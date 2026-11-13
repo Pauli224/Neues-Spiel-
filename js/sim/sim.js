@@ -687,8 +687,11 @@
       if (status !== 'war' && status !== 'peace' && status !== 'alliance') return false;
       const r = ka.relations[kb.id];
       if (!r) return false;
+      // Vom Spieler erzwungener Krieg bleibt, bis ein Reich besiegt ist oder der Spieler Frieden stiftet.
+      const force = () => { r.forced = true; const rb = kb.relations[ka.id]; if (rb) rb.forced = true; };
+      if (status === 'war' && r.status === 'war') { force(); return true; }
       if (r.status === status) return true;
-      if (status === 'war') return WW.Diplo.declareWar(sim, ka, kb, 'godWar');
+      if (status === 'war') { const ok = WW.Diplo.declareWar(sim, ka, kb, 'godWar'); if (ok) force(); return ok; }
       if (status === 'peace') return WW.Diplo.makePeace(sim, ka, kb, 'godPeace');
       return WW.Diplo.makeAlliance(sim, ka, kb, 'godAlliance');
     }

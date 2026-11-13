@@ -51,6 +51,7 @@
     for (const r of [ra, rb]) {
       if (status === 'war' && r.status !== 'war') { r.wars = (r.wars || 0) + 1; r.weariness = 0; r.losses = 0; }
       r.status = status; r.since = st.year;
+      if (status !== 'war' && r.forced) r.forced = false;   // erzwungener Krieg endet nur durch Sieg oder den Spieler
       if (status === 'peace') r.opinion = Math.min(100, r.opinion + 10);
       if (status === 'alliance') r.opinion = Math.max(r.opinion, 40);
       if (status === 'war') r.opinion = Math.min(r.opinion, -30);
@@ -379,6 +380,7 @@
       if (ra.status === 'war') {
         // Kriegsmüdigkeit
         const years = st.year - ra.since;
+        const forced = !!(ra.forced || rb.forced);   // vom Spieler erzwungen: kein Freikauf, keine Kriegsmüdigkeit
         const w = 9 + (ra.losses + rb.losses) * 1.2;
         ra.weariness += w; rb.weariness += w;
         ra.losses = 0; rb.losses = 0;
@@ -388,11 +390,11 @@
           const cap = sim._cities.get(p.capitalId);
           if (!cap) continue;
           const sk = WW.Cities.stock(sim, cap);
-          if (sk.gold >= 40 && years >= 1) { sk.gold -= 40; makePeace(sim, p, q, 'buyPeace', { gold: 40 }); break; }
+          if (!forced && sk.gold >= 40 && years >= 1) { sk.gold -= 40; makePeace(sim, p, q, 'buyPeace', { gold: 40 }); break; }
         }
         if (ra.status !== 'war') continue;
-        if (years >= 3 && ra.weariness > 80 + sim.rng.next() * 60) { makePeace(sim, a, b); continue; }
-        if (years >= 14) { makePeace(sim, a, b); continue; }
+        if (!forced && years >= 3 && ra.weariness > 80 + sim.rng.next() * 60) { makePeace(sim, a, b); continue; }
+        if (!forced && years >= 14) { makePeace(sim, a, b); continue; }
         // Söldner
         for (const p of [a, b]) {
           const g = WW.GOVERNMENTS[p.gov];

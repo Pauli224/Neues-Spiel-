@@ -409,6 +409,7 @@
         WW.Diplo.setStatus(sim, a, b, 'war'); WW.Diplo.callAllies(sim, a, b);
         return 'Krieg mit ' + ctx.vars.other;
       }
+      if (r.status === 'war' && r.forced) return FX.opinion(sim, ctx, { opinion: 5 });   // erzwungenen Krieg beendet kein Ereignis
       if (e.relation === 'alliance' && r.status === 'war') { WW.Diplo.setStatus(sim, a, b, 'peace'); return 'Frieden mit ' + ctx.vars.other; }
       if (e.relation === 'peace' && r.status !== 'war') return FX.opinion(sim, ctx, { opinion: 10 });
       WW.Diplo.setStatus(sim, a, b, e.relation);
