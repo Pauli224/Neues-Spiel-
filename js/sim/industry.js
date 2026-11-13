@@ -85,12 +85,13 @@
     const d = dims(st);
     if (!(st.pollution instanceof Uint8Array) || st.pollution.length !== d.pw * d.ph) st.pollution = new Uint8Array(d.pw * d.ph);
     if (!(st.murk instanceof Uint8Array) || st.murk.length !== st.W * st.H) st.murk = new Uint8Array(st.W * st.H);
+    if (!(st.barren instanceof Uint8Array) || st.barren.length !== st.W * st.H) st.barren = new Uint8Array(st.W * st.H);
     const w = st.wind && typeof st.wind === 'object' ? st.wind : {};
     w.dir = (w.dir | 0) & 15; w.str = typeof w.str === 'number' && isFinite(w.str) ? w.str : 0.8;
     const D = WW.Cities.DIRS16[w.dir]; w.dx = D[0]; w.dy = D[1];
     st.wind = w;
     const s = st.industry && typeof st.industry === 'object' ? st.industry : {};
-    s.any = +s.any || 0; s.murk = s.murk | 0;
+    s.any = +s.any || 0; s.murk = s.murk | 0; s.barren = s.barren | 0;
     st.industry = s;
     if (st.laws && !('industry' in st.laws) && WW.LAW_DEFAULTS && 'industry' in WW.LAW_DEFAULTS) st.laws.industry = WW.LAW_DEFAULTS.industry;
     for (const c of st.cities || []) { if (c.pollution == null) c.pollution = 0; if (c.indActive == null) c.indActive = 0; }
@@ -484,27 +485,30 @@
       if (changed) sim.terrainChanged();
     }
     if (st.industry.murk > 0) spreadMurk(sim);
+    const treeMap = treeDead || new Map();
+    soil(sim, treeMap);
     // Städte: Kennzahl, Mods, Chronik
     for (const city of st.cities) {
       const k = sim._kingdoms.get(city.kingdomId);
       const p = any ? cityPollution(st, city, d) : 0;
       city.pollution = p;
       const murky = st.industry.murk > 0 && murkNear(st, city);
-      if (WW.Mods && (p !== (city.indModP | 0) || murky !== !!city.indMurky)) {
-        if (p >= 8 || murky) {
-          const food = Math.max(0.5, 1 - (p >= 8 ? p * 0.005 : 0)) * (murky ? 0.9 : 1);
+      const bf = st.industry.barren > 0 ? barrenFields(sim, city) : 0;
+      if (WW.Mods && (p !== (city.indModP | 0) || murky !== !!city.indMurky || bf !== (city.indBarren | 0))) {
+        if (p >= 8 || murky || bf) {
+          const food = Math.max(0.5, 1 - (p >= 8 ? p * 0.005 : 0)) * (murky ? 0.9 : 1) * (1 - bf / 200);
           WW.Mods.add(city, { key: 'food', mul: food, source: 'industry_pol', name: 'Verschmutzung' });
           if (p >= 8) WW.Mods.add(city, { key: 'happiness', add: -Math.round(p * 0.3), source: 'industry_pol', name: 'Verschmutzung' });
           else WW.Mods.add(city, { key: 'happiness', add: 0, source: 'industry_pol' });
         } else WW.Mods.remove(city, 'industry_pol');
-        city.indModP = p;
+        city.indModP = p; city.indBarren = bf;
       }
       city.indMurky = murky;
       if (!k) continue;
       const eff = 'Zufriedenheit −' + Math.round(p * 0.3) + ', Ernte ' + pct(Math.max(0.5, 1 - p * 0.005));
       if (p >= 40 && !city.indHaze) { city.indHaze = st.year || 1; chron(sim, 'indHaze', { city: city.name }, city, k, eff); }
       else if (p < 12 && city.indHaze) { city.indHaze = 0; chron(sim, 'indClean', { city: city.name }, city, k, 'Luft wieder sauber'); }
-      const dead = treeDead ? (treeDead.get(city.id) | 0) : 0;
+      const dead = treeMap.get(city.id) | 0;
       if (dead) {
         city.indTreesN = (city.indTreesN | 0) + dead;
         if (city.indTreesN >= 8 && st.year - (city.indTreesY == null ? -99 : city.indTreesY) >= 6) {
@@ -514,6 +518,9 @@
       }
       if (murky && st.year - (city.indMurkY == null ? -99 : city.indMurkY) >= 8) {
         city.indMurkY = st.year; chron(sim, 'indMurk', { city: city.name }, city, k, 'Fluss trüb: Fischfang −10 %');
+      }
+      if (bf >= 30 && st.year - (city.indBarrenY == null ? -99 : city.indBarrenY) >= 10) {
+        city.indBarrenY = st.year; chron(sim, 'indBarren', { city: city.name, n: bf }, city, k, 'Ausgelaugter Boden: ' + bf + ' % der Felder tragen die Hälfte');
       }
       // Säureregen
       if (p >= 60 && st.year - (city.indAcidY == null ? -99 : city.indAcidY) >= 2 && WW.Powers && WW.POWERS && WW.POWERS.acidrain) {
@@ -572,26 +579,106 @@
     st.murk[i] = v;
     if ((o >> 6) !== (v >> 6)) sim.markDirty(i);
   }
-  // Trübung breitet sich entlang des Flusses aus und klingt ab (Reihenfolge nur vom Raster abhängig)
+  // Trübung fließt stromabwärts (Nachbar-Wasser mit geringerer Höhe, sonst gleich hoch) bis ein Stück ins Meer
+  // und klingt ab. Arbeitet auf einer Kopie: Ergebnis hängt nur vom Raster ab, nicht von der Reihenfolge.
   function spreadMurk(sim) {
-    const st = sim.state, W = st.W, H = st.H, N = W * H, m = st.murk, T = WW.T;
-    let n = 0;
+    const st = sim.state, W = st.W, N = W * st.H, m = st.murk, T = WW.T, LUT = WW.TERRAIN_LUT, hgt = st.height, ter = st.terrain;
+    let snap = sim._murkTmp;
+    if (!snap || snap.length !== N) snap = sim._murkTmp = new Uint8Array(N);
+    snap.set(m);
+    const down = [0, 0, 0, 0];
     for (let i = 0; i < N; i++) {
-      const v = m[i];
+      const v = snap[i];
       if (!v) continue;
-      if (st.terrain[i] !== T.RIVER) { setMurk(sim, i, 0); continue; }
-      const x = i % W, nv = v - 14;
+      const t = ter[i];
+      if (!LUT.water[t]) { setMurk(sim, i, 0); continue; }
+      const loss = t === T.RIVER ? 8 : 30, nv = v - loss;
       if (nv > 0) {
-        if (x > 0 && st.terrain[i - 1] === T.RIVER && m[i - 1] < nv) setMurk(sim, i - 1, nv);
-        if (x < W - 1 && st.terrain[i + 1] === T.RIVER && m[i + 1] < nv) setMurk(sim, i + 1, nv);
-        if (i >= W && st.terrain[i - W] === T.RIVER && m[i - W] < nv) setMurk(sim, i - W, nv);
-        if (i + W < N && st.terrain[i + W] === T.RIVER && m[i + W] < nv) setMurk(sim, i + W, nv);
+        const x = i % W, h = hgt[i];
+        let nl = 0, ne = 0;
+        const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i >= W ? i - W : -1, i + W < N ? i + W : -1];
+        for (const j of nb) if (j >= 0 && LUT.water[ter[j]] && hgt[j] < h) down[nl++] = j;
+        if (!nl) for (const j of nb) if (j >= 0 && LUT.water[ter[j]] && hgt[j] === h && snap[j] < nv) { down[ne++] = j; }
+        const k = nl || ne;
+        for (let q = 0; q < k; q++) { const j = down[q]; if (m[j] < nv) setMurk(sim, j, nv); }
       }
-      setMurk(sim, i, Math.max(0, v - 4));
+      setMurk(sim, i, Math.max(0, m[i] - 4));
     }
+    let n = 0;
     for (let i = 0; i < N; i++) if (m[i]) n++;
     st.industry.murk = n;
-    void H;
+  }
+  // Boden: Verschmutzung und Ruß laugen ihn aus (state.barren), saubere Luft lässt ihn langsam heilen.
+  // Stufen: ab BARREN_DEADTREES sterben Bäume (Gelände deforested + cleared = tote Stämme), ab BARREN_ASH wird
+  // Wiese/Steppe zu Aschefeld (dauerhaft). Rückgabe: Map Stadt-ID -> abgestorbene Bäume
+  function setBarren(sim, i, v) {
+    const b = sim.state.barren, o = b[i];
+    b[i] = v;
+    if ((o >> 6) !== (v >> 6)) sim.markDirty(i);
+  }
+  function soil(sim, treeDead) {
+    const st = sim.state, C = CF(), d = dims(st), W = st.W, H = st.H, pw = d.pw, pol = st.pollution, b = st.barren;
+    const T = WW.T, LUT = WW.TERRAIN_LUT, ind = st.industry, cell = d.cell;
+    if (ind.any > 0) {
+      for (let cy = 0; cy < d.ph; cy++) for (let cx = 0; cx < pw; cx++) {
+        const v = pol[cy * pw + cx];
+        if (v < C.TH_BARREN) continue;
+        const add = 1 + ((v - C.TH_BARREN) >> 4);
+        for (let y = cy * cell; y < Math.min(H, cy * cell + cell); y++) for (let x = cx * cell; x < Math.min(W, cx * cell + cell); x++) {
+          const i = y * W + x;
+          if (LUT.water[st.terrain[i]]) continue;
+          setBarren(sim, i, Math.min(255, b[i] + add));
+        }
+      }
+      // Ruß im Umkreis aktiver Fabriken
+      const R = C.SOOT_R;
+      for (const s of activeList(sim)) {
+        if (s.dead || !s.active) continue;
+        const mx = s.x + s.w / 2, my = s.y + s.h / 2, add = s.filtered ? 1 : C.SOOT;
+        for (let y = Math.max(0, Math.floor(my - R)); y <= Math.min(H - 1, Math.floor(my + R)); y++) for (let x = Math.max(0, Math.floor(mx - R)); x <= Math.min(W - 1, Math.floor(mx + R)); x++) {
+          const dx = x + 0.5 - mx, dy = y + 0.5 - my;
+          if (dx * dx + dy * dy > R * R) continue;
+          const i = y * W + x;
+          if (!LUT.water[st.terrain[i]]) setBarren(sim, i, Math.min(255, b[i] + add));
+        }
+      }
+    }
+    if (!(ind.barren > 0) && !(ind.any > 0)) return false;
+    let n = 0, changed = false, ash = 0;
+    const ASHABLE = {}; ASHABLE[T.GRASS] = 1; ASHABLE[T.FLOWERS] = 1; ASHABLE[T.SAVANNA] = 1; ASHABLE[T.TUNDRA] = 1;
+    for (let i = 0; i < W * H; i++) {
+      let bv = b[i];
+      if (!bv) continue;
+      const x = i % W, y = (i - x) / W, v = pol[Math.floor(y / cell) * pw + Math.floor(x / cell)];
+      if (v < C.TH_BARREN_HEAL) { bv = Math.max(0, bv - C.BARREN_HEAL); setBarren(sim, i, bv); }
+      if (bv) n++;
+      if (bv < C.BARREN_DEADTREES || st.structAt[i] !== -1) continue;
+      const t = st.terrain[i];
+      if (LUT.wood[t]) {
+        const nt = WW.Walls && WW.Walls.deforested ? WW.Walls.deforested(t) : T.GRASS;
+        if (nt === t) continue;
+        st.terrain[i] = nt; if (st.cleared) st.cleared[i] = WW.CONFIG.CLEARED_MAX || 240;
+        sim.markDirty(i); changed = true;
+        const o = st.owner[i]; if (o >= 0) treeDead.set(o, (treeDead.get(o) || 0) + 1);
+      } else if (bv >= C.BARREN_ASH && ASHABLE[t]) {
+        st.terrain[i] = T.ASH; sim.markDirty(i); changed = true; ash++;
+      }
+    }
+    ind.barren = n;
+    if (changed) sim.terrainChanged();
+    return ash;
+  }
+  // Anteil (0..100) der Felder der Stadt auf ausgelaugtem Boden
+  function barrenFields(sim, city) {
+    const st = sim.state, C = CF();
+    let n = 0, bad = 0;
+    for (const id of city.fields || []) {
+      const f = sim._structs.get(id);
+      if (!f || f.dead) continue;
+      n++;
+      if (st.barren[f.y * st.W + f.x] >= C.BARREN_FIELD) bad++;
+    }
+    return n ? Math.round(bad * 100 / n) : 0;
   }
   function murkNear(st, city) {
     const W = st.W, H = st.H;
@@ -647,9 +734,10 @@
     if (t % C.PLAN_EVERY === 33) plan(sim);
     if (t % C.STEP === 7) step(sim);
     if (t % 120 === 61) windTurn(sim);
-    if (t % C.EFFECT_EVERY === 41 && (st.industry.any > 0 || st.industry.murk > 0 || sim._indDirtyCities !== false)) {
+    const ind = st.industry;
+    if (t % C.EFFECT_EVERY === 41 && (ind.any > 0 || ind.murk > 0 || ind.barren > 0 || sim._indDirtyCities !== false)) {
       effects(sim); kingdomStats(sim);
-      sim._indDirtyCities = st.industry.any > 0 || st.industry.murk > 0;
+      sim._indDirtyCities = ind.any > 0 || ind.murk > 0 || ind.barren > 0;
     }
     if (t % TPY() === 131) neighbours(sim);
     if (t % 30 === 11) {

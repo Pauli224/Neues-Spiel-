@@ -152,6 +152,15 @@
 //     werden Zelte nach und nach zu level 1 aufgewertet (upgradeTo 1), neue Häuser gleich level 1.
 //     variant 0..255 (Zufall beim Bau; Formenvielfalt in der Darstellung; alte Spielstände: aus der ID abgeleitet).
 //
+// GEBIETSWACHSTUM (Ergänzung)
+//   WW.CITY_TIERS hat jetzt 6 Stufen: Lager, Dorf (8), Stadt (20), Großstadt (40), Metropole (110), Weltstadt (220); city.tier 0..5.
+//   Lager starten mit 3×3 Fluren. Städte nehmen stetig Land bis zur Ziel-Flurenzahl WW.Growth.flurTarget(sim, city)
+//     (FLUR_TARGET_BASE + Einwohner × FLUR_TARGET_POP + 3 × Stufe), alle FLUR_GROW_TICKS / gov.landSpeed Ticks eine angrenzende
+//     Flur in Reichweite (FLUR_REACH + Stufe × FLUR_REACH_TIER + …). gov.landSpeed: Faschismus 1,6, Monarchie 1,4, Stamm/Anarchie 0,6.
+//   Felder dürfen auf freiem Land direkt am Rand entstehen und nehmen die Flur dann in Besitz (WW.Growth.claimableAt).
+//   Tochterstädte erst ab Stadtstufe Stadt und wenn das Land ausgeschöpft ist; Abstand DAUGHTER_MIN_DIST (34).
+//   Neue Felder: city.flurMark (für Meilensteine), relations[id].borderMet. Ereignisse: territoryDoubled { city, n }, borderContact.
+//
 // MODIFIKATOREN (für js/sim/mods.js eines anderen Agenten; fehlt die Datei, gilt der Basiswert)
 //   Aufruf über WW.SimUtil.mod(sim, kingdom, city, key, base) -> WW.Mods.value(...) bzw. base, und
 //   WW.SimUtil.modFlag(sim, kingdom, key) -> WW.Mods.flag(...) bzw. undefined. Schlüssel und Aufrufstellen:
@@ -354,7 +363,7 @@
   const RASTERS = [['terrain', Uint8Array], ['variant', Uint8Array], ['height', Uint8Array], ['owner', Int32Array],
     ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array],
     ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array]];   // [wild] Raster der Wildnis
-  if (WW.Industry) RASTERS.push(['murk', Uint8Array]);   // [industry] Flusstrübung (pollution hat eigene Größe: WW.Industry.save/load)
+  if (WW.Industry) RASTERS.push(['murk', Uint8Array], ['barren', Uint8Array]);   // [industry] Flusstrübung (pollution hat eigene Größe: WW.Industry.save/load)
 
   function replacer(key, value) {
     if (key && key.charCodeAt(0) === 95) return undefined;   // '_' = Laufzeit

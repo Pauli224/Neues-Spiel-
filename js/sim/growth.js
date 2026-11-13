@@ -52,7 +52,11 @@
     const g = WW.GOVERNMENTS[(k && k.gov) || 'tribe'];
     const race = WW.RACES[city.race] || WW.RACES.human;
     const gv = city.governor;
-    return C().FLUR_REACH + city.tier * 3 + (g.landReach || 0) + (race.landReach || 0) + (gv ? (gv.admin - 3) * 1.5 : 0);
+    return C().FLUR_REACH + city.tier * C().FLUR_REACH_TIER + Math.min(12, city.pop * 0.04) + (g.landReach || 0) + (race.landReach || 0) + (gv ? (gv.admin - 3) * 1.5 : 0);
+  }
+  // Ziel-Flurenzahl: wächst mit Einwohnern (Lager ~9, Dorf ~16–25, Stadt ~36–60, Großstadt 80+)
+  function flurTarget(sim, city) {
+    return Math.round(C().FLUR_TARGET_BASE + city.pop * C().FLUR_TARGET_POP + city.tier * 3);
   }
 
   // Land einer Flur bewerten (begehbar, bebaubar, fruchtbar)
@@ -76,7 +80,7 @@
     const cf = flurAt(st, city.cx, city.cy);
     const cfx = cf % d.fw, cfy = (cf - cfx) / d.fw;
     // Anfangsgebiet groß genug für Felder vor der künftigen Mauer
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const fx = cfx + dx, fy = cfy + dy;
       if (fx < 0 || fy < 0 || fx >= d.fw || fy >= d.fh) continue;
       const fi = fy * d.fw + fx;
@@ -101,6 +105,7 @@
       const fx = fi % d.fw, fy = (fi - fx) / d.fw;
       let adj = 0;
       if (fx > 0 && st.flur[fi - 1] === city.id) adj++;
+      else if (fx > 0) noteBorder(sim, city, st.flur[fi - 1]);
       if (fx < d.fw - 1 && st.flur[fi + 1] === city.id) adj++;
       if (fy > 0 && st.flur[fi - d.fw] === city.id) adj++;
       if (fy < d.fh - 1 && st.flur[fi + d.fw] === city.id) adj++;
@@ -119,6 +124,32 @@
     const c = flurCenter(st, best);
     sim.fx({ type: 'claim', x: c.x, y: c.y, cityId: city.id });
     return true;
+  }
+
+  // Liegt die Kachel in einer freien Flur direkt am eigenen Gebiet und in Reichweite?
+  function claimableAt(sim, city, x, y) {
+    const st = sim.state, d = dims(st);
+    const fi = flurAt(st, x, y);
+    if (st.flur[fi] !== -1) return false;
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    const adj = (fx > 0 && st.flur[fi - 1] === city.id) || (fx < d.fw - 1 && st.flur[fi + 1] === city.id) ||
+      (fy > 0 && st.flur[fi - d.fw] === city.id) || (fy < d.fh - 1 && st.flur[fi + d.fw] === city.id);
+    if (!adj) return false;
+    const c = flurCenter(st, fi);
+    return Math.hypot(c.x - city.cx - 0.5, c.y - city.cy - 0.5) <= reach(sim, city);
+  }
+
+  // Grenzberührung zweier Reiche (einmal je Paar in der Chronik)
+  function noteBorder(sim, city, otherCityId) {
+    if (otherCityId == null || otherCityId < 0 || otherCityId === city.id) return;
+    const oc = sim._cities.get(otherCityId);
+    if (!oc || oc.kingdomId === city.kingdomId) return;
+    const k = sim._kingdoms.get(city.kingdomId), o = sim._kingdoms.get(oc.kingdomId);
+    const r = k && k.relations[o ? o.id : -1];
+    if (!r || r.borderMet) return;
+    r.borderMet = true;
+    if (o.relations[k.id]) o.relations[k.id].borderMet = true;
+    sim.event('borderContact', { kingdom: k.name, other: o.name, city: city.name, otherCity: oc.name }, WW.Cities.atCity(city));
   }
 
   // Alle Fluren (und Tile-Besitz) einer Stadt freigeben
@@ -547,9 +578,22 @@
       if (city.dead) continue;
       if (!city.governor) makeGovernor(sim, city);
       if (city.flurs == null) city.flurs = countFlurs(sim, city);
-      if (city.needLand && st.tick - (city.lastClaim || 0) >= C().FLUR_CLAIM_TICKS) {
+      // stetige Landnahme: bei Bedarf sofort, sonst alle paar Monate bis zur Ziel-Flurenzahl
+      const k = sim._kingdoms.get(city.kingdomId);
+      const sp = (WW.GOVERNMENTS[(k && k.gov) || 'tribe'].landSpeed || 1);
+      const since = st.tick - (city.lastClaim || 0);
+      const grow = city.flurs < flurTarget(sim, city) && since >= C().FLUR_GROW_TICKS / sp;
+      if ((city.needLand && since >= C().FLUR_CLAIM_TICKS) || grow) {
         city.lastClaim = st.tick;
-        if (!claimNext(sim, city)) city.landFull = true; else city.landFull = false;
+        if (!claimNext(sim, city)) city.landFull = true;
+        else {
+          city.landFull = false;
+          if (city.flurMark == null) city.flurMark = Math.max(1, city.flurs - 1);
+          if (city.flurs >= city.flurMark * 2 && city.flurs >= 18) {
+            sim.event('territoryDoubled', { city: city.name, n: city.flurs }, WW.Cities.atCity(city));
+            city.flurMark = city.flurs;
+          }
+        }
         city.needLand = false;
       }
     }
@@ -607,7 +651,7 @@
     cutOff: cutOff, warFlips: warFlips, makeGovernor: makeGovernor, ensureRuler: ensureRuler, cityLimit: cityLimit,
     loyaltyTarget: loyaltyTarget, loyaltyRaw: loyaltyRaw, secedeByLoyalty: secedeByLoyalty, planWar: planWar, planAlliance: planAlliance,
     addPlot: addPlot, removePlot: removePlot, updatePlots: updatePlots, emigrate: emigrate, freeSite: freeSite,
-    update: update, yearly: yearly, QUIRKS: QUIRKS, natureMode: natureMode, natureMul: natureMul, natureYearly: natureYearly
+    update: update, yearly: yearly, QUIRKS: QUIRKS, flurTarget: flurTarget, claimableAt: claimableAt, natureMode: natureMode, natureMul: natureMul, natureYearly: natureYearly
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wuselwelt 3D – Vorschau</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #1b2026; color: #e8e2d4; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #ui { position: absolute; left: 10px; top: 10px; background: rgba(16,20,26,0.78); padding: 8px 10px; border-radius: 6px; }
+  #ui button { background: #2c3440; color: #e8e2d4; border: 1px solid #4a5566; border-radius: 4px; padding: 3px 8px; margin: 2px; cursor: pointer; }
+  #ui button.on { background: #6b5a2a; border-color: #c9a64a; }
+  #stats { font: 12px/1.3 ui-monospace, monospace; margin-top: 4px; white-space: pre; }
+  #ui[hidden] { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div>Qualität:
+    <button data-q="low">niedrig</button><button data-q="mid">mittel</button><button data-q="high">hoch</button>
+  </div>
+  <div>
+    <button id="bTerr">Gebiete</button><button id="bAir">Luft</button><button id="bBrush">Pinsel</button>
+    <button id="bPaint">Berg malen</button>
+  </div>
+  <div id="stats">lädt …</div>
+  <div style="opacity:.7">Links ziehen: schieben · Rechts ziehen: drehen/kippen · Rad: zoomen</div>
+</div>
+<script>
+  // Testseite: Simulation + 3D-Kern. Parameter: ?seed=7&size=large&ticks=3000&q=mid&cam=x,y,dist,yaw,tilt&ui=0&still=1
+  window.__errors = [];
+  window.addEventListener('error', function (e) { window.__errors.push(String(e.message)); });
+  const FILES = [
+    'js/core/terrain.js', 'js/render/sprites.js', 'js/render/sprites-world.js',
+    'js/core/rng.js', 'js/core/config.js', 'js/core/config-industry.js', 'js/core/config-walls.js', 'js/core/config-events.js', 'js/core/config-wild.js',
+    'js/data/names.js', 'js/data/texts.js', 'js/data/texts-industry.js', 'js/data/events.js', 'js/data/texts-wild.js',
+    'js/sim/util.js', 'js/sim/world.js', 'js/sim/worldgen.js', 'js/sim/path.js', 'js/sim/structs.js', 'js/sim/walls.js', 'js/sim/mods.js',
+    'js/sim/cities.js', 'js/sim/industry.js', 'js/sim/units.js', 'js/sim/gov.js', 'js/sim/diplo.js', 'js/sim/growth.js', 'js/sim/creatures.js',
+    'js/sim/wild.js', 'js/sim/env.js', 'js/sim/powers.js', 'js/sim/events.js', 'js/sim/sim.js',
+    'js/vendor/three.min.js', 'js/render3d/core.js', 'js/render3d/terrain.js', 'js/render3d/flora.js'
+  ];
+  (function loadNext(i) {
+    if (i >= FILES.length) return start();
+    const s = document.createElement('script');
+    s.src = '../' + FILES[i];
+    s.onload = s.onerror = function () { loadNext(i + 1); };
+    document.head.appendChild(s);
+  })(0);
+
+  function start() {
+    const P = new URLSearchParams(location.search);
+    const canvas = document.getElementById('c');
+    if (P.get('ui') === '0') document.getElementById('ui').hidden = true;
+    if (!WW.R3 || !WW.R3.supported()) { document.getElementById('stats').textContent = 'Kein WebGL'; return; }
+    const q = P.get('q') || 'mid';
+    const r3 = WW.R3.create(canvas, { quality: q, preserveDrawingBuffer: true });
+    window.__r3 = r3;
+    const sim = WW.Sim.create({ seed: P.get('seed') || 7, size: P.get('size') || 'large', populate: +(P.get('pop') || 5), govs: 'mixed' });
+    const ticks = +(P.get('ticks') || 2500);
+    for (let i = 0; i < ticks; i++) sim.tick();
+    sim.drainDirtyTiles(); sim.drainFx();
+    window.__sim = sim;
+    r3.attach(sim);
+    const cam = (P.get('cam') || '').split(',').map(Number);
+    if (cam.length >= 3 && cam.every(v => !isNaN(v))) r3.focus(cam[0], cam[1], { dist: cam[2], yaw: cam[3] || 0, tilt: cam[4] || 0.95, instant: true });
+    const ov = { territory: true, air: false, brush: null, selection: null };
+    r3.setOverlay(ov);
+    // Bedienung
+    let drag = null;
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('pointerdown', e => { drag = { b: e.button, x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', e => {
+      const hit = r3.tileAt(e.clientX, e.clientY);
+      if (ov.brush) { if (hit) { ov.brush.x = hit.fx; ov.brush.y = hit.fy; } r3.setOverlay(ov); }
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+      if (drag.b === 0 && painting && hit) { sim.actions.paintTerrain(hit.x, hit.y, 2, WW.T.MOUNTAIN); r3.markDirty(sim.drainDirtyTiles()); return; }
+      if (drag.b === 2 || e.shiftKey) r3.orbit(-dx * 0.006, dy * 0.004); else r3.pan(dx, dy);
+    });
+    canvas.addEventListener('pointerup', () => { drag = null; });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); r3.zoomAt(Math.pow(1.0015, -e.deltaY), e.clientX, e.clientY); }, { passive: false });
+    window.addEventListener('resize', () => r3.resize());
+    let painting = false;
+    const qb = document.querySelectorAll('[data-q]');
+    function markQ() { qb.forEach(b => b.classList.toggle('on', b.dataset.q === r3.quality)); }
+    qb.forEach(b => b.onclick = () => { r3.setQuality(b.dataset.q); markQ(); }); markQ();
+    const bT = document.getElementById('bTerr'), bA = document.getElementById('bAir'), bB = document.getElementById('bBrush'), bP = document.getElementById('bPaint');
+    function marks() { bT.classList.toggle('on', ov.territory); bA.classList.toggle('on', ov.air); bB.classList.toggle('on', !!ov.brush); bP.classList.toggle('on', painting); }
+    bT.onclick = () => { ov.territory = !ov.territory; r3.setOverlay(ov); marks(); };
+    bA.onclick = () => { ov.air = !ov.air; r3.setOverlay(ov); marks(); };
+    bB.onclick = () => { ov.brush = ov.brush ? null : { x: 0, y: 0, r: 3, kind: 'tiles' }; r3.setOverlay(ov); marks(); };
+    bP.onclick = () => { painting = !painting; marks(); };
+    marks();
+    // Schleife: Simulation läuft weiter (10 Ticks/s), Darstellung jedes Bild
+    const still = P.get('still') === '1';
+    let last = performance.now(), acc = 0;
+    const stEl = document.getElementById('stats');
+    let statT = 0;
+    function loop(now) {
+      const dt = Math.min(0.25, (now - last) / 1000); last = now;
+      if (!still) {
+        acc += dt;
+        while (acc >= 0.1) { acc -= 0.1; sim.tick(); }
+        r3.markDirty(sim.drainDirtyTiles()); sim.drainFx();
+      }
+      r3.frame(still ? 1 : acc / 0.1, dt);
+      statT -= dt;
+      if (statT <= 0) {
+        statT = 0.5;
+        const s = r3.stats(), c = r3.cameraInfo();
+        stEl.textContent = 'Zeichenaufrufe ' + s.calls + '  Dreiecke ' + (s.tris / 1000).toFixed(0) + 'k\n' +
+          'Bild ' + s.ms.toFixed(1) + ' ms  ' + s.fps.toFixed(0) + ' B/s\n' +
+          'Kamera ' + c.x.toFixed(1) + ',' + c.y.toFixed(1) + ' d ' + c.dist.toFixed(1) + ' yaw ' + c.yaw.toFixed(2) + ' tilt ' + c.tilt.toFixed(2);
+      }
+      requestAnimationFrame(loop);
+    }
+    // für automatische Aufnahmen: einzelne Bilder ohne rAF
+    window.__render = function (n, dt) { for (let i = 0; i < (n || 1); i++) r3.frame(1, dt == null ? 1 / 30 : dt); return r3.stats(); };
+    window.__ready = true;
+    if (P.get('auto') !== '0') requestAnimationFrame(loop);
+  }
+</script>
+</body>
+</html>

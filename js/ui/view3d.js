@@ -74,8 +74,9 @@
     this.show(false);
   };
   // Qualität ändern = neu aufbauen
-  View3D.prototype.rebuild = function () {
+  View3D.prototype.rebuild = function (q) {
     if (!this.r3) return;
+    if (typeof this.r3.setQuality === 'function') { this.call('setQuality', q || this.game.quality); return; }
     const ci = this.cameraInfo();
     this.stop();
     if (this.start()) { this.show(this.game.mode === '3d'); if (ci) this.focus(ci.x, ci.y, true); }
@@ -104,7 +105,9 @@
   View3D.prototype.tileAt = function (sx, sy) {
     const r = this.canvas.getBoundingClientRect();
     const t = this.call('tileAt', sx + r.left, sy + r.top);
-    return t && isFinite(t.x) && isFinite(t.y) ? t : null;
+    if (!t || !isFinite(t.x) || !isFinite(t.y)) return null;
+    // Fließkomma-Treffer, falls geliefert (für sauberes Malen)
+    return { x: isFinite(t.fx) ? t.fx : t.x + 0.5, y: isFinite(t.fy) ? t.fy : t.y + 0.5 };
   };
   View3D.prototype.cameraInfo = function () { return this.call('cameraInfo') || null; };
   View3D.prototype.viewQuad = function () { return this.call('viewQuad') || null; };

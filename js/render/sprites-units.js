@@ -1166,7 +1166,7 @@
       else if (hat && HAT[hat]) HAT[hat](g, A);
       if (cs.mask) g.hline(A.hx0 + 1, eyY + 2, A.hx1 - A.hx0, cs.mask);
       // --- Soldaten: Schulterstücke in Teamfarbe, Glanzlicht am Helm
-      if (cls === 'soldier') {
+      if (cls === 'soldier' && gov !== 'fascism') {
         g.hline(tx0 - 1, ty0, tw + 2, 'T'); g.set(tx0 - 1, ty0, 'Tl'); g.set(tx0, ty0, 'Tl'); g.set(tx0 - 1, ty0 + 1, 'Td'); g.set(tx1 + 1, ty0 + 1, 'Td');
         if (hat && hat !== 'pot') { g.set(A.hx0 + 1, A.hy0, C.white); g.set(A.hx0 + 2, A.hy0, C.white); }
       }
@@ -1180,6 +1180,12 @@
       if (hold) { g.rect(tx1 - 1, ay, 2, 3, sl[1]); g.rect(tx1, ay + 2, hx - tx1 + 1, 2, sl[1]); g.set(tx1 + 1, ay + 2, sl[0]); g.rect(hx, hy - 1, 2, 2, skin[1]); hy = hy - 1; }
       else { g.rect(ax, ay, 2, th - 2, sl[1]); g.vline(ax, ay, th - 2, sl[0]); g.rect(ax, ty0 + th - 1, 2, 1, skin[1]); }
       if (attack && hold) { g.rect(tx1, ty0 - 3, 2, 5, sl[1]); g.rect(hx, ty0 - 4, 2, 2, skin[1]); hy = ty0 - 4; hx = hx + 1; }
+      // Armbinde (nur Faschismus, Soldat und Anführer): Teamfarbe mit zwei schmalen hellen Querstreifen, sonst nichts
+      if (gov === 'fascism' && (cls === 'soldier' || cls === 'leader')) {
+        var abx = attack ? tx1 : tx1 - 1, aby = attack ? ty0 - 2 : ay;
+        for (var ab = 0; ab < 4; ab++) g.hline(abx, aby + ab, 3, (ab === 1 || ab === 3) ? C.cream : 'T');
+        g.set(abx + 2, aby, 'Td'); g.set(abx + 2, aby + 2, 'Td');
+      }
       if (tool) tool(g, hx, hy, A);
       if (cls === 'soldier' && /tribe|democracy|communism|theocracy|anarchy/.test(gov)) {   // Wimpel an der Waffe
         var py = Math.max(0, (attack ? hy - 12 : A.top - 2)); g.paint(hx + 2, py, ['TTu', 'TTT', 'tT.', 't..']);

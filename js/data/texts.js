@@ -383,6 +383,16 @@
       'Agitatoren aus {kingdom_dat} verteilen in {city} Flugblätter. Thema: Wem gehört eigentlich das Brot?',
       'In {city} tauchen Plakate auf: „Arbeiter aller Dörfer, vereinigt euch!“ {other_nom} ist nervös.'
     ],
+    territoryDoubled: [
+      '{city} hat sein Gebiet verdoppelt: {n} Fluren! Die Grenzsteine werden knapp.',
+      'Die Felder von {city} reichen jetzt bis zum Horizont, genauer gesagt {n} Fluren weit.',
+      '{city} wächst und wächst: {n} Fluren Land. Die Landvermesser brauchen neue Schuhe.'
+    ],
+    borderContact: [
+      'Die Grenzen von {kingdom_dat} und {other_dat} stoßen bei {city} aneinander. Man beäugt sich über den Zaun.',
+      'Bei {city} beginnt jetzt {other_nom}. Die Bauern beider Seiten winken sich misstrauisch zu.',
+      '{kingdom_nom} und {other_nom} sind jetzt Nachbarn. Erste Streitfrage: Wem gehört der Apfelbaum an der Grenze?'
+    ],
     clearcut: [
       '{kingdom_nom} meldet: Der Wald rund um {city} wurde erfolgreich besiegt.',
       'Rund um {city} stehen nur noch Baumstümpfe. {leader} nennt das „Aussicht“.',

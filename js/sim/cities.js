@@ -352,7 +352,7 @@
     const inf = WW.STRUCT_INFO[type || 'house'];
     const w = inf.w, h = inf.h;
     const ringed = !!(city.wall.plan && city.wall.state !== 'none');
-    const r = Math.min(16, territoryRadius(city, sim));
+    const r = Math.min(26, territoryRadius(city, sim));
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const owner = st.owner, inRing = st.inRing, id = city.id;
     const area = ringed
@@ -384,7 +384,7 @@
   }
   function findFieldSpotMin(sim, city, minFert) {
     const st = sim.state, W = st.W, H = st.H;
-    const r = territoryRadius(city, sim) + 1;
+    const r = Math.min(26, territoryRadius(city, sim) + 1);
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const ringed = !!city.wall.plan;
     const minD = ringed ? 0 : WW.CONFIG.WALL_RESERVE + WW.CONFIG.WALL_MARGIN + 1.2;
@@ -392,7 +392,8 @@
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
         const i = y * W + x;
-        if (st.owner[i] !== city.id) continue;
+        // eigenes Land oder herrenloses Land direkt am Rand (das Feld nimmt die Flur dann in Besitz)
+        if (st.owner[i] !== city.id && !(st.owner[i] === -1 && WW.Growth.claimableAt(sim, city, x, y))) continue;
         if (st.structAt[i] !== -1 || st.inRing[i] !== -1) continue;
         const t = st.terrain[i];
         const fert = WW.TERRAIN_LUT.fertile[t];
@@ -433,7 +434,7 @@
   function findDropSpot(sim, city, res, type) {
     const st = sim.state, W = st.W, H = st.H;
     const inf = WW.STRUCT_INFO[type];
-    const r = territoryRadius(city, sim) + 3;
+    const r = Math.min(24, territoryRadius(city, sim) + 3);
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const LUT = WW.TERRAIN_LUT;
     const owner = st.owner, inRing = st.inRing, id = city.id;
@@ -560,7 +561,10 @@
       const i = findFieldSpot(sim, city);
       if (i >= 0) {
         const s = WW.Structs.create(sim, 'field', i % W, Math.floor(i / W), city.id, { built: true });
-        if (s) city.fields.push(s.id);
+        if (s) {
+          city.fields.push(s.id);
+          if (st.owner[i] === -1) { WW.Growth.setFlur(sim, WW.Growth.flurAt(st, i % W, Math.floor(i / W)), city.id); city.flurs = (city.flurs || 0) + 1; }
+        }
       } else city.needLand = true;
     }
     if (open >= maxOpen) return;
@@ -743,7 +747,7 @@
   // Rohstoffe in Reichweite? (einmal je Jahr)
   function scanResources(sim, city) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
-    const r = territoryRadius(city, sim) + 5;
+    const r = Math.min(30, territoryRadius(city, sim) + 5);
     const px = city.cx, py = city.cy;
     let wood = 0, stone = 0, water = 0;
     for (let y = Math.max(0, py - r); y <= Math.min(H - 1, py + r); y++) for (let x = Math.max(0, px - r); x <= Math.min(W - 1, px + r); x++) {
@@ -902,7 +906,9 @@
       // Tochterstadt: genug Erwachsene, Frieden, Anführer lebt
       const k = kingdomOf(sim, city);
       const leaderOk = k && (g.noLeader || (sim._units.get(k.leaderId) && !sim._units.get(k.leaderId).dead));
-      if (city.adults >= WW.CONFIG.DAUGHTER_ADULTS && leaderOk && !WW.Diplo.atWar(sim, k.id) && st.year - city.lastSettlers >= 4 && city.centerOk) sendSettlers(sim, city);
+      // Tochterstädte erst, wenn die Mutterstadt Stadt ist und ihre Reichweite ausgeschöpft hat (das Reich wächst zuerst flächig)
+      const landDone = city.landFull || (city.flurs || 0) >= WW.Growth.flurTarget(sim, city) * 0.9 && city.tier >= 3;
+      if (city.tier >= 2 && landDone && city.adults >= WW.CONFIG.DAUGHTER_ADULTS && leaderOk && !WW.Diplo.atWar(sim, k.id) && st.year - city.lastSettlers >= 4 && city.centerOk) sendSettlers(sim, city);
     }
   }
 

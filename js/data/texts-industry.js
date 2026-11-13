@@ -58,6 +58,11 @@
       '{other} schickt {kingdom} einen Brief – in Rußschrift. Inhalt: „Hört auf zu qualmen!"',
       'Die Gesandten von {other} kommen mit Taschentüchern vor dem Mund zu {kingdom}. Die Stimmung ist frostig.'
     ],
+    indBarren: [
+      'Der Boden um {city} ist grau wie ein Montagmorgen. Die Rüben wachsen jetzt freiwillig nach unten weg.',
+      'Bei {city} wächst nichts mehr außer der Ratlosigkeit der Bauern. {n} % der Felder sind ausgelaugt.',
+      'Um {city} färbt sich die Wiese aschgrau. Die Schafe halten es für modern, die Bauern nicht.'
+    ],
     indClean: [
       'Über {city} ist der Himmel wieder blau. Alte Leute erzählen den Kindern, was „Sonne" ist.'
     ]

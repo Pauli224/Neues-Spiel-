@@ -867,6 +867,31 @@ test('14 Kahlschlag (exploit) gegen Naturschutz (care)', function () {
 });
 
 // --------------------------------------------------------------------------
+// 15. Gebietswachstum bestehender Städte
+// --------------------------------------------------------------------------
+test('15 Gebiet wächst Flur um Flur (Lager klein, nach 20/60 Jahren ×2/×4, 80 Jahre > 150 Einw.)', function () {
+  const world = meadowWorld(200, 140, { hills: true, river: true, spots: [{ x: 100, y: 70 }] });
+  const sim = makeSim({ seed: 'gebiet', world: world, populate: 1, govs: ['monarchy'], races: ['human'], animals: false });
+  const st = sim.state, c = st.cities[0];
+  c.lastSettlers = 1e9;   // keine Tochterstädte: gemessen wird das Wachstum derselben Stadt
+  sim.state.kingdoms[0].govLocked = true;
+  sim.actions.setLaw('disasters', false);
+  const tiles = () => { let n = 0; for (let i = 0; i < st.owner.length; i++) if (st.owner[i] === c.id) n++; return n; };
+  const t0 = tiles();
+  const at = {};
+  for (const y of [2, 10, 20, 40, 60, 80]) {
+    run(sim, (y - st.year) * WW.CONFIG.TPY, 2000, () => checkInvariants(sim, 'Gebiet'));
+    at[y] = { t: tiles(), pop: c.pop, tier: c.tier, flurs: c.flurs };
+  }
+  log('Startgebiet', t0, 'Kacheln · ' + Object.keys(at).map(y => 'Jahr ' + y + ': ' + at[y].t + ' K, ' + at[y].pop + ' Einw. (' + WW.CITY_TIERS[at[y].tier].name + ')').join(' · '));
+  assert(t0 <= 330, 'Startgebiet zu groß (' + t0 + ')');
+  assert(at[20].t >= at[2].t * 2, 'Gebiet nach 20 Jahren nicht verdoppelt');
+  assert(at[60].t >= at[2].t * 4, 'Gebiet nach 60 Jahren nicht vervierfacht');
+  assert(at[60].t > at[20].t, 'Gebiet eingefroren zwischen Jahr 20 und 60');
+  assert(at[80].pop > 150, 'älteste Stadt nach 80 Jahren nur ' + at[80].pop + ' Einwohner');
+});
+
+// --------------------------------------------------------------------------
 // 7. Leistung
 // --------------------------------------------------------------------------
 test('7 Leistung (~800 Einheiten auf 144×96)', function () {

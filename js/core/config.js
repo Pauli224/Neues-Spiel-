@@ -40,14 +40,18 @@
     PATH_LIMIT_ARMY: 4000,    // Heere (mit Durchbruchskosten)
     ARMY_PATH_SHARE: 0.2,     // Anteil des Wegsuche-Budgets je Tick für Heere
     TERRITORY_BASE: 9,
-    SETTLER_DIST_MIN: 24, SETTLER_DIST_MAX: 40,
+    SETTLER_DIST_MIN: 36, SETTLER_DIST_MAX: 60,
     CITY_MIN_DIST: 20,
-    FLUR_REACH: 12,           // Grundreichweite der Landnahme (Kacheln ums Zentrum), + 3 je Stadtstufe
-    FLUR_START_RADIUS: 13.5,  // Anfangsgebiet: Fluren mit Mittelpunkt in diesem Abstand
+    FLUR_REACH: 11,           // Grundreichweite der Landnahme (Kacheln ums Zentrum), + FLUR_REACH_TIER je Stadtstufe
+    FLUR_REACH_TIER: 6,
+    FLUR_TARGET_BASE: 9,      // Ziel-Flurenzahl = BASE + Einwohner × FLUR_TARGET_POP (stetige Landnahme)
+    FLUR_TARGET_POP: 0.6,
+    FLUR_GROW_TICKS: 80,      // ohne Not alle ~4 Monate eine Flur (je Regierung landSpeed)
+    FLUR_START_RADIUS: 9.5,   // Anfangsgebiet: 3×3 Fluren um das Lager
     FLUR_CLAIM_TICKS: 120,    // frühestens alle n Ticks eine neue Flur je Stadt
     HOUSES_PER_FLUR: 1.6,     // Häuser je Flur (plus 2 Grundstock)
     NEW_REALM_MIN_DIST: 18,   // Mindestabstand für Auswanderer-Stämme
-    DAUGHTER_MIN_DIST: 18,    // Tochterstadt: Abstand zu jeder Stadt (Plan: ≥ 16)
+    DAUGHTER_MIN_DIST: 34,    // Tochterstadt: Abstand zu jeder Stadt (beide sollen noch wachsen können)
     DAUGHTER_ADULTS: 30,        // Mindestabstand Tochterstadt / Startstadt zu anderen Städten (Mitte zu Mitte)
     PLAYER_CITY_MIN_DIST: 12  // Siedler vom Spieler dürfen näher heran
   };
@@ -59,7 +63,9 @@
     { key: 'camp', name: 'Lager', nameA: 'ein Lager', minPop: 0 },
     { key: 'village', name: 'Dorf', nameA: 'ein Dorf', minPop: 8 },
     { key: 'town', name: 'Stadt', nameA: 'eine Stadt', minPop: 20 },
-    { key: 'city', name: 'Großstadt', nameA: 'eine Großstadt', minPop: 40 }
+    { key: 'city', name: 'Großstadt', nameA: 'eine Großstadt', minPop: 40 },
+    { key: 'metro', name: 'Metropole', nameA: 'eine Metropole', minPop: 110 },
+    { key: 'world', name: 'Weltstadt', nameA: 'eine Weltstadt', minPop: 220 }
   ];
 
   // ---------------------------------------------------------------------------
@@ -72,7 +78,7 @@
     wallThreshold: 10, wallMax: 3, wallHpMul: 1, wallSpeedMul: 1, buildMul: 1, workMul: 1,
     happiness: 0, growthMul: 1, soldierShare: 0.1, goldMul: 1, taxes: 0, aggression: 0.35,
     militia: false, noLeader: false, sharedStock: false, noMarket: false, barricades: false,
-    neverWar: false, traders: false, mercenaries: false, buysPeace: false, cityLimit: 3, landReach: 0, nature: 'use', natureMul: 1,
+    neverWar: false, traders: false, mercenaries: false, buysPeace: false, cityLimit: 3, landReach: 0, nature: 'use', natureMul: 1, landSpeed: 1,
     // Kriegsführung: raid | knights | defend | mass | agitate | holy | mercs | militia
     war: 'raid', soldierMul: 1, unitHpMul: 1, unitDmgMul: 1,
     // Bauprogramm: je Typ { first: ab Einwohnern, per: je weitere n Einwohner, max }; towerSpacing 0 = keine Türme
@@ -93,7 +99,7 @@
       war: 'raid', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 99, max: 1 }, towerSpacing: 0 },
       looks: { center: 'Langhaus mit Lagerfeuer', wall: 'Palisade, hölzerner Ausguck', house: 'Strohhütte', monument: 'Hinkelstein' },
       cityLimit: 2, landReach: -2,
-      nature: 'use'
+      nature: 'use', landSpeed: 0.6
     },
     monarchy: {
       name: 'Monarchie', titleM: 'König', titleF: 'Königin', realm: 'Königreich',
@@ -105,7 +111,7 @@
       war: 'knights', unitHpMul: 1.3, unitDmgMul: 1.2, build: { barracks: { first: 14, per: 25, max: 2 }, market: { first: 18, per: 40, max: 1 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 5 },
       looks: { center: 'Burg', wall: 'grauer Stein, runde Türme mit Kegeldach und Wimpel', house: 'Fachwerkhaus', monument: 'Königsstatue' },
       cityLimit: 5, landReach: 1,
-      nature: 'use'
+      nature: 'use', landSpeed: 1.4
     },
     democracy: {
       name: 'Demokratie', titleM: 'Kanzler', titleF: 'Kanzlerin', realm: 'Freistaat',
@@ -117,7 +123,7 @@
       war: 'defend', build: { barracks: { first: 35, per: 60, max: 1 }, market: { first: 14, per: 25, max: 2 }, monument: { first: 20, per: 60, max: 1 }, towerSpacing: 8 },
       looks: { center: 'Rathaus mit Uhrturm und Säulen', wall: 'heller Sandstein, Türme mit Fahne', house: 'buntes Bürgerhaus', monument: 'Rednerpult mit Wahlurne' },
       cityLimit: 4, landReach: 0,
-      nature: 'use'
+      nature: 'use', landSpeed: 1.0
     },
     fascism: {
       name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Strammstaat',
@@ -129,7 +135,7 @@
       war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3 },
       looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' },
       cityLimit: 4, landReach: 2,
-      nature: 'exploit'
+      nature: 'exploit', landSpeed: 1.6
     },
     communism: {
       name: 'Kommunismus', titleM: 'Generalsekretär', titleF: 'Generalsekretärin', realm: 'Volksrepublik',
@@ -141,7 +147,7 @@
       war: 'agitate', build: { barracks: { first: 22, per: 50, max: 1 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 18, per: 60, max: 1 }, towerSpacing: 7 },
       looks: { center: 'Volkshaus mit Fahne und Schornstein', wall: 'Betonplatten, schlichte Blocktürme', house: 'Plattenbau', monument: 'Denkmal der Planübererfüllung (Riesenrübe)' },
       cityLimit: 5, landReach: 1,
-      nature: 'exploit'
+      nature: 'exploit', landSpeed: 1.1
     },
     theocracy: {
       name: 'Theokratie', titleM: 'Hohepriester', titleF: 'Hohepriesterin', realm: 'Gottesstaat',
@@ -153,7 +159,7 @@
       war: 'holy', build: { barracks: { first: 24, per: 60, max: 1 }, market: { first: 22, per: 60, max: 1 }, monument: { first: 10, per: 12, max: 3 }, towerSpacing: 6 },
       looks: { center: 'Tempel mit Kuppel und goldener Spitze', wall: 'weißer Stein mit goldenen Kappen, Kuppeltürme', house: 'Fachwerk mit Türmchen', monument: 'Schrein der Gottheit' },
       cityLimit: 3, landReach: 0,
-      nature: 'care'
+      nature: 'care', landSpeed: 0.9
     },
     republic: {
       name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsrepublik',
@@ -165,7 +171,7 @@
       war: 'mercs', build: { barracks: { first: 30, per: 60, max: 1 }, market: { first: 10, per: 14, max: 3 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 7 },
       looks: { center: 'Kontor mit Treppengiebel und Kran', wall: 'roter Backstein, Türme mit Handelsflaggen', house: 'Giebelhaus', monument: 'Goldene Waage' },
       cityLimit: 4, landReach: 0,
-      nature: 'exploit', natureMul: 0.6
+      nature: 'exploit', natureMul: 0.6, landSpeed: 1.0
     },
     anarchy: {
       name: 'Anarchie', titleM: '', titleF: '', realm: 'Freie Kommune',
@@ -178,7 +184,7 @@
       war: 'militia', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 16, per: 99, max: 1 }, towerSpacing: 0 },
       looks: { center: 'Kommune (bunter Flickenbau)', wall: 'Barrikaden aus Gerümpel', house: 'Bauwagen und Flickenhütten', monument: 'bemalte Wand' },
       cityLimit: 2, landReach: -1,
-      nature: 'care'
+      nature: 'care', landSpeed: 0.6
     }
   };
   WW.GOVERNMENTS = {};

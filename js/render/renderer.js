@@ -90,11 +90,30 @@
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
     if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
     if (st.murk && st.murk[i] > 0 && this.S.has('t_murk')) { g.globalAlpha = Math.min(1, 0.4 + st.murk[i] / 200); this.S.drawFast(g, 't_murk', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
-    if (st.barren && st.barren[i] > 0 && this.S.has('t_barren')) this.S.drawFast(g, 't_barren', x * 8, y * 8, 0, false);
+    if (st.barren && st.barren[i] > 0) {
+      const b = st.barren[i], lv = b > 170 ? 3 : b > 85 ? 2 : 1;
+      const bk = this.S.has('t_barren_' + lv) ? 't_barren_' + lv : (this.S.has('t_barren') ? 't_barren' : null);
+      if (bk) this.S.drawFast(g, bk, x * 8, y * 8, 0, false);
+    }
+    if (st.soot && st.soot[i] > 0 && this.S.has('t_soot')) { g.globalAlpha = Math.min(1, 0.3 + st.soot[i] / 200); this.S.drawFast(g, 't_soot', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
+    if (st.cleared && st.cleared[i] > 0 && this.S.has('t_cleared')) this.S.drawFast(g, 't_cleared', x * 8, y * 8, 0, false);
+    // Schienen liegen im Boden wie Pfade
+    if (st.structAt && st.structAt[i] >= 0 && this.structById) {
+      const rs = this.structById(st.structAt[i]);
+      if (rs && rs.type === 'rail') this.drawRailTile(g, rs, x, y);
+    }
     if (st.crack && st.crack[i]) { const ck = this.S.has('t_crack') ? 't_crack' : (this.S.has('fx_crack') ? 'fx_crack' : null); if (ck) { g.globalAlpha = Math.min(1, st.crack[i] / 120); this.S.drawFast(g, ck, x * 8, y * 8, 0, false); g.globalAlpha = 1; } }
     if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) { g.globalAlpha = Math.min(1, 0.35 + st.fallout[i] / 160); this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
     const m = st.mark ? st.mark[i] : 0;
     if (m) this.S.drawFast(g, m >= 100 ? 't_crater' : 't_scorched', x * 8, y * 8, 0, false);
+  };
+
+  Renderer.prototype.drawRailTile = function (g, s, x, y) {
+    const S = this.S, m = (s.mask | 0) & 15;
+    if (typeof S.drawRail === 'function') { try { S.drawRail(g, x * 8, y * 8, m, !!s.bridge); return; } catch (e) { /* Rückfall */ } }
+    const k = (s.bridge && S.has('t_rail_bridge_' + m)) ? 't_rail_bridge_' + m : 't_rail_' + m;
+    if (S.has(k)) S.drawFast(g, k, x * 8, y * 8, 0, false);
+    else { g.fillStyle = '#5b4a3a'; g.fillRect(x * 8 + 1, y * 8 + 3, 6, 2); }
   };
 
   Renderer.prototype.pathMask = function (x, y) {
@@ -129,7 +148,7 @@
     if (st.structs) {
       const cityK = this.cityKingdoms();
       for (const s of st.structs) {
-        if (s.dead) continue;
+        if (s.dead || s.type === 'rail') continue;
         const by = s.y + s.h - 1;
         if (s.x < x0 || s.x >= x1 || by < y0 || by >= y1) continue;
         (rows[by - y0] || (rows[by - y0] = [])).push(s);
@@ -167,6 +186,7 @@
       const k = h % 5 === 0 && this.S.has('d_deadtree_0') ? 'd_deadtree_0' : 'd_stump_0';
       return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : null;
     }
+    if (st.deposit && st.deposit[i] > 0) { const d = this.depositDecor(i); if (d) return d; }
     if (st.owner && st.owner[i] >= 0) {
       // Ergebnis je Kachel eine Sekunde zwischenspeichern (Nachbarsuche ist teuer)
       const N = st.W * st.H;
@@ -176,6 +196,18 @@
       if (c >= 0) return { key: this._decoObj[c], dx: 0, dy: 0 };
     }
     return this.S.decorFor(st.terrain[i], st.variant ? st.variant[i] : 0);
+  };
+
+  // Vorkommen: Deko d_deposit_<art>_<n>; Art aus state.depositKinds / WW.DEPOSIT_KEYS / WW.DEPOSITS
+  Renderer.prototype.depositDecor = function (i) {
+    const st = this.st, v = st.deposit[i], S = this.S;
+    const kinds = st.depositKinds || WW.DEPOSIT_KEYS || (WW.DEPOSITS ? (Array.isArray(WW.DEPOSITS) ? WW.DEPOSITS.map(d => d.key || d) : Object.keys(WW.DEPOSITS)) : null);
+    if (!kinds) return null;
+    const kind = kinds[v] || kinds[v - 1];
+    if (!kind) return null;
+    const n = (Math.imul(i, 2654435761) >>> 28) % 3;
+    for (const k of ['d_deposit_' + kind + '_' + n, 'd_deposit_' + kind + '_0', 'd_deposit_' + kind]) if (S.has(k)) return { key: k, dx: 0, dy: 0 };
+    return null;
   };
 
   // Stadt-Deko (rein optisch): auf freien, bebaubaren Kacheln neben Häusern, deterministisch nach Kachel-Hash
@@ -361,6 +393,7 @@
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
+      if (f.type === 'trainsmoke') { this.addPlume(f.x * 8, f.y * 8 - 6, false, -6, -14, false); continue; }
       if (f.type === 'smokeplume') { if (typeof this.S.factoryStacks !== 'function') this.addPlume(f.x * 8, f.y * 8, !!(f.filtered || f.clean), -6, -14, f.big); continue; }
       if (f.type === 'muzzle' && this.st) { (this.muzzleT || (this.muzzleT = new Map())).set((f.y | 0) * this.st.W + (f.x | 0), this.time); }
       if (f.type === 'flash') this.flash = Math.max(this.flash || 0, 0.9);
@@ -383,8 +416,8 @@
   // Qualmwolke: (px, py) = Schornstein-Mündung, (ox, oy) = Zeichenversatz des Sprites zur Mündung
   Renderer.prototype.addPlume = function (px, py, clean, ox, oy, big) {
     const P = this.plumes || (this.plumes = []);
-    if (P.length >= 56) return;
-    P.push({ x: px, y: py, ox: ox == null ? -6 : ox, oy: oy == null ? -14 : oy, t: 0, life: (big ? 3.4 : 2.6) + Math.random(), clean: clean, f: (Math.random() * 4) | 0 });
+    if (P.length >= 70) return;
+    P.push({ x: px, y: py, ox: ox == null ? -6 : ox, oy: oy == null ? -14 : oy, t: 0, life: (big ? 5 : 4) + Math.random() * 1.5, clean: clean, f: (Math.random() * 4) | 0 });
   };
   Renderer.prototype.updatePlumes = function (g, vt, dt) {
     const S = this.S, st = this.st;
@@ -414,8 +447,11 @@
       p.x += dt * w.x * 6 * (0.3 + k); p.y += dt * w.y * 6 * k;
       const base = p.clean ? 'fx_smokeplume_clean_' : 'fx_smokeplume_';
       const key = S.has(base + '0') ? base + Math.min(3, (k * 4) | 0) : 'fx_smoke_' + (p.f & 1);
-      g.globalAlpha = (p.clean ? 0.6 : 0.85) * (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85);
-      S.drawFast(g, key, Math.round(p.x + p.ox), Math.round(p.y + p.oy), 0, false);
+      g.globalAlpha = (p.clean ? 0.6 : 0.85) * (k < 0.12 ? k / 0.12 : 1 - (k - 0.12) / 0.88);
+      const sc = 1 + k * 1.2;   // Wolke wächst beim Aufsteigen
+      g.save(); g.translate(p.x, p.y); g.scale(sc, sc);
+      S.drawFast(g, key, Math.round(p.ox), Math.round(p.oy), 0, false);
+      g.restore();
     }
     g.globalAlpha = 1;
     this.plumes = out;
@@ -435,7 +471,7 @@
       for (let i = 0; i < cw * chh && i < pol.length; i++) {
         const v = Math.max(0, Math.min(1, pol[i] / mx)), o = i * 4;
         if (airView) { d[o] = 90 + v * 70; d[o + 1] = 200 - v * 140; d[o + 2] = 90 - v * 50; d[o + 3] = 150; }
-        else { const h = Math.max(0, v - 0.2) / 0.8; d[o] = 96; d[o + 1] = 86; d[o + 2] = 70; d[o + 3] = Math.round(Math.min(0.55, h * 0.75) * 255); }   // Dunst ab ~50
+        else { const h = v < 0.1 ? 0 : 0.06 + (v - 0.1) / 0.9 * 0.6; d[o] = 96; d[o + 1] = 86; d[o + 2] = 70; d[o + 3] = Math.round(Math.min(0.62, h) * 255); }   // ab ~25 ein Hauch
       }
       c.putImageData(img, 0, 0);
     }
@@ -502,6 +538,24 @@
           for (let j = 0; j < 3; j++) { g.beginPath(); g.arc(px, py, r * (0.5 + j * 0.15), t * (3 - j) + j, t * (3 - j) + j + 2.2); g.stroke(); }
           break;
         case 'volcano': g.fillStyle = 'rgba(240,100,42,' + (0.25 + 0.15 * Math.sin(t * 5)) + ')'; g.beginPath(); g.arc(px, py, r * 0.5, 0, Math.PI * 2); g.fill(); break;
+      }
+    }
+  };
+
+  // Züge: Lok und Wagen; jedes Teil { x, y, dir }, Liste in train.cars/parts oder der Zug selbst
+  Renderer.prototype.drawTrains = function (g, list, vt) {
+    const S = this.S;
+    for (const t of list) {
+      if (!t) continue;
+      const parts = Array.isArray(t.cars) ? [{ x: t.x, y: t.y, dir: t.dir, part: 'loco' }].concat(t.cars.map(c => Object.assign({ part: 'car' }, c))) :
+        Array.isArray(t.parts) ? t.parts : [{ x: t.x, y: t.y, dir: t.dir, part: 'loco' }];
+      for (const p of parts) {
+        if (!p || !(p.x >= 0) || p.x < vt.x0 - 2 || p.x > vt.x1 + 2 || p.y < vt.y0 - 2 || p.y > vt.y1 + 2) continue;
+        let key = null;
+        if (typeof S.trainKey === 'function') { try { key = S.trainKey(p.part || 'car', p.kind || t.kind || 'freight', p.dir != null ? p.dir : 0); } catch (e) { key = null; } }
+        const px = Math.round(p.x * 8 - 4), py = Math.round(p.y * 8 - 6);
+        if (key && S.has(key)) S.drawFast(g, key, px, py, t.colorIndex != null ? t.colorIndex : 10, false);
+        else { g.fillStyle = '#0a1a21'; g.fillRect(px, py + 2, 8, 5); g.fillStyle = p.part === 'loco' ? '#3e3150' : '#9a6233'; g.fillRect(px + 1, py + 3, 6, 3); }
       }
     }
   };
@@ -920,6 +974,7 @@
     // (4) Effekte, Flugzeuge
     this.drawFx(ctx, dt);
     if (st.wild && st.wild.effects && st.wild.effects.length) this.drawEffects(ctx, st.wild.effects, vt);
+    if (st.trains && st.trains.length) this.drawTrains(ctx, st.trains, vt);
     if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
 
     // (5) Auswahl und Pinsel
@@ -963,6 +1018,7 @@
       for (const s of st.structs) {
         if (s.dead) continue;
         const by = s.y + s.h - 1;
+        if (s.type === 'rail') continue;
         if (by < y0 || by > y1 || s.x + s.w - 1 < sx0 || s.x > sx1) continue;
         rowS[by - y0].push(s);
         if ((s.device === 'spikes' || s.device === 'trap') && by + 1 - y0 < nrows) (this._spikes || (this._spikes = [])).push(s);

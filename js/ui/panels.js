@@ -341,8 +341,14 @@
     ]));
     // Lager (bei Kommunismus gemeinsames Lager)
     const stock = (k && k.stock && WW.GOVERNMENTS[k.gov].sharedStock) ? k.stock : c.stock;
+    // Rohstoffe aus WW.RESOURCES (sonst die vier Grundstoffe); kompakt als Icon-Raster
+    let res = [['food', 'Essen', 'i_food'], ['wood', 'Holz', 'i_wood'], ['stone', 'Stein', 'i_stone'], ['gold', 'Gold', 'i_gold']];
+    if (WW.RESOURCES) {
+      const L = Array.isArray(WW.RESOURCES) ? WW.RESOURCES : Object.keys(WW.RESOURCES).map(k => Object.assign({ key: k }, WW.RESOURCES[k]));
+      res = L.filter(r => r && r.key && (stock[r.key] != null || ['food', 'wood', 'stone', 'gold'].indexOf(r.key) >= 0)).map(r => [r.key, r.name || r.key, r.icon || 'i_' + r.key]);
+    }
     body.appendChild(h('div.sec', [h('h3', stock === c.stock ? 'Lager' : 'Gemeinsames Lager'),
-      h('div.stock', [['food', 'Essen'], ['wood', 'Holz'], ['stone', 'Stein'], ['gold', 'Gold']].map(r => h('div', { title: r[1] }, [icon('i_' + r[0], 22), h('span', String(Math.floor(stock[r[0]] || 0)))])))]));
+      h('div.stock', res.map(r => h('div', { title: r[1] }, [icon(WW.Sprites.has(r[2]) ? r[2] : 'i_' + r[0], 22, null, r[1]), h('span', String(Math.floor(stock[r[0]] || 0)))])))]));
     if (typeof c.loyalty === 'number') {
       const lv = Math.max(0, Math.min(100, c.loyalty));
       body.appendChild(h('div.sec', [h('h3', 'Loyalität'), h('div.barline', [h('span', lv >= 60 ? 'treu' : lv >= 35 ? 'wankelmütig' : 'abtrünnig'), h('b', Math.round(lv) + ' %')]), happyBar(lv)]));
@@ -353,6 +359,13 @@
     body.appendChild(h('div.sec', [h('h3', 'Stimmung'), h('div.barline', [h('span', moodWord(c.happiness)), h('b', Math.round(c.happiness) + ' %')]), happyBar(c.happiness)]));
     { const nb = natureBlock(c.nature); if (nb) body.appendChild(nb); }
     { const ab = airBlock(c.pollution); if (ab) body.appendChild(ab); }
+    {
+      const camps = sim.state.structs.filter(s => s.type === 'laborcamp' && s.cityId === c.id && !s.dead).length;
+      if (camps) {
+        let pr = 0; for (const u of sim.state.units) if (!u.dead && u.role === 'prisoner' && u.cityId === c.id) pr++;
+        body.appendChild(h('div.sec', [h('h3', 'Arbeitslager'), h('div', camps + (camps === 1 ? ' Lager' : ' Lager') + ' · ' + pr + ' Insassen')]));
+      }
+    }
     { const fb = factoryList(sim, s => s.cityId === c.id); if (fb) body.appendChild(fb); }
     { const mb = this.modsBlock(c); if (mb) body.appendChild(mb); }
     // Mauer

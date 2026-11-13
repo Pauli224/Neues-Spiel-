@@ -298,6 +298,19 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Armbinde (Faschismus: Diktator und Soldat)
+  if (want('armband') || Q.get('armband')) (function () {
+    var r = section('armband', 'Armbinde der Faschismus-Tracht: Diktator und Soldat, stehend, laufend, Angriff, in drei Teamfarben (Rot, Himmelblau, Schiefer), Maßstab 8');
+    var k = canvas(3 * 6 * 11 + 6, 22, 8); k.c.id = 'armbandcv';
+    groundRect(k.x, fill(WW.T.GRASS, Math.ceil((3 * 6 * 11 + 6) / 8), 3), 0, 0);
+    [0, 4, 11].forEach(function (t, ti) {
+      [['leader', 4], ['leader', 1], ['leader', 'attack'], ['soldier', 4], ['soldier', 1], ['soldier', 'attack']].forEach(function (c, i) {
+        S.draw(k.x, S.unitKey(ti === 1 ? 'orc' : (ti === 2 ? 'dwarf' : 'human'), c[0], 'fascism', c[1]), 2 + (ti * 6 + i) * 11, 12, { team: t });
+      });
+    });
+    cell(r, '', k.c);
+  })();
+
   // ---------------------------------------------------------------- Industrie
   if (want('industry') || Q.get('industry')) (function () {
     var r = section('industry', 'Industrie: links qualmende Industriestadt mit Dunstglocke, totem Wald und trübem Fluss, rechts saubere Stadt mit Filter und Hain; darunter alle Fabriken');
