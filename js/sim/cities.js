@@ -568,12 +568,15 @@
     let hasLumber = false, hasQuarry = false;
     for (const id of city.drops) { const s = sim._structs.get(id); if (s && s.type === 'lumber') hasLumber = true; if (s && s.type === 'quarry') hasQuarry = true; }
     for (const id of city.sites) { const s = sim._structs.get(id); if (s && s.type === 'lumber') hasLumber = true; if (s && s.type === 'quarry') hasQuarry = true; }
-    if (!hasLumber && (city.jobs.lumberjack || 0) >= 2 && sk.wood >= 4 && city.pop >= 7 && sim.rng.chance(0.5)) {
+    const dropTry = !(city.dropTry > st.tick);
+    if (!hasLumber && dropTry && (city.jobs.lumberjack || 0) >= 2 && sk.wood >= 4 && city.pop >= 7 && sim.rng.chance(0.5)) {
+      city.dropTry = st.tick + 150;   // teure Platzsuche höchstens alle 15 s
       const i = findDropSpot(sim, city, 'wood', 'lumber');
       if (i < 0) city.needLand = true;
       if (i >= 0) { const s = placeStruct(sim, city, 'lumber', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
     }
-    if (!hasQuarry && (city.jobs.miner || 0) >= 1 && sk.wood >= 4 && city.pop >= 10 && sim.rng.chance(0.5)) {
+    if (!hasQuarry && dropTry && (city.jobs.miner || 0) >= 1 && sk.wood >= 4 && city.pop >= 10 && sim.rng.chance(0.5)) {
+      city.dropTry = st.tick + 150;
       const i = findDropSpot(sim, city, 'stone', 'quarry');
       if (i < 0) city.needLand = true;
       if (i >= 0) { const s = placeStruct(sim, city, 'quarry', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
@@ -692,7 +695,8 @@
         }
       }
     } else { city.hungry = false; city.starve = 0; }
-    // Gold
+    // Gold (ohne Goldwirtschaft bleibt die Kasse leer, auch wenn Ereignisse Gold bringen)
+    if (g.goldMul <= 0) sk.gold = 0;
     if (g.goldMul > 0) {
       let gold = 0;
       const tax = WW.SimUtil.mod(sim, k, city, 'taxes', g.taxes);

@@ -85,8 +85,13 @@
     }
     const B = sim._buckets, A = sim._abuckets;
     for (let i = 0; i < B.length; i++) { B[i].length = 0; A[i].length = 0; }
+    // gibt es überhaupt Feindschaft zwischen Einheiten? (Krieg, Aufstand, Räuber, Wahnsinn)
+    let hostileWorld = false;
+    for (const k of st.kingdoms) { for (const o in k.relations) if (k.relations[o].status === 'war') { hostileWorld = true; break; } if (hostileWorld) break; }
+    if (!hostileWorld) for (const c of st.cities) if (c.revolt) { hostileWorld = true; break; }
     for (const u of st.units) {
       if (u.dead) continue;
+      if (!hostileWorld && (u.role === 'bandit' || u.role === 'rebel' || (u.wMad && u.wMad > st.tick))) hostileWorld = true;
       const cx = Math.min(bw - 1, Math.max(0, (u.x / CELL) | 0)), cy = Math.min(bh - 1, Math.max(0, (u.y / CELL) | 0));
       B[cy * bw + cx].push(u);
     }
@@ -95,6 +100,7 @@
       const cx = Math.min(bw - 1, Math.max(0, (a.x / CELL) | 0)), cy = Math.min(bh - 1, Math.max(0, (a.y / CELL) | 0));
       A[cy * bw + cx].push(a);
     }
+    sim._hostileWorld = hostileWorld;
   }
 
   // Ruft fn(v) für Einheiten (oder Tiere) im Umkreis r auf
@@ -163,7 +169,8 @@
 
   function findFoe(sim, u, r) {
     let best = null, bd = 1e9;
-    forNear(sim, u.x, u.y, r, false, (v, d2) => {
+    // ohne jede Feindschaft in der Welt nur nach Raubtieren schauen (spart die Nachbarschaftssuche)
+    if (sim._hostileWorld !== false) forNear(sim, u.x, u.y, r, false, (v, d2) => {
       if (!hostile(sim, u, v)) return;
       // Zivilisten werden nur angegriffen, wenn sie selbst kämpfen (Miliz) oder angreifen
       if (!isFighterRole(v.role) && v.foe !== u.id && !gov(sim, v).militia) return;
@@ -566,8 +573,9 @@
       if (!WW.TERRAIN_LUT[res][st.terrain[u.target]]) { u.phase = 0; return; }
       if (arrived(sim, u, u.tt)) { u.phase = 2; u.tt = res === 'wood' ? 40 : 52; return; }
       const r = goTo(sim, u, u.tt, { limit: 1500 });
-      if (r === null && u.fails > 2) {
-        u.phase = 0; u.fails = 0; u.wait = 16;
+      if (r === null) {
+        // unerreichbarer Rohstoff: eine Weile anderes tun statt erneut zu suchen
+        u.phase = 0; u.fails = 0; u.wait = 60 + (u.id % 40);
       }
       return;
     }
@@ -734,8 +742,22 @@
       return;
     }
     if (!best && distTo(u, tc.cx + 0.5, tc.cy + 0.5) < 6) { u.path = null; return; }
-    const r = goTo(sim, u, WW.Cities.centerTile(sim, tc, u.id), { breach: true, limit: C().PATH_LIMIT_LONG });
+    const r = armyGoTo(sim, u, WW.Cities.centerTile(sim, tc, u.id));
     if (r === null && u.fails > 3) { u.order = null; u.fails = 0; }
+  }
+
+  // Wegsuche für Heere gedeckelt: eigenes Teilbudget je Tick, wachsende Wartezeit nach Fehlschlägen,
+  // Pfad wird wiederverwendet, solange er gilt (zivile Wegsuchen verhungern nicht)
+  function armyGoTo(sim, u, goal) {
+    const st = sim.state;
+    if (u.path && u.goal === goal && u.pi < u.path.length) return true;
+    if (u.nextPath && u.nextPath > st.tick) return false;
+    if ((sim._armyUsed || 0) >= C().PATH_BUDGET * C().ARMY_PATH_SHARE) return false;
+    const b0 = sim._pathBudget;
+    const r = goTo(sim, u, goal, { breach: true, limit: C().PATH_LIMIT_ARMY });
+    sim._armyUsed = (sim._armyUsed || 0) + Math.max(0, b0 - sim._pathBudget);
+    if (r !== true) u.nextPath = st.tick + Math.min(480, 24 << Math.min(4, u.fails || 0));
+    return r;
   }
 
   function march(sim, u) {
@@ -781,7 +803,7 @@
       return;
     }
     const goal = WW.Cities.centerTile(sim, city, u.id);
-    const r = goTo(sim, u, goal, { breach: true, limit: C().PATH_LIMIT_LONG });
+    const r = armyGoTo(sim, u, goal);
     if (r === null && u.fails > 3) { u.order = null; u.fails = 0; }
   }
 

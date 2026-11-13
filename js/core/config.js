@@ -34,9 +34,11 @@
     WALL_RESERVE_STEP: 4,     // je Stadterweiterung so viel größer
     WALL_EXPAND_YEARS: 5,     // frühestens alle n Jahre erweitern
     TOWER_RANGE: 5.5, TOWER_DMG: 7, TOWER_COOLDOWN: 14,
-    PATH_BUDGET: 6000,        // A*-Knoten pro Tick weltweit
+    PATH_BUDGET: 4500,        // A*-Knoten pro Tick weltweit
     PATH_LIMIT: 2500,         // Knotenlimit je Suche (normal)
-    PATH_LIMIT_LONG: 14000,   // Siedler, Heere, Händler
+    PATH_LIMIT_LONG: 14000,   // Siedler, Händler
+    PATH_LIMIT_ARMY: 4000,    // Heere (mit Durchbruchskosten)
+    ARMY_PATH_SHARE: 0.2,     // Anteil des Wegsuche-Budgets je Tick für Heere
     TERRITORY_BASE: 9,
     SETTLER_DIST_MIN: 24, SETTLER_DIST_MAX: 40,
     CITY_MIN_DIST: 20,

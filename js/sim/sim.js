@@ -276,7 +276,11 @@
   function compact(sim) {
     const st = sim.state;
     if (sim._unitsDirty) {
-      st.units = st.units.filter(u => { if (u.dead) { sim._units.delete(u.id); return false; } return true; });
+      // in place verdichten (keine neuen Arrays je Tick)
+      const a = st.units;
+      let j = 0;
+      for (let i = 0; i < a.length; i++) { const u = a[i]; if (u.dead) sim._units.delete(u.id); else a[j++] = u; }
+      a.length = j;
       sim._unitsDirty = false;
     }
     if (sim._animalsDirty) {
@@ -295,6 +299,7 @@
     const TPY = WW.CONFIG.TPY;
     st.tick++;
     this._pathBudget = WW.CONFIG.PATH_BUDGET;
+    this._armyUsed = 0;
     compact(this);
     // Statistik (pop, jobs, _members) wird von den Verbrauchern selbst erneuert (alle 10/40 Ticks, jährlich)
     WW.Units.buildBuckets(this);

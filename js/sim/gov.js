@@ -175,6 +175,7 @@
       sim.event(o.reason || 'gov', { kingdom: k.name, gov: ng.name, oldGov: og.name, leader: leaderFull(k), deity: k.deity || '', why: o.why || '' }, atK(sim, k));
     }
     st.pathVersion++;
+    if (WW.Events && typeof WW.Events.onGovChange === 'function') WW.Events.onGovChange(sim, k);
     return true;
   }
 

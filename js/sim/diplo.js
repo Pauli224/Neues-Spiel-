@@ -71,7 +71,7 @@
     }
     callAllies(sim, a, b);
     const pa = capitalPt(sim, a), pb = capitalPt(sim, b);
-    sim.event(type || 'war', {
+    if (type !== 'silent') sim.event(type || 'war', {
       kingdom: a.name, other: b.name, city: pa ? pa.c.name : a.name, otherCity: pb ? pb.c.name : b.name,
       deity: a.deity || '', otherDeity: b.deity || ''
     }, { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
@@ -80,13 +80,13 @@
   function makePeace(sim, a, b, type, extra) {
     if (!setStatus(sim, a, b, 'peace')) return false;
     const pa = capitalPt(sim, a);
-    sim.event(type || 'peace', Object.assign({ kingdom: a.name, other: b.name }, extra || {}), { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
+    if (type !== 'silent') sim.event(type || 'peace', Object.assign({ kingdom: a.name, other: b.name }, extra || {}), { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
     return true;
   }
   function makeAlliance(sim, a, b, type) {
     if (!setStatus(sim, a, b, 'alliance')) return false;
     const pa = capitalPt(sim, a);
-    sim.event(type || 'alliance', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
+    if (type !== 'silent') sim.event(type || 'alliance', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
     return true;
   }
 
