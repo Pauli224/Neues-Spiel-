@@ -337,7 +337,10 @@
         const rdg = 1 - Math.abs(fbm(px * 0.22, pz * 0.22, 4, 23) * 2 - 1);
         n += (rdg * rdg - 0.35) * 2.6 * mAmt + (fbm(px * 0.9, pz * 0.9, 3, 5) - 0.5) * 0.9 * mAmt;
       }
-      if (nW) n *= 0.25;
+      if (nW && nL && nR < nW) {
+        // Küste: Uferlinie wandert frei um die Kachelkante (keine Treppen)
+        n = (fbm(px * 0.7, pz * 0.7, 3, 17) - 0.5) * 1.1 + (vnoise(px * 2.1, pz * 2.1, 19) - 0.5) * 0.25;
+      } else if (nW) n *= 0.25;
       v += n;
       if (nW && !nL) {
         // reines Wasser
@@ -347,8 +350,11 @@
       } else if (nW && nL) {
         // Ufer: Fluss knapp über dem Spiegel, Meer/See am Spiegel
         const lvl = wSum / wN;
-        if (nR) v = Math.min(Math.max(v, lvl + 0.03), lvl + 0.09);
-        else v = clamp(v, lvl - 0.12, lvl + 0.05);
+        if (nR && nR === nW) {
+          const wob = (fbm(px * 0.9, pz * 0.9, 2, 29) - 0.5) * 0.22;
+          v = lvl + (nR >= 2 ? -0.07 : 0.03) + wob;
+        }
+        else v = clamp(v, lvl - 0.45, lvl + 0.32);
         wl[gz * GW + gx] = lvl;
       } else {
         // reines Land: über dem Spiegel der Nachbarn halten
@@ -785,8 +791,8 @@
     this.ctx.camTarget.set(c.x, this._ty, c.z);
     // Dunst: wächst mit dem Abstand
     const fog = this.scene.fog;
-    fog.near = c.dist * 1.1 + 10;
-    fog.far = c.dist * 4.2 + 90;
+    fog.near = c.dist * 1.3 + 20;
+    fog.far = c.dist * 5.5 + 160;
     this.camera.far = Math.max(400, fog.far * 1.6);
     this.camera.near = clamp(c.dist * 0.02, 0.2, 3);
     this.camera.updateProjectionMatrix();

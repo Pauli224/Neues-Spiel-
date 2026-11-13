@@ -162,7 +162,7 @@
     }
     const r = Math.min(24, WW.Cities.territoryRadius(city, sim));
     const area = (i) => {
-      if (owner[i] !== id || inRing[i] !== -1 || plan.has(i)) return false;
+      if ((owner[i] !== id && owner[i] !== -1) || inRing[i] !== -1 || plan.has(i)) return false;   // eigenes oder freies Land
       const s = sim._structs.get(st.structAt[i]);
       return !(s && WW.Structs.isWallish(s));
     };
@@ -170,9 +170,10 @@
     let best = -1, bs = -1e9;
     const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
     const y0 = Math.max(1, Math.floor(py - r)), y1 = Math.min(H - 2 - h, Math.ceil(py + r));
-    const want = ringR + 3;
+    const want = ringR + 6;   // etwas Abstand: wachsende Mauerringe reißen ab, was im Weg steht
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      if (owner[y * W + x] !== id) continue;
+      const own = owner[y * W + x];
+      if (own !== id && own !== -1) continue;
       const mx = x + w / 2, my = y + h / 2;
       const d = Math.sqrt((mx - px) * (mx - px) + (my - py) * (my - py));
       if (d < minD || d > r - 1) continue;
@@ -183,7 +184,7 @@
         if (t === T.RIVER) river++;
         else if (WW.TERRAIN_LUT.wood[t]) wood++;
       }
-      const score = -Math.abs(d - want) * 0.5 + (river ? 6 + Math.min(3, river * 0.3) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8;
+      const score = -Math.abs(d - want) * 0.5 + (river ? 6 + Math.min(3, river * 0.3) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === -1 ? 2 : 0);
       if (score > bs) { bs = score; best = y * W + x; }
     }
     return best;
@@ -224,6 +225,9 @@
     if (!force) {
       if ((city.tier | 0) < 2 || city.pop < spec.minPop || !city.centerOk) return null;
       if ((city.indNext | 0) > st.tick) return null;
+      // erst wenn der Mauerring geplant ist (sonst reißt ihn die erste Mauer gleich wieder ab)
+      const g = WW.GOVERNMENTS[(sim._kingdoms.get(city.kingdomId) || {}).gov];
+      if (g && g.wallMax > 0 && !(city.wall && city.wall.plan && city.wall.plan.length) && city.pop < 60) return null;
       const list = factories(sim, city);
       if (list.some((s) => !s.built)) return null;
       const want = Math.min(spec.max, 1 + Math.floor((city.pop - spec.minPop) / spec.perPop));
@@ -302,6 +306,10 @@
         city.indActive = n;
       }
       city.indGov = gk;
+      // abgerissene Fabrik (z. B. wachsender Mauerring): sofort Ersatz weiter draußen planen
+      const have = fs.filter((f) => !f.dead).length;
+      if (have < (city.indHave | 0) && spec) city.indNext = 0;
+      city.indHave = have;
       // Neubau
       if (spec && law && !(city.indNext > st.tick)) WW.Industry.tryBuild(sim, city, false);
       // Filter (Demokratie)
@@ -429,16 +437,17 @@
   // ---------------------------------------------------------------------------
   // Folgen (alle EFFECT_EVERY Ticks)
   // ---------------------------------------------------------------------------
+  // Luft über der Stadt samt Stadtrand (7×7 Zellen = 28×28 Kacheln): Mittel und Spitze gemischt
   function cityPollution(st, city, d) {
     const C = d.cell, ccx = Math.floor(city.cx / C), ccy = Math.floor(city.cy / C);
     let sum = 0, wsum = 0, mx = 0;
-    for (let y = ccy - 2; y <= ccy + 2; y++) for (let x = ccx - 2; x <= ccx + 2; x++) {
+    for (let y = ccy - 3; y <= ccy + 3; y++) for (let x = ccx - 3; x <= ccx + 3; x++) {
       if (x < 0 || y < 0 || x >= d.pw || y >= d.ph) continue;
-      const v = st.pollution[y * d.pw + x], wt = Math.abs(x - ccx) + Math.abs(y - ccy) <= 1 ? 2 : 1;
+      const v = st.pollution[y * d.pw + x], wt = Math.max(Math.abs(x - ccx), Math.abs(y - ccy)) <= 1 ? 2 : 1;
       sum += v * wt; wsum += wt; if (v > mx) mx = v;
     }
     const avg = wsum ? sum / wsum : 0;
-    return Math.max(0, Math.min(100, Math.round((avg * 0.6 + mx * 0.4) * 100 / 170)));
+    return Math.max(0, Math.min(100, Math.round((avg * 0.45 + mx * 0.55) * 100 / 150)));
   }
 
   function effects(sim) {

@@ -56,7 +56,7 @@
     const q = P.get('q') || 'mid';
     const r3 = WW.R3.create(canvas, { quality: q, preserveDrawingBuffer: true });
     window.__r3 = r3;
-    const sim = WW.Sim.create({ seed: P.get('seed') || 7, size: P.get('size') || 'large', populate: +(P.get('pop') || 5), govs: 'mixed' });
+    const sim = WW.Sim.create({ seed: (P.get('seed') && isNaN(+P.get('seed'))) ? P.get('seed') : +(P.get('seed') || 7), size: P.get('size') || 'large', populate: +(P.get('pop') || 5), govs: 'mixed' });
     const ticks = +(P.get('ticks') || 2500);
     for (let i = 0; i < ticks; i++) sim.tick();
     sim.drainDirtyTiles(); sim.drainFx();

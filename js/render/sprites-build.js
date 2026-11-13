@@ -2296,12 +2296,7 @@
       def('fx_smokeplume_' + pf, plume(pf, SMK), { group: 'fx', anchor: 'icon' });
       def('fx_smokeplume_clean_' + pf, plume(pf, SMC), { group: 'fx', anchor: 'icon' });
     }
-    // Dunst in drei Dichten (kachelbar, gelbgrau, halbdurchsichtig)
-    [70, 115, 160].forEach(function (a, i) {
-      var g = new Grid(8, 8), c1 = AC(null, '#b8b08a', a), c2 = AC(null, '#a49c7a', Math.min(255, a + 25));
-      for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) g.set(x, y, hash(x, y, 400 + i) < 0.25 ? c2 : c1);
-      def('t_smog_' + (i + 1), g, { group: 'ground' });
-    });
+    // Dunst t_smog_1..3 (mit weichen Randvarianten) steht in sprites-world.js
     (function () {
       var g = new Grid(8, 8), m1 = AC(null, '#7a6a3e', 120), m2 = AC(null, '#5e5030', 150), m3 = AC(null, '#9a8a5a', 110);
       for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) { var h = hash(x, y, 410); g.set(x, y, h < 0.15 ? m2 : (h > 0.9 ? m3 : m1)); }
@@ -2340,6 +2335,157 @@
     deco2('d_sickbush_1', ['..yY..', '.yHHy.', 'YHyyHY', 'HYHHYH'], 'woodD');
     deco2('d_stump_1', ['.wvw.', 'wWWWw', 'WwWwW'], 'ink');
     deco2('d_stump_2', ['vwv....', 'wWWw.vw', 'WwWW.WW'], 'ink');
+    // ======================================================================
+    // Bahnhöfe, Arbeitslager, Rohstoff-Betriebe, Fahnen
+    // ---------------------------------------------------------------- Bahnhöfe (2×2)
+    function platform(gr, y) { gr.rect(0, y, 14, 2, 'stoneL'); gr.hline(0, y + 1, 14, 'stoneD'); for (var x = 1; x < 14; x += 4) gr.set(x, y, 'stone'); }
+    g = new Grid(14, 22);   // neutral: Holzbahnhof mit Bahnsteigdach
+    roofSide(g, 0, 4, 14, 7, WOODR, 2);
+    wallPlanks(g, 1, 11, 12, 7); eaveShadow(g, 1, 11, 12, 'woodD');
+    door(g, 6, 13, 5); win(g, 2, 13); win(g, 10, 13);
+    platform(g, 19); g.vline(0, 12, 7, 'woodD'); g.vline(13, 12, 7, 'woodD');
+    defB('s_station', finishB(g), 2);
+    g = new Grid(14, 25);   // Kommunismus: Ziegel mit Uhr und Fahne
+    g.vline(11, 0, 9, 'woodD'); g.paint(12, 0, ['TT', 'TT', 'Tt']);
+    roofSide(g, 0, 7, 14, 7, ['stoneL', 'stone', 'stoneD'], 2);
+    g.ellipse(7, 7.5, 2.6, 2.6, function (x, y, nx, ny) { return nx * nx + ny * ny > 0.6 ? 'stoneD' : 'white'; }); g.set(7, 7, 'ink'); g.set(7, 6, 'ink'); g.set(8, 7, 'ink');
+    wallBrick(g, 0, 14, 14, 9, BRK2, 0); eaveShadow(g, 0, 14, 14, BRK2[2]);
+    g.hline(0, 14, 14, 'T'); door(g, 6, 17, 6); win(g, 2, 16); win(g, 10, 16);
+    platform(g, 23);
+    defB('s_station_communism', finishB(g), 2);
+    g = new Grid(14, 24);   // Faschismus: grauer Block, Pfeiler, schmale Fenster
+    roofFlat(g, 0, 4, 14, 5, RF[0], RF[1], RF[2]);
+    g.rect(4, 0, 6, 5, DCON[1]); g.hline(4, 0, 6, DCON[0]); g.rect(6, 1, 2, 2, 'ink');
+    g.rect(0, 9, 14, 13, DCON[1]); g.vline(0, 9, 13, DCON[0]); g.vline(13, 9, 13, DCON[2]); g.hline(0, 9, 14, DCON[3]);
+    for (var px = 2; px < 13; px += 3) g.vline(px, 11, 6, 'ink');
+    g.rect(5, 16, 4, 6, 'ink'); g.hline(5, 16, 4, DCON[3]);
+    platform(g, 22);
+    defB('s_station_fascism', finishB(g), 2);
+    S.stationKey = function (gov) { return (gov === 'communism' || gov === 'fascism') ? 's_station_' + gov : 's_station'; };
+
+    // ---------------------------------------------------------------- Arbeitslager (2×2): Zaun, zwei Baracken, Wachturm, kahler Boden
+    var BARE = AC(null, '#9a9486', 210), BARED = AC(null, '#827c70', 220);
+    function laborCamp(ruin) {
+      var gr = new Grid(16, 22), G0 = 6;    // Zeile G0 = Oberkante der Grundfläche
+      for (var y = G0; y < G0 + 16; y++) for (var x = 0; x < 16; x++) gr.set(x, y, hash(x, y, 91) < 0.2 ? BARED : BARE);
+      function barrack(x, y, w) { gr.rect(x, y, w, 2, 'stoneD'); gr.hline(x, y, w, 'stone'); gr.rect(x, y + 2, w, 4, 'woodD'); for (var k = x + 1; k < x + w - 1; k += 3) gr.set(k, y + 3, ruin ? 'ink' : 'plum'); gr.hline(x, y + 5, w, 'ink'); }
+      barrack(2, G0 + 2, 9); barrack(4, G0 + 9, 9);
+      // Wachturm in der Ecke
+      gr.vline(13, G0 - 6, 10, 'woodD'); gr.vline(15, G0 - 6, 10, 'woodD'); gr.line(13, G0 + 3, 15, G0 - 2, 'wood');
+      gr.rect(12, G0 - 9, 5, 3, 'woodL'); gr.hline(12, G0 - 10, 5, 'stoneD'); gr.set(14, G0 - 8, ruin ? 'woodD' : 'fireY');
+      // Zaun ringsum (bei der Ruine offen und umgefallen)
+      for (var i = 0; i < 16; i++) {
+        if (!ruin || i % 5 !== 2) { gr.set(i, G0, 'metalD'); gr.set(i, G0 + 15, 'metalD'); }
+        if (i % 3 === 0) { gr.vline(i, G0 - 2, 3, 'woodD'); if (!ruin || i < 8) gr.vline(i, G0 + 13, 3, 'woodD'); }
+      }
+      for (y = G0; y < G0 + 16; y++) { if (!ruin || y % 4) gr.set(0, y, 'metalD'); gr.set(15, y, 'metalD'); }
+      if (ruin) { gr.line(9, G0 + 15, 13, G0 + 13, 'woodD'); gr.set(7, G0 + 7, 'leaf'); gr.set(10, G0 + 14, 'leafL'); }
+      // Tor: schlichte Lücke mit zwei Pfosten, keine Schrift, kein Bogen
+      gr.d[(G0 + 15) * 16 + 7] = 0; gr.d[(G0 + 15) * 16 + 8] = 0; gr.vline(6, G0 + 12, 4, 'woodD'); gr.vline(9, G0 + 12, 4, 'woodD');
+      return gr;
+    }
+    ['s_laborcamp', 's_laborcamp_communism', 's_laborcamp_fascism'].forEach(function (k) { def(k, laborCamp(false), { group: 'build', fw: 2, fh: 2, ox: 0, oy: 16 - 22 }); });
+    def('s_laborcamp_ruin', laborCamp(true), { group: 'build', fw: 2, fh: 2, ox: 0, oy: 16 - 22 });
+    S.laborcampKey = function (gov, ruin) { return ruin ? 's_laborcamp_ruin' : ((gov === 'communism' || gov === 'fascism') ? 's_laborcamp_' + gov : 's_laborcamp'); };
+
+    // ---------------------------------------------------------------- Mine (2×2), Schmiede, Fischerei, Weide
+    function mine(pile) {
+      var gr = new Grid(14, 22);
+      // Fördergerüst
+      gr.line(2, 18, 5, 2, 'woodD'); gr.line(9, 18, 6, 2, 'woodD'); gr.hline(2, 10, 8, 'wood'); gr.hline(4, 2, 4, 'woodD');
+      gr.ellipse(5.5, 3, 2.2, 2.2, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d > 0.55 ? 'metalD' : (d < 0.15 ? 'metal' : null); });
+      gr.vline(5, 4, 9, 'stoneD');
+      // Felshang mit Stolleneingang
+      gr.ellipse(8, 18, 6.5, 5, function (x, y, nx, ny) { return y > 21 ? null : (nx + ny < -0.5 ? 'stoneL' : (nx > 0.4 ? 'stoneD' : 'stone')); });
+      gr.rect(6, 16, 5, 6, 'ink'); gr.hline(5, 15, 7, 'woodD'); gr.vline(5, 15, 7, 'woodD'); gr.vline(11, 15, 7, 'woodD');
+      gr.hline(6, 21, 5, 'metalD');
+      // Lore
+      gr.paint(0, 17, ['wwww', 'WwwW', '.oo.']);
+      if (pile) gr.paint(10, 18, pile);
+      return gr;
+    }
+    defB('s_mine', finishB(mine(null)), 2);
+    defB('s_mine_iron', finishB(mine(['.hQ.', 'QhRQ', 'hQhR'])), 2);
+    defB('s_mine_coal', finishB(mine(['.oO.', 'OoOo', 'oOdo'])), 2);
+    defB('s_mine_gold', finishB(mine(['.kj.', 'kjKk', 'jKkK'])), 2);
+    S.mineKey = function (ore) { return /^(iron|coal|gold)$/.test(ore) ? 's_mine_' + ore : 's_mine'; };
+    def('s_smithy', L.DEFS.s_factory_schmiede_1.grid, { group: 'build', fw: 2, fh: 2, ox: 0, oy: L.DEFS.s_factory_schmiede_1.oy });
+    // Fischerei am Ufer: Hütte oben, Steg nach unten ins Wasser, Netz, Boot (Wasser scheint durch)
+    g = new Grid(14, 20);
+    roofSide(g, 0, 2, 9, 6, WOODR, 2); wallPlanks(g, 1, 8, 7, 5); g.rect(3, 10, 2, 3, 'plum');
+    g.rect(9, 9, 3, 11, 'woodL'); for (var sy = 9; sy < 20; sy += 2) g.hline(9, sy, 3, 'wood'); g.vline(9, 18, 2, 'woodD'); g.vline(11, 18, 2, 'woodD');
+    for (var nx2 = 0; nx2 < 6; nx2++) for (var ny2 = 0; ny2 < 4; ny2++) if ((nx2 + ny2) & 1) g.set(1 + nx2, 14 + ny2, 'stoneL');
+    g.vline(0, 13, 6, 'woodD'); g.vline(7, 13, 6, 'woodD');
+    g.paint(1, 18, ['.wwwwW', 'wvvvvW', '.WWWW.']);
+    defB('s_fishery', finishB(g), 2);
+    // Weide: Holzzaun um 2×2, innen frei, Tränke
+    g = new Grid(16, 18);
+    for (var fx2 = 0; fx2 < 16; fx2++) { g.set(fx2, 3, 'woodL'); g.set(fx2, 17, 'woodL'); if (fx2 % 3 === 0) { g.vline(fx2, 2, 3, 'woodD'); g.vline(fx2, 15, 3, 'woodD'); } }
+    for (var fy2 = 3; fy2 < 18; fy2++) { g.set(0, fy2, 'woodL'); g.set(15, fy2, 'woodL'); }
+    g.rect(10, 12, 4, 2, 'woodD'); g.hline(11, 12, 2, 'glass');
+    g.d[17 * 16 + 7] = 0; g.d[17 * 16 + 8] = 0;
+    def('s_pasture', g, { group: 'build', fw: 2, fh: 2, ox: 0, oy: -2 });
+
+    // ---------------------------------------------------------------- Fahnen in Reichsfarbe mit dem Muster des Reichs
+    // Muster wie banner_<0..7>, hier als Funktion auf Tuchkoordinaten (u nach rechts, v nach unten, je 0..1)
+    var FPAT = [
+      function (u, v) { return v < 0.38 ? 'T' : (v < 0.62 ? 'white' : 'Td'); },                                   // Streifen
+      function (u, v) { return (Math.abs(u - 0.36) < 0.1 || Math.abs(v - 0.5) < 0.13) ? 'white' : 'T'; },          // Kreuzbalken
+      function (u, v) { var d = u - Math.abs(v - 0.5) * 0.9; return (d > 0.28 && d < 0.46) ? 'white' : 'T'; },      // Sparren
+      function (u, v) { return (u < 0.12 || v < 0.16 || u > 0.88 || v > 0.84) ? 'Td' : 'T'; },                     // Rand
+      function (u, v) { return ((Math.floor(u * 4) + Math.floor(v * 3)) & 1) ? 'white' : 'T'; },                  // Schach
+      function (u, v) { var dx = u - 0.5, dy = (v - 0.5) * 0.7; return dx * dx + dy * dy < 0.045 ? 'white' : 'T'; }, // Kreis
+      function (u, v) { var d = u - v; return d > 0.15 ? 'Td' : (d > -0.15 ? 'white' : 'T'); },                    // Diagonale
+      function (u, v) { return (Math.abs(u - 0.5) < 0.1 && Math.abs(v - 0.5) < 0.14) ? 'white' : (v > 0.8 ? 'Td' : 'T'); } // Punkt
+    ];
+    // Sicherheitsregel: bei roter Reichsfarbe (Index 0) kein Kreis/Punkt (rot + heller Fleck) und kein Kreuz (Ähnlichkeit zu Landesflaggen)
+    var SAFE = { 0: { 5: 2, 7: 4, 1: 6 } };
+    S.safePattern = function (pattern, team) { pattern = ((pattern | 0) % 8 + 8) % 8; var r = SAFE[team | 0]; return r && r[pattern] != null ? r[pattern] : pattern; };
+    function cloth(gr, x0, y0, w, h, p, wave, vertical) {
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var u = vertical ? j / h : i / w, v = vertical ? i / w : j / h;
+        var c = FPAT[p](u, v);
+        var dy = wave ? Math.round(Math.sin(i * 0.9 + wave * 1.6) * 0.8 * (i / w)) : 0;
+        gr.set(x0 + i, y0 + j + dy, c);
+      }
+    }
+    for (var fp = 0; fp < 8; fp++) {
+      [0, 1].forEach(function (f) {
+        var gr = new Grid(16, 24);
+        gr.vline(1, 1, 22, 'metalD'); gr.vline(2, 1, 22, 'metal'); gr.set(1, 0, 'goldL'); gr.set(2, 0, 'gold');
+        cloth(gr, 3, 2, 12, 8, fp, f + 1, false);
+        if (f) { gr.set(14, 2, 0); gr.set(14, 9, 0); }
+        gr.rect(0, 22, 4, 2, 'stone'); gr.hline(0, 22, 4, 'stoneL');
+        def('s_flagpole_' + fp + '_' + f, gr.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 1).footShade(), { group: 'flag', ox: -1, oy: 8 - 26 });
+      });
+      var hb = new Grid(6, 16);
+      hb.hline(0, 0, 6, 'woodD'); cloth(hb, 0, 1, 6, 13, fp, 0, true);
+      hb.set(0, 14, 'Td'); hb.set(5, 14, 'Td'); hb.hline(1, 14, 4, 'T'); hb.hline(2, 15, 2, 'Td');
+      def('s_banner_hang_' + fp, hb.pad(1, 1, 1, 1).outline(), { group: 'flag', anchor: 'icon' });
+      var rw = new Grid(8, 7);
+      for (var x = 0; x < 8; x++) rw.set(x, Math.round(1 + Math.sin(x / 7 * Math.PI) * 1.5), 'woodD');
+      [1, 4, 7].forEach(function (x0, k) { var yb = Math.round(1 + Math.sin(x0 / 7 * Math.PI) * 1.5) + 1, c = FPAT[fp](k / 3 + 0.1, 0.5); rw.set(x0 - 1, yb, c); rw.set(x0, yb, c); rw.set(x0 - 1, yb + 1, k & 1 ? 'Td' : 'T'); rw.set(x0 - 1, yb + 2, k & 1 ? 'Td' : 'T'); });
+      def('s_banner_row_' + fp, rw, { group: 'flag', anchor: 'icon' });
+    }
+    // Helfer: kind = 'pole' | 'hang' | 'row' | 'center'; team optional für die Sicherheitsregel
+    S.flagKey = function (kind, pattern, frame, team) {
+      var p = team == null ? (((pattern | 0) % 8) + 8) % 8 : S.safePattern(pattern, team);
+      if (kind === 'hang') return 's_banner_hang_' + p;
+      if (kind === 'row') return 's_banner_row_' + p;
+      if (kind === 'center') return 's_center_fascism_p' + p;
+      return 's_flagpole_' + p + '_' + ((frame | 0) & 1);
+    };
+    // Kommandantur mit den Fassadenbannern im Muster des Reichs
+    for (fp = 0; fp < 8; fp++) {
+      var cg = new Grid(CW, 32), Cc = [CONC[2], CONC[0], CONC[1]];
+      roofFlat(cg, 0, 4, 22, 5, RF[0], RF[1], RF[2]); roofFlat(cg, 6, 1, 10, 4, RF[0], RF[1], RF[2]);
+      cg.set(1, 3, 'fireY'); cg.set(2, 3, 'metalD'); cg.set(20, 3, 'fireY'); cg.set(19, 3, 'metalD');
+      paint(cg, 0, 9, 22, 21, Cc[1], Cc[2], Cc[0]); paint(cg, 6, 5, 10, 25, Cc[0], Cc[2], 'white'); cg.hline(0, 9, 22, Cc[2]);
+      for (var bx2 = 2; bx2 < 6; bx2 += 2) for (var by2 = 11; by2 < 27; by2 += 5) { cg.vline(bx2, by2, 3, 'ink'); cg.vline(bx2 + 15, by2, 3, 'ink'); }
+      [6, 13].forEach(function (bx) { cloth(cg, bx, 6, 3, 16, fp, 0, true); cg.set(bx + 1, 22, 'Td'); });
+      cg.rect(10, 22, 2, 8, 'ink'); cg.hline(9, 21, 4, Cc[2]); cg.hline(5, 30, 12, Cc[0]); cg.hline(4, 31, 14, Cc[2]);
+      defB('s_center_fascism_p' + fp, finishB(cg), 3, 'center');
+    }
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

@@ -4,6 +4,9 @@
   const SAVE_KEY = 'wuselwelt.save', AUTO_KEY = 'wuselwelt.auto', WELCOME_KEY = 'wuselwelt.welcomed', SPEED_KEY = 'wuselwelt.speed';
   const TICK = 1 / 10;   // Sekunden je Sim-Schritt bei 1×
 
+  // Schalter der Oberfläche: 3D-Ansicht ist abgeschaltet (Code bleibt, kostet aber nichts)
+  WW.CONFIG_UI = Object.assign({ enable3d: false }, WW.CONFIG_UI || {});
+
   const game = {
     sim: null, cam: null, renderer: null, input: null, canvas: null,
     hud: null, ui: null, minimap: null, newWorldScreen: null,
@@ -272,7 +275,7 @@
     if (k === 'p' || k === 'P' || k === 'Pause') { game.togglePause(); return; }
     if (k === 'c' || k === 'C') { game.ui.openChronicle(); return; }
     if (k === 'm' || k === 'M') { game.ui.toggleMinimap(); return; }
-    if (k === 'v' || k === 'V') { game.toggleMode(); return; }
+    if ((k === 'v' || k === 'V') && game.v3) { game.toggleMode(); return; }
     if (k === 'n' || k === 'N') { if (game.v3 && game.mode === '3d') game.v3.north(); return; }
     if (k === '+' || k === '=') { game.cam.animateZoom(game.cam.crispZoom(game.cam.zoom * 1.6)); return; }
     if (k === '-' || k === '_') { game.cam.animateZoom(game.cam.crispZoom(game.cam.zoom / 1.6)); return; }
@@ -543,7 +546,8 @@
     document.body.classList.toggle('mode3d', m === '3d');
   }
   game.setMode = setMode;
-  game.toggleMode = function () { setMode(game.mode === '3d' ? '2d' : '3d'); game.hud.hint(game.mode === '3d' ? 'Ansicht: 3D. Rechts ziehen verschiebt, Mitte oder Alt+Ziehen dreht, Q/E drehen.' : 'Ansicht: Pixel.'); };
+  game.toggleMode = function () {
+    if (!game.v3) return; setMode(game.mode === '3d' ? '2d' : '3d'); game.hud.hint(game.mode === '3d' ? 'Ansicht: 3D. Rechts ziehen verschiebt, Mitte oder Alt+Ziehen dreht, Q/E drehen.' : 'Ansicht: Pixel.'); };
 
   // ------------------------------------------------------------------ Ton
   const AUDIO_KEY = 'wuselwelt.audio';
@@ -582,7 +586,7 @@
     game.hud = new WW.UI.Hud(game);
     game.minimap = new WW.UI.Minimap(game);
     game.newWorldScreen = new WW.UI.NewWorld(game);
-    game.v3 = WW.UI.View3D ? new WW.UI.View3D(game) : null;
+    game.v3 = WW.CONFIG_UI.enable3d && WW.UI.View3D ? new WW.UI.View3D(game) : null;
     game.input = new WW.UI.Input(game.v3 ? [game.canvas, game.v3.canvas] : [game.canvas], game);
     // Ton erst nach der ersten Nutzeraktion; bei verdecktem Fenster pausieren
     const unlock = () => { game.audioStart(); };
@@ -607,7 +611,7 @@
     const firstVisit = !D().store.get(WELCOME_KEY);
     // Ansicht: gespeicherte Wahl, sonst 3D, wenn das Gerät es kann
     const vw = D().store.get(VIEW_KEY);
-    const want3d = vw ? vw === '3d' : !!(WW.R3 && WW.R3.supported && WW.R3.supported());
+    const want3d = WW.CONFIG_UI.enable3d && (vw ? vw === '3d' : !!(WW.R3 && WW.R3.supported && WW.R3.supported()));
     setMode(want3d && game.v3 && game.v3.available() ? '3d' : '2d', false);
     const go = (s) => {
       attachSim(s);

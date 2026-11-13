@@ -851,6 +851,47 @@
       '.....gggG.....',
       '....qggggG....',
       '....GGGGGG....']);
+    // ================================================================== Rohstoff-, Zug- und Gefangenen-Icons
+    icon('i_iron', ['..............', '..............', '....hQQh......', '...hQRQRh.....', '..hQRhQRQh....', '..QRQQRhRQ....', '...hRQRQh.QQh.', '....hhhh.QRQRh', '.........hQRQh', '..........hhh.']);
+    icon('i_coal', ['..............', '..............', '....oOOo......', '...oOdOOo.....', '..oOOOdOOo....', '..OdOOOOdO....', '...oOOdOo.OOo.', '....oooo.OdOOo', '.........oOOOo', '..........ooo.']);
+    icon('i_fish', function (g) {
+      g.ellipse(6, 7, 5, 3, function (x, y, nx, ny) { return ny < -0.3 ? 'white' : (ny > 0.4 ? 'waterD' : 'glass'); });
+      g.paint(10, 3, ['..b', '.bb', 'bbb', 'bbb', '.bb', '..b']); g.set(3, 6, 'ink'); g.line(5, 5, 7, 9, 'waterD');
+    });
+    icon('i_crystal', function (g) {
+      [[2, 4, 3, 9], [5, 1, 4, 12], [9, 5, 3, 8]].forEach(function (s) {
+        for (var y = 0; y < s[3]; y++) for (var x = 0; x < s[2]; x++) { var dx = x - (s[2] - 1) / 2; if (y >= Math.abs(dx) * 1.6) g.set(s[0] + x, s[1] + y, dx < 0 ? 'white' : (dx < 0.6 ? 'glass' : 'waterD')); }
+      });
+    });
+    icon('i_wool', function (g) {
+      [[4, 7, 3.4], [9, 6, 3.6], [6, 4, 3], [7, 9, 3.4]].forEach(function (c) { g.ellipse(c[0], c[1], c[2], c[2] * 0.9, function (x, y, nx, ny) { return nx + ny < -0.5 ? 'white' : (ny > 0.5 ? 'snowD' : 'cream'); }); });
+    });
+    icon('i_train', [
+      '...GG.........',
+      '...GG.........',
+      '..GGGG..dddd..',
+      '.ddddddddbbd..',
+      '.dTTTTTTdbbd..',
+      '.dddddddddddd.',
+      'MMMMMMMMMMMMMM',
+      '.oMo.oMo.oMo..',
+      '..o...o...o...',
+      '..............',
+      'nnnnnnnnnnnnnn',
+      'WW.WW.WW.WW.WW']);
+    icon('i_prisoner', [
+      '.....ggg......',
+      '....gsssG.....',
+      '....ssssS.....',
+      '.....sSS......',
+      '...ggggggG....',
+      '..gggggggGG...',
+      '..sgggggGs....',
+      '...ggggggW....',
+      '...GG..GGW....',
+      '...GG..GGW....',
+      '.........mm...',
+      '.........mm...']);
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

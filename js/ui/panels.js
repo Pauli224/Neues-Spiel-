@@ -473,7 +473,7 @@
       item('i_map', 'Minikarte', 'Ein- oder ausblenden', () => { this.toggleMinimap(); this.closeModal(); }),
       game.sim && game.sim.state.pollution ? item(WW.Sprites.has('i_view_air') ? 'i_view_air' : 'i_map', 'Luftkarte', 'Verschmutzung und Wind zeigen', () => { game.toggleAirView(); this.closeModal(); }) : null,
       game.v3 && game.v3.available() ? item('i_map', 'Ansicht: ' + (game.mode === '3d' ? '3D' : 'Pixel'), 'Umschalten auf ' + (game.mode === '3d' ? 'Pixel' : '3D') + ' (Taste V)', () => { game.toggleMode(); this.closeModal(); }) : null,
-      game.v3 && game.v3.available() ? item('i_newworld', 'Grafik', 'Qualität ' + ({ low: 'niedrig', mid: 'mittel', high: 'hoch' })[game.quality], () => this.openGraphics()) : null,
+      item('i_newworld', 'Grafik', 'Tag/Nacht, Wetter, Qualität', () => this.openGraphics()),
       WW.Audio ? item(WW.Sprites.has('i_sound') ? 'i_sound' : 'i_chronicle', 'Ton', game.audioSet.on ? 'An · Lautstärken einstellen' : 'Aus', () => this.openSound()) : null,
       item('i_inspect', 'Kurzanleitung', 'Die drei wichtigsten Tipps', () => this.showWelcome())
     ]);

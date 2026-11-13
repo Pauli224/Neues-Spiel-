@@ -20,11 +20,11 @@
       monarchy:  { kind: 'schmiede',   minPop: 34, perPop: 60, max: 1, mods: [{ key: 'strength', mul: 1.08 }, { key: 'gold', mul: 1.05 }] }
     },
     KINDS: {
-      kombinat:   { name: 'Kombinat',          desc: 'Erfüllt den Plan. Welchen, weiß keiner, aber er wird erfüllt.', g: 'n', emit: 40 },
-      ruestung:   { name: 'Rüstungswerk',      desc: 'Macht Helme, Schilde und sehr viel grauen Rauch.', g: 'n', emit: 46 },
-      manufaktur: { name: 'Manufaktur',        desc: 'Hier werden Knöpfe gemacht. Und Gold. Und Husten.', g: 'f', emit: 32 },
-      fabrik:     { name: 'Fabrik',            desc: 'Hat einen Betriebsrat, eine Kantine und irgendwann einen Filter.', g: 'f', emit: 29 },
-      schmiede:   { name: 'Königliche Schmiede', desc: 'Klein, laut, königlich. Der Ruß trägt eine Krone.', g: 'f', emit: 14, small: true }
+      kombinat:   { name: 'Kombinat',          desc: 'Erfüllt den Plan. Welchen, weiß keiner, aber er wird erfüllt.', g: 'n', emit: 52 },
+      ruestung:   { name: 'Rüstungswerk',      desc: 'Macht Helme, Schilde und sehr viel grauen Rauch.', g: 'n', emit: 60 },
+      manufaktur: { name: 'Manufaktur',        desc: 'Hier werden Knöpfe gemacht. Und Gold. Und Husten.', g: 'f', emit: 44 },
+      fabrik:     { name: 'Fabrik',            desc: 'Hat einen Betriebsrat, eine Kantine und irgendwann einen Filter.', g: 'f', emit: 40 },
+      schmiede:   { name: 'Königliche Schmiede', desc: 'Klein, laut, königlich. Der Ruß trägt eine Krone.', g: 'f', emit: 18, small: true }
     },
     NO_RACES: { elf: 1, frog: 1 },
     CFG: {

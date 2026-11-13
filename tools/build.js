@@ -40,9 +40,11 @@ const between = (s, a, b) => { const i = s.indexOf(a), j = s.indexOf(b, i + a.le
 // 3D und Ton: Block <!--R3--> … <!--/R3--> in index.html aus den vorhandenen Dateien neu aufbauen
 // (three.js zuerst, dann render3d in fester Reihenfolge, dann audio). Fehlende Dateien: Block bleibt leer.
 function listDir(dir) { try { return fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).sort(); } catch (e) { return []; } }
+// 3D-Ansicht ist gestoppt (Wunsch des Spielers): three.js und js/render3d werden nicht geladen.
+const ENABLE_3D = false;
 function r3Files() {
   const out = [];
-  if (fs.existsSync(path.join(ROOT, 'js/vendor/three.min.js')) && fs.existsSync(path.join(ROOT, 'js/render3d/core.js'))) {
+  if (ENABLE_3D && fs.existsSync(path.join(ROOT, 'js/vendor/three.min.js')) && fs.existsSync(path.join(ROOT, 'js/render3d/core.js'))) {
     out.push('js/vendor/three.min.js');
     const r3 = listDir('js/render3d');
     const ORDER = ['core.js', 'terrain.js', 'flora.js'];
@@ -53,7 +55,7 @@ function r3Files() {
     for (const f of r3) if (!out.includes('js/render3d/' + f)) out.push('js/render3d/' + f);
   }
   const au = listDir('js/audio');
-  const FIRST = ['core.js', 'audio.js', 'engine.js', 'synth.js'];
+  const FIRST = au.filter(f => /(^|-)core\.js$/.test(f)).concat(['audio.js', 'engine.js', 'synth.js']);
   for (const f of FIRST) if (au.includes(f)) out.push('js/audio/' + f);
   for (const f of au) if (!out.includes('js/audio/' + f)) out.push('js/audio/' + f);
   return out;

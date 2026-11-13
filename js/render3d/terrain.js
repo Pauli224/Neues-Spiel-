@@ -194,7 +194,7 @@
             'vec4 d2 = texture2D(uDetail, vWP.xz * 0.083 + 0.37);',
             'vec4 d3 = texture2D(uDetail, vWP.xz * 1.7);',
             'float rockT = texture2D(uDetail, vec2(vWP.x * 0.7 + vWP.z * 0.7, vWP.y * 1.6) * 0.21).b * 0.6 + texture2D(uDetail, vWP.xz * 0.19).b * 0.4;',
-            'float fGrass = 0.72 + 0.34 * d1.r + 0.22 * (d2.g - 0.5) + 0.16 * (d3.r - 0.5);',
+            'float fGrass = 0.70 + 0.30 * d1.r + 0.22 * (d2.g - 0.5) + 0.30 * (d3.r - 0.5) + 0.22 * (texture2D(uDetail, vWP.xz * 4.1).r - 0.5);',
             'float fRock = 0.62 + 0.62 * rockT + 0.1 * (d3.r - 0.5);',
             'float fSmooth = 0.92 + 0.10 * d1.r + 0.06 * (d2.g - 0.5);',
             'float grassW = clamp(1.0 - vAux.y - vAux.w, 0.0, 1.0);',
@@ -207,6 +207,9 @@
             // Effekte
             'vec2 muv = vWP.xz / uMap;',
             'vec4 ef = texture2D(uEff, muv);',
+            // ausgefranste Ränder statt weicher Quadrate
+            'float en = d2.g * 0.55 + d1.r * 0.3 + d3.r * 0.15;',
+            'ef = clamp((ef - 0.62 * (1.0 - ef) * en) * vec4(1.8), 0.0, 1.0);',
             'vec3 soil = vec3(0.21, 0.14, 0.08) * (0.75 + 0.5 * d1.r);',
             'diffuseColor.rgb = mix(diffuseColor.rgb, soil, ef.a * 0.75);',
             'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.022, 0.02) * (0.6 + 0.8 * d3.r), ef.r * 0.9);',
@@ -240,8 +243,8 @@
       const wun = this.wun = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
         uTime: ctx.uniforms.uTime, uDetail: { value: ctx.tex('detail') }, uEff: { value: this.effTex }, uMap: un.uMap,
         uSun: { value: ctx.sunDir }, uSunCol: { value: ctx.sunColor },
-        uZenith: { value: lin('#5d88bd') }, uHorizon: { value: lin('#e2d2bd') },
-        uShallow: { value: lin('#3f9a98') }, uDeep: { value: lin('#0d3550') }, uRiver: { value: lin('#3a7d86') },
+        uZenith: { value: lin('#4f80b8') }, uHorizon: { value: lin('#b4c3cc') },
+        uShallow: { value: lin('#46aba2') }, uDeep: { value: lin('#0c4466') }, uRiver: { value: lin('#3a7d86') },
         uPol: { value: this.polTex }, uPolMap: un.uPolMap
       });
       this.wMat = new THREE.ShaderMaterial({
@@ -287,7 +290,7 @@
           '  body = mix(body, body * vec3(0.7, 0.68, 0.55), pol * 0.7);',
           '  float sunUp = clamp(uSun.y, 0.0, 1.0);',
           '  vec3 lit = body * (0.35 + 0.9 * sunUp) * mix(vec3(0.85, 0.9, 1.0), uSunCol, 0.5);',
-          '  vec3 col = mix(lit, sky, fres * 0.75);',
+          '  vec3 col = mix(lit, sky, fres * 0.55);',
           '  float sp = pow(max(dot(r, normalize(uSun)), 0.0), 220.0);',
           '  col += uSunCol * (sp * 5.0 + pow(max(dot(r, normalize(uSun)), 0.0), 24.0) * 0.12);',
           // Brandung
@@ -608,7 +611,7 @@
       x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1); x1 = Math.min(W - 1, x1 + 1); y1 = Math.min(H - 1, y1 + 1);
       const g = this.terrG, P = this.P;
       g.clearRect(x0 * P, y0 * P, (x1 - x0 + 1) * P, (y1 - y0 + 1) * P);
-      const lw = Math.max(1, Math.round(P * 0.16));
+      const lw = Math.max(1, Math.round(P * 0.12));
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const i = y * W + x, k = kt[i];
         if (k < 0) continue;

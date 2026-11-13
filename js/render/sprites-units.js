@@ -1067,6 +1067,7 @@
       var cls = role === 'soldier' ? 'soldier' : (role === 'leader' ? 'leader' : 'citizen');
       var cs;
       if (role === 'rebel') cs = REBEL;
+      else if (role === 'prisoner') cs = COST.prisonerSuit;
       else if (role === 'bandit') cs = BANDIT;
       else if (cls === 'soldier') cs = SOLD[gov] || SOLD.tribe;
       else if (cls === 'leader') { var Ld = LEAD[gov] || LEAD.tribe; cs = merge(COST[Ld.base], Ld); }
@@ -1518,6 +1519,80 @@
       for (var f = 0; f < 4; f++) L.ALIAS['a_' + k + '_' + f] = 'h_' + k + '_monster_' + k + '_' + f;
       L.ALIAS['a_' + k + '_1'] = 'h_' + k + '_monster_' + k + '_2';
     });
+
+    // ================================================================== Züge (feines Raster, Maßstab 0,5)
+    // tr_loco_<dir>, tr_car_<kind>_<dir>; dir e/w = Seitenansicht (w gespiegelt), n = von hinten, s = von vorn.
+    var TRC = { body: [HC('#5a5e6a'), HC('#3e424c'), HC('#2a2c34')], black: [HC('#44464e'), HC('#2c2e36'), HC('#1a1a22')],
+      wood: [C.woodL, C.wood, C.woodD], coal: [HC('#4a4650'), HC('#2a2830'), HC('#18161c')], olive: [K2.oliveL, K2.olive, K2.oliveD], brass: [C.goldL, C.gold, C.goldD] };
+    function wheels(g, xs, y, r) { xs.forEach(function (x) { g.ellipse(x, y, r, r, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.55 ? C.ink : (d < 0.15 ? C.metalL : C.metalD); }); }); }
+    function boxSide(g, x, y, w, h, P) { g.rect(x, y, w, h, P[1]); g.hline(x, y, w, P[0]); g.hline(x, y + h - 1, w, P[2]); g.vline(x + w - 1, y, h, P[2]); }
+    function trainGrid(part, kind, dir) {
+      var g;
+      if (dir === 'e' || dir === 'w') {
+        if (part === 'loco') {
+          g = new Grid(34, 22);
+          boxSide(g, 3, 9, 20, 7, TRC.black); g.hline(3, 12, 20, 'T'); g.hline(3, 13, 20, 'Td');           // Kessel mit Zierstreifen
+          g.rect(22, 8, 4, 9, TRC.black[1]); g.vline(25, 8, 9, TRC.black[2]); g.set(24, 11, C.fireY);     // Rauchkammer, Laterne
+          g.rect(17, 2, 3, 7, TRC.black[1]); g.hline(16, 2, 5, TRC.black[2]); g.vline(17, 3, 6, TRC.black[0]);  // Schlot
+          g.ellipse(11, 8, 2, 1.4, TRC.brass[1]);                                                           // Dom
+          boxSide(g, 0, 4, 7, 12, TRC.body); g.rect(1, 6, 3, 3, C.glass); g.hline(0, 4, 8, TRC.body[2]); g.hline(-1, 3, 9, TRC.body[2]);  // Führerhaus
+          g.rect(0, 16, 28, 2, C.ink); g.paint(26, 15, ['MMM', '.MMM']);                                   // Rahmen, Schienenräumer
+          wheels(g, [6, 13, 20], 18.5, 2.6); g.line(6, 18, 20, 18, C.metal);
+        } else {
+          g = new Grid(30, 20);
+          var P = kind === 'coal' ? TRC.coal : (kind === 'troop' ? TRC.olive : TRC.wood);
+          if (kind === 'coal') { boxSide(g, 1, 9, 27, 6, P); for (var x = 2; x < 27; x += 2) g.set(x, 8 + (x % 4 === 0 ? 0 : 1), TRC.coal[2]); g.hline(2, 8, 25, TRC.coal[1]); }
+          else if (kind === 'troop') { boxSide(g, 1, 5, 27, 10, P); g.hline(1, 4, 27, P[2]); g.hline(0, 3, 29, P[0]); for (x = 3; x < 26; x += 4) { g.rect(x, 7, 2, 2, C.glass); g.set(x, 8, C.waterD); } }
+          else { boxSide(g, 1, 4, 27, 11, P); for (x = 4; x < 27; x += 4) g.vline(x, 5, 9, P[2]); g.rect(12, 6, 5, 8, P[2]); g.hline(0, 3, 29, TRC.body[2]); }
+          g.hline(1, 13, 27, 'T');
+          g.rect(0, 15, 29, 2, C.ink); wheels(g, [6, 22], 17.5, 2.4);
+        }
+      } else {
+        // Ansicht von vorn (s) bzw. hinten (n), 20 breit
+        var front = dir === 's';
+        g = new Grid(20, 24);
+        if (part === 'loco') {
+          if (front) {
+            g.ellipse(10, 13, 7, 7, function (x, y, nx, ny) { return nx + ny < -0.6 ? TRC.black[0] : (nx > 0.5 ? TRC.black[2] : TRC.black[1]); });
+            g.ellipse(10, 13, 3, 3, TRC.black[2]); g.ellipse(10, 13, 1.6, 1.6, C.fireY); g.set(9, 12, C.white);
+            g.rect(8, 1, 4, 6, TRC.black[1]); g.hline(7, 1, 6, TRC.black[2]);
+            g.hline(3, 19, 14, 'T'); g.paint(4, 20, ['MMMMMMMMMMMM', '.MMMMMMMMMM.']);
+          } else {
+            boxSide(g, 3, 4, 14, 15, TRC.body); g.rect(6, 7, 3, 3, C.glass); g.rect(11, 7, 3, 3, C.glass); g.hline(3, 15, 14, 'T');
+            g.rect(8, 0, 4, 4, TRC.black[1]);
+          }
+          g.rect(2, 21, 3, 3, C.ink); g.rect(15, 21, 3, 3, C.ink);
+        } else {
+          var P2 = kind === 'coal' ? TRC.coal : (kind === 'troop' ? TRC.olive : TRC.wood);
+          var top = kind === 'coal' ? 10 : 4;
+          boxSide(g, 2, top, 16, 20 - top, P2);
+          if (kind === 'coal') { g.hline(3, top - 1, 14, TRC.coal[1]); for (var x2 = 3; x2 < 17; x2 += 2) g.set(x2, top - 2, TRC.coal[2]); }
+          if (kind === 'troop') { g.rect(5, 8, 3, 3, C.glass); g.rect(12, 8, 3, 3, C.glass); g.hline(1, top - 1, 18, P2[0]); }
+          if (kind === 'freight') { g.rect(7, 8, 6, 10, P2[2]); g.vline(10, 8, 10, P2[0]); }
+          g.hline(2, 17, 16, 'T');
+          g.rect(3, 20, 3, 3, C.ink); g.rect(14, 20, 3, 3, C.ink);
+        }
+      }
+      var o = g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
+      return dir === 'w' ? o.flipX() : o;
+    }
+    L.lazyDef('tr_', function (key) {
+      var p = key.split('_'), part = p[1], kind = null, dir;
+      if (part === 'loco') dir = p[2]; else if (part === 'car') { kind = p[2]; dir = p[3]; } else return null;
+      if (!/^[ewns]$/.test(dir || '') || (part === 'car' && !/^(freight|coal|troop)$/.test(kind))) return null;
+      var g = trainGrid(part, kind, dir);
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    });
+    S.trainKey = function (part, kind, dir) {
+      dir = /^[ewns]$/.test(dir) ? dir : 'e';
+      if (part === 'loco') return 'tr_loco_' + dir;
+      return 'tr_car_' + (/^(freight|coal|troop)$/.test(kind) ? kind : 'freight') + '_' + dir;
+    };
+
+    // ================================================================== Gefangene (Rolle prisoner): schlicht grau, ohne Streifen, Abzeichen oder Nummern
+    COST.prisonerSuit = { top: T3(K2.greyL, K2.grey, K2.greyD), sleeve: T3(K2.greyL, K2.grey, K2.greyD), pants: T3(K2.grey, K2.greyD, K2.greyD), shoes: C.woodD, hat: null };
+    TOOL2.prisoner = function (g, hx, hy) { g.vline(hx + 1, hy - 7, 10, C.wood); g.vline(hx + 2, hy - 7, 10, C.woodD); g.rect(hx, hy + 3, 4, 3, C.metal); g.hline(hx, hy + 3, 4, C.metalL); };
+    ROLES2.push('prisoner');
   });
 
   WW.SPRITE_RACES = RACES;

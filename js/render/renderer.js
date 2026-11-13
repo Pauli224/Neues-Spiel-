@@ -198,6 +198,85 @@
     return this.S.decorFor(st.terrain[i], st.variant ? st.variant[i] : 0);
   };
 
+  // Fahnen je Regierung (rein optisch, deterministisch); Liste alle 2 s neu
+  Renderer.prototype.flagList = function () {
+    const st = this.st, W = st.W;
+    if (this._flags && this.time - this._flagsT < 2) return this._flags;
+    this._flagsT = this.time;
+    const out = [];
+    const kings = new Map(); for (const k of st.kingdoms) kings.set(k.id, k);
+    const cityK = new Map(); for (const c of st.cities) cityK.set(c.id, kings.get(c.kingdomId));
+    const hash = (a, b) => (Math.imul(a * 73856093 ^ b * 19349663, 2654435761) >>> 0) / 4294967296;
+    const free = (x, y) => {
+      if (x < 0 || y < 0 || x >= W || y >= st.H) return false;
+      const i = y * W + x;
+      return st.structAt[i] < 0 && !this.path[i] && WW.TERRAIN_LUT.build[st.terrain[i]];
+    };
+    const add = (kind, px, py, k, seed) => out.push({ kind: kind, px: px, py: py, pat: k.bannerPattern | 0, team: k.colorIndex | 0, seed: seed });
+    for (const s of st.structs) {
+      if (s.dead || !s.built || s.cityId < 0) continue;
+      const k = cityK.get(s.cityId);
+      if (!k) continue;
+      const g = k.gov, h = hash(s.id, 7);
+      const px = s.x * 8, py = s.y * 8;
+      switch (s.type) {
+        case 'gate':
+          if (g === 'fascism' || g === 'monarchy') add('pole', px + 6, py, k, s.id);
+          break;
+        case 'tower':
+          if ((g === 'fascism' && h < 0.5) || g === 'monarchy') add('pole', px + 3, py - 4, k, s.id);
+          break;
+        case 'center':
+          if (s.stage != null && s.stage < 2) { if (g !== 'anarchy') add('pole', px + s.w * 8 - 4, py + 2, k, s.id); break; }
+          if (g === 'fascism' || g === 'communism') { add('hang', px + 3, py + s.h * 8 - 10, k, s.id); add('hang', px + s.w * 8 - 9, py + s.h * 8 - 10, k, s.id + 1); }
+          else if (g === 'democracy') { add('pole', px - 2, py + 4, k, s.id); add('pole', px + s.w * 8 - 2, py + 4, k, s.id + 1); }
+          else if (g === 'theocracy' || g === 'tribe') add('pole', px + s.w * 8 - 3, py + 4, k, s.id);
+          else if (g === 'anarchy') add('row', px, py + 4, k, s.id);
+          // Faschismus: Mastreihe entlang der Achse Zentrum–Tor
+          if (g === 'fascism') {
+            const c = st.cities.find(cc => cc.id === s.cityId), gates = c && c.wall && c.wall.gates;
+            if (Array.isArray(gates)) for (const gid of gates) {
+              const gs = this.structById ? this.structById(gid) : null;
+              if (!gs) continue;
+              const cx = s.x + 1, cy = s.y + 1, n = Math.max(Math.abs(gs.x - cx), Math.abs(gs.y - cy));
+              for (let t = 2; t < n - 1; t += 2) {
+                const x = Math.round(cx + (gs.x - cx) * t / n), y = Math.round(cy + (gs.y - cy) * t / n);
+                if (free(x + 1, y)) add('pole', (x + 1) * 8 + 2, y * 8, k, x * 31 + y);
+                if (free(x - 1, y)) add('pole', (x - 1) * 8 + 2, y * 8, k, x * 37 + y);
+              }
+            }
+          }
+          break;
+        case 'barracks':
+          if (g === 'fascism') add('hang', px + 4, py + s.h * 8 - 10, k, s.id);
+          break;
+        case 'factory':
+          if (g === 'communism') add('pole', px + s.w * 8 - 3, py + 2, k, s.id);
+          break;
+        case 'market':
+          if (g === 'republic') add('row', px, py, k, s.id);
+          break;
+        case 'monument':
+          if (g === 'theocracy' && h < 0.6) add('pole', px + 6, py + 2, k, s.id);
+          break;
+        case 'house':
+          if (g === 'anarchy' && h < 0.12) add('row', px, py + 2, k, s.id);
+          break;
+      }
+    }
+    return (this._flags = out);
+  };
+  Renderer.prototype.drawFlags = function (g, vt) {
+    const S = this.S, list = this.flagList();
+    for (const f of list) {
+      if (f.px < (vt.x0 - 2) * 8 || f.px > (vt.x1 + 2) * 8 || f.py < (vt.y0 - 2) * 8 || f.py > (vt.y1 + 3) * 8) continue;
+      const fr = ((this.time * 3 + (f.seed & 7) * 0.4) | 0) & 1;
+      let k = null;
+      try { k = S.flagKey(f.kind, f.pat, fr); } catch (e) { k = null; }
+      if (k && S.has(k)) S.drawFast(g, k, f.px, f.py, f.team, false);
+    }
+  };
+
   // Vorkommen: Deko d_deposit_<art>_<n>; Art aus state.depositKinds / WW.DEPOSIT_KEYS / WW.DEPOSITS
   Renderer.prototype.depositDecor = function (i) {
     const st = this.st, v = st.deposit[i], S = this.S;
@@ -958,6 +1037,7 @@
     ctx.setTransform(s, 0, 0, s, ox, oy);
     if (st.scars && st.scars.length) this.drawScars(ctx, vt);
     let drawn = low && (opts.scale || 1) < 0.9 ? this.drawDots(ctx, vt, opts) : this.drawObjects(ctx, vt, low, opts);
+    if (!low && typeof S.flagKey === 'function') this.drawFlags(ctx, vt);
 
     // Feuer auf Kacheln
     if (st.fire && st.fireCount > 0) {

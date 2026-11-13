@@ -396,6 +396,10 @@
   S.drawGround = drawGround;
   // Trampelpfad über den Boden legen (in die Bodenebene backen). mask: Bit0 N, Bit1 O, Bit2 S, Bit3 W.
   S.drawPath = function (ctx, px, py, mask) { S.draw(ctx, 't_path_' + (mask & 15), px, py); };
+  // Gleis über den Boden legen (Bit0 N, Bit1 O, Bit2 S, Bit3 W = Nachbarkachel hat ebenfalls Gleis)
+  S.drawRail = function (ctx, px, py, mask) { S.draw(ctx, 't_rail_' + (mask & 15), px, py); };
+  // Weiche Überlagerung: base z. B. 't_barren_2', 't_smog_1', 't_soot', 't_cleared'; mask = Nachbarn mit mindestens derselben Stufe
+  S.softKey = function (base, mask) { return base + '_' + (mask & 15); };
   S.drawGroundMap = drawGroundMap;
   S.decorFor = decorFor;
   S.groundColor = groundColor;
@@ -698,6 +702,118 @@
       def('d_peak_' + i, finishDecor(peak(s[0], s[1], s[2], PK, CAP, 480 + i).pad(1, 1, 1, 0), RKO, s[0] / 2 + 2, s[1] - 0.2, s[0] / 2 - 0.5, 1.2), { group: 'decor' });
     });
     def('d_icepeak_0', finishDecor(peak(11, 12, 12, PK, [K('#ffffff'), K('#c8d9ea')], 490).pad(1, 1, 1, 0), K('#4a5f80'), 7.5, 11.8, 5, 1.1), { group: 'decor' });
+
+    // -------------------------------------------------------------- Gleise t_rail_<maske> (Überlagerung, Bit0 N, Bit1 O, Bit2 S, Bit3 W)
+    var GRV = [addColor(null, '#b4ada0'), addColor(null, '#958e82'), addColor(null, '#7a7468')];
+    var TIE = [addColor(null, '#8a5a34'), addColor(null, '#6a4226')], RAIL = [addColor(null, '#dfe4ea'), addColor(null, '#8a92a0')];
+    function railTile(mask) {
+      var g = new Grid(8, 8), x, y;
+      var n = mask & 1, e = mask & 2, s = mask & 4, w = mask & 8, cnt = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+      var curve = cnt === 2 && !((n && s) || (e && w));
+      if (curve) {
+        var cx = e ? 8 : 0, cy = n ? 0 : 8;
+        for (y = 0; y < 8; y++) for (x = 0; x < 8; x++) {
+          var d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+          if (d > 0.8 && d < 7.2) g.set(x, y, hash(x, y, 31) < 0.3 ? GRV[1] : GRV[0]);
+        }
+        for (var a = 0; a <= 8; a++) {   // Schwellen radial
+          var t = (a + 0.5) / 9 * Math.PI / 2, dx = Math.cos(t), dy = Math.sin(t);
+          if (a % 2) continue;
+          for (var r = 1.5; r <= 6.5; r += 0.5) { var px = Math.floor(cx + (cx ? -1 : 1) * dx * r), py = Math.floor(cy + (cy ? -1 : 1) * dy * r); g.set(px, py, r < 2 || r > 6 ? TIE[1] : TIE[0]); }
+        }
+        for (y = 0; y < 8; y++) for (x = 0; x < 8; x++) {
+          var d2 = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+          if (Math.abs(d2 - 2.5) < 0.55 || Math.abs(d2 - 5.5) < 0.55) g.set(x, y, Math.abs(d2 - 5.5) < 0.55 ? RAIL[0] : RAIL[1]);
+        }
+        return g;
+      }
+      function vert(y0, y1) {
+        for (y = y0; y <= y1; y++) { for (x = 1; x <= 6; x++) g.set(x, y, hash(x, y, 32) < 0.3 ? GRV[1] : GRV[0]); g.set(1, y, GRV[2]); }
+        for (y = y0; y <= y1; y++) if ((y & 1) === 0) g.hline(1, y, 6, TIE[0]);
+        for (y = y0; y <= y1; y++) { g.set(2, y, RAIL[0]); g.set(5, y, RAIL[1]); }
+      }
+      function horiz(x0, x1) {
+        for (x = x0; x <= x1; x++) { for (y = 1; y <= 6; y++) g.set(x, y, hash(x, y, 33) < 0.3 ? GRV[1] : GRV[0]); g.set(x, 6, GRV[2]); }
+        for (x = x0; x <= x1; x++) if ((x & 1) === 0) g.vline(x, 1, 6, TIE[0]);
+        for (x = x0; x <= x1; x++) { g.set(x, 2, RAIL[0]); g.set(x, 5, RAIL[1]); }
+      }
+      if (cnt === 0) { horiz(1, 6); return g; }
+      if (n || s) vert(n ? 0 : 3, s ? 7 : 4);
+      if (e || w) horiz(w ? 0 : 3, e ? 7 : 4);
+      if (cnt === 1) {   // Prellbock am offenen Ende
+        if (n) g.hline(1, 5, 6, C.red); if (s) g.hline(1, 2, 6, C.red); if (e) g.vline(2, 1, 6, C.red); if (w) g.vline(5, 1, 6, C.red);
+      }
+      return g;
+    }
+    for (var rm = 0; rm < 16; rm++) def('t_rail_' + rm, railTile(rm), { group: 'ground' });
+    // Brücken über Wasser: Holzdeck mit Geländer
+    (function () {
+      var DK = [addColor(null, '#b88a58'), addColor(null, '#8c643c'), addColor(null, '#5e4026')];
+      var h = new Grid(8, 8);
+      h.rect(0, 1, 8, 6, DK[0]); for (var x = 0; x < 8; x += 2) h.vline(x, 1, 6, DK[1]);
+      h.hline(0, 0, 8, DK[2]); h.hline(0, 7, 8, DK[2]); h.set(0, 7, DK[1]); h.set(4, 7, DK[1]);
+      h.hline(0, 2, 8, RAIL[0]); h.hline(0, 5, 8, RAIL[1]);
+      def('t_rail_bridge_h', h, { group: 'ground' });
+      var v = new Grid(8, 8);
+      v.rect(1, 0, 6, 8, DK[0]); for (var y = 0; y < 8; y += 2) v.hline(1, y, 6, DK[1]);
+      v.vline(0, 0, 8, DK[2]); v.vline(7, 0, 8, DK[2]);
+      v.vline(2, 0, 8, RAIL[0]); v.vline(5, 0, 8, RAIL[1]);
+      def('t_rail_bridge_v', v, { group: 'ground' });
+    })();
+
+    // -------------------------------------------------------------- Weiche Überlagerungen: Verödung, Ruß, Dunst
+    // Je Stufe 16 Randvarianten: Maske = Nachbarn mit mindestens derselben Stufe (Bit0 N, Bit1 O, Bit2 S, Bit3 W).
+    // Zur offenen Seite hin dünnt die Fläche unregelmäßig aus. Schlüssel <basis>_<maske>, <basis> allein = 15 (voll).
+    function softSet(base, pal, seed, deco) {
+      for (var m = 0; m < 16; m++) {
+        var g = new Grid(8, 8);
+        for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) {
+          var d = 9;
+          if (!(m & 1)) d = Math.min(d, y + 0.5); if (!(m & 4)) d = Math.min(d, 7.5 - y);
+          if (!(m & 8)) d = Math.min(d, x + 0.5); if (!(m & 2)) d = Math.min(d, 7.5 - x);
+          var keep = d >= 4 ? 1 : (d / 4) * 0.9 + (hash(x * 3, y * 5, seed + 7) - 0.5) * 0.35;
+          if (hash(x, y, seed + m) > keep) continue;
+          var hv = hash(x, y, seed);
+          g.set(x, y, hv < pal[1][1] ? pal[1][0] : (hv > 1 - pal[2][1] ? pal[2][0] : pal[0]));
+        }
+        if (deco) deco(g, m);
+        def(base + '_' + m, g, { group: 'ground' });
+        if (m === 15) def(base, g, { group: 'ground' });
+      }
+    }
+    var A = function (h, a) { return addColor(null, h, a); };
+    softSet('t_barren_1', [A('#c8c0a0', 70), [A('#b8ae8a', 90), 0.2], [A('#d6d0b8', 70), 0.1]], 600);
+    softSet('t_barren_2', [A('#a29c8c', 135), [A('#7e786a', 160), 0.22], [A('#bab4a4', 130), 0.1]], 610, function (g, m) { if (m === 15) { g.line(1, 2, 3, 4, A('#5e5850', 170)); g.line(3, 4, 6, 3, A('#5e5850', 170)); } });
+    softSet('t_barren_3', [A('#6e6860', 185), [A('#4a4440', 205), 0.25], [A('#8a8478', 175), 0.08]], 620, function (g, m) { if (m === 15) { g.set(2, 5, A('#2a2628', 220)); g.set(3, 5, A('#2a2628', 220)); g.set(6, 2, A('#2a2628', 220)); } });
+    softSet('t_soot', [A('#3a363a', 120), [A('#242024', 160), 0.25], [A('#5a565a', 100), 0.1]], 630);
+    softSet('t_cleared', [A('#8a6a44', 200), [A('#6e5232', 220), 0.25], [A('#a8865a', 190), 0.15]], 640, function (g, m) { if (m === 15) { g.line(1, 1, 3, 2, A('#5a3e24', 230)); g.set(6, 5, A('#4f9a3c', 220)); g.set(5, 6, A('#4f9a3c', 220)); } });
+    // Dunst mit weichen Rändern (ersetzt die harten Kacheln, Schlüssel t_smog_<n> bleiben = volle Fläche)
+    softSet('t_smog_1', [A('#b8b08a', 70), [A('#a49c7a', 95), 0.25], [A('#c8c0a0', 60), 0.1]], 650);
+    softSet('t_smog_2', [A('#b0a882', 115), [A('#9c9472', 140), 0.25], [A('#c0b896', 100), 0.1]], 660);
+    softSet('t_smog_3', [A('#a8a07a', 160), [A('#948c6a', 185), 0.25], [A('#b8b08e', 145), 0.1]], 670);
+    // gefällte Stämme
+    var LOGC = [K('#b07a46'), K('#86582e'), K('#e6c890'), K('#5e3c22')];
+    (function () {
+      var a = new Grid(9, 4); a.rect(0, 0, 9, 3, LOGC[1]); a.hline(0, 0, 9, LOGC[0]); a.rect(8, 0, 1, 3, LOGC[2]); a.set(8, 1, LOGC[1]); a.set(3, 1, LOGC[3]);
+      def('d_log_0', finishDecor(a.pad(1, 1, 1, 1), LOGC[3], 5.5, 4.5, 5, 0.9), { group: 'decor' });
+      var b = new Grid(9, 6);
+      [[0, 3], [4, 3], [2, 0]].forEach(function (p) { b.rect(p[0], p[1], 5, 3, LOGC[1]); b.hline(p[0], p[1], 5, LOGC[0]); b.vline(p[0] + 4, p[1], 3, LOGC[2]); b.set(p[0] + 4, p[1] + 1, LOGC[1]); });
+      def('d_log_1', finishDecor(b.pad(1, 1, 1, 1), LOGC[3], 5.5, 6.5, 5, 0.9), { group: 'decor' });
+    })();
+    // Vorkommen: Brocken auf der Kachel
+    [['iron', ['#c88a62', '#9a5a3a', '#6e3a26'], '#e0a070'], ['coal', ['#5a5660', '#38343c', '#201c22'], '#8a8a98'],
+     ['gold', ['#c9c6cf', '#9d9aa8', '#77748a'], '#ffd84a'], ['crystal', ['#e4fbff', '#86e0e6', '#4aa4c4'], '#ffffff']].forEach(function (dp, di) {
+      var P3 = dp[1].map(K), shine = K(dp[2]);
+      [0, 1].forEach(function (v) {
+        var o = new Grid(10, 7);
+        (v ? [[3, 4, 3, 2.4], [7, 4.5, 2.4, 2], [5, 2.5, 2, 1.8]] : [[4, 4, 3.6, 2.6], [7.5, 5, 2, 1.6]]).forEach(function (c) {
+          o.ellipse(c[0], c[1], c[2], c[3], function (x, y, nx, ny) { var s2 = nx * 0.8 + ny; return s2 < -0.6 ? P3[0] : (s2 > 0.5 ? P3[2] : P3[1]); });
+        });
+        if (dp[0] === 'crystal') { o.vline(4, 0, 4, P3[0]); o.vline(5, 1, 3, P3[2]); o.vline(7, 2, 3, P3[1]); }
+        [[3, 3], [6, 4], [4, 5]].forEach(function (p, k) { if ((k + v) % 2 === 0 || dp[0] !== 'coal') o.set(p[0], p[1], shine); });
+        def('d_deposit_' + dp[0] + '_' + v, finishDecor(o.pad(1, 1, 1, 1), K('#2a2430'), 6.5, 8, 5, 1), { group: 'decor' });
+      });
+    });
     // Beerensträucher und Blumenbüschel (Wachstum der Wildnis)
     [[K('#ee4a4a'), K('#ff9a8a')], [K('#5a5ad8'), K('#9a9af0')]].forEach(function (bc, i) {
       var o = blob(8, 6, [[4, 3.5, 4, 2.8], [2.5, 4, 2.2]], LEAF, LEAFO, 520 + i);
