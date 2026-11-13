@@ -354,6 +354,9 @@
     return (c[type] = out);
   };
 
+  // Bauwerks-Variante 0..255 (alte Welten ohne Feld: aus der ID)
+  function varOf(s) { return s.variant != null ? s.variant & 255 : (Math.imul(s.id | 0, 2654435761) >>> 24) & 255; }
+
   function rnd(seed, k) { let h = (seed * 374761393 + k * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 
   Renderer.prototype.drawFx = function (g, dt) {
@@ -503,8 +506,16 @@
     const style = s.style || gov || 'tribe';
     if (!s.built) return s.w >= 3 ? 's_site_3' : (s.w >= 2 ? 's_site_2' : 's_site');
     switch (s.type) {
-      case 'center': return 's_center_' + style;
-      case 'house': return S.houseKey(style, s.level, s.id);
+      case 'center': {
+        // Ausbaustufen: 0 Lager, 1 Dorfhalle, 2 (oder fehlend) Regierungssitz
+        if (s.stage === 0) { const k = this.pickVar(S.campKey, ['s_camp_a', 's_camp_b'], s); if (k) return k; }
+        if (s.stage === 1) { const k = this.pickVar(S.hallKey, ['s_hall_a', 's_hall_b'], s); if (k) return k; }
+        return 's_center_' + style;
+      }
+      case 'house': {
+        if (s.level === 0) { const k = this.pickVar(S.tentKey, ['s_tent_a', 's_tent_b', 's_tent_c', 's_tent_d'], s); if (k) return k; }
+        return S.houseKey(style, Math.max(1, s.level | 0), varOf(s));
+      }
       case 'field': return 's_field_' + Math.max(0, Math.min(3, s.growth | 0));
       case 'monument': return 's_monument_' + style;
       case 'wall': {
@@ -523,6 +534,14 @@
   };
 
   // Figuren-Schlüssel: u_<volk>_<rolle>, sonst u_<rolle> (Banditen, Rammen …), sonst Mensch, sonst Bauer
+  // Sprite über Helfer (Schlüssel-Funktion) oder Liste, gewählt nach variant; null wenn nichts existiert
+  Renderer.prototype.pickVar = function (fn, list, s) {
+    const S = this.S, v = varOf(s);
+    if (typeof fn === 'function') { try { const k = fn(v); if (k && S.has(k)) return k; } catch (e) { /* weiter */ } }
+    const ok = list.filter(k => S.has(k));
+    return ok.length ? ok[v % ok.length] : null;
+  };
+
   Renderer.prototype.unitKey = function (u, gov, frame) {
     const S = this.S, race = u.race || 'human', role = u.role || 'farmer';
     const ck = this._ukCache || (this._ukCache = new Map());
@@ -812,7 +831,24 @@
     const fh = inf ? inf.fh : s.h;
     const px = s.x * 8, py = (s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
+    // Lagerfeuer: Feuer-Frames der Lager-Sprites, sonst fx_fire in der Mitte
+    if (s.type === 'center' && s.stage === 0 && s.built !== false && key.indexOf('s_camp') === 0) {
+      const fr = ((this.time * 6) | 0) % 3;
+      if (S.has(key + '_1')) S.drawFast(ctx, key + '_' + fr % 2, px, py, team, false);
+      else S.drawFast(ctx, 'fx_fire_' + fr, (s.x + s.w / 2) * 8 - 4, (s.y + s.h / 2) * 8 - 6, 0, false);
+    }
+    // laufender Ausbau: Gerüst über dem bestehenden Gebäude
+    if (s.upgrading && s.built !== false) {
+      const sk = s.w >= 3 ? 's_scaffold_3' : (s.w >= 2 ? 's_scaffold_2' : 's_scaffold');
+      const sc = S.has(sk) ? sk : (s.w >= 3 ? 's_site_3' : s.w >= 2 ? 's_site_2' : 's_site');
+      const si = S.info(sc);
+      ctx.globalAlpha = S.has(sk) ? 1 : 0.85;
+      S.drawFast(ctx, sc, px, (s.y + s.h - (si ? si.fh : s.h)) * 8, 0, false);
+      ctx.globalAlpha = 1;
+      if (zoomBig) bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.progress || 0, col: '#f2b541' });
+    }
     if (!zoomBig) return;
+    if (s.upgrading) return;
     if (!s.built && s.progress > 0) bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.progress, col: '#f2b541' });
     else if (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin') bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.hp / s.maxHp, col: '#e2543d' });
   };

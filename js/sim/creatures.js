@@ -341,7 +341,9 @@
         if (!prey && a.food < 70) {
           prey = nearestAnimal(sim, a, cr.sight, (b) => cr.prey.indexOf(b.kind) >= 0);
           // Bewohner nur, wenn allein draußen und hungrig (hinter Mauern ist man sicher)
-          if (!prey && cr.huntsUnits && a.food < 35) prey = nearestUnit(sim, a, cr.sight * 0.6, true, (u) => {
+          // nur Einzelne weit draußen (≥ 14 Kacheln von jeder Stadtmitte), nie Kinder, nicht in Gruppen
+          if (!prey && cr.huntsUnits && a.food < 25 && WW.Wild && WW.Wild.cityDist2(sim, a.x, a.y) > 14 * 14) prey = nearestUnit(sim, a, cr.sight * 0.6, true, (u) => {
+            if (u.role === 'child' || WW.Wild.cityDist2(sim, u.x, u.y) < 14 * 14) return false;
             let company = 0;
             WW.Units.forNear(sim, u.x, u.y, 2.5, false, (v) => { if (v !== u) company++; });
             return company < 2;
@@ -447,7 +449,7 @@
       if (think) {
         if (a.cd > 0) a.cd -= THINK;
         const home = a.home >= 0 ? sim._structs.get(a.home) : null;
-        const t = nearestUnit(sim, a, cr.sight, false, (u) => u.role !== 'bandit');
+        const t = nearestUnit(sim, a, home ? 4 : cr.sight, false, (u) => u.role !== 'bandit' && (!home || (u.x - home.x) * (u.x - home.x) + (u.y - home.y) * (u.y - home.y) < 49));
         if (t) {
           const d = Math.sqrt(dist2(a, t));
           if (d <= cr.range) { a.tx = -1; if (a.cd <= 0) { sim.fx({ type: 'arrow', x: a.x, y: a.y - 0.4, x2: t.x, y2: t.y - 0.3 }); attack(sim, a, t, cr.dmg); a.cd = 14; } }

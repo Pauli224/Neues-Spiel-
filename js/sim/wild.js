@@ -248,6 +248,14 @@
     for (const c of st.cities) { const dx = c.cx + 0.5 - x, dy = c.cy + 0.5 - y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
     return best;
   }
+  // Abstand² zur nächsten Stadtmitte (1e9 ohne Städte)
+  function cityDist2(sim, x, y) {
+    let bd = 1e9;
+    for (const c of sim.state.cities) { const dx = c.cx + 0.5 - x, dy = c.cy + 0.5 - y, d = dx * dx + dy * dy; if (d < bd) bd = d; }
+    return bd;
+  }
+  // junge oder kleine Städte werden von Räubern und Drachen verschont
+  function sturdy(sim, c) { return c && c.pop >= 15 && sim.state.year - (c.founded || 0) >= 8; }
   function crName(kind) { const c = WW.CREATURES[kind]; return c ? c.name : 'Etwas'; }
 
   // ---------------------------------------------------------------------------
@@ -331,7 +339,8 @@
     for (const u of st.units) if (!u.dead && u.role === 'bandit' && u.wHome >= 0) res[u.wHome] = (res[u.wHome] || 0) + 1;
     for (const s of lairs) {
       const L = WW.LAIRS[s.kind];
-      if (L.resident) {
+      if (L.resident && L.hostile !== false && cityDist2(sim, s.x, s.y) < 18 * 18) { /* ruht, solange eine Stadt nah ist */ }
+      else if (L.resident) {
         if (s.spawnT > 0) s.spawnT -= 30;
         else if ((res[s.id] || 0) < L.max) {
           const n = spawnResident(sim, s, L);
@@ -461,11 +470,12 @@
     let target = -1, city = null;
     let trader = null;
     WW.Units.forNear(sim, s.x + 0.5, s.y + 0.5, 24, false, (u) => { if (!trader && u.role === 'trader') trader = u; });
-    if (trader) target = trader.id;
+    if (trader && sturdy(sim, sim._cities.get(trader.cityId))) target = trader.id;
+    else if (trader) return;
     else {
       let bd = 40 * 40;
       for (const c of st.cities) { const dx = c.cx - s.x, dy = c.cy - s.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; city = c; } }
-      if (!city) return;
+      if (!city || !sturdy(sim, city)) return;
       const open = !(city.wall && city.wall.level >= 1);
       if (open && sim.rng.chance(0.5)) target = city.centerId;
       else {
@@ -509,8 +519,8 @@
       if (dx * dx + dy * dy <= (tgt.type === 'center' ? 6 : 2.6)) {
         u.path = null;
         if (tgt.role !== undefined) {                         // Händler
-          if (u.cd <= 0) { u.cd = 8; WW.Units.hitUnit(sim, { id: u.id, kingdomId: -1 }, tgt, 6); WW.Units.bubble(tgt, 'exclaim', 25); }
-          if (tgt.dead || sim.rng.chance(0.3)) {
+          if (u.cd <= 0) { u.cd = 8; if (tgt.hp > 8) WW.Units.hitUnit(sim, { id: -1, kingdomId: -1 }, tgt, 3); WW.Units.bubble(tgt, 'exclaim', 25); }
+          if (tgt.dead || sim.rng.chance(0.4)) {
             u.carrying = 'gold'; u.carryAmt = 6; u.task = home ? 'back' : 'roam';
             const c = sim._cities.get(tgt.cityId);
             if (c) chron(sim, 'banditTrader', { city: c.name, name: tgt.name }, WW.Cities.atCity(c), c.id);
@@ -524,7 +534,7 @@
           const c = sim._cities.get(tgt.cityId);
           if (c) {
             const sk = WW.Cities.stock(sim, c);
-            const f = Math.min(sk.food * 0.15, 10), g = Math.min(sk.gold * 0.25, 10);
+            const f = Math.min(Math.max(0, sk.food - 30) * 0.15, 8), g = Math.min(sk.gold * 0.25, 10);
             sk.food -= f; sk.gold -= g;
             u.carrying = g > f ? 'gold' : 'food'; u.carryAmt = f + g;
             chron(sim, 'banditTheft', { city: c.name, n: Math.round(f + g) }, WW.Cities.atCity(c), c.id);
@@ -564,7 +574,7 @@
     if (!home && sim.rng.chance(0.01)) {
       // heimatlose Räuber versuchen ab und zu ihr Glück an einem Feld
       let f = null;
-      for (const c of st.cities) { const dx = c.cx - u.x, dy = c.cy - u.y; if (dx * dx + dy * dy < 900 && c.fields && c.fields.length) { f = sim._structs.get(sim.rng.pick(c.fields)); break; } }
+      for (const c of st.cities) { const dx = c.cx - u.x, dy = c.cy - u.y; if (dx * dx + dy * dy < 900 && sturdy(sim, c) && c.fields && c.fields.length) { f = sim._structs.get(sim.rng.pick(c.fields)); break; } }
       if (f) { u.task = 'raid'; u.target = f.id; u.tt = 0; u.path = null; }
     }
   }
@@ -648,7 +658,7 @@
       chron(sim, type, { city: c.name, foe: foe }, WW.Cities.atCity(c), c.id, WW.CONFIG.TPY * 2);
     }
     let n = 0;
-    const fr = type === 'alarmBeasts' ? 6 : 10;
+    const fr = type === 'alarmBeasts' ? 0 : 6;
     for (const u of c._members || []) {
       if (n >= 14) break;
       const dx = u.x - threat.x, dy = u.y - threat.y;
@@ -701,7 +711,7 @@
     const px = home ? home.x + 0.5 : a.x, py = home ? home.y + 0.5 : a.y;
     if (sim.rng.chance(home ? 0.35 : 0.3)) {
       let best = null, bd = (home ? 40 : 30) ** 2;
-      for (const c of st.cities) { const dx = c.cx - px, dy = c.cy - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
+      for (const c of st.cities) { if (!sturdy(sim, c) || c.pop < 25) continue; const dx = c.cx - px, dy = c.cy - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
       if (best) {
         const x = Math.max(0, Math.min(st.W - 1, best.cx + sim.rng.irange(-4, 4))), y = Math.max(0, Math.min(st.H - 1, best.cy + sim.rng.irange(-4, 4)));
         chron(sim, 'dragonRaid', { city: best.name }, WW.Cities.atCity(best), best.id, WW.CONFIG.TPY);
@@ -807,7 +817,7 @@
       const want = Math.min(C.NATIVE_MAX, Math.floor(hab[kind] / C.NATIVE_AREA[kind]));
       let have = 0;
       for (const a of sim.state.animals) if (!a.dead && a.kind === kind && a.home < 0) have++;
-      if (have < want && sim.rng.chance(p)) spawnGroup(sim, kind, kind === 'slime' ? 2 : 1, 16);
+      if (have < want && sim.rng.chance(p * 0.5)) spawnGroup(sim, kind, kind === 'slime' ? 2 : 1, 28);
     }
   }
   function immigrate(sim) {
@@ -824,7 +834,7 @@
         for (const p of cr.prey) prey += cnt[p] || 0;
         if (prey < 10) continue;
       }
-      spawnGroup(sim, kind, cr.group[0] + 1, 10);
+      spawnGroup(sim, kind, cr.group[0] + 1, cr.hostile ? 24 : 10);
     }
     natives(sim, 0.35);
   }
@@ -971,7 +981,7 @@
   WW.Wild = {
     defaults: defaults, ensure: ensure, addScar: addScar, RASTERS: RASTERS, bandOf: bandOf, terrainForBand: terrainForBand, terrainFromHeight: terrainFromHeight,
     setTerrain: setTerrain, setHeight: setHeight, finishTerrain: finishTerrain, plantTree: plantTree, capOf: capOf, habitat: habitat,
-    chron: chron, cityNear: cityNear, scare: scare, sendSoldiers: sendSoldiers, placeLair: placeLair, lairsOf: lairsOf,
+    chron: chron, cityNear: cityNear, cityDist2: cityDist2, sturdy: sturdy, scare: scare, sendSoldiers: sendSoldiers, placeLair: placeLair, lairsOf: lairsOf,
     spawnBandit: spawnBandit, makeMad: makeMad, populate: populate, immigrate: immigrate, grab: grab, drop: drop,
     actions: actions, update: update, yearly: yearly,
     onCreatureDeath: onCreatureDeath, onPreyKilled: onPreyKilled, onZombieBite: onZombieBite, onHaunt: onHaunt,
