@@ -1,6 +1,6 @@
 // Service Worker: alle Spieldateien zwischenspeichern, damit Wuselwelt offline läuft.
 // Bei Änderungen VERSION hochzählen.
-const VERSION = 'wuselwelt-v1';
+const VERSION = 'wuselwelt-62mt7x';
 const FILES = [
   './',
   'index.html',
@@ -17,6 +17,7 @@ const FILES = [
   'js/render/sprites-icons.js',
   'js/core/rng.js',
   'js/core/config.js',
+  'js/core/config-wild.js',
   'js/data/names.js',
   'js/data/texts.js',
   'js/sim/util.js',
@@ -29,6 +30,7 @@ const FILES = [
   'js/sim/units.js',
   'js/sim/gov.js',
   'js/sim/diplo.js',
+  'js/sim/growth.js',
   'js/sim/creatures.js',
   'js/sim/env.js',
   'js/sim/powers.js',

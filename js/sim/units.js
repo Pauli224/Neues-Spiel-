@@ -398,22 +398,23 @@
   // Rohstoffkachel nahe der Stadt suchen (Holz, Stein, Wasser)
   function findResource(sim, u, city, res, maxR) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
-    const px = city.cx, py = city.cy;
+    const tab = LUT[res], ter = st.terrain, inRing = st.inRing, owner = st.owner;
+    const px = city.cx, py = city.cy, cid = city.id;
     const cand = [];
+    const test = (x, y) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      const i = y * W + x;
+      if (!tab[ter[i]]) return;
+      const ring = inRing[i];
+      if (ring !== -1 && ring !== cid) return;
+      const o = owner[i];
+      if (o !== -1 && o !== cid) { const oc = sim._cities.get(o); if (oc && oc.kingdomId !== city.kingdomId) return; }
+      cand.push(i);
+    };
+    // nur den Rand jedes Rings absuchen (innen nach außen)
     for (let r = 2; r <= maxR && cand.length < 6; r++) {
-      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        const x = px + dx, y = py + dy;
-        if (x < 0 || y < 0 || x >= W || y >= H) continue;
-        const i = y * W + x;
-        const t = st.terrain[i];
-        if (!LUT[res][t]) continue;
-        const ring = st.inRing[i];
-        if (ring !== -1 && ring !== city.id) continue;
-        const o = st.owner[i];
-        if (o !== -1 && o !== city.id) { const oc = sim._cities.get(o); if (oc && oc.kingdomId !== city.kingdomId) continue; }
-        cand.push(i);
-      }
+      for (let d = -r; d <= r; d++) { test(px + d, py - r); test(px + d, py + r); }
+      for (let d = -r + 1; d <= r - 1; d++) { test(px - r, py + d); test(px + r, py + d); }
     }
     if (!cand.length) return -1;
     return cand[sim.rng.int(cand.length)];

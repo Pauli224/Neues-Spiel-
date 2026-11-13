@@ -263,7 +263,7 @@
   // Themenwelten für „Alles würfeln“: Vorlagen und Regelbereiche mit Charakter.
   const THEMES = [
     { key: 'ice', name: 'Eiswelt', tpl: ['continents', 'pangaea', 'archipelago', 'coast'], s: { temperature: [0, 0.14], moisture: [0.35, 0.8], mountains: [0.3, 0.8], forests: [0.2, 0.6] } },
-    { key: 'desert', name: 'Wüstenwelt', tpl: ['pangaea', 'continents', 'twins', 'coast'], s: { temperature: [0.85, 1], moisture: [0, 0.14], forests: [0.05, 0.3], rivers: [0.1, 0.4] } },
+    { key: 'desert', name: 'Wüstenwelt', tpl: ['pangaea', 'continents', 'twins', 'coast'], s: { temperature: [0.82, 1], moisture: [0.06, 0.2], forests: [0.05, 0.3], rivers: [0.4, 0.8] } },
     { key: 'jungle', name: 'Dschungelwelt', tpl: ['continents', 'archipelago', 'lakeland', 'shards'], s: { temperature: [0.82, 1], moisture: [0.8, 1], forests: [0.75, 1], rivers: [0.5, 0.9] } },
     { key: 'swamp', name: 'Sumpfwelt', tpl: ['lakeland', 'pangaea', 'coast'], s: { temperature: [0.45, 0.7], moisture: [0.92, 1], mountains: [0, 0.25], rivers: [0.7, 1], forests: [0.3, 0.6] } },
     { key: 'magic', name: 'Zauberwelt', tpl: ['ringsea', 'archipelago', 'shards', 'continents'], s: { magic: [0.85, 1], moisture: [0.5, 0.9], forests: [0.4, 0.8] } },
@@ -718,7 +718,7 @@
       let strength = 0;
       const pm = 1 - dB / pw;
       if (pm > 0) strength = smooth01(pm) * clamp01(0.3 + conv * 0.7);
-      const rn = nRidge.ridged(px * 4.2, py * 4.2, 4);
+      const rn = nRidge.ridged(px * 4.2, py * 4.2, 3);
       const massif = clamp01(nMisc.fbm(qx * 1.2 + 300, qy * 1.2, 2, 0.5) * 2.2 - 0.15);
       let mtn = strength * (0.45 + 0.7 * rn) + massW * massif * rn * rn;
       if (mc) {
@@ -1146,7 +1146,7 @@
       // Sumpf: nass, tief, nahe Wasser
       if (t >= 0.3 && m > 0.78 && E[i] < 0.22 && dWet[i] <= 4 && nVeg.fbm(qx * 6 + 400, qy * 6, 2, 0.5) > 0.16 - (m - 0.78) * 1.2) { b = TT.SWAMP; forestable[i] = 0; }
       ter[i] = b;
-      fscore[i] = 0.25 * m + 0.75 * (0.5 + 0.5 * nVeg.fbm(qx * 3.5 + 700, qy * 3.5, 4, 0.5)) + 0.06 * (3 / (3 + dWet[i]));
+      fscore[i] = 0.25 * m + 0.75 * (0.5 + 0.5 * nVeg.fbm(qx * 3.5 + 700, qy * 3.5, 3, 0.5)) + 0.06 * (3 / (3 + dWet[i]));
     }
     {
       const fFrac = 0.02 + 0.84 * o.forests;
@@ -1307,7 +1307,7 @@
       if (lake[i]) { ter[i] = d <= 1.5 ? TT.SHALLOW : TT.WATER; continue; }
       const sh = th - h0[i] + 0.07 * nMisc.fbm(QX[i] * 5 + 61, QY[i] * 5, 2, 0.5);
       if (d <= 1.5 || (d <= 3.5 && sh < 0.03)) ter[i] = TT.SHALLOW;
-      else if (d >= 12 || (d >= 4 && sh > 0.2)) ter[i] = TT.DEEP;
+      else if (d >= 10 || (d >= 4 && sh > 0.13)) ter[i] = TT.DEEP;
       else ter[i] = TT.WATER;
     }
     cleanWaterCrumbs(ter, land, W, H);

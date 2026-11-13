@@ -129,7 +129,7 @@
         idle.sort((u1, u2) => (Math.abs(u1.x - pair.b.cx) + Math.abs(u1.y - pair.b.cy)) - (Math.abs(u2.x - pair.b.cx) + Math.abs(u2.y - pair.b.cy)) || u1.id - u2.id);
         // Belagerungsgerät gegen ummauerte Städte: Rammbock ab Kaserne, Katapult mit eigener Steinmauer
         let rams = 0, cats = 0;
-        if (send >= 4 && pair.b.wall.level >= 1 && pair.a.hasBarracks && marching === 0) {
+        if (send >= 4 && pair.b.wall.level >= 1 && pair.a.hasBarracks && marching === 0 && !sim._noSiegeEngines) {
           rams = 1 + Math.floor(send / 10);
           if (pair.a.wall.level >= 2 && pair.b.wall.level >= 2) cats = 1 + Math.floor(send / 14);
         }

@@ -33,7 +33,19 @@
     this.$('btnChron').addEventListener('click', () => game.ui.openChronicle());
     this.$('btnMenu').addEventListener('click', () => game.ui.openMenu());
     this.$('btnMap').addEventListener('click', () => game.ui.toggleMinimap());
-    // Kategorien
+    this.buildCats();
+    this.pickCat('look', false);
+    // Höhe der Werkzeugleiste für das Info-Fenster merken
+    const tb = this.$('toolbar');
+    const upd = () => document.documentElement.style.setProperty('--toolbar-h', tb.offsetHeight + 'px');
+    if (window.ResizeObserver) new ResizeObserver(upd).observe(tb); else setInterval(upd, 500);
+    upd();
+  };
+
+  // Kategorieleiste (neu aufbaubar, falls Werkzeuge nachgeladen werden)
+  Hud.prototype.buildCats = function () {
+    const { h, icon } = D();
+    D().clear(this.$('catRow'));
     const cr = this.$('catRow');
     this.catBtns = {};
     for (const c of WW.UI.Tools.CATEGORIES) {
@@ -42,12 +54,6 @@
       cr.appendChild(b);
       this.catBtns[c.id] = b;
     }
-    this.pickCat('look', false);
-    // Höhe der Werkzeugleiste für das Info-Fenster merken
-    const tb = this.$('toolbar');
-    const upd = () => document.documentElement.style.setProperty('--toolbar-h', tb.offsetHeight + 'px');
-    if (window.ResizeObserver) new ResizeObserver(upd).observe(tb); else setInterval(upd, 500);
-    upd();
   };
 
   // Kategorie wählen; user = Klick (bei „Schauen" sofort Werkzeug)
@@ -103,9 +109,12 @@
     }
     if (this.toolBtns) for (const id in this.toolBtns) this.toolBtns[id].setAttribute('aria-pressed', id === tool.id ? 'true' : 'false');
     const btn = this.toolBtns && this.toolBtns[tool.id];
-    if (btn && btn.scrollIntoView && !this.$('toolRow').hidden) {
+    if (btn && !this.$('toolRow').hidden) {
       const row = this.$('toolRow'), r = btn.getBoundingClientRect(), rr = row.getBoundingClientRect();
-      if (r.left < rr.left || r.right > rr.right) row.scrollLeft += (r.left - rr.left) - rr.width / 2 + r.width / 2;
+      if (rr.width > 0) {
+        if (r.left < rr.left) row.scrollLeft -= rr.left - r.left + 24;
+        else if (r.right > rr.right) row.scrollLeft += r.right - rr.right + 24;
+      }
     }
     this.renderOpts();
     this.hint(tool.hint || '');

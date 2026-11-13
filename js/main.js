@@ -174,6 +174,12 @@
     if (r == null) game.hud.hint('Hier mag das Tier nicht stehen.');
     return r;
   };
+  game.spawnLair = function (x, y, kind) {
+    const a = game.sim.actions;
+    const r = a.spawnLair ? a.spawnLair(x, y, kind) : null;
+    if (r == null || r === false) game.hud.hint('Hier passt dieser Ort nicht hin.');
+    return r;
+  };
   game.stampGov = function (x, y, gov) {
     const sim = game.sim, k = sim.query.kingdomAt(x, y);
     if (!k) { game.hud.hint('Tippe auf eine Stadt oder ihr Gebiet.'); return false; }

@@ -57,26 +57,39 @@
     addTool({ id: 'settlers', cat: 'life', icon: 'i_settlers', name: 'Siedler', kind: 'tap', options: 'settler',
       hint: 'Auf freies Land tippen: Sechs Siedler gründen ein neues Reich. In einer Stadt schließen sie sich an.',
       apply(game, x, y) { return game.spawnSettlers(x, y); } });
-    // Tiere und Wesen aus WW.CREATURES (gibt es ein Feld spawnable, nur diese), gruppiert nach group/hostile
+    // Tiere, Monster, Orte aus WW.CREATURES / WW.LAIRS (gibt es ein Feld spawnable, nur diese), gruppiert nach category
+    const WILD = WW.WILD || {};
+    const ccatName = {};
+    for (const c of (WILD.CREATURE_CATEGORIES || [])) ccatName[c.key] = c.name;
     const CR = WW.CREATURES || {};
     const ckeys = Object.keys(CR);
     const flagged = ckeys.some(k => 'spawnable' in CR[k]);
-    const groupOf = (cr) => cr.group || cr.category || (cr.hostile ? 'wild' : 'tame');
+    const groupOf = (cr) => cr.category || cr.group || (cr.hostile ? 'wild' : 'animal');
     const groups = [];
     for (const kind of ckeys) { const cr = CR[kind]; if (flagged && !cr.spawnable) continue; const g = groupOf(cr); if (groups.indexOf(g) < 0) groups.push(g); }
-    groups.forEach((g, gi) => {
-      addTool({ id: 'sep_life_' + g, cat: 'life', kind: 'sep' });
+    for (const g of groups) {
+      addTool({ id: 'sep_life_' + g, cat: 'life', kind: 'sep', label: ccatName[g] || ({ animal: 'Tiere', monster: 'Monster', wild: 'Wild' })[g] || g });
       for (const kind of ckeys) {
         const cr = CR[kind];
         if ((flagged && !cr.spawnable) || groupOf(cr) !== g) continue;
         addTool({ id: 'animal_' + kind, cat: 'life', icon: pickIcon(['i_a_' + kind, 'i_' + kind, 'a_' + kind + '_0']), name: cr.name || kind, kind: 'tap',
-          hint: cr.desc || ((cr.name || kind) + ' aussetzen: auf Land tippen.'),
+          hint: (cr.name || kind) + ': ' + (cr.desc || 'auf Land tippen.'),
           apply(game, x, y) { return game.spawnAnimal(x, y, kind); } });
       }
-      void gi;
-    });
-    // Göttliche Hand (erscheint nur, wenn die Simulation sie kennt)
-    addTool({ id: 'grab', cat: 'life', icon: pickIcon(['i_grab', 'i_hand', 'i_inspect']), name: 'Hand', kind: 'grab', requires: 'grab',
+    }
+    const LA = WW.LAIRS || {};
+    const lkeys = Object.keys(LA).filter(k => LA[k].spawnable !== false);
+    if (lkeys.length) {
+      addTool({ id: 'sep_life_place', cat: 'life', kind: 'sep', label: ccatName.place || 'Orte' });
+      for (const k of lkeys) {
+        const l = LA[k];
+        addTool({ id: 'lair_' + k, cat: 'life', icon: pickIcon(['i_l_' + k, 'i_' + k, 's_lair_' + k]), name: l.name || k, kind: 'tap', requires: 'spawnLair',
+          hint: (l.name || k) + ': ' + (l.desc || 'auf Land tippen.'),
+          apply(game, x, y) { return game.spawnLair(x, y, k); } });
+      }
+    }
+    // Göttliche Hand als eigenes Werkzeug nur, wenn die Simulation grab/drop kennt und keine Kraft „hand" hat
+    if (!(WW.POWERS && WW.POWERS.hand)) addTool({ id: 'grab', cat: 'life', icon: pickIcon(['i_grab', 'i_hand', 'i_inspect']), name: 'Hand', kind: 'grab', requires: 'grab',
       hint: 'Göttliche Hand: Figur antippen und halten, ziehen, loslassen setzt sie ab.' });
 
     // Herrschaft: Regierungs-Stempel, Diplomatie
@@ -99,20 +112,24 @@
       plague: 'Seuche: macht Bewohner krank.', bless: 'Segen: heilt, macht glücklich, Felder reifen.' };
     const DRAG = { gunship: 'aim', bomber: 'direction', orbitallaser: 'trace', laser: 'trace' };
     const P = WW.POWERS || {};
+    const PC = (WW.WILD && WW.WILD.POWER_CATEGORIES) || [];
+    for (const c of PC) POWER_CATS[c.key] = c.name;
+    const dragOf = (k, p) => p.drag || (p.aim ? 'aim' : p.dir ? 'direction' : p.brush ? 'trace' : DRAG[k] || null);
     const pkeys = (WW.POWER_KEYS || Object.keys(P)).slice().sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
     const pcats = [];
+    for (const c of PC) if (pkeys.some(k => P[k] && P[k].category === c.key)) pcats.push(c.key);
     for (const k of pkeys) { const c = (P[k] && P[k].category) || 'nature'; if (pcats.indexOf(c) < 0) pcats.push(c); }
-    const tabOf = (c) => c === 'destruction' ? 'destruction' : 'power';
+    const tabOf = (c) => c === 'destruction' ? 'destruction' : (c === 'terrain' ? 'land' : 'power');
     if (pcats.indexOf('destruction') >= 0) addCategory({ id: 'destruction', name: 'Zerstörung', short: 'Bomben', icon: 'i_cat_destruction' }, 'world');
     const multi = pcats.filter(c => tabOf(c) === 'power').length > 1;
     for (const c of pcats) {
       const tab = tabOf(c);
-      addTool({ id: 'sep_power_' + c, cat: tab, kind: 'sep', label: tab === 'power' && multi ? (POWER_CATS[c] || c) : null });
+      addTool({ id: 'sep_power_' + c, cat: tab, kind: 'sep', label: (tab === 'power' && multi) || tab === 'land' ? (POWER_CATS[c] || c) : null });
       for (const k of pkeys) {
         const p = P[k] || { name: k, radius: 2 };
         if (((p.category) || 'nature') !== c) continue;
         addTool({ id: 'power_' + k, cat: tab, icon: pickIcon(['i_' + k]), name: p.name || k, kind: 'tap', power: k,
-          drag: p.drag || DRAG[k] || null, radius: p.radius || 2, hint: PH[k] || p.desc || ((p.name || k) + ': auf die Karte tippen.'),
+          drag: dragOf(k, p), radius: p.radius || 2, hint: PH[k] || p.desc || ((p.name || k) + ': auf die Karte tippen.'),
           apply(game, x, y) { return game.strike(x, y, k); } });
       }
     }
@@ -136,7 +153,7 @@
   WW.UI = WW.UI || {};
   WW.UI.Tools = {
     CATEGORIES: CATEGORIES, TOOLS: TOOLS, BRUSHES: BRUSHES,
-    get: (id) => BY_ID[id], addTool: addTool, addCategory: addCategory, init: defaults,
+    get: (id) => BY_ID[id], addTool: addTool, reset() { TOOLS.length = 0; for (const k in BY_ID) delete BY_ID[k]; }, addCategory: addCategory, init: defaults,
     inCat: (cat) => TOOLS.filter(t => t.cat === cat)
   };
 

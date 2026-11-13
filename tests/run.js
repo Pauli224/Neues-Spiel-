@@ -401,23 +401,33 @@ test('4 Krieg (Marsch, Angriff auf Mauer/Tor, Kampf, Ende)', function () {
   assert(ended > 0, 'Krieg endet nicht');
 });
 
-// Belagerung: gleicher Angriff auf dieselbe Stadt mit und ohne Mauer
-function siege(save, withWall) {
+// Belagerung: gleicher Angriff auf dieselbe Stadt. mode: 'stone' | 'palisade' | 'none'; engines: Rammböcke/Katapulte dabei
+function siege(save, mode, engines, maxTicks) {
   const sim = WW.Sim.load(save); sim._throwErrors = true;
+  sim._noSiegeEngines = true;   // Gerät nur, wenn der Test es ausdrücklich mitgibt
   const [a, b] = sim.state.kingdoms;
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
-  if (!withWall) WW.Walls.demolishAll(sim, cb);
-  // Angreifer bekommt ein großes Heer vor die Tore
-  const W = sim.state.W;
+  if (mode === 'none') WW.Walls.demolishAll(sim, cb);
+  if (mode === 'palisade') {
+    // dieselbe Mauer, aber nur als Palisade
+    for (const s of sim.state.structs) if (!s.dead && s.cityId === cb.id && WW.Structs.isWallish(s)) {
+      s.level = 1; s.mat = 'palisade'; s.upgradeTo = 0; s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = s.maxHp;
+    }
+    cb.wall.level = 1; cb.wall.target = 1; cb.wall.state = 'done'; cb.wall.style = 'palisade';
+    cb.noSpace = false; cb.wall.plannedYear = sim.state.year + 100;
+  }
+  if (mode === 'stone') { cb.wall.plannedYear = sim.state.year + 100; }
+  const made = [];
   for (let n = 0; n < 24; n++) {
     const u = WW.Units.create(sim, { x: cb.cx + 16 + (n % 4), y: cb.cy - 3 + Math.floor(n / 4), role: 'soldier', kingdomId: a.id, cityId: ca.id, race: 'orc', age: 20 });
-    if (u) WW.Units.setRole(sim, u, 'soldier');
+    if (u) { WW.Units.setRole(sim, u, engines && n < 2 ? 'ram' : (engines && n < 4 ? 'catapult' : 'soldier')); made.push(u); }
   }
+  for (const u of made) u.order = { kind: 'march', city: cb.id, k: b.id };
   sim.actions.setLaw('wars', true);
   sim.actions.setRelation(a.id, b.id, 'war');
   const t0 = sim.state.tick;
   let fell = -1;
-  for (let i = 1; i <= 30000; i++) {
+  for (let i = 1; i <= (maxTicks || 30000); i++) {
     sim.tick();
     if (i % 50 === 0) {
       if (cb.dead || cb.kingdomId !== b.id || b.dead) { fell = sim.state.tick - t0; break; }
@@ -431,25 +441,31 @@ function siege(save, withWall) {
   return { sim: sim, fell: fell, city: cb, att: a, def: b };
 }
 
-test('4b Ummauerte Stadt hält länger durch, Eroberung läuft stabil weiter', function () {
+test('4b Belagerung: Mauer hält länger, Stein länger als Palisade, mit Gerät machbar', function () {
   const { sim, cb } = warSetup('belagerung', 'fascism', 'monarchy', 'orc', 'dwarf', 2);
   log('Verteidiger:', cb.name, 'Mauer', cb.wall.style + '/' + cb.wall.level, cb.wall.state, cb.wall.built + '/' + cb.wall.total, 'Türme', cb.wall.towers.length, '· Jahr', sim.state.year);
   assert(cb.wall.level >= 2 && (cb.wall.state === 'done' || cb.wall.state === 'upgrading') && !leaks(sim, cb).leak, 'Vorlauf: keine fertige, dichte Steinmauer (' + cb.wall.state + ' Stufe ' + cb.wall.level + ')');
   const save = sim.serialize();
-  const wall = siege(save, true), open = siege(save, false);
-  const fmt = (r) => r.fell > 0 ? (r.fell / WW.CONFIG.TPY).toFixed(1) + ' Jahre' : 'hält > ' + (30000 / WW.CONFIG.TPY).toFixed(0) + ' Jahre';
-  log('Mit Mauer:', fmt(wall), '· ohne Mauer:', fmt(open));
-  assert(open.fell > 0, 'Stadt ohne Mauer fällt nicht einmal');
-  assert(wall.fell < 0 || wall.fell > open.fell * 1.3, 'Mauer bringt keinen messbaren Vorteil');
+  const LIM = 24000;
+  const open = siege(save, 'none', false, LIM);
+  const stoneNo = siege(save, 'stone', false, LIM);
+  const stoneEng = siege(save, 'stone', true, LIM);
+  const palEng = siege(save, 'palisade', true, LIM);
+  const fmt = (r) => r.fell > 0 ? (r.fell / WW.CONFIG.TPY).toFixed(1) + ' Jahre' : 'hält > ' + (LIM / WW.CONFIG.TPY).toFixed(0) + ' Jahre';
+  log('Ohne Mauer:', fmt(open), '· Palisade mit Gerät:', fmt(palEng), '· Stein mit Gerät:', fmt(stoneEng), '· Stein ohne Gerät:', fmt(stoneNo));
+  assert(open.fell > 0, 'Stadt ohne Mauer fällt nicht');
+  assert(stoneEng.fell > 0, 'Steinstadt fällt auch mit Belagerungsgerät nicht');
+  assert(palEng.fell > 0 && stoneEng.fell > palEng.fell * 1.3, 'Stein hält nicht deutlich länger als Palisade');
+  assert(stoneNo.fell < 0 || stoneNo.fell > stoneEng.fell * 2, 'ohne Gerät fast genauso schnell wie mit');
+  assert(stoneEng.fell > open.fell, 'Mauer bringt keinen Vorteil');
   // (c) Eroberte Stadt gehört dem Sieger und läuft stabil weiter
-  const c = open.city;
-  assert(!c.dead && c.kingdomId === open.att.id, 'eroberte Stadt gehört nicht dem Sieger');
-  log('Erobert:', c.name, 'gehört jetzt', open.att.name, '· Verteidiger', open.def.dead ? 'untergegangen' : 'existiert noch');
-  sim.actions.setLaw && open.sim.actions.setRelation(open.att.id, open.def.id, 'peace');
-  run(open.sim, 6000, 500, (i) => { checkInvariants(open.sim, 'nach Eroberung ' + i); if (i % 1000 === 0) log('  +' + i, 'Einw.', c.pop, 'Reich', c.kingdomId, 'tot', !!c.dead, 'Laune', Math.round(c.happiness), 'Hunger', c.hungry, JSON.stringify(c.jobs)); });
-  for (const e of open.sim.state.events.filter(e => e.cityId === c.id && e.tick > open.sim.state.tick - 6000)) log('  [' + e.year + '] ' + e.type + ': ' + e.text);
-  assert(open.sim._cities.get(c.id), 'eroberte Stadt ist danach verschwunden');
-  log('6000 Ticks nach der Eroberung:', c.name, c.pop, 'Einw., Reich', (open.sim._kingdoms.get(c.kingdomId) || {}).name);
+  const r = stoneEng, c = r.city;
+  assert(!c.dead && c.kingdomId === r.att.id, 'eroberte Stadt gehört nicht dem Sieger');
+  log('Erobert:', c.name, 'gehört jetzt', r.att.name, '· Loyalität', Math.round(c.loyalty));
+  r.sim.actions.setRelation(r.att.id, r.def.id, 'peace');
+  run(r.sim, 6000, 500, (i) => { checkInvariants(r.sim, 'nach Eroberung ' + i); });
+  assert(r.sim._cities.get(c.id), 'eroberte Stadt ist danach verschwunden');
+  log('6000 Ticks nach der Eroberung:', c.name, c.pop, 'Einw., Reich', (r.sim._kingdoms.get(c.kingdomId) || {}).name);
 });
 
 test('4d Reich ohne Stadt verschwindet sauber', function () {

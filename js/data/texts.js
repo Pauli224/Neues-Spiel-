@@ -163,7 +163,7 @@
       'Aus Angst wird gewählt, was laut ist: {Kingdom_in} regiert nun {gov_d}. Die nächste Wahl fällt leider aus.'
     ],
     collapse: [
-      'Zusammenbruch! Niemand will mehr regieren. {kingdom_nom} ist jetzt Anarchie, das Plenum tagt ab sofort.',
+      'Zusammenbruch! Niemand will mehr regieren. {Kingdom_in} herrscht jetzt Anarchie, das Plenum tagt ab sofort.',
       'Die Ordnung zerfällt: {Kingdom_in} entscheidet nun das Plenum. Oder niemand. Oder alle.'
     ],
     evolve: [

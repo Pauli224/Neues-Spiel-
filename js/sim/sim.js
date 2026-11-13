@@ -241,16 +241,16 @@
     st.tick++;
     this._pathBudget = WW.CONFIG.PATH_BUDGET;
     compact(this);
-    WW.Cities.stats(this);
+    // Statistik (pop, jobs, _members) wird von den Verbrauchern selbst erneuert (alle 10/40 Ticks, jährlich)
     WW.Units.buildBuckets(this);
     WW.Units.updateAll(this);
     WW.Creatures.updateAll(this);
     WW.Env.update(this);
     if (st.tick % 10 === 0) WW.Cities.updateAll(this);
     if (st.tick % 20 === 5) WW.Gov.update(this);
-    if (st.tick % 40 === 15) WW.Diplo.update(this);
+    if (st.tick % 40 === 15) { WW.Cities.stats(this); WW.Diplo.update(this); }
     if (st.tick % 30 === 20) WW.Growth.update(this);
-    if (st.tick % 40 === 25) WW.Growth.updatePlots(this);
+    if (st.tick % 40 === 25) { WW.Cities.stats(this); WW.Growth.updatePlots(this); }
     if (st.tick % TPY === 0) {
       st.year++;
       WW.Units.yearly(this);

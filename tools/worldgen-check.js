@@ -249,7 +249,8 @@ for (const [k, pred, name, inverse] of sliderTests) {
 
 // ---------------------------------------------------------------- Zeiten
 console.log('Zeiten');
-function timeIt(fn, n) { fn(); const t0 = now(); for (let i = 0; i < n; i++) fn(i); return (now() - t0) / n; }
+// bestes von 3 Durchgängen: misst den Generator, nicht die Auslastung des Rechners
+function timeIt(fn, n) { fn(); let best = 1e9; for (let r = 0; r < 3; r++) { const t0 = now(); for (let i = 0; i < n; i++) fn(i + r * n); best = Math.min(best, (now() - t0) / n); } return best; }
 const tM = timeIt(i => G.generate({ seed: 3000 + (i | 0), size: 'medium' }), 10);
 const tH = timeIt(i => G.generate({ seed: 4000 + (i | 0), size: 'huge' }), 5);
 const tP = timeIt(i => G.preview({ seed: 5000 + (i | 0), size: 'medium' }, 288, 192), 10);
