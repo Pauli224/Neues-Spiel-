@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Wuselwelt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="description" content="Wuselwelt – ein kleiner Gott-Sandkasten: Völker gründen Städte, bauen Mauern und regieren sich (mehr oder weniger) selbst.">
+<meta name="theme-color" content="#0f2a35">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wuselwelt">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<!--FONTS-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Pixelify+Sans:wght@400;500;600;700&display=swap">
+<!--/FONTS-->
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="world" aria-label="Spielwelt"></canvas>
+
+  <!-- Kopfleiste -->
+  <header id="topbar" class="hud">
+    <div class="tb-brand panel">
+      <span class="tb-title">Wuselwelt</span>
+      <span class="tb-world" id="tbWorld"></span>
+    </div>
+    <div class="tb-stats panel" id="tbStats">
+      <span class="stat" title="Jahr"><b id="stYear">0</b><small>Jahr</small></span>
+      <span class="stat" title="Einwohner"><i data-icon="i_pop"></i><b id="stPop">0</b></span>
+      <span class="stat st-k" title="Reiche"><i data-icon="i_cat_rule"></i><b id="stKing">0</b></span>
+    </div>
+    <div class="tb-right">
+      <div class="seg panel" id="speedSeg" role="group" aria-label="Tempo"></div>
+      <button class="btn icon panel-btn" id="btnMap" title="Minikarte (M)" aria-label="Minikarte"><i data-icon="i_map"></i></button>
+      <button class="btn icon panel-btn" id="btnChron" title="Chronik (C)" aria-label="Chronik"><i data-icon="i_chronicle"></i></button>
+      <button class="btn icon panel-btn" id="btnMenu" title="Menü" aria-label="Menü"><i data-icon="i_menu"></i></button>
+    </div>
+  </header>
+
+  <!-- Meldung -->
+  <div id="toasts" class="hud" aria-live="polite"></div>
+
+  <!-- Minikarte -->
+  <div id="minimap" class="panel hud" hidden>
+    <canvas id="miniCanvas"></canvas>
+  </div>
+
+  <!-- Werkzeugleiste -->
+  <nav id="toolbar" class="hud" aria-label="Werkzeuge">
+    <div id="toolHint" class="tool-hint"></div>
+    <div id="toolOpts" class="tool-opts panel" hidden></div>
+    <div id="toolRow" class="tool-row panel" hidden></div>
+    <div id="catRow" class="cat-row panel" role="tablist"></div>
+  </nav>
+
+  <!-- Info-Fenster -->
+  <aside id="info" class="panel hud" hidden aria-label="Info">
+    <div class="info-grip" id="infoGrip"></div>
+    <div class="info-head">
+      <div class="info-title" id="infoTitle"></div>
+      <button class="btn icon small" id="infoClose" aria-label="Schließen"><i data-icon="i_close"></i></button>
+    </div>
+    <div class="info-body" id="infoBody"></div>
+  </aside>
+
+  <!-- Dialoge -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card panel" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2 id="modalTitle"></h2>
+        <button class="btn icon small" id="modalClose" aria-label="Schließen"><i data-icon="i_close"></i></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Neue Welt -->
+  <section id="newworld" class="screen" hidden aria-label="Neue Welt"></section>
+
+  <!-- Start -->
+  <div id="boot" class="boot"><div class="boot-card panel"><div class="boot-title">Wuselwelt</div><div class="boot-sub" id="bootMsg">Die Welt wird geknetet …</div></div></div>
+</div>
+
+<!--SCRIPTS-->
+<script src="js/core/terrain.js"></script>
+<script src="js/render/sprites.js"></script>
+<script src="js/render/sprites-world.js"></script>
+<script src="js/render/sprites-build.js"></script>
+<script src="js/render/sprites-units.js"></script>
+<script src="js/render/sprites-icons.js"></script>
+<script src="js/core/rng.js"></script>
+<script src="js/core/config.js"></script>
+<script src="js/data/names.js"></script>
+<script src="js/data/texts.js"></script>
+<script src="js/sim/util.js"></script>
+<script src="js/sim/world.js"></script>
+<script src="js/sim/worldgen.js"></script>
+<script src="js/sim/path.js"></script>
+<script src="js/sim/structs.js"></script>
+<script src="js/sim/walls.js"></script>
+<script src="js/sim/cities.js"></script>
+<script src="js/sim/units.js"></script>
+<script src="js/sim/gov.js"></script>
+<script src="js/sim/diplo.js"></script>
+<script src="js/sim/creatures.js"></script>
+<script src="js/sim/env.js"></script>
+<script src="js/sim/powers.js"></script>
+<script src="js/sim/sim.js"></script>
+<script src="js/render/camera.js"></script>
+<script src="js/render/renderer.js"></script>
+<script src="js/ui/dom.js"></script>
+<script src="js/ui/tools.js"></script>
+<script src="js/ui/input.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/panels.js"></script>
+<script src="js/ui/newworld.js"></script>
+<script src="js/ui/minimap.js"></script>
+<script src="js/main.js"></script>
+<!--/SCRIPTS-->
+</body>
+</html>
