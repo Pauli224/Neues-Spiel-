@@ -366,7 +366,9 @@ function warSetup(seed, govA, govB, raceA, raceB, minLevelB) {
   sim.actions.setLaw('disasters', false);
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
   const lvB = minLevelB || 1;
-  run(sim, 60 * WW.CONFIG.TPY, 120, () => ca.wall.level >= 1 && cb.wall.level >= lvB && cb.wall.state === 'done' && sim.state.year >= 8);
+  // fertig = Ring geschlossen auf Stufe lvB (ein laufender Ausbau auf die nächste Stufe lässt alle Stücke stehen)
+  const ready = (c, lv) => c.wall.level >= lv && (c.wall.state === 'done' || c.wall.state === 'upgrading');
+  run(sim, 60 * WW.CONFIG.TPY, 120, () => ready(ca, 1) && ready(cb, lvB) && sim.state.year >= 8);
   return { sim: sim, a: a, b: b, ca: ca, cb: cb };
 }
 
@@ -431,7 +433,7 @@ function siege(save, withWall) {
 test('4b Ummauerte Stadt hält länger durch, Eroberung läuft stabil weiter', function () {
   const { sim, cb } = warSetup('belagerung', 'fascism', 'monarchy', 'orc', 'dwarf', 2);
   log('Verteidiger:', cb.name, 'Mauer', cb.wall.style + '/' + cb.wall.level, cb.wall.state, cb.wall.built + '/' + cb.wall.total, 'Türme', cb.wall.towers.length, '· Jahr', sim.state.year);
-  assert(cb.wall.level >= 2 && cb.wall.state === 'done', 'Vorlauf: keine fertige Steinmauer');
+  assert(cb.wall.level >= 2 && (cb.wall.state === 'done' || cb.wall.state === 'upgrading') && !leaks(sim, cb).leak, 'Vorlauf: keine fertige, dichte Steinmauer (' + cb.wall.state + ' Stufe ' + cb.wall.level + ')');
   const save = sim.serialize();
   const wall = siege(save, true), open = siege(save, false);
   const fmt = (r) => r.fell > 0 ? (r.fell / WW.CONFIG.TPY).toFixed(1) + ' Jahre' : 'hält > ' + (30000 / WW.CONFIG.TPY).toFixed(0) + ' Jahre';
@@ -535,6 +537,33 @@ test('6 Gotteshandlungen-Fuzz (2000 Aktionen)', function () {
   const D = WW.Sim.load(sim.serialize());
   assert(D && D.serialize() === sim.serialize(), 'Spielstand nach Fuzz nicht stabil');
   log('Aktionen:', JSON.stringify(counts), '· Einheiten', sim.state.units.length, '· Reiche', sim.state.kingdoms.length);
+});
+
+// --------------------------------------------------------------------------
+// 8. Wachstum
+// --------------------------------------------------------------------------
+test('8 Wachstum (Stufen, Stadterweiterung, Tochterstädte, 40 000 Ticks)', function () {
+  const sim = makeSim({ seed: 'wachstum-1', size: 'medium', populate: 3 });
+  const counts = {};
+  const orig = sim.event;
+  sim.event = function (type) { counts[type] = (counts[type] || 0) + 1; return orig.apply(this, arguments); };
+  const pop0 = sim.state.units.length;
+  const rows = [];
+  let maxTier = 0, maxCities = 0;
+  run(sim, 40000, 4000, (i) => {
+    for (const c of sim.state.cities) maxTier = Math.max(maxTier, c.tier);
+    for (const k of sim.state.kingdoms) maxCities = Math.max(maxCities, k.cityIds.length);
+    rows.push('Jahr ' + String(sim.state.year).padStart(3) + ': ' + sim.state.units.length + ' Einwohner, ' + sim.state.cities.length + ' Städte, ' + sim.state.kingdoms.length + ' Reiche, größtes Reich ' + Math.max(0, ...sim.state.kingdoms.map(k => k.cityIds.length)) + ' Städte');
+  });
+  for (const r of rows) log(r);
+  log('Ereignisse gesamt: Tochterstädte', counts.daughter || 0, '· Stadterweiterungen begonnen', counts.wallExpand || 0, 'fertig', counts.wallExpandDone || 0, '· Stufenaufstiege', counts.tier || 0, '· Steinmauern', counts.wallStoneDone || 0);
+  const pop1 = sim.state.units.length;
+  log('Bevölkerung', pop0, '→', pop1, '· höchste Stadtstufe', WW.CITY_TIERS[maxTier].name, '· meiste Städte in einem Reich', maxCities);
+  assert(pop1 >= pop0 * 4, 'Bevölkerung kaum gewachsen');
+  assert(maxCities >= 2, 'kein Reich mit mehr als einer Stadt');
+  assert((counts.daughter || 0) >= 1, 'keine Tochterstadt');
+  assert((counts.wallExpandDone || 0) >= 1, 'keine abgeschlossene Stadterweiterung');
+  assert(maxTier >= 3, 'keine Großstadt');
 });
 
 // --------------------------------------------------------------------------
