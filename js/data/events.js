@@ -468,7 +468,7 @@
     texts: ['Die Orks von {city} veranstalten eine Kraftprobe: Wer hebt den Ochsen? {Person} schafft es. Ein anderer übernimmt sich gründlich.',
       'In {city} wird Steineweitwurf gespielt. Ein Stein fliegt bis ins Nachbardorf. Ein Zuschauer kehrt nicht zurück.',
       'Ringkampf in {city}! {Person} gewinnt, die anderen trainieren seitdem noch härter.'] });
-  ev('ork_brüllen', 'race', 'pair', 'Grenzbrüllen', { weight: 1, cooldown: 6, when: c => c.race === 'orc' ? 2 : 0, rel: ['peace', 'war'],
+  ev('ork_bruellen', 'race', 'pair', 'Grenzbrüllen', { weight: 1, cooldown: 6, when: c => c.race === 'orc' ? 2 : 0, rel: ['peace', 'war'],
     effects: [{ opinion: [-18, -8] }, { mod: 'aggression', add: 0.08, years: 3 }],
     texts: ['Die Orks {kingdom_dat} brüllen an der Grenze so laut, dass in {otherCity} die Milch sauer wird.',
       '{Kingdom_nom} schickt {other_dat} eine Herausforderung: ein Wettbrüllen. {Other_nom} lehnt höflich ab, was als Feigheit gilt.',
