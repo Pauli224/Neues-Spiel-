@@ -251,7 +251,7 @@ test('7 Speichern/Laden, Determinismus, alte Spielstände', function () {
   assert(A.sim.hash() === L.hash(), 'Laden und Weiterlaufen weicht ab');
   // alter Spielstand ohne Industrie-Felder
   const o = JSON.parse(B.sim.serialize());
-  delete o.rasters.pollution; delete o.rasters.murk; delete o.wind; delete o.industry; delete o.laws.industry;
+  delete o.rasters.pollution; delete o.rasters.murk; delete o.rasters.barren; delete o.wind; delete o.industry; delete o.laws.industry;
   o.structs = o.structs.filter((s) => s.type !== 'factory');
   for (const c of o.cities) { delete c.pollution; delete c.indActive; delete c.indNext; c.mods = (c.mods || []).filter((m) => !/^industry/.test(m.source)); }
   for (const k of o.kingdoms) delete k.pollution;

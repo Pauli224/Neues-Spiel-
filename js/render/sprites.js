@@ -342,7 +342,7 @@
       };
     });
     // Umleitungen alter Schlüssel (z. B. Figuren auf das feine Raster)
-    Object.keys(ALIAS).forEach(function (k) { ENT[k] = { alias: ALIAS[k] }; });
+    Object.keys(ALIAS).forEach(function (k) { if (ENT[k] && !ENT[k].alias) ORIG[k] = ENT[k]; ENT[k] = { alias: ALIAS[k] }; });
     // Gelände-Varianten zählen (für terrainKey)
     var TT = WW.TERRAIN || [];
     for (var ti = 0; ti < TT.length; ti++) {
@@ -405,6 +405,15 @@
     return cv;
   }
   var TEAMTAB = [];
+  var ORIG = {};   // grobe Originale hinter Umleitungen (nur für Vergleichsbilder)
+  function drawOrig(ctx, key, x, y, opts) {
+    var e = ORIG[key];
+    if (!e) { draw(ctx, key, x, y, opts); return; }
+    var team = opts ? opts.team | 0 : 0, flip = opts && opts.flip;
+    var src = e.team ? (teamCanvas[team] || teamAtlas(normTeam(team))) : baseCanvas;
+    if (flip) ctx.drawImage(src, e.fx, e.fy, e.w, e.h, x + e.fox, y + e.oy, e.w, e.h);
+    else ctx.drawImage(src, e.x, e.y, e.w, e.h, x + e.ox, y + e.oy, e.w, e.h);
+  }
   function entry(key) {
     var e = ENT[key];
     if (e) return e.alias ? entry(e.alias) : e;
@@ -468,6 +477,7 @@
     init: init,
     draw: draw,
     drawFast: drawFast,
+    drawOrig: drawOrig,
     info: info,
     has: function (k) { return !!entry(k); },
     keys: function () { if (!ready) init(); return ORDER.slice(); },

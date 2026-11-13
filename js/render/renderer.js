@@ -29,6 +29,7 @@
     this.teamCss = this.S.TEAM_COLORS.map(c => ({ main: c.main, dark: c.dark, light: c.light, rgb: hexRgb(c.main) }));
     this.rowU = []; this.rowS = [];
     this.labelCache = new Map();
+    this.gfx = { daynight: true, weather: true, clouds: true, water: true, quality: 'mid' };
   }
 
   // ------------------------------------------------------------------ Welt setzen
@@ -130,6 +131,7 @@
     for (let y = c.cy * CH; y < y1; y++) for (let x = c.cx * CH; x < x1; x++) this.drawGroundTile(g, x, y);
     c.built = true;
     c.decorDirty = true;
+    c.waterDirty = true;
   };
 
   // Deko-Block für die weite Ansicht: Deko und Bauwerke des Blocks, zeilenweise, in ein Canvas
@@ -419,6 +421,7 @@
       g.setTransform(1, 0, 0, 1, -c.cx * CPX, -c.cy * CPX);
       this.drawGroundTile(g, x, y);
       touched.add(c);
+      c.waterDirty = true;
       // Deko-Block nur neu, wenn sich die Deko dieser Kachel ändern kann
       const sig = st.structAt && st.structAt[i] >= 0 ? -2 : (this.path[i] ? -3 : st.terrain[i]);
       if (this.decorSig[i] !== sig) { this.decorSig[i] = sig; c._decorTouched = true; }
@@ -472,6 +475,7 @@
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
+      this.burst(f);
       if (f.type === 'trainsmoke') { this.addPlume(f.x * 8, f.y * 8 - 6, false, -6, -14, false); continue; }
       if (f.type === 'smokeplume') { if (typeof this.S.factoryStacks !== 'function') this.addPlume(f.x * 8, f.y * 8, !!(f.filtered || f.clean), -6, -14, f.big); continue; }
       if (f.type === 'muzzle' && this.st) { (this.muzzleT || (this.muzzleT = new Map())).set((f.y | 0) * this.st.W + (f.x | 0), this.time); }
@@ -493,10 +497,10 @@
     return { x: x, y: y };
   };
   // Qualmwolke: (px, py) = Schornstein-Mündung, (ox, oy) = Zeichenversatz des Sprites zur Mündung
-  Renderer.prototype.addPlume = function (px, py, clean, ox, oy, big) {
+  Renderer.prototype.addPlume = function (px, py, clean, ox, oy, big, scale) {
     const P = this.plumes || (this.plumes = []);
     if (P.length >= 70) return;
-    P.push({ x: px, y: py, ox: ox == null ? -6 : ox, oy: oy == null ? -14 : oy, t: 0, life: (big ? 5 : 4) + Math.random() * 1.5, clean: clean, f: (Math.random() * 4) | 0 });
+    P.push({ x: px, y: py, ox: ox == null ? -6 : ox, oy: oy == null ? -14 : oy, t: 0, life: (scale ? 3 : big ? 5 : 4) + Math.random() * 1.5, clean: clean, f: (Math.random() * 4) | 0, sc: scale || 1 });
   };
   Renderer.prototype.updatePlumes = function (g, vt, dt) {
     const S = this.S, st = this.st;
@@ -527,7 +531,7 @@
       const base = p.clean ? 'fx_smokeplume_clean_' : 'fx_smokeplume_';
       const key = S.has(base + '0') ? base + Math.min(3, (k * 4) | 0) : 'fx_smoke_' + (p.f & 1);
       g.globalAlpha = (p.clean ? 0.6 : 0.85) * (k < 0.12 ? k / 0.12 : 1 - (k - 0.12) / 0.88);
-      const sc = 1 + k * 1.2;   // Wolke wächst beim Aufsteigen
+      const sc = (1 + k * 1.2) * p.sc;   // Wolke wächst beim Aufsteigen
       g.save(); g.translate(p.x, p.y); g.scale(sc, sc);
       S.drawFast(g, key, Math.round(p.ox), Math.round(p.oy), 0, false);
       g.restore();
@@ -1006,6 +1010,8 @@
       const dx = rx(X), dy = ry(Y);
       ctx.drawImage(c.ground, 0, 0, w, h, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
     }
+    // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
+    if (this.gfx.water !== false) this.drawWaterLayer(ctx, cx0, cx1, cy0, cy1, rx, ry, low);
     // (2) Gebietstönung
     if (st.owner && opts.territory !== false) {
       for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
@@ -1048,6 +1054,8 @@
       }
     }
 
+    // Leben: Vögel, Schmetterlinge, springende Fische, Schornsteinrauch
+    if (!low) this.drawLife(ctx, vt, dt, opts);
     // Rauch aus Fabriken, Dunst
     if (st.structs) this.updatePlumes(ctx, vt, dt);
     if (st.pollution && st.pollution.length) this.drawSmog(ctx, cam, opts.view === 'air');
@@ -1056,6 +1064,13 @@
     if (st.wild && st.wild.effects && st.wild.effects.length) this.drawEffects(ctx, st.wild.effects, vt);
     if (st.trains && st.trains.length) this.drawTrains(ctx, st.trains, vt);
     if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
+
+    this.drawParticles(ctx, dt);
+    // Wolkenschatten, Wetter, Tageszeit
+    if (this.gfx.clouds !== false && this.gfx.quality !== 'low') this.drawCloudShadows(ctx, vt);
+    this._dayPhase = opts.dayPhase; this._dpr = cam.dpr;
+    this.drawAtmosphere(ctx, cam, vt, dt, opts, s, ox, oy);
+    ctx.setTransform(s, 0, 0, s, ox, oy);
 
     // (5) Auswahl und Pinsel
     if (opts.select) this.drawSelection(ctx, opts.select, opts);
@@ -1441,6 +1456,406 @@
     if (!this.labelBoxes) return null;
     for (const L of this.labelBoxes) { const b = L.box; if (b && sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) return L.c; }
     return null;
+  };
+
+
+  // ===========================================================================
+  // Lebendige Pixelwelt: Wasser, Leben, Licht, Wetter, Partikel (rein optisch, deterministisch genug)
+  // ===========================================================================
+  const WATER_IDS = {}; // Gelände-ID -> 1 Meer/See, 2 Fluss
+  function waterKind(id) {
+    if (!WATER_IDS._init) { WATER_IDS._init = 1; const T = WW.T; WATER_IDS[T.DEEP] = 1; WATER_IDS[T.WATER] = 1; WATER_IDS[T.SHALLOW] = 1; WATER_IDS[T.RIVER] = 2; }
+    return WATER_IDS[id] || 0;
+  }
+  function hash2(x, y, s) {
+    let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 1442695041)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; h = Math.imul(h, 2246822519); h ^= h >>> 13;
+    return (h >>> 0) / 4294967296;
+  }
+
+  // Glitzer-Muster: 6 Bilder, 64×64, kurze helle Striche, die auf- und abblenden
+  Renderer.prototype.glintFrames = function () {
+    if (this._glint) return this._glint;
+    const N = 8, S = 64, out = [];
+    const dashes = [];
+    for (let i = 0; i < 46; i++) dashes.push({ x: (hash2(i, 1, 9) * S) | 0, y: (hash2(i, 2, 9) * S) | 0, l: 1 + ((hash2(i, 3, 9) * 3) | 0), ph: (hash2(i, 4, 9) * N) | 0, c: hash2(i, 5, 9) });
+    for (let f = 0; f < N; f++) {
+      const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+      const g = cv.getContext('2d');
+      for (const d of dashes) {
+        const age = (f - d.ph + N) % N;
+        if (age > 3) continue;
+        const a = age === 0 || age === 3 ? 0.25 : 0.55;
+        g.fillStyle = d.c < 0.3 ? 'rgba(255,255,255,' + a + ')' : 'rgba(196,236,250,' + a + ')';
+        g.fillRect(d.x, d.y, d.l + (age === 1 || age === 2 ? 1 : 0), 1);
+      }
+      out.push(cv);
+    }
+    return (this._glint = out);
+  };
+
+  // je Block: Masken für Meer/See, Fluss und zwei Brandungsringe
+  Renderer.prototype.buildWater = function (c) {
+    const st = this.st, W = st.W, H = st.H, t = st.terrain;
+    const x0 = c.cx * CH, y0 = c.cy * CH, x1 = Math.min(W, x0 + CH), y1 = Math.min(H, y0 + CH);
+    let any = false;
+    for (let y = y0; y < y1 && !any; y++) for (let x = x0; x < x1; x++) if (waterKind(t[y * W + x])) { any = true; break; }
+    c.waterDirty = false;
+    c.hasWater = any;
+    if (!any) return;
+    const mk = (k) => { if (!c[k]) { c[k] = document.createElement('canvas'); c[k].width = CPX; c[k].height = CPX; } const g = c[k].getContext('2d'); g.clearRect(0, 0, CPX, CPX); return g; };
+    const gs = mk('wSea'), gr = mk('wRiv'), f1 = mk('wFoam1'), f2 = mk('wFoam2');
+    gs.fillStyle = gr.fillStyle = '#fff';
+    f1.fillStyle = 'rgba(232,248,250,1)'; f2.fillStyle = 'rgba(232,248,250,0.85)';
+    const land = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !waterKind(t[y * W + x]);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const k = waterKind(t[y * W + x]);
+      if (!k) continue;
+      const px = (x - x0) * 8, py = (y - y0) * 8;
+      (k === 2 ? gr : gs).fillRect(px, py, 8, 8);
+      if (k === 2) continue;
+      // Brandung: Ring 1 direkt am Ufer, Ring 2 zwei Pixel weiter draußen, gestrichelt nach Kachel-Hash
+      const n = land(x, y - 1), e = land(x + 1, y), so = land(x, y + 1), w = land(x - 1, y);
+      if (!(n || e || so || w)) continue;
+      for (let i = 0; i < 8; i++) {
+        const on1 = hash2(x * 8 + i, y, 3) > 0.25, on2 = hash2(x * 8 + i, y, 4) > 0.45;
+        if (n) { if (on1) f1.fillRect(px + i, py, 1, 1); if (on2) f2.fillRect(px + i, py + 2, 1, 1); }
+        if (so) { if (on1) f1.fillRect(px + i, py + 7, 1, 1); if (on2) f2.fillRect(px + i, py + 5, 1, 1); }
+        if (w) { if (on1) f1.fillRect(px, py + i, 1, 1); if (on2) f2.fillRect(px + 2, py + i, 1, 1); }
+        if (e) { if (on1) f1.fillRect(px + 7, py + i, 1, 1); if (on2) f2.fillRect(px + 5, py + i, 1, 1); }
+      }
+    }
+  };
+
+  Renderer.prototype.drawWaterLayer = function (ctx, cx0, cx1, cy0, cy1, rx, ry, low) {
+    const st = this.st, t = this.time;
+    const frames = this.glintFrames(), F = frames.length;
+    if (!this._wTmp) { this._wTmp = document.createElement('canvas'); this._wTmp.width = CPX; this._wTmp.height = CPX; }
+    const tmp = this._wTmp, tg = tmp.getContext('2d');
+    const fr = ((t * 5) | 0) % F;
+    if (!this._wPat || this._wPatF !== fr) { this._wPat = tg.createPattern(frames[fr], 'repeat'); this._wPatF = fr; }
+    const fr2 = ((t * 9) | 0) % F;
+    if (!this._wPat2 || this._wPatF2 !== fr2) { this._wPat2 = tg.createPattern(frames[(fr2 + 3) % F], 'repeat'); this._wPatF2 = fr2; }
+    const a1 = 0.5 + 0.45 * Math.sin(t * 1.7), a2 = 0.5 + 0.45 * Math.sin(t * 1.7 - 2.1);
+    let budget = low ? 6 : 40;
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const c = this.chunks[cy * this.cw + cx];
+      if (!c.built) continue;
+      if (c.waterDirty || c.hasWater == null) this.buildWater(c);
+      if (!c.hasWater) continue;
+      const X = cx * CPX, Y = cy * CPX, w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
+      const dx = rx(X), dy = ry(Y), dw = rx(X + w) - dx, dh = ry(Y + h) - dy;
+      if (budget-- > 0) {
+        // Meer/See: langsam treibendes Glitzern; Fluss: schneller, schräg „stromab"
+        tg.globalCompositeOperation = 'source-over';
+        tg.clearRect(0, 0, CPX, CPX);
+        tg.imageSmoothingEnabled = false;
+        tg.save(); tg.translate(Math.round((t * 3) % 64) - 64, Math.round((t * 1.3) % 64) - 64); tg.fillStyle = this._wPat; tg.fillRect(0, 0, CPX + 128, CPX + 128); tg.restore();
+        tg.globalCompositeOperation = 'destination-in'; tg.drawImage(c.wSea, 0, 0);
+        tg.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmp, 0, 0, w, h, dx, dy, dw, dh);
+        tg.clearRect(0, 0, CPX, CPX);
+        tg.save(); tg.translate(Math.round((t * 11) % 64) - 64, Math.round((t * 11) % 64) - 64); tg.fillStyle = this._wPat2; tg.fillRect(0, 0, CPX + 128, CPX + 128); tg.restore();
+        tg.globalCompositeOperation = 'destination-in'; tg.drawImage(c.wRiv, 0, 0);
+        tg.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmp, 0, 0, w, h, dx, dy, dw, dh);
+      }
+      // Brandung rollt an: zwei Ringe im Wechsel
+      ctx.globalAlpha = Math.max(0, a1) * 0.9; ctx.drawImage(c.wFoam1, 0, 0, w, h, dx, dy, dw, dh);
+      ctx.globalAlpha = Math.max(0, a2) * 0.6; ctx.drawImage(c.wFoam2, 0, 0, w, h, dx, dy, dw, dh);
+      ctx.globalAlpha = 1;
+    }
+  };
+
+  // Vögel, Schmetterlinge, Fische, Schornsteinrauch
+  Renderer.prototype.drawLife = function (g, vt, dt, opts) {
+    const st = this.st, t = this.time, W = st.W, q = this.gfx.quality;
+    const night = this._night || 0;
+    // Vogelschwärme ziehen über das Bild
+    const fl = this.flocks || (this.flocks = []);
+    this._flockT = (this._flockT || 0) - dt;
+    if (this._flockT <= 0 && fl.length < (q === 'low' ? 1 : 3) && night < 0.6) {
+      this._flockT = 6 + Math.random() * 8;
+      const fromLeft = Math.random() < 0.5, y = (vt.y0 + Math.random() * (vt.y1 - vt.y0)) * 8;
+      const n = 4 + ((Math.random() * 7) | 0), birds = [];
+      for (let i = 0; i < n; i++) birds.push({ ox: -i * 5 + Math.random() * 3, oy: (i % 2 ? 1 : -1) * i * 2.4 + Math.random() * 2, ph: Math.random() * 6 });
+      fl.push({ x: fromLeft ? (vt.x0 - 2) * 8 : (vt.x1 + 2) * 8, y: y, vx: (fromLeft ? 1 : -1) * (14 + Math.random() * 8), vy: (Math.random() - 0.5) * 4, birds: birds, life: 40 });
+    }
+    g.fillStyle = '#2b2533';
+    for (let k = fl.length - 1; k >= 0; k--) {
+      const f = fl[k];
+      f.x += f.vx * dt; f.y += f.vy * dt + Math.sin(t * 0.7 + k) * 2 * dt; f.life -= dt;
+      if (f.life <= 0) { fl.splice(k, 1); continue; }
+      for (const b of f.birds) {
+        const bx = Math.round(f.x + b.ox * Math.sign(f.vx)), by = Math.round(f.y + b.oy - 18);
+        const up = Math.sin(t * 9 + b.ph) > 0;
+        g.fillRect(bx, by, 1, 1);
+        if (up) { g.fillRect(bx - 1, by - 1, 1, 1); g.fillRect(bx + 1, by - 1, 1, 1); } else { g.fillRect(bx - 1, by, 1, 1); g.fillRect(bx + 1, by, 1, 1); }
+      }
+    }
+    // Schmetterlinge über Blumenwiesen (nur nah)
+    if ((opts.scale || 1) >= 2.5 && night < 0.4) {
+      const T = WW.T, cols = ['#f29db6', '#ffe68c', '#fbf7ee', '#bd8af0'];
+      let n = 0;
+      for (let y = vt.y0; y <= vt.y1 && n < 14; y++) for (let x = vt.x0; x <= vt.x1 && n < 14; x++) {
+        const id = st.terrain[y * W + x];
+        if (id !== T.FLOWERS && id !== T.GRASS) continue;
+        const h = hash2(x, y, 21);
+        if (h > (id === T.FLOWERS ? 0.06 : 0.008)) continue;
+        n++;
+        const px = x * 8 + 4 + Math.sin(t * 1.3 + h * 40) * 6, py = y * 8 + 2 + Math.sin(t * 2.1 + h * 70) * 3 - 3;
+        g.fillStyle = cols[(h * 1000 | 0) % cols.length];
+        const open = Math.sin(t * 14 + h * 9) > 0;
+        g.fillRect(Math.round(px) - (open ? 1 : 0), Math.round(py), open ? 3 : 1, 1);
+      }
+    }
+    // springende Fische
+    this._fishT = (this._fishT || 0) - dt;
+    const fish = this.fishes || (this.fishes = []);
+    if (this._fishT <= 0) {
+      this._fishT = 0.8 + Math.random() * 1.8;
+      for (let tries = 0; tries < 12; tries++) {
+        const x = (vt.x0 + Math.random() * (vt.x1 - vt.x0)) | 0, y = (vt.y0 + Math.random() * (vt.y1 - vt.y0)) | 0;
+        const id = st.terrain[y * W + x];
+        if (id === WW.T.WATER || id === WW.T.SHALLOW || id === WW.T.RIVER) { fish.push({ x: x * 8 + 4, y: y * 8 + 5, t: 0, d: Math.random() < 0.5 ? -1 : 1 }); break; }
+      }
+    }
+    for (let k = fish.length - 1; k >= 0; k--) {
+      const f = fish[k]; f.t += dt;
+      if (f.t > 0.9) { fish.splice(k, 1); continue; }
+      const p = f.t / 0.6;
+      if (p < 1) {
+        const fx = f.x + f.d * p * 5, fy = f.y - Math.sin(p * Math.PI) * 5;
+        g.fillStyle = '#d6e2ea'; g.fillRect(Math.round(fx), Math.round(fy), 2, 1);
+        g.fillStyle = '#7f8aa3'; g.fillRect(Math.round(fx) + (f.d > 0 ? -1 : 2), Math.round(fy), 1, 1);
+      }
+      if (p < 0.25 || p > 0.85) { g.fillStyle = 'rgba(232,248,250,0.8)'; const sx = p < 0.25 ? f.x : f.x + f.d * 5; g.fillRect(Math.round(sx) - 1, Math.round(f.y) + 1, 3, 1); }
+    }
+    // Schornsteinrauch aus Wohnhäusern (gemächlich, wenige)
+    this._chimT = (this._chimT || 0) - dt;
+    if (this._chimT <= 0 && st.structs) {
+      this._chimT = q === 'low' ? 1.2 : 0.45;
+      const cands = [];
+      for (const s of st.structs) {
+        if (s.type !== 'house' || !s.built || s.dead || (s.level | 0) < 1) continue;
+        if (s.x < vt.x0 || s.x > vt.x1 || s.y < vt.y0 || s.y > vt.y1 + 1) continue;
+        cands.push(s);
+        if (cands.length > 60) break;
+      }
+      if (cands.length) {
+        const s = cands[(Math.random() * cands.length) | 0];
+        this.addPlume(s.x * 8 + s.w * 8 - 5, s.y * 8 - 6, true, -6, -14, false, 0.45);
+      }
+    }
+  };
+
+  // Partikel: Funken und Trümmer bei Explosionen, Einschlägen, Blitzen
+  Renderer.prototype.burst = function (f) {
+    const P = this.parts || (this.parts = []);
+    const kind = f.type;
+    let n = 0, sparks = 0, big = 1;
+    if (kind === 'explosion') { n = 10 + Math.min(30, (f.r || 1) * 6); sparks = n; big = Math.min(4, f.r || 1); }
+    else if (kind === 'meteor') { n = 24; sparks = 18; big = 2.5; }
+    else if (kind === 'bolt') { sparks = 10; }
+    else if (kind === 'hit' || kind === 'muzzle') { sparks = 3; }
+    else if (kind === 'mushroom') { n = 40; sparks = 30; big = 5; }
+    else return;
+    if (this.gfx.quality === 'low') { n = n >> 1; sparks = sparks >> 1; }
+    if (P.length > 400) return;
+    const x = f.x * 8, y = f.y * 8;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = (10 + Math.random() * 30) * big;
+      P.push({ x: x, y: y, z: 0, vx: Math.cos(a) * v * 0.6, vy: Math.sin(a) * v * 0.35, vz: 20 + Math.random() * 40 * big, life: 0.8 + Math.random() * 0.8, t: 0,
+        col: Math.random() < 0.5 ? '#625a71' : '#80532f', size: Math.random() < 0.3 ? 2 : 1 });
+    }
+    for (let i = 0; i < sparks; i++) {
+      const a = Math.random() * Math.PI * 2, v = (15 + Math.random() * 40) * big;
+      P.push({ x: x, y: y, z: 2, vx: Math.cos(a) * v * 0.7, vy: Math.sin(a) * v * 0.4, vz: 10 + Math.random() * 30 * big, life: 0.4 + Math.random() * 0.5, t: 0,
+        col: Math.random() < 0.5 ? '#ffd23f' : '#ff8a2a', size: 1, glow: true });
+    }
+    // Druckwelle als sichtbarer Ring bei großen Explosionen
+    if (big >= 2 && this.fx.length < 500) this.fx.push({ type: 'shockwave', x: f.x, y: f.y, r: big * 2.5, t: 0, d: 0.7, seed: 1 });
+  };
+  Renderer.prototype.drawParticles = function (g, dt) {
+    const P = this.parts;
+    if (!P || !P.length) return;
+    let w = 0;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      p.t += dt;
+      if (p.t >= p.life) continue;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vz -= 90 * dt; p.z += p.vz * dt;
+      if (p.z < 0) { p.z = 0; p.vz *= -0.3; p.vx *= 0.5; p.vy *= 0.5; }
+      P[w++] = p;
+      const k = p.t / p.life;
+      g.globalAlpha = p.glow ? 1 - k : Math.min(1, 1.5 - k);
+      g.fillStyle = p.col;
+      g.fillRect(Math.round(p.x), Math.round(p.y - p.z), p.size, p.size);
+    }
+    P.length = w;
+    g.globalAlpha = 1;
+  };
+
+  // Wolkenschatten: weiche Flecken, ziehen mit dem Wind
+  Renderer.prototype.drawCloudShadows = function (g, vt) {
+    if (!this._clouds) {
+      const N = 48, cv = document.createElement('canvas'); cv.width = N; cv.height = N;
+      const c = cv.getContext('2d'), img = c.createImageData(N, N), d = img.data;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        // weiches, kachelbares Rauschen aus Sinuswellen
+        let v = 0;
+        for (let o = 0; o < 4; o++) { const f = (o + 1) * 2 * Math.PI / N; v += Math.sin(x * f * (o + 1) * 0.5 + o * 1.7 + Math.sin(y * f * 0.7 + o)) * Math.cos(y * f * (o % 2 ? 1 : 0.5) * (o + 1) * 0.5 + o * 2.3) / (o + 1); }
+        const a = Math.max(0, v - 0.35) * 1.3;
+        const i = (y * N + x) * 4; d[i] = 22; d[i + 1] = 30; d[i + 2] = 52; d[i + 3] = Math.round(Math.min(1, a) * 70);
+      }
+      c.putImageData(img, 0, 0);
+      this._clouds = cv;
+    }
+    const w = this.wind(), t = this.time;
+    const size = 8 * 64;                 // eine Wolkenkachel deckt 64×64 Spielkacheln
+    const ox = ((t * 3 * (w.x || 0.6)) % size + size) % size, oy = ((t * 3 * (w.y || 0.2)) % size + size) % size;
+    const x0 = Math.floor((vt.x0 * 8 - ox) / size) * size + ox, y0 = Math.floor((vt.y0 * 8 - oy) / size) * size + oy;
+    g.save(); g.imageSmoothingEnabled = true;
+    for (let y = y0; y < (vt.y1 + 2) * 8; y += size) for (let x = x0; x < (vt.x1 + 2) * 8; x += size) g.drawImage(this._clouds, x, y, size, size);
+    g.restore();
+  };
+
+  // Tageszeit und Wetter. dayPhase 0..1 (0 = Mitternacht); ein Tag je Spieljahr
+  const NIGHT = [52, 64, 120], DUSK = [255, 150, 90];
+  Renderer.prototype.drawAtmosphere = function (ctx, cam, vt, dt, opts, s, ox, oy) {
+    const st = this.st, cv = this.canvas, W = cv.width, H = cv.height;
+    const ph = opts.dayPhase == null ? 0.5 : opts.dayPhase;
+    const sun = this.gfx.daynight ? Math.sin((ph - 0.25) * Math.PI * 2) : 1;  // −1 Nacht … 1 Mittag
+    const night = this.gfx.daynight ? Math.max(0, Math.min(1, (-sun + 0.05) / 0.45)) : 0;
+    const dusk = this.gfx.daynight ? Math.max(0, 1 - Math.abs(sun) / 0.32) : 0;
+    this._night = night;
+    // Wetter (rein optisch): Schauer nach Jahr und Ort, über der Kamera
+    const wx = this.weatherState(cam, dt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Nacht: multiplizierend abdunkeln und bläulich tönen
+    if (night > 0.01 || wx.dark > 0.01) {
+      const k = Math.min(0.78, night * 0.72 + wx.dark * 0.35);
+      const r = Math.round(255 - (255 - NIGHT[0]) * k), gg = Math.round(255 - (255 - NIGHT[1]) * k), b = Math.round(255 - (255 - NIGHT[2]) * k);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = 'rgb(' + r + ',' + gg + ',' + b + ')';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    // Morgen- und Abendrot
+    if (dusk > 0.02) {
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.fillStyle = 'rgba(' + DUSK[0] + ',' + DUSK[1] + ',' + DUSK[2] + ',' + (dusk * 0.55).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    // Lichter in der Dämmerung und Nacht: Fenster, Feuer (additiv)
+    const lights = Math.max(night, dusk * 0.5);
+    if (lights > 0.05) {
+      ctx.setTransform(s, 0, 0, s, ox, oy);
+      this.drawLights(ctx, vt, lights);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    // Niederschlag in Bildschirmpixeln
+    if (wx.rain > 0.02 || wx.snow > 0.02) this.drawPrecip(ctx, wx, dt);
+    if (wx.fog > 0.02) {
+      ctx.fillStyle = 'rgba(225,232,236,' + (wx.fog * 0.28).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (wx.flash > 0) { ctx.fillStyle = 'rgba(240,244,255,' + Math.min(0.55, wx.flash) + ')'; ctx.fillRect(0, 0, W, H); }
+  };
+
+  // Wetter: Schauer kommen und gehen (nach Spieljahr und Zufall), Schnee in kalten Gegenden, Nebel am Morgen
+  Renderer.prototype.weatherState = function (cam, dt) {
+    const w = this._wx || (this._wx = { rain: 0, snow: 0, fog: 0, dark: 0, flash: 0, tRain: 0, target: 0, storm: false, next: 8 });
+    if (!this.gfx.weather) { w.rain = w.snow = w.fog = w.dark = w.flash = 0; return w; }
+    const st = this.st;
+    w.next -= dt;
+    if (w.next <= 0) {
+      // neuer Wetterabschnitt
+      const r = Math.random();
+      w.target = r < 0.62 ? 0 : r < 0.9 ? 0.6 : 1;
+      w.storm = w.target >= 1 && Math.random() < 0.6;
+      w.next = w.target ? 14 + Math.random() * 16 : 25 + Math.random() * 35;
+    }
+    // Regen der Simulation (Kraft) zählt auch
+    w.rain += ((w.target) - w.rain) * Math.min(1, dt * 0.4);
+    // kalt? Gelände unter der Kamera
+    const tx = Math.max(0, Math.min(st.W - 1, (cam.x / 8) | 0)), ty = Math.max(0, Math.min(st.H - 1, (cam.y / 8) | 0));
+    const tk = (WW.TERRAIN[st.terrain[ty * st.W + tx]] || {}).key;
+    const cold = tk === 'snow' || tk === 'snowfield' || tk === 'tundra' || tk === 'taiga';
+    w.snowMode = cold;
+    w.snow = cold ? w.rain : 0;
+    const rainOnly = cold ? 0 : w.rain;
+    w.dark = Math.max(rainOnly, w.snow * 0.6) * 0.7;
+    // Morgennebel in Tälern: nur bei wenig Wind und kurz nach Sonnenaufgang (über dayPhase gesteuert)
+    const ph = this._dayPhase || 0.5;
+    w.fog = Math.max(0, 1 - Math.abs(ph - 0.3) / 0.06) * 0.6;
+    if (w.flash > 0) w.flash -= dt * 2;
+    if (w.storm && rainOnly > 0.6 && Math.random() < dt * 0.25) { w.flash = 0.55; }
+    w.rainOnly = rainOnly;
+    return w;
+  };
+  Renderer.prototype.drawPrecip = function (ctx, wx, dt) {
+    const cv = this.canvas, W = cv.width, H = cv.height, dpr = Math.max(1, this._dpr || 1);
+    const P = this.drops || (this.drops = []);
+    const want = Math.round((this.gfx.quality === 'low' ? 90 : 220) * Math.max(wx.rainOnly || 0, wx.snow));
+    while (P.length < want) P.push({ x: Math.random() * W, y: Math.random() * H, v: 0.7 + Math.random() * 0.6 });
+    if (P.length > want) P.length = want;
+    const snow = wx.snow > (wx.rainOnly || 0);
+    const wind = this.wind();
+    ctx.fillStyle = snow ? 'rgba(250,252,255,0.9)' : 'rgba(190,215,235,0.55)';
+    for (const p of P) {
+      if (snow) { p.y += (40 * p.v) * dt * dpr; p.x += (Math.sin(this.time * 1.5 + p.v * 9) * 12 + wind.x * 10) * dt * dpr; }
+      else { p.y += 520 * p.v * dt * dpr; p.x += (wind.x * 60 + 40) * dt * dpr; }
+      if (p.y > H) { p.y -= H; p.x = Math.random() * W; }
+      if (p.x > W) p.x -= W; else if (p.x < 0) p.x += W;
+      if (snow) ctx.fillRect(Math.round(p.x), Math.round(p.y), 2 * dpr, 2 * dpr);
+      else ctx.fillRect(Math.round(p.x), Math.round(p.y), dpr, 7 * dpr);
+    }
+  };
+
+  // warmes Licht: vorberechneter Lichtfleck, additiv an Häusern, Zentren, Lagerfeuern, Bränden
+  Renderer.prototype.glowSprite = function () {
+    if (this._glow) return this._glow;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const c = cv.getContext('2d'), gr = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,200,110,0.85)'); gr.addColorStop(0.35, 'rgba(255,160,70,0.35)'); gr.addColorStop(1, 'rgba(255,140,60,0)');
+    c.fillStyle = gr; c.fillRect(0, 0, 32, 32);
+    return (this._glow = cv);
+  };
+  Renderer.prototype.drawLights = function (g, vt, k) {
+    const st = this.st, glow = this.glowSprite();
+    g.globalCompositeOperation = 'lighter';
+    g.imageSmoothingEnabled = true;
+    let n = 0;
+    const max = this.gfx.quality === 'low' ? 60 : 180;
+    for (const s of st.structs) {
+      if (n >= max) break;
+      if (!s.built || s.dead) continue;
+      if (s.x + s.w < vt.x0 || s.x > vt.x1 || s.y + s.h < vt.y0 || s.y > vt.y1 + 1) continue;
+      let r = 0, fl = 1;
+      if (s.type === 'house' && (s.level | 0) >= 1) r = 10;
+      else if (s.type === 'center') { r = s.stage === 0 ? 22 : 18; if (s.stage === 0) fl = 0.85 + Math.sin(this.time * 9 + s.id) * 0.15; }
+      else if (s.type === 'barracks' || s.type === 'market' || s.type === 'factory' || s.type === 'tower' || s.type === 'gate') r = 8;
+      if (!r) continue;
+      // Fenster nicht alle gleichzeitig an
+      if (s.type === 'house' && hash2(s.id, 1, 33) > 0.35 + k * 0.6) continue;
+      n++;
+      g.globalAlpha = Math.min(1, k * 0.8 * fl);
+      const cx = (s.x + s.w / 2) * 8, cy = (s.y + s.h / 2) * 8 - 2;
+      g.drawImage(glow, cx - r, cy - r, r * 2, r * 2);
+    }
+    if (st.fire && st.fireCount > 0) {
+      for (let y = vt.y0; y <= vt.y1 && n < max + 80; y++) for (let x = vt.x0; x <= vt.x1; x++) {
+        if (!st.fire[y * st.W + x]) continue;
+        n++;
+        g.globalAlpha = Math.min(1, k * (0.8 + Math.sin(this.time * 11 + x * 3 + y) * 0.2));
+        g.drawImage(glow, x * 8 - 10, y * 8 - 12, 28, 28);
+      }
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.imageSmoothingEnabled = false;
   };
 
   WW.Renderer = Renderer;

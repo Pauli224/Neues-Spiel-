@@ -40,7 +40,7 @@
     PATH_LIMIT_ARMY: 4000,    // Heere (mit Durchbruchskosten)
     ARMY_PATH_SHARE: 0.2,     // Anteil des Wegsuche-Budgets je Tick für Heere
     TERRITORY_BASE: 9,
-    SETTLER_DIST_MIN: 36, SETTLER_DIST_MAX: 60,
+    SETTLER_DIST_MIN: 27, SETTLER_DIST_MAX: 50,
     CITY_MIN_DIST: 20,
     FLUR_REACH: 11,           // Grundreichweite der Landnahme (Kacheln ums Zentrum), + FLUR_REACH_TIER je Stadtstufe
     FLUR_REACH_TIER: 6,
@@ -51,7 +51,7 @@
     FLUR_CLAIM_TICKS: 120,    // frühestens alle n Ticks eine neue Flur je Stadt
     HOUSES_PER_FLUR: 1.6,     // Häuser je Flur (plus 2 Grundstock)
     NEW_REALM_MIN_DIST: 18,   // Mindestabstand für Auswanderer-Stämme
-    DAUGHTER_MIN_DIST: 34,    // Tochterstadt: Abstand zu jeder Stadt (beide sollen noch wachsen können)
+    DAUGHTER_MIN_DIST: 26,    // Tochterstadt: Abstand zu jeder Stadt (beide sollen noch wachsen können)
     DAUGHTER_ADULTS: 30,        // Mindestabstand Tochterstadt / Startstadt zu anderen Städten (Mitte zu Mitte)
     PLAYER_CITY_MIN_DIST: 12  // Siedler vom Spieler dürfen näher heran
   };

@@ -551,5 +551,22 @@
     blit(canvas, top, scale);
   }
 
-  WW.SpriteScene = { renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Vergleich alt/neu: Musterstadt mit groben bzw. feinen Gebäuden
+  function renderTownCompare(canvas, scale, old, gov) {
+    S.init();
+    var TW = 18, TH = 16, ter = new Uint8Array(TW * TH), vari = new Uint8Array(TW * TH);
+    for (var i = 0; i < ter.length; i++) { ter[i] = T.GRASS; vari[i] = Math.floor(h2(i % TW, Math.floor(i / TW), 89) * 256); }
+    // direkt im Zielmaßstab zeichnen, damit feine Sprites (Maßstab 0,5) ihre Details behalten
+    canvas.width = TW * 8 * scale; canvas.height = TH * 8 * scale;
+    var tx = canvas.getContext('2d'); tx.imageSmoothingEnabled = false; tx.scale(scale, scale);
+    S.drawGroundMap(tx, ter, vari, TW, TH);
+    for (var y = 0; y < TH; y++) S.drawPath(tx, 8 * 8, y * 8, 5);
+    var items = townItems(gov || 'monarchy', 0, 0, 5);
+    items.forEach(function (it) { it._s = sortY(it); });
+    items.sort(function (a, c) { return a._s - c._s || a.x - c.x; });
+    items.forEach(function (it) { var fn = old ? S.drawOrig : S.draw; fn(tx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team || 0, flip: it.flip }); });
+  }
+
+  WW.SpriteScene = { renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

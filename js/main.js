@@ -482,7 +482,8 @@
     if (game.mode === '3d' && game.v3 && game.v3.r3) {
       if (!game.v3.frame(alpha, dt, { brush: brush, select: sel, air: game.view === 'air' })) setMode('2d', true);
       cami = game.v3.cameraInfo();
-    } else game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, view: game.view, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
+    } else game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, view: game.view, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0,
+      dayPhase: game.forcePhase != null ? game.forcePhase : ((sim.state.tick + alpha) / WW.CONFIG.TPY + 0.42) % 1 });
     if (!cami) cami = { x: game.cam.x / 8, y: game.cam.y / 8, dist: 60 / game.cam.zoom, yaw: 0, tilt: 1 };
     if (WW.Audio && game.audioOn) { try { WW.Audio.update(sim.state, cami, dt); } catch (e) { /* egal */ } }
 
@@ -550,9 +551,9 @@
     if (!game.v3) return; setMode(game.mode === '3d' ? '2d' : '3d'); game.hud.hint(game.mode === '3d' ? 'Ansicht: 3D. Rechts ziehen verschiebt, Mitte oder Alt+Ziehen dreht, Q/E drehen.' : 'Ansicht: Pixel.'); };
 
   // ------------------------------------------------------------------ Ton
-  const AUDIO_KEY = 'wuselwelt.audio';
+  const AUDIO_KEY = 'wuselwelt.audio2';   // neuer Schlüssel: Ton ist vorerst standardmäßig aus
   game.audioOn = false;
-  game.audioSet = (function () { try { return Object.assign({ on: true, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }, JSON.parse(D().store.get(AUDIO_KEY) || '{}')); } catch (e) { return { on: true, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }; } })();
+  game.audioSet = (function () { try { return Object.assign({ on: false, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }, JSON.parse(D().store.get(AUDIO_KEY) || '{}')); } catch (e) { return { on: true, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }; } })();
   game.audioStart = function () {
     if (game.audioOn || !WW.Audio || !game.audioSet.on) return;
     try { WW.Audio.init(); WW.Audio.setVolume(game.audioSet); WW.Audio.mute(false); game.audioOn = true; } catch (e) { game.audioOn = false; }
@@ -566,6 +567,11 @@
     game.hud && game.hud.soundChanged && game.hud.soundChanged();
   };
   game.uiSound = function (name) { if (game.audioOn && game.audioSet.on && WW.Audio && WW.Audio.ui) { try { WW.Audio.ui(name); } catch (e) { /* egal */ } } };
+  // Grafik-Einstellungen der Pixel-Ansicht (gespeichert)
+  const GFX_KEY = 'wuselwelt.gfx';
+  game.gfx = (function () { const small = window.innerWidth < 760; const d = { daynight: true, weather: true, clouds: !small, water: true, quality: small ? 'low' : 'mid' };
+    try { return Object.assign(d, JSON.parse(D().store.get(GFX_KEY) || '{}')); } catch (e) { return d; } })();
+  game.applyGfx = function () { D().store.set(GFX_KEY, JSON.stringify(game.gfx)); if (game.renderer) game.renderer.gfx = game.gfx; };
   game.quality = (function () { const q = D().store.get('wuselwelt.quality'); return q || (window.innerWidth < 760 ? 'low' : 'mid'); })();
   game.setQuality = function (q) {
     game.quality = q; D().store.set('wuselwelt.quality', q);
@@ -582,6 +588,7 @@
     game.cam = new WW.Camera();
     game.renderer = new WW.Renderer(game.canvas);
     game.renderer.structById = (id) => game.sim ? game.sim.query.struct(id) : null;
+    game.renderer.gfx = game.gfx;
     game.ui = new WW.UI.Panels(game);
     game.hud = new WW.UI.Hud(game);
     game.minimap = new WW.UI.Minimap(game);

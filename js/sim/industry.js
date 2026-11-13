@@ -33,11 +33,18 @@
 //                    (WW.INDUSTRY.CFG.CELL); pw = ceil(W / 4), ph = ceil(H / 4); Kachel (x, y) -> Zelle
 //                    floor(y / 4) * pw + floor(x / 4). Hilfe: WW.Industry.dims(state) -> { pw, ph, cell },
 //                    WW.Industry.at(state, x, y) -> 0..255. Ab ~60 Dunst sichtbar, ab 170 Säureregen-Gefahr.
-//   state.murk       Uint8Array(W * H), Trübung von Flusskacheln 0..255 (nur auf 'river'; > 0 trüb, weniger Fisch).
-//                    Dirty-Kacheln, wenn sich murk >> 6 ändert.
+//   state.murk       Uint8Array(W * H), Trübung von Wasserkacheln 0..255 (entsteht auf 'river' unter verschmutzter Luft,
+//                    fließt stromabwärts – zu Wassernachbarn mit geringerer state.height, sonst gleich hoch – bis wenige
+//                    Kacheln ins Meer; > 0 trüb, weniger Fisch). Dirty-Kacheln, wenn sich murk >> 6 ändert.
+//   state.barren     Uint8Array(W * H), ausgelaugter, grauer Boden 0..255 (Landkacheln). Steigt unter Luft ≥ TH_BARREN (45)
+//                    und durch Ruß im Umkreis 3,5 aktiver Fabriken, heilt bei Luft < 30 um 4 je 60 Ticks.
+//                    Stufen: ≥ 80 Feld trägt weniger, ≥ 95 Bäume sterben (Gelände deforested + state.cleared = tote
+//                    Stämme), ≥ 230 Wiese/Blumen/Savanne/Tundra -> 'ash' (dauerhaft). Dirty-Kacheln bei barren >> 6.
+//                    Darstellung: grau überlagern ab ~64.
 //   state.wind       { dx, dy (Einheitsvektor aus 16 Richtungen), dir 0..15 (0 = Osten, im Uhrzeigersinn, 4 = Süden),
 //                    str 0.6..1 } – dreht sich langsam (alle 120 Ticks evtl. um 1/16).
-//   state.industry   { any (Summe der Verschmutzung beim letzten Schritt, 0 = alles sauber), murk (Anzahl trüber Kacheln) }
+//   state.industry   { any (Summe der Verschmutzung beim letzten Schritt, 0 = alles sauber), murk (Anzahl trüber Kacheln),
+//                    barren (Anzahl ausgelaugter Kacheln) }
 //
 // KENNZAHLEN
 //   city.pollution 0..100 (Luft über der Stadt), city.indActive (aktive Fabriken), city.indNext (Tick der nächsten
@@ -48,7 +55,8 @@
 // WIRKUNG (über WW.Mods, source 'industry' = Ertrag der Fabriken, source 'industry_pol' = Folgen der Luft)
 //   Fabriken: je aktiver Fabrik die Mods aus WW.INDUSTRY.GOVS[gov].mods (z. B. gold ×1,25, strength ×1,12, soldiers +3 Pkt.)
 //   Verschmutzung ab city.pollution ≥ 8: happiness −0,3 je Punkt, food × (1 − 0,005 je Punkt, min. 0,5), trübe Flüsse
-//   in Stadtnähe food × 0,9.
+//   in Stadtnähe food × 0,9, Felder auf ausgelaugtem Boden: food × (1 − Anteil/2). city.indBarren = Anteil 0..100.
+//   city.pollution misst Stadt und Stadtrand (Ringradius + 8 Kacheln).
 // FOLGEN (alle 60 Ticks): Bäume sterben ab Zelle ≥ 85 (Wald -> deforested-Gelände, state.cleared = CLEARED_MAX:
 //   tote Stümpfe), Flüsse ab ≥ 70 trüb (breitet sich entlang des Flusses aus, Fische verschwinden), Bewohner ab
 //   ≥ 105 krank (u.sick), Tiere (category 'animal', nicht vom Spieler gesetzt) wandern ab ≥ 95 ab, Säureregen
@@ -58,7 +66,7 @@
 //   'acidrain' (r 5, ×0,6) – angehängt über WW.POWERS[key].apply (Hülle, powers.js unverändert).
 //
 // FX: smokeplume { x, y, kind, filtered, big } alle 30 Ticks je aktiver Fabrik (Schornstein-Mitte, Kachelkoord.)
-// EREIGNISSE (group 'nature', mit effectText): indFirst, indMore, indHaze, indClean, indTrees, indSick, indMurk,
+// EREIGNISSE (group 'nature', mit effectText): indFirst, indMore, indHaze, indClean, indTrees, indSick, indMurk, indBarren,
 //   indAcid, indFilterVote, indFilter, indClose, indRuin, indComplaint
 // SCHNITTSTELLE: WW.Industry.tick(sim), defaults(st), save(st, o), load(st, o), dims(st), at(st, x, y),
 //   specFor(sim, city) -> Eintrag aus GOVS | null, tryBuild(sim, city, force) -> Bauwerk | null, clean(sim, x, y, r, keep),

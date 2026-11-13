@@ -10,19 +10,19 @@
 
   const MOODS = {
     peace: {
-      dur: 9, release: 4, cutoff: 1100, peak: 0.05, melN: [1, 3], melPeak: 0.07, pulse: false, drone: false,
+      dur: 9, release: 4, cutoff: 1100, peak: 0.1, melN: [1, 3], melPeak: 0.14, pulse: false, drone: false,
       chords: [[50, 57, 61, 64, 66], [47, 54, 57, 62, 64], [43, 50, 54, 59, 61], [45, 52, 59, 61, 64], [52, 59, 62, 66, 67]],
       next: [[2, 1, 4], [2, 4], [0, 3], [0, 1], [3, 2]],
       scale: [62, 64, 66, 69, 71, 74, 76, 78, 81]
     },
     war: {
-      dur: 7, release: 3, cutoff: 850, peak: 0.05, melN: [2, 4], melPeak: 0.06, pulse: true, drone: false,
+      dur: 7, release: 3, cutoff: 850, peak: 0.1, melN: [2, 4], melPeak: 0.12, pulse: true, drone: false,
       chords: [[50, 57, 60, 64, 65], [46, 53, 57, 62, 65], [43, 50, 53, 58, 62], [45, 52, 55, 60, 62], [48, 55, 62, 64, 67]],
       next: [[1, 2, 3], [4, 3], [3, 0], [0], [3, 1]],
       scale: [62, 65, 67, 69, 72, 74, 77]
     },
     dark: {
-      dur: 11, release: 5, cutoff: 650, peak: 0.055, melN: [0, 2], melPeak: 0.05, pulse: false, drone: true,
+      dur: 11, release: 5, cutoff: 650, peak: 0.11, melN: [0, 2], melPeak: 0.1, pulse: false, drone: true,
       chords: [[38, 50, 53, 57], [38, 51, 55, 58, 62], [38, 49, 53, 58], [38, 50, 55, 57, 58]],
       next: [[1, 3], [0, 2], [0], [0, 1]],
       scale: [62, 63, 65, 69, 72, 74]
@@ -92,7 +92,7 @@
     // Puls (Krieg): leise tiefe Trommel
     for (const p of b.pulse) {
       const at = t + p.t, o = R.osc('sine', 70, at, at + 0.8), pg = R.g(0); R.c(o, pg, out);
-      R.xpts(o.frequency, [[at, 78], [at + 0.5, 52]]); R.env(pg.gain, at, 0.005, 0.11 * p.v, 0.6);
+      R.xpts(o.frequency, [[at, 78], [at + 0.5, 52]]); R.env(pg.gain, at, 0.005, 0.2 * p.v, 0.6);
       const n = R.noise('brown', at, at + 0.2), nl = R.f('lowpass', 300, 1), ng = R.g(0); R.c(n, nl, ng, out); R.env(ng.gain, at, 0.002, 0.05 * p.v, 0.1);
     }
     return b.dur + b.release;

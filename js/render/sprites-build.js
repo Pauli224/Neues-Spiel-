@@ -2486,6 +2486,268 @@
       cg.rect(10, 22, 2, 8, 'ink'); cg.hline(9, 21, 4, Cc[2]); cg.hline(5, 30, 12, Cc[0]); cg.hline(4, 31, 14, Cc[2]);
       defB('s_center_fascism_p' + fp, finishB(cg), 3, 'center');
     }
+    // ======================================================================
+    // Feine Gebäude (Maßstab 0,5, gleiche Schlüssel über Umleitung, träge erzeugt).
+    // a) Häuser: eigener Generator im doppelt feinen Raster mit Dachziegeln, Fachwerk, Fensterkreuzen, Türen mit Schwelle,
+    //    Dachrinne, Verwitterung, Schlagschatten. b) Übrige Gebäude: Verfeinerung des groben Sprites (2× vergrößern,
+    //    Flächen nach Material neu texturieren, feine Kontur). Je Gebäude eine Nachtfassung mit leuchtenden Fenstern (_lit).
+    var HCOL = function (h) { return AC(null, h); };
+    var LITC = [HCOL('#fff2b0'), HCOL('#ffd060'), HCOL('#e09a38')];
+    var GLC = [HCOL('#d8f2ff'), HCOL('#8ccbea'), HCOL('#4a86b4')];
+    var MORT = HCOL('#cfc8bc'), MORTD = HCOL('#9c958a'), GUT = HCOL('#7a7e88');
+    // Ton-Nachbarn je Material (für Fugen, Kanten, Verwitterung)
+    var DARKER = {}, LIGHTER = {}, CLS = {};
+    function ramp(names, cls) { var ids = names.map(function (n) { return typeof n === 'number' ? n : C[n]; }); for (var i = 0; i < ids.length; i++) { CLS[ids[i]] = cls; DARKER[ids[i]] = ids[Math.min(ids.length - 1, i + 1)]; LIGHTER[ids[i]] = ids[Math.max(0, i - 1)]; } }
+    ramp(['white', 'stoneL', 'stone', 'stoneD', 'plum'], 'stone'); ramp(['redL', 'red', 'redD'], 'brick'); ramp(BRK2.slice(0, 3), 'brick');
+    ramp(['woodL', 'wood', 'woodD'], 'wood'); ramp(['strawL', 'straw', 'strawD'], 'straw'); ramp(['Tl', 'T', 'Td'], 'tile');
+    ramp(['cream', 'sandD'], 'plaster'); ramp(['glass', 'waterD'], 'glass'); ramp(['leafL', 'leaf', 'leafD'], 'leaf');
+    ramp(DCON.slice(0, 3), 'concrete'); ramp(CONC, 'concrete'); ramp(RF, 'concrete'); ramp(PANEL, 'panel');
+    ramp(['goldL', 'gold', 'goldD'], 'metal'); ramp(['metalL', 'metal', 'metalD'], 'metal');
+    function texel(c, X, Y) {
+      var cls = CLS[c], d = DARKER[c] || c, l = LIGHTER[c] || c, h = hash(X, Y, 701);
+      switch (cls) {
+        case 'stone': { var row = Math.floor(Y / 4), off = (row & 1) * 4; if (Y % 4 === 3 || (X + off) % 8 === 7) return d; return h < 0.03 ? l : c; }
+        case 'brick': { var r2 = Math.floor(Y / 2), o2 = (r2 & 1) * 2; if (Y % 2 === 1 && (X + o2) % 4 !== 3) return h < 0.5 ? c : d; if ((X + o2) % 4 === 3) return MORTD; return h < 0.15 ? l : c; }
+        case 'wood': return X % 3 === 2 ? d : (h < 0.04 ? d : c);
+        case 'straw': return ((X * 3 + Y * 2) % 5 === 0) ? d : (((X + Y * 3) % 7 === 0) ? l : c);
+        case 'tile': { var tr = Math.floor(Y / 3), to = (tr & 1) * 2; if (Y % 3 === 2) return d; if ((X + to) % 4 === 3) return d; return Y % 3 === 0 ? l : c; }
+        case 'plaster': return h < 0.05 ? d : c;
+        case 'leaf': return h < 0.2 ? l : (h > 0.85 ? d : c);
+        case 'concrete': return (X % 8 === 7 || Y % 7 === 6) ? d : (h < 0.04 ? l : c);
+        case 'panel': return (X % 6 === 5 || Y % 5 === 4) ? d : c;
+        default: return c;
+      }
+    }
+    // grobes Sprite -> feines Sprite
+    function upscale(src, lit) {
+      var w = src.w, h = src.h, o = new Grid(w * 2, h * 2);
+      for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+        var c = src.d[y * w + x];
+        if (!c || c === C.ink) continue;
+        for (var j = 0; j < 2; j++) for (var i = 0; i < 2; i++) {
+          var X = x * 2 + i, Y = y * 2 + j, v = c;
+          if (c === C.shade || c === C.shadeL) v = c;
+          else if (CLS[c] === 'glass') {
+            var pal = lit ? LITC : GLC, up = src.get(x, y - 1), left = src.get(x - 1, y);
+            v = (CLS[up] !== 'glass' && j === 0) || (CLS[left] !== 'glass' && i === 0) ? (lit ? pal[0] : C.woodL) : (c === C.waterD ? pal[2] : (i === 0 && j === 1 ? pal[0] : pal[1]));
+          } else v = texel(c, X, Y);
+          o.d[Y * o.w + X] = v;
+        }
+      }
+      // feine Kontur und Lichtkante oben links
+      var out = o.outline();
+      for (y = 1; y < out.h; y++) for (x = 1; x < out.w; x++) {
+        var cc = out.d[y * out.w + x];
+        if (!cc || cc === C.ink || cc === C.shade || cc === C.shadeL) continue;
+        if (out.d[(y - 1) * out.w + x] === C.ink && LIGHTER[cc] && hash(x, y, 702) < 0.7) out.d[y * out.w + x] = LIGHTER[cc];
+      }
+      return out;
+    }
+
+    // ---------------------------------------------------------------- Hausgenerator im feinen Raster
+    function winH(g, x, y, lit, shutter, tall) {
+      var hh = tall ? 7 : 5, P = lit ? LITC : GLC;
+      g.rect(x - 1, y - 1, 6, hh + 2, C.woodD);                       // Rahmen
+      g.rect(x, y, 4, hh, P[1]); g.set(x, y, P[0]); g.set(x + 1, y, P[0]); g.set(x, y + 1, P[0]);
+      g.vline(x + 3, y, hh, P[2]); g.hline(x, y + hh - 1, 4, P[2]);
+      g.vline(x + 1.5 | 0, y, hh, C.woodL); g.hline(x, y + (tall ? 3 : 2), 4, C.woodL);  // Fensterkreuz
+      g.hline(x - 2, y + hh + 1, 8, C.stoneL); g.hline(x - 1, y + hh + 2, 6, C.stoneD); // Sims
+      if (shutter) { g.rect(x - 3, y - 1, 2, hh + 2, shutter[1]); g.rect(x + 5, y - 1, 2, hh + 2, shutter[2]); g.set(x - 3, y, shutter[0]); }
+    }
+    function doorH(g, x, y, h, col, lit) {
+      g.rect(x - 1, y - 1, 8, h + 1, C.woodD);
+      g.rect(x, y, 6, h, col || C.wood); g.vline(x + 2, y, h, C.woodD); g.vline(x + 4, y + 1, h - 1, C.woodD); g.vline(x, y, h, C.woodL);
+      g.set(x + 4, y + (h >> 1), C.goldL); g.set(x + 4, y + (h >> 1) + 1, C.gold);
+      if (lit) { g.rect(x + 1, y + 1, 4, 2, LITC[1]); g.set(x + 1, y + 1, LITC[0]); }
+      g.hline(x - 2, y + h, 10, C.stoneL); g.hline(x - 1, y + h + 1, 8, C.stone);            // Schwelle/Stufe
+    }
+    function chimneyH(g, x, top, h) {
+      for (var y = top; y < top + h; y++) for (var i = 0; i < 4; i++) g.set(x + i, y, ((y + (i >> 1)) & 1) ? C.redD : (i === 0 ? C.redL : C.red));
+      g.rect(x - 1, top - 2, 6, 2, C.stoneD); g.hline(x - 1, top - 2, 6, C.stone); g.set(x + 1, top - 2, C.ink); g.set(x + 2, top - 2, C.ink);
+    }
+    function roofTiles(g, x, y, w, h, t, back) {
+      back = back == null ? Math.max(4, Math.round(h / 3.4)) : back;
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var c;
+        if (j < back) c = (i === w - 1) ? t[1] : t[0];
+        else if (j === back) c = t[0];
+        else if (j >= h - 2) c = j === h - 1 ? C.ink : t[2];
+        else {
+          var jj = j - back - 1, row = Math.floor(jj / 3), off = (row & 1) * 2;
+          c = (jj % 3 === 2) ? t[2] : ((i + off) % 4 === 3 ? t[2] : (jj % 3 === 0 ? t[0] : t[1]));
+          if (i === 0) c = t[0]; if (i === w - 1) c = t[2];
+        }
+        g.set(x + i, y + j, c);
+      }
+      for (var k = 1; k < w - 1; k += 3) g.set(x + k, y + back, (k % 6 === 1) ? t[1] : t[0]);   // Firstziegel
+      g.set(x, y, 0); g.set(x + w - 1, y, 0); g.set(x, y + 1, 0); g.set(x + w - 1, y + 1, 0);
+      g.hline(x + 1, y + h, w - 2, GUT);                                                       // Dachrinne
+    }
+    function roofHipT(g, x, y, w, h, t) {
+      roofTiles(g, x, y, w, h, t);
+      var k = Math.min(Math.floor(w / 3), h - 4);
+      for (var j = 0; j < k; j++) { var ins = k - j; for (var i = 0; i < ins; i++) { g.set(x + i, y + j, 0); g.set(x + w - 1 - i, y + j, 0); } g.set(x + ins, y + j, t[0]); g.set(x + w - 1 - ins, y + j, t[2]); }
+    }
+    function thatchT(g, x, y, w, h) {
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var ins = j === 0 ? 4 : (j === 1 ? 2 : (j === 2 ? 1 : 0));
+        if (i < ins || i >= w - ins) continue;
+        var c = ((i * 3 + j * 2) % 5 === 0) ? C.strawD : (j < 3 || i === ins ? C.strawL : C.straw);
+        if (i >= w - ins - 2) c = C.strawD;
+        g.set(x + i, y + j, c);
+      }
+      for (var k = 0; k < w; k++) { g.set(x + k, y + h, (k & 1) ? C.strawD : C.straw); if (k % 3 === 0) g.set(x + k, y + h + 1, C.strawD); }
+      g.hline(x + 3, y + 3, w - 6, C.woodD); g.hline(x + 3, y + Math.floor(h * 0.6), w - 6, C.strawD);
+    }
+    function coneThatch(g, cx, y, w, h) {
+      for (var j = 0; j < h; j++) { var hw = 1 + j * (w / 2) / h; for (var i = Math.floor(cx - hw); i <= Math.ceil(cx + hw); i++) { var dx = i - cx; if (Math.abs(dx) > hw) continue; g.set(i, y + j, dx < -hw * 0.4 ? C.strawL : (dx > hw * 0.45 ? C.strawD : (((i + j * 2) % 5 === 0) ? C.strawD : C.straw))); } }
+      for (var k = Math.floor(cx - w / 2); k < cx + w / 2; k += 2) g.set(k, y + h, C.strawD);
+      g.vline(Math.round(cx), y - 3, 3, C.woodD); g.set(Math.round(cx) - 1, y - 3, C.woodD); g.set(Math.round(cx) + 1, y - 3, C.woodD);
+    }
+    function frontT(g, x, y, w, h, t, gh, wallC) {
+      var cx = x + (w - 1) / 2;
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) { var px = x + i; g.set(px, y + j, px < cx - 0.1 ? ((j % 3 === 2) ? t[2] : (i === 0 ? t[0] : t[1])) : (px > cx + 0.1 ? ((j % 3 === 2) ? C.ink : t[2]) : t[0])); }
+      var top = y + h - gh;
+      for (j = 0; j < gh; j++) { var half = (j + 1) / gh * (w / 2 - 2); for (i = 0; i < w; i++) { var dx = x + i - cx; if (Math.abs(dx) <= half - 0.5) g.set(x + i, top + j, wallC(x + i, top + j)); else if (Math.abs(dx) <= half + 1) g.set(x + i, top + j, dx < 0 ? C.woodL : C.woodD); } }
+      g.set(Math.round(cx), top + Math.floor(gh * 0.55), GLC[1]); g.set(Math.round(cx) - 1, top + Math.floor(gh * 0.55), GLC[0]);
+    }
+    function flatT(g, x, y, w, h) {
+      g.rect(x, y, w, h, RF[0]); g.hline(x, y, w, RF[2]); g.hline(x, y + h - 1, w, RF[1]); g.vline(x + w - 1, y, h, RF[1]);
+      g.hline(x, y + h, w, C.ink); g.rect(x + 3, y + 2, 4, 3, RF[1]); g.hline(x + 3, y + 2, 4, RF[2]); g.rect(x + w - 7, y + 2, 3, 2, C.metalD);
+    }
+    function shedT(g, x, y, w, h, t) {
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) { if (j < Math.floor(i * (h - 5) / w)) continue; g.set(x + i, y + j, j >= h - 1 ? C.ink : ((j % 3 === 2) ? t[2] : (i === 0 ? t[0] : t[1]))); }
+    }
+    function wallFill(kind, g, x, y, w, h, col, seed) {
+      var i, j;
+      for (j = 0; j < h; j++) for (i = 0; i < w; i++) {
+        var X = x + i, Y = y + j, c, hh = hash(X, Y, seed || 5);
+        if (kind === 'planks') c = (i % 3 === 2) ? C.woodD : (hh < 0.05 ? C.woodD : (i % 6 === 0 ? C.woodL : C.wood));
+        else if (kind === 'plaster') c = hh < 0.04 ? C.sandD : C.cream;
+        else if (kind === 'brick') { var br = Math.floor(j / 2), bo = (br & 1) * 2; c = (j % 2 === 1 && (i + bo) % 4 !== 3) ? col[1] : ((i + bo) % 4 === 3 ? MORTD : (hh < 0.2 ? col[0] : col[1])); if (j % 2 === 1) c = MORT; if ((i + bo) % 4 === 3) c = MORT; if (c !== MORT && hh > 0.9) c = col[2]; }
+        else if (kind === 'stone') { var sr = Math.floor(j / 3), so = (sr & 1) * 3 + (hash(sr, 0, 9) * 3 | 0); c = (j % 3 === 2 || (i + so) % 7 === 6) ? C.stoneD : (hh < 0.15 ? C.stoneL : C.stone); }
+        else if (kind === 'concrete') c = (i % 8 === 7 || j % 9 === 8) ? col[2] : (hh < 0.05 ? col[2] : col[1]);
+        else if (kind === 'panel') c = (i % 7 === 6 || j % 8 === 7) ? col[1] : col[0];
+        else if (kind === 'patch') { var pi = (Math.floor((i + seed) / 5) + Math.floor(j / 4) * 3) % 5; c = [C.woodL, C.cream, C.sandL, C.wood, C.pink][pi]; if (i % 5 === 4) c = C.woodD; }
+        else c = hh < 0.05 ? col[1] : col[0];   // Putz in Farbe
+        g.set(X, Y, c);
+      }
+      // Lichtkante links, Schatten rechts, Sockel
+      for (j = 0; j < h; j++) { g.set(x, y + j, LIGHTER[g.get(x, y + j)] || g.get(x, y + j)); g.set(x + w - 1, y + j, DARKER[g.get(x + w - 1, y + j)] || C.ink); }
+      if (kind === 'plaster') {   // Fachwerk: Ständer, Riegel, Streben
+        for (i = 0; i < w; i += 7) g.vline(x + Math.min(i, w - 2), y, h, C.woodD);
+        g.vline(x + w - 2, y, h, C.woodD); g.hline(x, y, w, C.woodD); g.hline(x, y + (h >> 1), w, C.woodD); g.hline(x, y + h - 2, w, C.woodD);
+        for (i = 0; i + 7 < w; i += 14) g.line(x + i + 1, y + (h >> 1) - 1, x + i + 6, y + 1, C.woodD);
+      }
+      if (kind === 'paint' || kind === 'plaster' || kind === 'brick') { g.hline(x, y + h - 2, w, C.stoneD); g.hline(x, y + h - 1, w, C.stone); }
+      // Verwitterung unten
+      for (i = 0; i < w; i++) if (hash(x + i, y, seed + 3) < 0.25) g.set(x + i, y + h - 3, DARKER[g.get(x + i, y + h - 3)] || g.get(x + i, y + h - 3));
+    }
+    function genHouseH(o, lit, n) {
+      n = n || 2;
+      var GW = n * 16 - 2, stories = o.stories || 1, sh = (o.storyH || 5) * 2, wallH = 4 + stories * sh, roofH = (o.roofH || 9) * 2;
+      var x = (o.x == null ? 1 : o.x) * 2 + 1, w = (o.w || 12) * 2, top = o.tower ? 18 : 8, rt = o.rt || TR, col = o.col;
+      if (n === 3 && o.w) { x = o.x * 2 + 1; }
+      var H = top + roofH + wallH, g = new Grid(GW, H), wy = top + roofH;
+      if (o.chimney != null) chimneyH(g, x + o.chimney * 2, top - 6, 10);
+      var R = o.roof;
+      if (R === 'side') roofTiles(g, x - 2, top, w + 4, roofH, rt);
+      else if (R === 'hip') roofHipT(g, x - 2, top, w + 4, roofH, rt);
+      else if (R === 'front') frontT(g, x - 2, top, w + 4, roofH, rt, Math.min(12, roofH - 4), function (px, py) { return o.wall === 'plaster' ? ((px - x) % 6 === 0 || (py % 5 === 0) ? C.woodD : C.cream) : (o.wall === 'planks' ? ((px % 3 === 2) ? C.woodD : C.woodL) : (col ? col[0] : C.cream)); });
+      else if (R === 'thatch') thatchT(g, x - 2, top, w + 4, roofH);
+      else if (R === 'cone') coneThatch(g, x + w / 2, top - 2, w + 6, roofH + 2);
+      else if (R === 'shed') shedT(g, x - 2, top, w + 4, roofH, rt);
+      else if (R === 'flat') flatT(g, x, top + roofH - 10, w, 10);
+      else if (R === 'patch') { for (var j = 0; j < roofH; j++) for (var i = 0; i < w + 4; i++) g.set(x - 2 + i, top + j + Math.floor(i / 12), [C.red, C.purple, C.straw, C.glass, C.pink, C.leafL, C.fireO, 'Tl', 'T'][(Math.floor(i / 5) + Math.floor(j / 4) * 2 + (o.seed || 1)) % 9]); g.hline(x - 2, top + roofH, w + 4, C.woodD); }
+      else if (R === 'step') {   // Treppengiebel
+        for (j = 0; j < roofH; j++) { var ins = Math.max(0, Math.floor((roofH - 2 - j) / 4) * 2); for (i = ins; i < w - ins; i++) g.set(x + i, top + j, i === ins ? col[0] : (i === w - ins - 1 ? col[2] : col[1])); if (ins > 0 && (j % 4) === 0) { g.set(x + ins, top + j, C.stoneL); g.set(x + w - ins - 1, top + j, C.stoneL); } }
+        winH(g, x + (w >> 1) - 2, top + roofH - 9, lit);
+      }
+      wallFill(o.wall, g, x, wy, w, wallH, col, o.seed || 7);
+      for (i = x; i < x + w; i++) { if (g.get(i, wy)) g.set(i, wy, DARKER[DARKER[g.get(i, wy)]] || C.ink); }   // Schatten unter der Traufe
+      // Fenster je Geschoss, Tür unten
+      var step = (o.winStep || 4) * 2, dx = x + (w >> 1) - 3;
+      for (var s2 = 0; s2 < stories; s2++) {
+        var yy = wy + 3 + s2 * sh, last = s2 === stories - 1;
+        for (var k = x + 3; k + 5 < x + w - 1; k += step) {
+          if (last && Math.abs(k - dx) < 6) continue;
+          if (o.wall === 'concrete' && !o.shop) { g.rect(k + 1, yy, 2, sh - 4, lit ? LITC[1] : C.ink); g.set(k + 1, yy, lit ? LITC[0] : C.dusk); }
+          else winH(g, k, yy, lit && hash(k, s2, 31) < 0.8, (o.wall === 'plaster' || o.wall === 'paint') && o.shutters !== false ? ['Tl', 'T', 'Td'] : null, sh >= 10 && !last);
+          if (o.balcony && !last) { g.hline(k - 2, yy + sh - 3, 9, C.metalD); for (var b2 = k - 2; b2 < k + 7; b2 += 2) g.set(b2, yy + sh - 4, C.metalD); }
+        }
+      }
+      if (o.barn) { var bw = 10, bx = x + (w >> 1) - 5, by = wy + wallH - 12; g.rect(bx, by, bw, 12, C.woodD); g.rect(bx + 1, by + 1, bw - 2, 11, C.wood); g.line(bx + 1, by + 1, bx + bw - 2, by + 11, C.woodD); g.line(bx + bw - 2, by + 1, bx + 1, by + 11, C.woodD); }
+      else doorH(g, dx, wy + wallH - 10, 9, o.doorCol, lit);
+      if (o.shop) { var ay = wy + wallH - 14; for (i = x; i < x + w; i++) { g.set(i, ay, ((i >> 1) & 1) ? 'T' : C.white); g.set(i, ay + 1, ((i >> 1) & 1) ? 'Td' : C.cream); } for (i = x + 1; i < x + w; i += 2) g.set(i, ay + 2, ((i >> 1) & 1) ? 'Td' : C.cream); }
+      if (o.annex) {
+        var ax = o.annex > 0 ? x + w : 1, aw = o.annex > 0 ? GW - 1 - (x + w) : x - 1;
+        if (aw >= 6) { shedT(g, ax, H - 18, aw, 8, o.annexRoof || WOODR); wallFill('planks', g, ax, H - 10, aw, 10, null, 3); g.rect(ax + (aw >> 1) - 1, H - 7, 3, 7, C.plum); }
+      }
+      if (o.tower) {
+        var tx = o.tower > 0 ? GW - 10 : 0;
+        for (j = 0; j < 16; j++) { var hw = 0.6 + j * 0.3; for (i = 0; i < 10; i++) { var ddx = i - 4.5; if (Math.abs(ddx) <= hw) g.set(tx + i, j, ddx < -1 ? rt[0] : (ddx < 1 ? rt[1] : rt[2])); } }
+        g.hline(tx, 16, 10, C.ink); wallFill(o.wall === 'concrete' || o.wall === 'panel' || o.wall === 'paint' ? 'stone' : o.wall, g, tx, 17, 10, H - 17, col, 11);
+        winH(g, tx + 3, 21, lit, null, true);
+      }
+      if (o.dormer) { var dd = x + (w >> 1) - 4; g.rect(dd - 1, top + 3, 10, 7, rt[2]); g.rect(dd, top + 5, 8, 5, C.cream); winH(g, dd + 2, top + 6, lit); }
+      return g;
+    }
+    // Parameter der Varianten a/b (bisher handgezeichnet) für den feinen Generator
+    var AB = {
+      rustic: function (lv) { return [
+        { roof: 'thatch', wall: 'planks', x: 2, w: 10, roofH: 7 + lv, stories: 1, seed: 1 },
+        { roof: 'cone', wall: 'planks', x: 2, w: 10, roofH: 8 + lv, stories: 1, seed: 2 },
+        { roof: 'patch', wall: 'patch', x: 1, w: 12, roofH: 6, stories: lv >= 3 ? 2 : 1, seed: lv },
+        { roof: 'patch', wall: 'patch', x: 2, w: 11, roofH: 5, stories: 1, seed: lv + 4, annex: 1 }]; },
+      timber: function (lv) { return [
+        { roof: 'side', wall: 'plaster', x: 1, w: 12, roofH: 9, stories: lv >= 3 ? 2 : 1, chimney: 9 },
+        { roof: 'front', wall: 'plaster', x: 1, w: 12, roofH: 10, stories: lv >= 2 ? 2 : 1, chimney: 2 }]; },
+      town: function (lv) { return [
+        { roof: 'side', wall: 'paint', col: PASTEL[lv % 5], x: 1, w: 12, roofH: 9, stories: lv, chimney: 2, dormer: lv >= 3 },
+        { roof: 'step', wall: 'brick', col: lv === 2 ? ['redL', 'red', 'redD'].map(function (n2) { return C[n2]; }) : BRK2, x: 1, w: 12, roofH: 10, stories: lv + 1 }]; },
+      block: function (lv) { return [
+        { roof: 'flat', wall: 'concrete', col: CONC, x: 0, w: 14, roofH: 5, stories: lv, storyH: 5 },
+        { roof: 'flat', wall: 'panel', col: PANEL, x: 0, w: 14, roofH: 5, stories: lv + 1, storyH: 4, winStep: 3 }]; }
+    };
+    function houseParams(fam, lv, v) {
+      var idx = 'abcdefgh'.indexOf(v), ab = AB[fam] && AB[fam](lv);
+      if (ab && ab[idx]) return ab[idx];
+      var vv = VAR[fam] && VAR[fam](lv);
+      return vv && vv[idx];
+    }
+    function finishH(g, n) {   // feine Kontur, Schlagschatten rechts (4 px) und Bodenschatten
+      var o = g.pad(1, 1, 1, 1).outline(), H = o.h, W = o.w, out = o.pad(0, 0, 4, 1);
+      for (var y = Math.max(0, H - n * 16 + 6); y < H - 1; y++) { var xr = -1; for (var x = W - 1; x >= 0; x--) if (o.get(x, y)) { xr = x; break; } if (xr < 0) continue; for (var k = 1; k <= 4; k++) if (!out.get(xr + k, y)) out.set(xr + k, y, k > 2 ? C.shadeL : C.shade); }
+      return out.footShade();
+    }
+    L.lazyDef('hb_', function (key) {
+      var lit = /_lit$/.test(key), k = key.replace(/_lit$/, ''), m, g, n = 2;
+      if ((m = /^hb_house_(rustic|timber|town|block)_(\d)_([a-h])$/.exec(k))) {
+        var o = houseParams(m[1], +m[2], m[3]); if (!o) return null;
+        g = finishH(genHouseH(o, lit, 2), 2);
+      } else if ((m = /^hb_hall_([ab])$/.exec(k))) {
+        n = 3;
+        g = finishH(genHouseH(m[1] === 'a' ? { roof: 'side', wall: 'planks', x: 2, w: 18, roofH: 9, stories: 1, chimney: 13, rt: TR } : { roof: 'front', wall: 'planks', x: 3, w: 16, roofH: 12, stories: 1, rt: TR }, lit, 3), 3);
+      } else if ((m = /^hb_up_(.+)$/.exec(k))) {
+        var d = L.DEFS[m[1]]; if (!d) return null;
+        var gg = upscale(d.grid, lit);
+        return { grid: gg, scale: 0.5, fw: d.fw, fh: d.fh, ox: d.ox, oy: d.oy };
+      } else return null;
+      return { grid: g, scale: 0.5, fw: n, fh: n, ox: 0, oy: n * 8 - g.h * 0.5 + 0.5 };
+    });
+    // Umleitungen: Häuser aller Familien, Halle, Zelte, Lager, Regierungssitze
+    var LITMAP = {};
+    Object.keys(L.DEFS).forEach(function (k) {
+      var m = /^s_house_(rustic|timber|town|block)_(\d)_([a-h])$/.exec(k) || (/^s_house_(\d)_([ab])$/.test(k) ? ['', 'timber', k.split('_')[2], k.split('_')[3]] : null);
+      var t = null;
+      if (m) t = 'hb_house_' + m[1] + '_' + m[2] + '_' + m[3];
+      else if (/^s_hall_[ab]$/.test(k)) t = 'hb_hall_' + k.slice(-1);
+      else if (/^(s_tent_[a-d]|s_camp_[ab](_[01])?|s_center_[a-z]+(_p\d)?)$/.test(k)) t = 'hb_up_' + k;
+      if (!t) return;
+      L.ALIAS[k] = t; LITMAP[k] = t + '_lit'; LITMAP[t] = t + '_lit';
+    });
+    // Nachtfassung: leuchtende Fenster (Schlüssel bleibt gleich, Helfer liefert den passenden Nacht-Schlüssel)
+    S.litKey = function (key) { return LITMAP[key] || key; };
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

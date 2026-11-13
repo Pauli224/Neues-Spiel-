@@ -503,19 +503,27 @@
     render();
     this.openModal('Ton', [box], { icon: WW.Sprites.has('i_sound') ? 'i_sound' : 'i_menu' });
   };
-  // Grafik: Qualität der 3D-Ansicht
+  // Grafik der Pixel-Ansicht: Tag/Nacht, Wetter, Wolkenschatten, Wasser, Qualität
   Panels.prototype.openGraphics = function () {
     const { h } = D();
-    const game = this.game;
+    const game = this.game, gx = game.gfx;
     const box = h('div');
     const render = () => {
       D().clear(box);
-      box.appendChild(h('p.muted', 'Gilt für die 3D-Ansicht. Niedrig ist am schonendsten für Handy und Akku.'));
+      for (const r of [['daynight', 'Tag und Nacht', 'Ein Tag je Spieljahr: Morgenrot, Mittag, Abendlicht, Nacht mit Lichtern.'],
+        ['weather', 'Wetter', 'Regenschauer, Schnee in kalten Gegenden, Morgennebel, Gewitter.'],
+        ['clouds', 'Wolkenschatten', 'Weiche Schatten ziehen mit dem Wind über das Land.'],
+        ['water', 'Lebendiges Wasser', 'Glitzern, Strömung und Brandung.']]) {
+        const on = gx[r[0]] !== false;
+        box.appendChild(h('div.law', [h('div.lt', [h('b', r[1]), h('span', r[2])]),
+          h('button.btn.switch' + (on ? '.on' : ''), { type: 'button', role: 'switch', 'aria-checked': on ? 'true' : 'false', on: { click: () => { gx[r[0]] = !on; game.applyGfx(); render(); } } }, on ? 'An' : 'Aus')]));
+      }
+      box.appendChild(h('div.muted', { style: { margin: '12px 0 6px' } }, 'Qualität (niedrig schont Handy und Akku: weniger Partikel, keine Wolkenschatten)'));
       const chips = h('div.chips');
-      for (const q of [['low', 'Niedrig'], ['mid', 'Mittel'], ['high', 'Hoch']]) chips.appendChild(h('button.chip', { type: 'button', 'aria-pressed': game.quality === q[0] ? 'true' : 'false',
-        on: { click: () => { game.setQuality(q[0]); render(); } } }, h('span', q[1])));
+      for (const q of [['low', 'Niedrig'], ['mid', 'Mittel'], ['high', 'Hoch']]) chips.appendChild(h('button.chip', { type: 'button', 'aria-pressed': gx.quality === q[0] ? 'true' : 'false',
+        on: { click: () => { gx.quality = q[0]; game.applyGfx(); render(); } } }, h('span', q[1])));
       box.appendChild(chips);
-      box.appendChild(h('div.law', { style: { marginTop: '10px' } }, [h('div.lt', [h('b', 'Ansicht'), h('span', game.mode === '3d' ? 'Gerade: 3D' : 'Gerade: Pixel')]),
+      if (game.v3) box.appendChild(h('div.law', { style: { marginTop: '10px' } }, [h('div.lt', [h('b', 'Ansicht'), h('span', game.mode === '3d' ? 'Gerade: 3D' : 'Gerade: Pixel')]),
         h('button.btn', { type: 'button', on: { click: () => { game.toggleMode(); render(); } } }, game.mode === '3d' ? 'Pixel' : '3D')]));
     };
     render();

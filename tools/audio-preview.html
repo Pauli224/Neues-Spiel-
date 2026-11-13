@@ -220,11 +220,15 @@
     const T0 = 0.05;
     if (job.music) {
       let t = T0;
-      while (t < secs - 1) { const b = WW.AudioMusic.bar(job.music); const R = WW.AudioCore.makeR(oc, { srcs: [] }); WW.AudioMusic.playBar(R, dest, t, b); t += b.dur; }
+      const mg = oc.createGain(); mg.connect(dest);
+      mg.gain.setValueAtTime(1, secs - 4); mg.gain.linearRampToValueAtTime(0, secs - 3);   // Ende ausblenden (wie Stimmenabbruch)
+      while (t < secs - 4) { const b = WW.AudioMusic.bar(job.music); const R = WW.AudioCore.makeR(oc, { srcs: [] }); WW.AudioMusic.playBar(R, mg, t, b); t += b.dur; }
     } else if (job.bed) {
-      const R = WW.AudioCore.makeR(oc, { srcs: [] }), g = oc.createGain(); g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(0.45 * 0.35, T0 + 1.5); g.connect(dest);
+      // typischer Zielpegel 0,8 der Schicht (wie in Beds.set)
+      const lvl = 0.8 * WW.AudioAmbient.BED_LEVEL[job.bed];
+      const R = WW.AudioCore.makeR(oc, { srcs: [] }), g = oc.createGain(); g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(lvl, T0 + 1.5); g.connect(dest);
       WW.AudioAmbient.BEDS[job.bed](R, g, T0);
-      g.gain.setValueAtTime(0.45 * 0.35, secs - 1.6); g.gain.linearRampToValueAtTime(0, secs - 0.3);
+      g.gain.setValueAtTime(lvl, secs - 4); g.gain.linearRampToValueAtTime(0, secs - 3);
       if (job.waves) for (let t = 0.2; t < secs - 6.5; t += 3.5 + Math.random() * 2) { const v = { srcs: [] }, wg = oc.createGain(); wg.gain.value = 0.55; wg.connect(dest); WW.AudioSfx.play(oc, wg, 'wave', t, { amp: 1 }, v); }
     } else {
       const rc = WW.AudioSfx.RECIPES[job.name], g = oc.createGain(); g.gain.value = job.raw ? 1 : (rc.vol != null ? rc.vol : 1); g.connect(dest);
@@ -249,13 +253,16 @@
     for (let i = 0; i < n; i += win) { let m = 0; for (let k = i; k < Math.min(n, i + win); k++) m = Math.max(m, Math.abs(L[k]), Math.abs(Rr[k])); env.push(m); }
     let lastLoud = 0; for (let i = 0; i < env.length; i++) if (env[i] > peak * 0.00316) lastLoud = i;
     const dur = (lastLoud + 1) * win / SR - T0;
-    let startAbs = 0; if (first >= 0) for (let i = first; i < Math.min(n, first + Math.floor(SR * 0.0005)); i++) startAbs = Math.max(startAbs, Math.abs(L[i]), Math.abs(Rr[i]));
+    // Anfang: größter Betrag in den ersten 0,2 ms nach dem ersten Abtastwert ≠ 0, relativ zur Spitze (Sprung = nahe 1)
+    let startAbs = 0; if (first >= 0) for (let i = first; i < Math.min(n, first + Math.floor(SR * 0.0002)); i++) startAbs = Math.max(startAbs, Math.abs(L[i]), Math.abs(Rr[i]));
+    startAbs /= (peak || 1);
     let endAbs = 0; for (let i = n - Math.floor(SR * 0.005); i < n; i++) endAbs = Math.max(endAbs, Math.abs(L[i]), Math.abs(Rr[i]));
     // Spektrum gesamt: Anteil < 150 Hz
     const N = 4096, spec = new Float64Array(N / 2); let frames = 0;
     for (let s = 0; s + N <= n; s += N) { const re = new Float64Array(N), im = new Float64Array(N); for (let i = 0; i < N; i++) re[i] = (L[s + i] + Rr[s + i]) * 0.5 * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N)); fft(re, im); for (let k = 0; k < N / 2; k++) spec[k] += re[k] * re[k] + im[k] * im[k]; frames++; }
     let lo = 0, tot = 0, cen = 0; for (let k = 1; k < N / 2; k++) { const f = k * SR / N; tot += spec[k]; cen += spec[k] * f; if (f < 150) lo += spec[k]; }
-    return { name: job.label || job.name || job.music || job.bed, peak, rms, nan, dur, startAbs, endAbs, low: tot ? lo / tot : 0, centroid: tot ? cen / tot : 0, buf };
+    const loE = lo / (frames || 1) / N;
+    return { name: job.label || job.name || job.music || job.bed, peak, rms, nan, dur, startAbs, endAbs, low: tot ? lo / tot : 0, loE, centroid: tot ? cen / tot : 0, buf };
   }
   // Wellenform + Spektrogramm als PNG (data URL)
   function draw(buf, title) {
@@ -296,10 +303,10 @@
   for (const [l, r] of [['Knall r1,4', 1.4], ['Kanone r1,6', 1.6], ['Bomber r1,9', 1.9], ['Bombe r2,5', 2.5], ['Rakete r3', 3], ['Groß r4', 4]]) JOBS.push({ name: 'explosion', label: 'Explosion ' + l, p: { r }, secs: 7 });
   JOBS.push({ name: 'meteor', secs: 8 }, { name: 'nuke', label: 'Atombombe', p: {}, secs: 14 }, { name: 'nuke', label: 'Zar-Bombe', p: { big: true }, secs: 22 });
   for (const n of Object.keys(WW.AudioSfx.RECIPES)) if (!/^(explosion|nuke|meteor)$/.test(n) && !WW.AudioSfx.RECIPES[n].loop) JOBS.push({ name: n, secs: 8 });
-  for (const b of Object.keys(WW.AudioAmbient.BEDS)) JOBS.push({ bed: b, label: 'Schicht ' + b, bus: 'ambient', secs: 10, waves: b === 'sea' });
+  for (const b of Object.keys(WW.AudioAmbient.BEDS)) JOBS.push({ bed: b, label: 'Schicht ' + b, bus: 'ambient', secs: 14, waves: b === 'sea' });
   for (const k of ['gunship', 'bomber', 'rocket']) JOBS.push({ name: 'engine', loopKind: k, label: 'Dauer engine ' + k, p: { kind: k }, secs: 5 });
   for (const n of ['tornado', 'blackhole', 'volcano', 'floodLoop']) JOBS.push({ name: n, label: 'Dauer ' + n, secs: 5 });
-  for (const m of ['peace', 'war', 'dark']) JOBS.push({ music: m, label: 'Musik ' + m, bus: 'music', secs: 20 });
+  for (const m of ['peace', 'war', 'dark']) JOBS.push({ music: m, label: 'Musik ' + m, bus: 'music', secs: 24 });
   window.WWMeasure.JOBS = JOBS;
   $('measure').onclick = async () => {
     $('report').textContent = 'Rendere ' + JOBS.length + ' Klänge …';

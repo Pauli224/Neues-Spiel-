@@ -557,7 +557,7 @@
   }
   def('bear', { prio: 3, cls: 'detail', gap: 1.5, vol: 1.1,
     fn(R, out, t) { const L = R.rr(1, 1.5); growl(R, out, t, R.rr(70, 90), L, 0.5); return L + 0.1; } });
-  def('yeti', { prio: 5, cls: 'mid', gap: 1.5, vol: 1.36,
+  def('yeti', { prio: 5, cls: 'mid', gap: 1.5, vol: 1.1,
     fn(R, out, t) { const L = 1.8, lp = growl(R, out, t, 120, L, 0.55, 1100); R.xpts(lp.frequency, [[t, 500], [t + 0.5, 1500], [t + L, 600]]); return L + 0.1; } });
   def('dragon', { prio: 7, cls: 'loud', gap: 1.5, vol: 2.0,
     fn(R, out, t, p) {
@@ -573,7 +573,7 @@
       R.ahr(g.gain, t, 0.15, 0.55, L - 0.6, 0.45);
       return L + 0.1;
     } });
-  def('demon', { prio: 6, cls: 'mid', gap: 1.5, vol: 1.4,
+  def('demon', { prio: 6, cls: 'mid', gap: 1.5, vol: 1.1,
     fn(R, out, t) { const L = 1.8; growl(R, out, t, 55, L, 0.55, 800); for (let i = 0; i < 8; i++) R.tick(out, t + R.rnd() * L, R.rr(1500, 4000), 1, 0.06, 0.01); return L + 0.1; } });
   def('zombie', { prio: 3, cls: 'detail', gap: 1.2, vol: 1.47,
     fn(R, out, t) {
@@ -659,7 +659,7 @@
       for (let i = 0; i < n; i++) { const at = t + i * R.rr(0.1, 0.18), o = R.osc('sine', 6000, at, at + 0.06), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[at, R.rr(5000, 6500)], [at + 0.035, R.rr(2200, 3000)]]); R.env(g.gain, at, 0.003, 0.16, 0.04); }
       return n * 0.18 + 0.1;
     } });
-  def('jungleBird', { prio: 1, cls: 'detail', gap: 0.3, vol: 5.8,
+  def('jungleBird', { prio: 1, cls: 'detail', gap: 0.3, vol: 2.5,
     fn(R, out, t) {
       if (R.rnd() < 0.5) {
         for (let i = 0; i < 3; i++) { const at = t + i * 0.28, o = R.osc('sine', 800, at, at + 0.25), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[at, R.rr(700, 900)], [at + 0.2, R.rr(1400, 1900)]]); R.ahr(g.gain, at, 0.02, 0.18, 0.08, 0.1); }
@@ -741,7 +741,7 @@
   function loopCtl(list) {
     return { set(k, v, t) { if (k === 'rate') for (const x of list) { try { if (x.detune) x.detune.setTargetAtTime(1200 * Math.log2(C.clamp(v, 0.5, 2)), t, 0.15); else if (x.playbackRate) x.playbackRate.setTargetAtTime(C.clamp(v, 0.5, 2), t, 0.15); } catch (e) { /* still */ } } } };
   }
-  def('engine', { prio: 6, cls: 'loud', loop: true, vol: 0.6,
+  def('engine', { prio: 6, cls: 'loud', loop: true, vol: 0.3,
     fn(R, out, t, p) {
       const kind = p.kind || 'bomber', g = R.g(0), list = [];
       R.c(g, out); R.pts(g.gain, [[t, 0], [t + 0.8, 1]]);
@@ -757,7 +757,7 @@
       }
       return loopCtl(list);
     } });
-  def('tornado', { prio: 7, cls: 'loud', loop: true, vol: 0.7,
+  def('tornado', { prio: 7, cls: 'loud', loop: true, vol: 0.6,
     fn(R, out, t) {
       const g = R.g(0); R.c(g, out); R.pts(g.gain, [[t, 0], [t + 1.2, 1]]);
       const a = R.noise('pink', t, null, true), bp = R.f('bandpass', 450, 1.5), ag = R.g(0.8); R.c(a, bp, ag, g); R.lfo('sine', 0.3, 220, bp.frequency, t);
@@ -765,7 +765,7 @@
       const c = R.noise('brown', t), lp = R.f('lowpass', 150, 1), cg = R.g(0.7); R.c(c, lp, cg, g);
       return loopCtl([]);
     } });
-  def('blackhole', { prio: 8, cls: 'loud', loop: true, vol: 0.75,
+  def('blackhole', { prio: 8, cls: 'loud', loop: true, vol: 0.5,
     fn(R, out, t) {
       const g = R.g(0); R.c(g, out); R.pts(g.gain, [[t, 0], [t + 1.5, 1]]);
       for (const f of [38, 41]) { const o = R.osc('sine', f, t), og = R.g(0.4); R.c(o, og, g); }
@@ -796,12 +796,12 @@
     fn(R, out, t) { R.fm(out, t, 1174.7, 4, 0.8, 0.05, 0.002, 0.16, 0.18); R.fm(out, t + 0.06, 1760, 4, 0.8, 0.05, 0.002, 0.14, 0.22); return 0.32; } });
   def('ui_tool', { prio: 9, cls: 'global', gap: 0.05, vol: 2.0,
     fn(R, out, t) { thud(R, out, t, 950, 700, 0.2, 0.06); R.tick(out, t, 1800, 3, 0.12, 0.02); return 0.1; } });
-  def('ui_error', { prio: 9, cls: 'global', gap: 0.2, vol: 1.6,
+  def('ui_error', { prio: 9, cls: 'global', gap: 0.2, vol: 1.2,
     fn(R, out, t) {
       for (const [f, d] of [[330, 0], [311, 0.13]]) { const o = R.osc('triangle', f, t + d, t + d + 0.2), lp = R.f('lowpass', 1200, 0.7), g = R.g(0); R.c(o, lp, g, out); R.ahr(g.gain, t + d, 0.008, 0.2, 0.06, 0.06); }
       return 0.32;
     } });
-  def('ui_open', { prio: 9, cls: 'global', gap: 0.08, vol: 3.3,
+  def('ui_open', { prio: 9, cls: 'global', gap: 0.08, vol: 2.5,
     fn(R, out, t) { whoosh(R, out, t, 500, 2000, 0.16, 0.1, 1.5); R.fm(out, t + 0.1, 880, 3, 0.6, 0.05, 0.002, 0.1, 0.2); return 0.35; } });
   def('ui_close', { prio: 9, cls: 'global', gap: 0.08, vol: 3.6,
     fn(R, out, t) { whoosh(R, out, t, 1800, 500, 0.16, 0.1, 1.5); R.fm(out, t + 0.08, 660, 3, 0.6, 0.05, 0.002, 0.08, 0.18); return 0.3; } });

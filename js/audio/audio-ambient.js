@@ -208,7 +208,7 @@
       return {};
     }
   };
-  const BED_LEVEL = { wind: 0.5, howl: 0.25, sea: 0.45, river: 0.4, rain: 0.5, fire: 0.5, city: 0.35, factory: 0.3, battle: 0.45, rumble: 0.6 };
+  const BED_LEVEL = { wind: 0.5, howl: 0.7, sea: 0.45, river: 0.55, rain: 0.45, fire: 0.5, city: 1.0, factory: 0.14, battle: 0.45, rumble: 0.5 };
 
   // Zielpegel der Schichten aus der Lage
   function targets(m) {
@@ -303,6 +303,6 @@
     return out;
   }
 
-  WW.AudioAmbient = { analyze, Beds, targets, events, BEDS, MONSTERS, CALLS };
+  WW.AudioAmbient = { analyze, Beds, targets, events, BEDS, BED_LEVEL, MONSTERS, CALLS };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
