@@ -1,6 +1,6 @@
 // Service Worker: alle Spieldateien zwischenspeichern, damit Wuselwelt offline läuft.
 // Bei Änderungen VERSION hochzählen.
-const VERSION = 'wuselwelt-1acvrkf';
+const VERSION = 'wuselwelt-1kbohch';
 const FILES = [
   './',
   'index.html',

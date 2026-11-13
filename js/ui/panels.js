@@ -134,7 +134,7 @@
       by[s.kind || '?'] = (by[s.kind || '?'] || 0) + 1;
     }
     if (!n) return null;
-    const FN = WW.FACTORY_KINDS || WW.FACTORIES || {};
+    const FN = (WW.INDUSTRY && WW.INDUSTRY.KINDS) || WW.FACTORY_KINDS || {};
     const nm = (k) => { const v = FN[k]; return (v && (v.name || v)) || k; };
     return h('div.sec', [h('h3', 'Fabriken'), h('div', Object.keys(by).map(k => nm(k) + ' ×' + by[k]).join(' · ')),
       h('div.muted', { style: { marginTop: '4px' } }, filt === n ? 'Alle mit Filter' : filt ? filt + ' von ' + n + ' mit Filter' : 'Ohne Filter')]);
@@ -355,7 +355,7 @@
     // Mauer
     const w = c.wall || {};
     const gl = k && WW.GOVERNMENTS[k.gov] && WW.GOVERNMENTS[k.gov].wallLevels;
-    const lvName = gl && w.level > 0 && gl[w.level - 1] ? (gl[w.level - 1].name || gl[w.level - 1]) : null;
+    const lvName = w.name || (gl && w.level > 0 && gl[w.level - 1] ? (gl[w.level - 1].name || gl[w.level - 1]) : null);
     const wName = w.level > 0 || w.total > 0 ? (lvName || WW.WALL_STYLE_NAMES[w.style] || 'Mauer') : 'keine';
     const wsec = h('div.sec', [h('h3', 'Mauer')]);
     if (w.total > 0) {
@@ -369,6 +369,7 @@
       for (const s of sim.state.structs) if (s.cityId === c.id && s.device && !s.dead) dev[s.device] = (dev[s.device] || 0) + 1;
       const DN = WW.WALL_DEVICES || {};
       const dl = Object.keys(dev).map(d => ((DN[d] && (DN[d].name || DN[d])) || d) + ' ×' + dev[d]);
+      void dl;
       if (dl.length) wsec.appendChild(h('div.muted', { style: { marginTop: '4px' } }, 'Verteidigung: ' + dl.join(', ')));
     } else {
       const g = k ? WW.GOVERNMENTS[k.gov] : null;

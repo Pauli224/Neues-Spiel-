@@ -143,7 +143,7 @@
         if (d) S.drawFast(g, d.key, x * 8 + d.dx, y * 8 + d.dy, 0, false);
       }
       const ls = rows[y - y0];
-      if (ls) { ls.sort((p, q) => p.x - q.x); for (const s of ls) { this.drawStruct(g, s, this._cityKTmp, false, bars); if (s.device === 'spikes') this.drawDevice(g, s); } }
+      if (ls) { ls.sort((p, q) => p.x - q.x); for (const s of ls) { this.drawStruct(g, s, this._cityKTmp, false, bars); if (s.device === 'spikes' || s.device === 'trap') this.drawDevice(g, s); } }
     }
     c.decorDirty = false;
     c.decorT = this.time;
@@ -351,7 +351,7 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { rock: 0.5, ward: 0.8, dud: 0.6, smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
@@ -361,7 +361,7 @@
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
-      if (f.type === 'smokeplume') { this.addPlume(f.x * 8, f.y * 8, !!f.clean); continue; }
+      if (f.type === 'smokeplume') { if (typeof this.S.factoryStacks !== 'function') this.addPlume(f.x * 8, f.y * 8, !!(f.filtered || f.clean), -6, -14, f.big); continue; }
       if (f.type === 'muzzle' && this.st) { (this.muzzleT || (this.muzzleT = new Map())).set((f.y | 0) * this.st.W + (f.x | 0), this.time); }
       if (f.type === 'flash') this.flash = Math.max(this.flash || 0, 0.9);
       let sh = f.type === 'meteor' ? 0.35 : 0;
@@ -380,10 +380,11 @@
     if (w.angle != null) { const s = w.speed != null ? w.speed : 1; return { x: Math.cos(w.angle) * s, y: Math.sin(w.angle) * s }; }
     return { x: x, y: y };
   };
-  Renderer.prototype.addPlume = function (px, py, clean) {
+  // Qualmwolke: (px, py) = Schornstein-Mündung, (ox, oy) = Zeichenversatz des Sprites zur Mündung
+  Renderer.prototype.addPlume = function (px, py, clean, ox, oy, big) {
     const P = this.plumes || (this.plumes = []);
-    if (P.length >= 48) return;
-    P.push({ x: px + (Math.random() - 0.5) * 2, y: py, t: 0, life: 2.6 + Math.random(), clean: clean, f: (Math.random() * 4) | 0 });
+    if (P.length >= 56) return;
+    P.push({ x: px, y: py, ox: ox == null ? -6 : ox, oy: oy == null ? -14 : oy, t: 0, life: (big ? 3.4 : 2.6) + Math.random(), clean: clean, f: (Math.random() * 4) | 0 });
   };
   Renderer.prototype.updatePlumes = function (g, vt, dt) {
     const S = this.S, st = this.st;
@@ -392,13 +393,13 @@
     if (this._plumeT > 0.35) {
       this._plumeT = 0;
       for (const s of st.structs) {
-        if (s.type !== 'factory' || s.active === false || s.dead || !s.built) continue;
+        if (s.type !== 'factory' || !s.active || s.closed || s.dead || !s.built) continue;
         if (s.x + s.w < vt.x0 - 2 || s.x > vt.x1 + 2 || s.y + s.h < vt.y0 || s.y > vt.y1 + 4) continue;
         const lv = Math.max(1, Math.min(2, s.level | 0 || 1));
         let stacks = null;
-        if (typeof S.factoryStacks === 'function') { try { stacks = S.factoryStacks(s.kind, lv); } catch (e) { stacks = null; } }
-        if (!Array.isArray(stacks) || !stacks.length) stacks = [{ x: s.w * 8 - 5, y: -10 }];
-        for (const m of stacks) this.addPlume(s.x * 8 + (m.x != null ? m.x : m[0]), s.y * 8 + (m.y != null ? m.y : m[1]), !!s.filtered);
+        if (typeof S.factoryStacks === 'function') { try { stacks = S.factoryStacks(s.kind, lv, !!s.filtered); } catch (e) { stacks = null; } }
+        if (!Array.isArray(stacks) || !stacks.length) stacks = [{ x: s.w * 8 - 5, y: -10, dx: s.w * 8 - 11, dy: -24 }];
+        for (const m of stacks) this.addPlume(s.x * 8 + m.x, s.y * 8 + m.y, !!s.filtered, m.dx != null ? m.dx - m.x : -6, m.dy != null ? m.dy - m.y : -14, s.level >= 2);
       }
     }
     const P = this.plumes;
@@ -414,7 +415,7 @@
       const base = p.clean ? 'fx_smokeplume_clean_' : 'fx_smokeplume_';
       const key = S.has(base + '0') ? base + Math.min(3, (k * 4) | 0) : 'fx_smoke_' + (p.f & 1);
       g.globalAlpha = (p.clean ? 0.6 : 0.85) * (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85);
-      S.drawFast(g, key, Math.round(p.x - 4), Math.round(p.y - 4), 0, false);
+      S.drawFast(g, key, Math.round(p.x + p.ox), Math.round(p.y + p.oy), 0, false);
     }
     g.globalAlpha = 1;
     this.plumes = out;
@@ -422,7 +423,7 @@
   // Dunst aus dem groben Raster state.pollution: weich gezeichnet, mit dem Wind verschoben; Ansicht „Luft" färbt stärker
   Renderer.prototype.drawSmog = function (g, cam, airView) {
     const st = this.st, pol = st.pollution;
-    let cell = st.pollutionCell;
+    let cell = st.pollutionCell || (WW.INDUSTRY && WW.INDUSTRY.CFG && WW.INDUSTRY.CFG.CELL);
     if (!(cell > 0)) cell = Math.max(1, Math.round(Math.sqrt((st.W * st.H) / pol.length)));
     const cw = Math.ceil(st.W / cell), chh = Math.ceil(st.H / cell);
     if (this.time - (this._smogT || -9) > 1 || !this._smog || this._smogAir !== airView) {
@@ -434,7 +435,7 @@
       for (let i = 0; i < cw * chh && i < pol.length; i++) {
         const v = Math.max(0, Math.min(1, pol[i] / mx)), o = i * 4;
         if (airView) { d[o] = 90 + v * 70; d[o + 1] = 200 - v * 140; d[o + 2] = 90 - v * 50; d[o + 3] = 150; }
-        else { d[o] = 92; d[o + 1] = 84; d[o + 2] = 70; d[o + 3] = v < 0.06 ? 0 : Math.round(Math.min(0.55, v * 0.7) * 255); }
+        else { const h = Math.max(0, v - 0.2) / 0.8; d[o] = 96; d[o + 1] = 86; d[o + 2] = 70; d[o + 3] = Math.round(Math.min(0.55, h * 0.75) * 255); }   // Dunst ab ~50
       }
       c.putImageData(img, 0, 0);
     }
@@ -558,9 +559,10 @@
           S.drawFast(g, k, px - 4, py - 8, 0, false);
           break;
         }
-        case 'bolt_shot':
+        case 'bolt_shot': case 'rock':
         case 'arrow': {
-          const ak = f.type === 'bolt_shot' && S.has('fx_bolt_shot') ? 'fx_bolt_shot' : 'fx_arrow';
+          if (f.x2 == null) break;
+          const ak = f.type !== 'arrow' && S.has('fx_' + f.type) ? 'fx_' + f.type : (f.type === 'rock' && S.has('fx_rock_0') ? 'fx_rock_0' : 'fx_arrow');
           const x = px + ((f.x2 * 8) - px) * k, y = py + ((f.y2 * 8) - py) * k - Math.sin(k * Math.PI) * 6;
           const ang = Math.atan2((f.y2 - f.y) * 8, (f.x2 - f.x) * 8);
           g.save(); g.translate(x, y); g.rotate(ang); S.drawFast(g, ak, -4, -4, 0, false); g.restore();
@@ -586,7 +588,7 @@
           }
           break;
         }
-        case 'smoke': case 'dust': case 'poof': {
+        case 'smoke': case 'dust': case 'poof': case 'dud': {
           const n = f.type === 'smoke' ? 3 : 2;
           for (let j = 0; j < n; j++) {
             const kk = Math.min(1, k + j * 0.15);
@@ -620,7 +622,7 @@
           g.globalAlpha = 1;
           break;
         }
-        case 'sparkle': case 'restyle': case 'govchange': case 'hit': case 'spark': {
+        case 'sparkle': case 'restyle': case 'govchange': case 'hit': case 'spark': case 'ward': {
           const r = (f.r || (f.type === 'hit' ? 0.4 : 2.2)) * 8, n = f.type === 'hit' ? 2 : (f.type === 'sparkle' ? 14 : 18);
           for (let j = 0; j < n; j++) {
             const ph = (k * 2 + rnd(f.seed, j)) % 1;
@@ -713,7 +715,7 @@
       case 'wall': case 'gate': case 'tower': return this.wallishKey(s, style);
       case 'factory': {
         const lv = Math.max(1, Math.min(2, s.level | 0 || (s.w >= 3 ? 2 : 1)));
-        if (s.active === false && S.has('s_factory_ruin_' + lv)) return 's_factory_ruin_' + lv;
+        if (s.closed && S.has('s_factory_ruin_' + lv)) return 's_factory_ruin_' + lv;
         let k = null;
         if (typeof S.factoryKey === 'function') { try { k = S.factoryKey(s.kind, lv, !!s.filtered); } catch (e) { k = null; } }
         if (k && S.has(k)) return k;
@@ -963,7 +965,7 @@
         const by = s.y + s.h - 1;
         if (by < y0 || by > y1 || s.x + s.w - 1 < sx0 || s.x > sx1) continue;
         rowS[by - y0].push(s);
-        if (s.device === 'spikes' && by + 1 - y0 < nrows) (this._spikes || (this._spikes = [])).push(s);
+        if ((s.device === 'spikes' || s.device === 'trap') && by + 1 - y0 < nrows) (this._spikes || (this._spikes = [])).push(s);
       }
     }
     // Figuren und Tiere
@@ -1099,7 +1101,7 @@
     const px = s.x * 8, py = (s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
     // Verteidigungsgerät auf dem Mauerstück (Stacheln stehen davor und werden eine Zeile tiefer gezeichnet)
-    if (s.device && s.device !== 'spikes' && s.built !== false) this.drawDevice(ctx, s);
+    if (s.device && s.device !== 'spikes' && s.device !== 'trap' && s.built !== false) this.drawDevice(ctx, s);
     // Lagerfeuer: Feuer-Frames der Lager-Sprites, sonst fx_fire in der Mitte
     if (s.type === 'center' && s.stage === 0 && s.built !== false && key.indexOf('s_camp') === 0) {
       const fr = ((this.time * 6) | 0) % 3;
@@ -1130,7 +1132,12 @@
     const S = this.S, base = 's_walldev_' + s.device;
     const shot = this.muzzleT && this.time - (this.muzzleT.get(s.y * this.st.W + s.x) || -9) < 0.25;
     const k = S.has(base + '_' + (shot ? 1 : 0)) ? base + '_' + (shot ? 1 : 0) : (S.has(base) ? base : null);
-    if (k) S.drawFast(ctx, k, s.x * 8, s.y * 8 + (s.device === 'spikes' ? 8 : 0), 0, false);
+    let off = s.device === 'spikes' || s.device === 'trap' ? 8 : 0;
+    if (typeof S.wallDevOffset === 'function' && off === 0) {
+      const c = this._cityById && this._cityById.get(s.cityId), k2 = c && this._kings ? this._kings.get(c.kingdomId) : null;
+      try { const o = S.wallDevOffset(s.style || (k2 && k2.gov) || 'tribe', s.level, s.device); if (typeof o === 'number') off = o; } catch (e) { /* egal */ }
+    }
+    if (k) S.drawFast(ctx, k, s.x * 8, s.y * 8 + off, 0, false);
   };
 
   // Figur an der Göttlichen Hand: hängt am Zeiger, zappelt
