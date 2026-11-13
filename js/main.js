@@ -195,7 +195,41 @@
     game.afterAction();
     return ok;
   };
-  game.strike = function (x, y, kind) { const r = game.sim.actions.strike(x, y, kind); game.afterAction(); return r; };
+  game.strike = function (x, y, kind, opt) { const r = opt ? game.sim.actions.strike(x, y, kind, opt) : game.sim.actions.strike(x, y, kind); game.afterAction(); return r; };
+
+  // Kräfte mit Halten/Ziehen: Ziel nachführen (aim), Richtung ziehen (direction), Spur zeichnen (trace)
+  game.dragStart = function (sx, sy) {
+    const t = game.tool, p = tileOf(sx, sy), sim = game.sim;
+    if (!inMap(p.x, p.y)) { game.drag = null; return; }
+    game.drag = { mode: t.drag, power: t.power, x0: p.x, y0: p.y, x: p.x, y: p.y, last: null, id: null };
+    if (t.drag === 'aim') {
+      const before = new Set((sim.state.aircraft || []).map(a => a.id));
+      const r = game.strike(p.x, p.y, t.power);
+      let id = typeof r === 'number' ? r : (r && r.id != null ? r.id : null);
+      if (id == null) for (const a of (sim.state.aircraft || [])) if (!before.has(a.id) && (!a.kind || a.kind === t.power)) id = a.id;
+      game.drag.id = id;
+    } else if (t.drag === 'trace') { game.strike(p.x, p.y, t.power); game.drag.last = p; }
+  };
+  game.dragMove = function (sx, sy) {
+    const d = game.drag, sim = game.sim;
+    if (!d) return;
+    const p = tileOf(sx, sy);
+    d.x = p.x; d.y = p.y;
+    if (d.mode === 'aim' && d.id != null && sim.actions.aimAircraft) { try { sim.actions.aimAircraft(d.id, p.x, p.y); } catch (e) { /* egal */ } }
+    else if (d.mode === 'trace' && inMap(p.x, p.y) && (!d.last || Math.hypot(p.x - d.last.x, p.y - d.last.y) >= 1.2)) { game.strike(p.x, p.y, d.power); d.last = p; }
+  };
+  game.dragEnd = function (sx, sy, cancel) {
+    const d = game.drag;
+    game.drag = null;
+    if (!d || cancel) return;
+    if (d.mode === 'direction') {
+      const p = tileOf(sx, sy);
+      let dx = p.x - d.x0, dy = p.y - d.y0;
+      const l = Math.hypot(dx, dy);
+      if (l < 0.8) { dx = 1; dy = 0; } else { dx /= l; dy /= l; }
+      game.strike(d.x0, d.y0, d.power, { dx: dx, dy: dy });
+    }
+  };
   game.afterAction = function () { game.pollEvents(); game.ui.refreshInfo(true); game.autosaveSoon(); };
 
   // ------------------------------------------------------------------ Tastatur
@@ -366,10 +400,12 @@
 
     // Pinselvorschau
     let brush = null;
-    const t = game.tool, hp = game.input.hover;
-    if (hp && t.kind !== 'look') {
+    const t = game.tool, hp = game.input.hover || (game.drag ? { x: 0, y: 0 } : null);
+    if (game.drag && game.drag.mode === 'direction') brush = { x: game.drag.x0, y: game.drag.y0, x2: game.drag.x, y2: game.drag.y, kind: 'arrow' };
+    else if (hp && t.kind !== 'look' && game.input.hover) {
       const p = tileOf(hp.x, hp.y);
       if (t.kind === 'paint') { const b = WW.UI.Tools.BRUSHES.find(z => z.id === game.opts.brush) || WW.UI.Tools.BRUSHES[1]; brush = { x: p.x, y: p.y, r: b.r, kind: 'tiles' }; }
+      else if (game.drag && game.drag.mode === 'direction') brush = { x: game.drag.x0, y: game.drag.y0, x2: game.drag.x, y2: game.drag.y, kind: 'arrow' };
       else if (t.power) brush = { x: p.x, y: p.y, r: t.radius, kind: 'circle' };
       else brush = { x: p.x, y: p.y, kind: 'tile' };
     }
@@ -419,6 +455,7 @@
     game.newWorldScreen = new WW.UI.NewWorld(game);
     game.input = new WW.UI.Input(game.canvas, game.cam, game);
     try { reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* egal */ }
+    game.renderer.reduced = reducedMotion;
     game.tool = WW.UI.Tools.get('inspect');
     game.ui.build();
     game.hud.build();

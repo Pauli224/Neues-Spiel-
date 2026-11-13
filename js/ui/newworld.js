@@ -77,12 +77,21 @@
     }
     // Startreiche
     side.appendChild(h('h3', 'Startreiche'));
-    this.countEl = h('b', String(s.count));
+    this.countEl = h('b');
+    this.countTxt = h('span.count-txt');
+    this.startOpts = h('div.start-opts');
+    const upd = () => {
+      this.countEl.textContent = s.count;
+      this.countTxt.textContent = s.count ? (s.count === 1 ? 'Reich startet sofort' : 'Reiche starten sofort') : 'keine (leere Welt)';
+      this.countTxt.classList.toggle('on', !s.count);
+      this.startOpts.classList.toggle('dim', !s.count);
+    };
     side.appendChild(h('div.stepper', [
-      h('button.btn', { type: 'button', 'aria-label': 'Weniger', on: { click: () => { s.count = Math.max(0, s.count - 1); this.countEl.textContent = s.count; } } }, '–'),
+      h('button.btn', { type: 'button', 'aria-label': 'Weniger', on: { click: () => { s.count = Math.max(0, s.count - 1); upd(); } } }, '–'),
       this.countEl,
-      h('button.btn', { type: 'button', 'aria-label': 'Mehr', on: { click: () => { s.count = Math.min(8, s.count + 1); this.countEl.textContent = s.count; } } }, '+'),
-      h('span.muted', '0 = leere Welt')]));
+      h('button.btn', { type: 'button', 'aria-label': 'Mehr', on: { click: () => { s.count = Math.min(8, s.count + 1); upd(); } } }, '+'),
+      this.countTxt]));
+    upd();
     const opts = (label, list, get, set) => {
       const box = h('div.chips');
       const render = () => {
@@ -91,13 +100,16 @@
           on: { click: () => { set(it[0]); render(); } } }, [it[2] ? icon(it[2], 22, 0) : null, h('span', it[1])]));
       };
       render();
-      side.appendChild(h('div.muted', { style: { margin: '10px 0 5px' } }, label));
-      side.appendChild(box);
+      const tgt = label === 'Tiere' ? side : this.startOpts;
+      tgt.appendChild(h('div.muted', { style: { margin: '10px 0 5px' } }, label));
+      tgt.appendChild(box);
     };
+    side.appendChild(this.startOpts);
     opts('Völker', [['random', 'Passend zum Land', 'i_settlers']].concat(WW.RACE_KEYS.map(r => [r, WW.RACES[r].name, 'u_' + r + '_settler_0'])),
       () => s.races, (v) => { s.races = v; });
     opts('Regierungen', [['mixed', 'Verschiedene'], ['tribe', 'Alle als Stamm']], () => s.govs, (v) => { s.govs = v; });
-    opts('Tiere', [[true, 'Schafe und Wölfe'], [false, 'Keine']], () => s.animals, (v) => { s.animals = v; });
+    side.appendChild(h('h3', 'Natur'));
+    opts('Tiere', [[true, 'Mit Tieren'], [false, 'Keine Tiere']], () => s.animals, (v) => { s.animals = v; });
 
     const main = h('div.nw-main', [h('div.nw-prev', [h('div.nw-canvas-wrap.panel', [this.cv]), this.nameEl, this.tplBox]), side]);
     this.el.appendChild(h('div.nw-head', [h('h2', 'Neue Welt'), h('button.btn.icon', { type: 'button', 'aria-label': 'Schließen', on: { click: () => this.close() } }, icon('i_close', 28))]));

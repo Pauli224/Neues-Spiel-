@@ -18,7 +18,14 @@
     if (BY_ID[t.id]) { Object.assign(BY_ID[t.id], t); return BY_ID[t.id]; }
     TOOLS.push(t); BY_ID[t.id] = t; return t;
   }
-  function addCategory(c) { if (!CATEGORIES.some(x => x.id === c.id)) CATEGORIES.push(c); }
+  // neue Kategorie, optional vor einer bestehenden einsortiert
+  function addCategory(c, before) {
+    if (CATEGORIES.some(x => x.id === c.id)) return;
+    const i = before ? CATEGORIES.findIndex(x => x.id === before) : -1;
+    if (i >= 0) CATEGORIES.splice(i, 0, c); else CATEGORIES.push(c);
+  }
+  const POWER_CATS = { nature: 'Natur', basic: 'Natur', weather: 'Wetter', blessing: 'Segen & Fluch', curse: 'Segen & Fluch', fate: 'Segen & Fluch',
+    earth: 'Erde', life: 'Leben', misc: 'Sonstiges', other: 'Sonstiges', destruction: 'Zerstörung' };
 
   // Pinselgrößen (Durchmesser in Kacheln → Radius für paintTerrain)
   const BRUSHES = [
@@ -85,25 +92,30 @@
         hint: r[1] + ': erst ein Reich antippen, dann das zweite.' });
     }
 
-    // Kräfte aus WW.POWERS, gruppiert nach category (Reihenfolge der Grundkräfte wie im Plan)
+    // Kräfte aus WW.POWERS: Kategorien aus power.category; „destruction" bekommt einen eigenen Reiter
     const order = ['lightning', 'fire', 'rain', 'meteor', 'plague', 'bless'];
     const PH = { lightning: 'Blitz: tippen, wo es einschlagen soll.', fire: 'Feuer legen: Wald und Palisaden brennen gut.',
       rain: 'Regen löscht Brände und lässt Wald wachsen.', meteor: 'Meteor: Krater, zerstört auch Steinmauern.',
       plague: 'Seuche: macht Bewohner krank.', bless: 'Segen: heilt, macht glücklich, Felder reifen.' };
+    const DRAG = { gunship: 'aim', bomber: 'direction', orbitallaser: 'trace', laser: 'trace' };
     const P = WW.POWERS || {};
     const pkeys = (WW.POWER_KEYS || Object.keys(P)).slice().sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
     const pcats = [];
-    for (const k of pkeys) { const c = (P[k] && P[k].category) || 'basic'; if (pcats.indexOf(c) < 0) pcats.push(c); }
-    pcats.forEach((c, ci) => {
-      if (ci) addTool({ id: 'sep_power_' + c, cat: 'power', kind: 'sep' });
+    for (const k of pkeys) { const c = (P[k] && P[k].category) || 'nature'; if (pcats.indexOf(c) < 0) pcats.push(c); }
+    const tabOf = (c) => c === 'destruction' ? 'destruction' : 'power';
+    if (pcats.indexOf('destruction') >= 0) addCategory({ id: 'destruction', name: 'Zerstörung', short: 'Bomben', icon: 'i_cat_destruction' }, 'world');
+    const multi = pcats.filter(c => tabOf(c) === 'power').length > 1;
+    for (const c of pcats) {
+      const tab = tabOf(c);
+      addTool({ id: 'sep_power_' + c, cat: tab, kind: 'sep', label: tab === 'power' && multi ? (POWER_CATS[c] || c) : null });
       for (const k of pkeys) {
         const p = P[k] || { name: k, radius: 2 };
-        if (((p.category) || 'basic') !== c) continue;
-        addTool({ id: 'power_' + k, cat: 'power', icon: pickIcon(['i_' + k]), name: p.name || k, kind: 'tap', power: k,
-          radius: p.radius || 2, hint: PH[k] || p.desc || ((p.name || k) + ': auf die Karte tippen.'),
+        if (((p.category) || 'nature') !== c) continue;
+        addTool({ id: 'power_' + k, cat: tab, icon: pickIcon(['i_' + k]), name: p.name || k, kind: 'tap', power: k,
+          drag: p.drag || DRAG[k] || null, radius: p.radius || 2, hint: PH[k] || p.desc || ((p.name || k) + ': auf die Karte tippen.'),
           apply(game, x, y) { return game.strike(x, y, k); } });
       }
-    });
+    }
 
     // Welt: Aktionen
     addTool({ id: 'w_new', cat: 'world', icon: 'i_newworld', name: 'Neue Welt', kind: 'action', run(game) { game.ui.openNewWorld(); } });

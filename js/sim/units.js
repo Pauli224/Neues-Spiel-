@@ -750,7 +750,26 @@
         if (sim._cities.get(v.cityId)) setRole(sim, v, 'farmer');
       }
     };
-    if (u.site < 0 || !k) { if (home) setRole(sim, u, 'farmer'); return; }
+    if (u.site < 0 || !k) {
+      if (home) { setRole(sim, u, 'farmer'); return; }
+      // heimatlose Auswanderer: neuen Platz suchen, sonst der nächsten friedlichen Stadt anschließen
+      u.fails = (u.fails || 0) + 1;
+      if (u.fails % 4 === 1) {
+        const site = WW.Growth.freeSite(sim, u.x, u.y, u.race, 4, 26);
+        if (site) { u.site = site.y * W + site.x; return; }
+      }
+      if (u.fails > 12) {
+        let best = null, bd = 1e9;
+        for (const c of st.cities) {
+          if (WW.Path.hostileKingdoms(sim, u.kingdomId, c.kingdomId)) continue;
+          const d = Math.abs(c.cx - u.x) + Math.abs(c.cy - u.y);
+          if (d < bd) { bd = d; best = c; }
+        }
+        if (best) { u.kingdomId = best.kingdomId; u.cityId = best.id; u.group = -1; setRole(sim, u, 'farmer'); }
+        else kill(sim, u, 'lost');
+      }
+      return;
+    }
     const sx = u.site % W, sy = Math.floor(u.site / W);
     if (distTo(u, sx + 0.5, sy + 0.5) <= 2) {
       const md = WW.CONFIG.CITY_MIN_DIST - 4;
@@ -771,7 +790,12 @@
       for (const v of st.units) if (!v.dead && grp >= 0 && v.group === grp && v.kingdomId === k.id) {
         v.cityId = c.id; v.group = -1; v.site = -1; setRole(sim, v, 'farmer'); n++;
       }
-      sim.event('daughter', { city: c.name, mother: home ? home.name : '?', kingdom: k.name, n: n }, WW.Cities.atCity(c));
+      if (home) sim.event('daughter', { city: c.name, mother: home.name, kingdom: k.name, n: n }, WW.Cities.atCity(c));
+      else {
+        const ss = WW.CONFIG.START_STOCK;
+        c.stock.food += ss.food * 0.7; c.stock.wood += ss.wood * 0.7;
+        sim.event('newRealm', { city: c.name, kingdom: k.name, n: n }, WW.Cities.atCity(c));
+      }
       return;
     }
     const r = goTo(sim, u, u.site, { limit: C().PATH_LIMIT_LONG });

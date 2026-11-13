@@ -298,13 +298,94 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Kreaturen
+  if (want('creatures')) (function () {
+    var r = section('creatures', 'Kreaturen (Frame 0 und 1, daneben ein Mensch als Größenvergleich)', 'Tiere, Monster, Räuber, Jäger und Belagerungsgerät auf passendem Untergrund. Der Drache fliegt (eigener Schatten am Boden).');
+    var L2 = [['sheep', 'grass'], ['wolf', 'forest'], ['cow', 'grass'], ['chicken', 'grass'], ['rabbit', 'flowers'], ['deer', 'forest'], ['bear', 'forest'], ['crab', 'sand'], ['fish', 'water'],
+      ['dragon', 'grass'], ['zombie', 'ash'], ['skeleton', 'ash'], ['slime_s', 'swamp'], ['slime', 'swamp'], ['slime_l', 'swamp'], ['ghost', 'tundra'], ['demon', 'ash'], ['giantchicken', 'grass'],
+      ['yeti', 'snowfield'], ['sandworm', 'desert'], ['treant', 'forest'], ['golem', 'crystal']];
+    function cellFor(label, bg, keys, wTiles, hTiles, team) {
+      var k = canvas(wTiles * 8, hTiles * 8, 3);
+      groundRect(k.x, fill(WW.TERRAIN_BY_KEY[bg].id, wTiles, hTiles), 0, 0);
+      keys.forEach(function (it) { S.draw(k.x, it[0], it[1], it[2], { team: team || 0, flip: it[3] }); });
+      cell(r, label, k.c);
+    }
+    L2.forEach(function (c) {
+      var kind = c[0], big = /dragon|giantchicken|treant|slime_l|sandworm|yeti|bear/.test(kind), wT = big ? 7 : 5, hT = big ? 5 : 3, by = (hT - 1) * 8;
+      var keys = [['a_' + kind + '_0', 4, by], ['a_' + kind + '_1', big ? 28 : 18, by], ['u_human_farmer_0', (wT - 1) * 8 + 1, by]];
+      if (kind === 'dragon') keys.unshift(['a_dragon_shadow', 4, by], ['a_dragon_shadow', 28, by]);
+      cellFor(kind, c[1], keys, wT, hT);
+    });
+    cellFor('bandit', 'grass', [['u_bandit_0', 2, 16], ['u_bandit_1', 12, 16], ['u_human_farmer_0', 25, 16]], 4, 3);
+    cellFor('ram', 'grass', [['u_ram_0', 4, 16], ['u_ram_1', 24, 16], ['u_human_soldier_0', 42, 16]], 6, 3, 0);
+    cellFor('catapult', 'grass', [['u_catapult_0', 4, 16], ['u_catapult_1', 24, 16], ['u_human_soldier_0', 42, 16], ['fx_rock', 44, 0]], 6, 3, 0);
+    var kh = canvas(13 * 8, 3 * 8, 3);
+    groundRect(kh.x, fill(WW.T.FOREST, 13, 3), 0, 0);
+    RACES.forEach(function (race, i) { S.draw(kh.x, 'u_' + race + '_hunter_0', 2 + i * 17, 16, { team: 4 }); S.draw(kh.x, 'u_' + race + '_hunter_1', 10 + i * 17, 16, { team: 4 }); });
+    cell(r, 'Jäger je Volk', kh.c);
+  })();
+
+  // ---------------------------------------------------------------- Orte
+  if (want('places')) gallery('places', 'Orte in der Wildnis, Holz-Ausguck, Spielermauer', function (k) { return /^s_lair_|^s_tower_1$|^s_tower_tribe$/.test(k); }, function (k) {
+    return { scale: 4, bg: /dragon/.test(k) ? 'mountain' : (/ore|gold|bear|wolf/.test(k) ? 'hill' : (/bandit/.test(k) ? 'forest' : 'grass')) };
+  });
+
+  // ---------------------------------------------------------------- Unregelmäßiger Mauerring, alle Stile
+  if (want('ringstyles')) (function () {
+    var r = section('ringstyles', 'Organischer, treppiger Mauerring in allen Stilen (1–3 Kacheln lange Stücke, viele Ecken)', 'Wie im Spiel: Masken aus den Nachbarn, ein Tor je Seite, Türme nur an wenigen Ecken.');
+    var walls = [
+      '                ',
+      '    ###G##      ',
+      '   ##     ##    ',
+      '  ##       T#   ',
+      '  #          #  ',
+      ' T#          ## ',
+      ' G            G ',
+      ' ##          #  ',
+      '  #         ##  ',
+      '  T##     ###   ',
+      '     #G###      ',
+      '                '];
+    var terr = walls.map(function (row) { return row.replace(/./g, '.'); });
+    [['tribe', 1], ['monarchy', 2], ['democracy', 2], ['fascism', 3], ['communism', 2], ['theocracy', 3], ['republic', 2], ['anarchy', 1], ['player', 2]].forEach(function (st, n) {
+      var k = canvas(16 * 8, 12 * 8, 2);
+      var rows = terr.map(function () { var a = []; for (var i = 0; i < 16; i++) a.push(WW.T.GRASS); return a; });
+      groundRect(k.x, rows, 0, 0);
+      function wallish(x, y) { var c = walls[y] && walls[y][x]; return c === '#' || c === 'T' || c === 'G'; }
+      var items = [];
+      for (var y = 0; y < 12; y++) for (var x = 0; x < 16; x++) {
+        var c = walls[y][x]; if (!wallish(x, y)) continue;
+        var m = (wallish(x, y - 1) ? 1 : 0) | (wallish(x + 1, y) ? 2 : 0) | (wallish(x, y + 1) ? 4 : 0) | (wallish(x - 1, y) ? 8 : 0);
+        var horiz = wallish(x - 1, y) || wallish(x + 1, y), key;
+        if (st[0] === 'player') key = 's_wall_player_' + m;
+        else if (c === 'G') key = st[0] === 'anarchy' ? null : S.gateKey(st[0], st[1], horiz ? 'h' : 'v');
+        else if (c === 'T') key = S.towerKey(st[0], st[1]) || S.wallKey(st[0], st[1], m);
+        else key = S.wallKey(st[0], st[1], m);
+        if (key) items.push([key, x, y]);
+      }
+      items.forEach(function (it) { S.draw(k.x, it[0], it[1] * 8, it[2] * 8, { team: n + 1 }); });
+      cell(r, st[0] + ' ' + st[1], k.c);
+    });
+  })();
+
   // ---------------------------------------------------------------- UI-Icons
   if (want('icons')) (function () {
-    var r = section('icons', 'UI-Icons 16×16 (iconCanvas, Maßstab 3) auf Tafelfarbe --pult-hell');
-    KEYS.filter(function (k) { return /^i_/.test(k); }).forEach(function (k) {
-      var c = S.iconCanvas(k, 3);
-      var wrap = document.createElement('div'); wrap.style.background = '#2a5261'; wrap.style.padding = '4px'; wrap.appendChild(c);
-      cell(r, k.slice(2), wrap);
+    var groups = [
+      ['icons', 'Kräfte- und Bedienungs-Icons 16×16 (iconCanvas, Maßstab 3) auf der UI-Tafel #1d3b47', function (k) { return /^i_/.test(k) && !/^i_t_|^i_a_/.test(k); }],
+      ['icons_t', 'Gelände-Icons i_t_<key> zum Malen', function (k) { return /^i_t_/.test(k); }],
+      ['icons_a', 'Kreatur-Icons i_a_<kind>', function (k) { return /^i_a_/.test(k); }]
+    ];
+    var holder = document.createElement('div'); holder.id = 'kraefte'; holder.style.background = '#1d3b47'; holder.style.padding = '8px';
+    out.appendChild(holder);
+    groups.forEach(function (gp) {
+      var r = section(gp[0], gp[1]);
+      r.parentNode.style.background = '#1d3b47';
+      holder.appendChild(r.parentNode);
+      KEYS.filter(gp[2]).forEach(function (k) {
+        var c = S.iconCanvas(k, 3);
+        var wrap = document.createElement('div'); wrap.style.background = '#1d3b47'; wrap.style.padding = '4px'; wrap.appendChild(c);
+        cell(r, k.slice(2), wrap);
+      });
     });
   })();
 

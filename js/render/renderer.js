@@ -88,6 +88,7 @@
     this.S.drawGround(g, x * 8, y * 8, t[i], st.variant ? st.variant[i] : 0,
       y > 0 ? t[i - W] : -1, x < W - 1 ? t[i + 1] : -1, y < H - 1 ? t[i + W] : -1, x > 0 ? t[i - 1] : -1);
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
+    if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false);
     const m = st.mark ? st.mark[i] : 0;
     if (m) this.S.drawFast(g, m >= 100 ? 't_crater' : 't_scorched', x * 8, y * 8, 0, false);
   };
@@ -304,17 +305,43 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
       if (this.fx.length > 500) break;
       const o = Object.assign({}, f);
-      o.t = 0; o.d = FX_DUR[f.type] || 0.8;
+      o.t = 0; o.d = (typeof f.dur === 'number' && f.dur > 0) ? f.dur : (FX_DUR[f.type] || 0.8);
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
-      if (f.type === 'meteor') this.shake = 0.35;
+      if (f.type === 'flash') this.flash = Math.max(this.flash || 0, 0.9);
+      let sh = f.type === 'meteor' ? 0.35 : 0;
+      if (f.type === 'mushroom' || f.type === 'shockwave') sh = 0.8;
+      if (f.type === 'explosion') sh = Math.min(0.6, 0.12 * (f.r || 1));
+      if (sh && !this.reduced) this.shake = Math.max(this.shake || 0, sh);
+    }
+  };
+
+  // Flugzeuge über allem: Schatten am Boden, Rumpf um angle gedreht (oder Richtungs-Frame)
+  Renderer.prototype.drawAircraft = function (g, list) {
+    const S = this.S;
+    for (const a of list) {
+      if (!a || !(a.x >= 0)) continue;
+      const kind = a.kind || 'bomber', px = a.x * 8, py = a.y * 8, alt = a.alt != null ? a.alt * 8 : 22;
+      const ang = +a.angle || 0;
+      const sk = 'fx_' + kind + '_shadow';
+      const draw = (key, x, y) => {
+        const inf = S.info(key);
+        if (!inf) return false;
+        g.save(); g.translate(x, y); g.rotate(ang);
+        S.drawFast(g, key, -Math.round(inf.w / 2) - inf.ox, -Math.round(inf.h / 2) - inf.oy, 0, false);
+        g.restore(); return true;
+      };
+      if (!draw(sk, px + 4, py + 4)) { g.fillStyle = 'rgba(10,26,33,0.3)'; g.beginPath(); g.ellipse(px + 4, py + 4, 6, 3, ang, 0, Math.PI * 2); g.fill(); }
+      const frames = this.fxFrames(kind);
+      const key = S.has('fx_' + kind) ? 'fx_' + kind : (frames.length ? frames[((this.time * 10) | 0) % frames.length] : null);
+      if (!key || !draw(key, px, py - alt)) { g.fillStyle = '#58637a'; g.save(); g.translate(px, py - alt); g.rotate(ang); g.fillRect(-6, -2, 12, 4); g.fillRect(-2, -7, 4, 14); g.restore(); }
     }
   };
 
@@ -407,6 +434,54 @@
             S.drawFast(g, 'fx_sparkle_' + (ph < 0.5 ? 0 : 1), px - 4 + (rnd(f.seed, j) - 0.5) * 2 * rr, py - 6 + (rnd(f.seed, j + 3) - 0.5) * 1.4 * rr - k * 4, 0, false);
           }
           g.globalAlpha = 1;
+          break;
+        }
+        case 'shockwave': {
+          const r = (f.r || 6) * 8 * (0.15 + 0.85 * k);
+          g.strokeStyle = 'rgba(255,250,230,' + (0.9 * (1 - k)) + ')'; g.lineWidth = 3;
+          g.beginPath(); g.ellipse(px, py, r, r * 0.75, 0, 0, Math.PI * 2); g.stroke();
+          g.strokeStyle = 'rgba(242,181,65,' + (0.6 * (1 - k)) + ')'; g.lineWidth = 1;
+          g.beginPath(); g.ellipse(px, py, r * 0.9, r * 0.68, 0, 0, Math.PI * 2); g.stroke();
+          break;
+        }
+        case 'flash':
+          break;
+        case 'tracer': {
+          g.strokeStyle = 'rgba(255,230,120,' + (1 - k) + ')'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(px, py); g.lineTo(f.x2 * 8, f.y2 * 8); g.stroke();
+          break;
+        }
+        case 'laser': case 'orbitallaser': {
+          const w = 3 + Math.sin(k * Math.PI) * 3;
+          g.globalAlpha = 1 - k * 0.8;
+          g.fillStyle = '#ff7ad9'; g.fillRect(px - w, py - 400, w * 2, 400);
+          g.fillStyle = '#fff4fb'; g.fillRect(px - w / 3, py - 400, w * 2 / 3, 400);
+          g.beginPath(); g.ellipse(px, py, w * 2.2, w * 1.4, 0, 0, Math.PI * 2); g.fill();
+          g.globalAlpha = 1;
+          break;
+        }
+        case 'blackhole': {
+          const r = (f.r || 3) * 8 * Math.sin(Math.min(1, k * 1.3) * Math.PI * 0.5) * (k > 0.85 ? (1 - k) / 0.15 : 1);
+          g.fillStyle = 'rgba(20,8,32,0.92)'; g.beginPath(); g.arc(px, py, r * 0.6, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = 'rgba(189,138,240,0.8)'; g.lineWidth = 2;
+          for (let j = 0; j < 3; j++) { g.beginPath(); g.arc(px, py, r * (0.7 + j * 0.15), this.time * (3 - j) + j, this.time * (3 - j) + j + 2.2); g.stroke(); }
+          break;
+        }
+        case 'mushroom': case 'explosion': {
+          let fr = this.fxFrames(f.type === 'explosion' && (f.r || 1) >= 3 && this.fxFrames('explosion_big').length ? 'explosion_big' : f.type);
+          const sc = f.type === 'explosion' ? Math.max(1, Math.min(4, (f.r || 1) / (this.fxFrames('explosion_big').length && (f.r || 1) >= 3 ? 3 : 1.2))) : Math.max(1, (f.r || 1) / 4);
+          if (!fr.length) {   // Ersatz: Feuerball aus vorhandenen Sprites
+            const r = (f.r || 1.5) * 8 * (0.4 + k);
+            g.globalAlpha = 1 - k;
+            for (let j = 0; j < 8; j++) { const a = j / 8 * Math.PI * 2; S.drawFast(g, 'fx_fire_' + (j % 3), px - 4 + Math.cos(a) * r * 0.6, py - 4 + Math.sin(a) * r * 0.45 - k * 6, 0, false); }
+            g.globalAlpha = 1;
+            break;
+          }
+          const key = fr[Math.min(fr.length - 1, (k * fr.length) | 0)], inf = S.info(key);
+          g.save(); g.translate(px, py); g.scale(sc, sc);
+          g.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
+          S.drawFast(g, key, -Math.round((inf ? inf.w : 8) / 2) - (inf ? inf.ox : 0), -(inf ? inf.h : 8) - (inf ? inf.oy : 0) + 4, 0, false);
+          g.restore();
           break;
         }
         default: {
@@ -559,8 +634,9 @@
       }
     }
 
-    // (4) Effekte
+    // (4) Effekte, Flugzeuge
     this.drawFx(ctx, dt);
+    if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
 
     // (5) Auswahl und Pinsel
     if (opts.select) this.drawSelection(ctx, opts.select, opts);
@@ -758,7 +834,7 @@
     for (const p of this.st.plots) {
       if (!p || !(p.x >= 0) || !(p.y >= 0)) continue;
       if (p.x < vt.x0 - 1 || p.x > vt.x1 + 1 || p.y < vt.y0 - 1 || p.y > vt.y1 + 1) continue;
-      const x = Math.round(p.x * 8), y = Math.round(p.y * 8) - 22, v = Math.max(0, Math.min(1, +p.progress || 0));
+      const x = Math.round(p.x * 8) + 18, y = Math.round(p.y * 8) + 6, v = Math.max(0, Math.min(1, +p.progress || 0));
       ctx.fillStyle = '#0a1a21'; ctx.fillRect(x - 6, y - 6, 12, 12);
       ctx.fillStyle = '#2a5261'; ctx.fillRect(x - 5, y - 5, 10, 10);
       ctx.fillStyle = '#f2b541'; ctx.fillRect(x - 5, y + 5 - Math.round(10 * v), 10, Math.round(10 * v));
@@ -819,6 +895,13 @@
         if (!inside(-1, 0)) ctx.fillRect(x, y, 1, 8);
         if (!inside(1, 0)) ctx.fillRect(x + 7, y, 1, 8);
       }
+    } else if (b.kind === 'arrow') {
+      const x0 = b.x * 8, y0 = b.y * 8, x1 = b.x2 * 8, y1 = b.y2 * 8, a = Math.atan2(y1 - y0, x1 - x0);
+      ctx.strokeStyle = '#f2b541'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#f2b541'; ctx.beginPath(); ctx.moveTo(x1 + Math.cos(a) * 5, y1 + Math.sin(a) * 5);
+      ctx.lineTo(x1 + Math.cos(a + 2.4) * 6, y1 + Math.sin(a + 2.4) * 6); ctx.lineTo(x1 + Math.cos(a - 2.4) * 6, y1 + Math.sin(a - 2.4) * 6); ctx.fill();
+      corners(ctx, Math.floor(b.x) * 8 - 1, Math.floor(b.y) * 8 - 1, 10, 10);
     } else if (b.kind === 'circle') {
       const r = (b.r || 2) * 8;
       ctx.strokeStyle = '#f2b541'; ctx.lineWidth = 1;

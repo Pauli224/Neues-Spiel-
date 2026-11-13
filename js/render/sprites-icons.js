@@ -565,7 +565,6 @@
       g.set(Math.round(cx - r * 0.4), Math.round(cy - r * 0.4), 'stoneL');
     }
     icon('i_bomb', function (g) { bomb(g, 4.5, 6, 8.5); g.rect(8, 3, 2, 2, 'stoneD'); g.line(10, 3, 12, 1, 'woodL'); g.set(12, 0, 'fireY'); g.set(13, 1, 'fireO'); g.set(11, 0, 'goldL'); });
-    icon('i_bigbomb', function (g) { bomb(g, 6.4, 6.5, 7.5); g.rect(9, 0, 2, 2, 'stoneD'); g.set(11, 0, 'fireY'); g.set(12, 0, 'goldL'); g.paint(3, 6, ['.ll.', 'l..l', '.ll.']); });
     icon('i_earthquake', function (g) { landBlock(g, 5); g.line(7, 5, 5, 8, 'ink'); g.line(5, 8, 8, 10, 'ink'); g.line(8, 10, 6, 13, 'ink'); g.line(8, 5, 6, 8, 'plum'); g.line(1, 2, 3, 0, 'white'); g.line(10, 0, 12, 2, 'white'); g.line(0, 3, 1, 3, 'white'); });
     icon('i_volcano', [
       '....F..Q......',
@@ -736,17 +735,82 @@
     ['sheep', 'wolf', 'cow', 'chicken', 'rabbit', 'deer', 'bear', 'crab', 'fish', 'dragon', 'zombie', 'skeleton', 'slime', 'ghost', 'demon', 'giantchicken', 'yeti', 'sandworm', 'treant', 'golem']
       .forEach(function (k) {
         var d = L.DEFS['a_' + k + '_0']; if (!d) return;
-        var src = d.grid, sc = (src.w > 16 || src.h > 16) ? 2 : 1;
+        var src = d.grid, sc = (src.w > 21 || src.h > 21) ? 2 : 1;
         var w = Math.ceil(src.w / sc), h = Math.ceil(src.h / sc), g = new Grid(16, 16);
-        var ox = Math.floor((16 - w) / 2), oy = Math.max(0, Math.floor((16 - h) / 2));
+        var ox = Math.floor((16 - w) / 2), oy = Math.floor((16 - h) / 2);
         for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
           var c = src.get(x * sc, y * sc);
           if (sc === 2 && (!c || c === L.C.shade)) c = src.get(x * sc + 1, y * sc + 1) || src.get(x * sc + 1, y * sc) || c;
-          if (c && c !== L.C.shade && c !== L.C.shadeL) g.set(ox + x, oy + y, c);
+          if (c && c !== L.C.shade && c !== L.C.shadeL) g.set(ox + x, oy + y, c);   // außerhalb 16×16 wird abgeschnitten
         }
         if (sc === 2) g = (function (o) { var t = new Grid(16, 16); for (var i = 0; i < o.d.length; i++) t.d[i] = (o.d[i] === L.C.ink) ? 0 : o.d[i]; return t.outline(); })(g);
         def('i_a_' + k, g, { group: 'icon', anchor: 'icon' });
       });
+
+    // ================================================================== Zerstörung: Icons
+    function mushroomIcon(g, big) {
+      if (big) g.rect(0, 0, 14, 14, 'redD');
+      var pal = big ? ['white', 'goldL', 'fireY', 'fireO'] : ['goldL', 'fireY', 'fireO', 'red'];
+      var r = big ? 5.5 : 4.2, cy = big ? 4.5 : 4;
+      g.rect(6, cy + 2, 2, 12 - cy - 2, pal[2]); g.vline(7, cy + 2, 12 - cy - 2, pal[3]);
+      g.ellipse(7, 12.5, big ? 7 : 5.5, 1.5, pal[3]);
+      g.ellipse(7, cy, r + 1.5, r * 0.75, function (x, y, nx, ny) { var s2 = nx * 0.6 + ny; return s2 < -0.6 ? pal[0] : (s2 < 0.1 ? pal[1] : (s2 < 0.6 ? pal[2] : pal[3])); });
+      g.hline(Math.round(7 - r * 0.6), Math.round(cy + r * 0.55), Math.round(r * 1.2), pal[3]);
+    }
+    icon('i_clusterbomb', function (g) {
+      [[3, 3], [10, 3], [3, 10], [10, 10], [6.5, 6.5]].forEach(function (p) { bomb(g, 2.4, p[0], p[1]); });
+      g.set(4, 0, 'fireY'); g.set(11, 0, 'fireY');
+    });
+    icon('i_napalm', [
+      '..........j...',
+      '...j.....jF...',
+      '..jF..j..FQ...',
+      '..FQ.jF.jFQ...',
+      '.jFQjFQjFQQj..',
+      '.FFQFFQFFQQF..',
+      'QFjFQFjFQFjFQ.',
+      'QFjjFQjjFQjjFQ',
+      'RQFFQQFFQQFFQR',
+      'RRQQQQQQQQQQRR',
+      '.RRRRRRRRRRRR.']);
+    icon('i_rocket', function (g) {
+      g.line(1, 12, 9, 4, 'metal'); g.line(2, 12, 10, 4, 'metalL'); g.line(1, 11, 9, 3, 'metalD');
+      g.paint(9, 1, ['..r', '.rr', 'rR.']); g.set(10, 3, 'red');
+      g.paint(0, 11, ['M..', 'MM.', '.QF']); g.set(0, 13, 'fireY'); g.set(3, 12, 'metalD');
+    });
+    icon('i_bomber', function (g) {
+      g.rect(1, 6, 12, 2, 'stoneL'); g.hline(1, 7, 12, 'stone'); g.set(13, 6, 'stone'); g.set(13, 7, 'stoneD');
+      g.line(8, 6, 4, 0, 'stoneL'); g.line(9, 6, 5, 0, 'stone'); g.line(8, 7, 4, 13, 'stone'); g.line(9, 7, 5, 13, 'stoneD');
+      g.line(2, 6, 0, 4, 'stone'); g.line(2, 7, 0, 9, 'stoneD'); g.set(11, 6, 'glass');
+    });
+    icon('i_gunship', function (g) {
+      g.rect(6, 0, 3, 14, 'stone'); g.vline(6, 0, 14, 'stoneL'); g.vline(8, 0, 14, 'stoneD');
+      g.rect(0, 5, 14, 4, 'stone'); g.hline(0, 5, 14, 'stoneL'); g.hline(0, 8, 14, 'stoneD');
+      g.rect(0, 3, 2, 8, 'stone'); g.set(12, 6, 'glass'); g.set(13, 7, 'stoneD');
+      [1, 3, 10, 12].forEach(function (y) { g.set(9, y, 'stoneD'); g.set(10, y, 'snowD'); });
+      g.set(4, 9, 'ink'); g.set(4, 10, 'fireY');
+    });
+    icon('i_nuke', function (g) { mushroomIcon(g, false); });
+    icon('i_tsar', function (g) { mushroomIcon(g, true); });
+    icon('i_orbitallaser', function (g) {
+      g.rect(5, 0, 4, 3, 'metal'); g.hline(5, 0, 4, 'metalL'); g.rect(0, 1, 4, 1, 'glass'); g.rect(10, 1, 4, 1, 'glass');
+      g.rect(6, 3, 2, 9, 'glass'); g.vline(6, 3, 9, 'white');
+      g.ellipse(7, 12.5, 5, 1.5, function (x, y, nx, ny) { return nx * nx + ny * ny < 0.3 ? 'white' : 'glass'; });
+    });
+    icon('i_blackhole', function (g) {
+      for (var y = 0; y < 14; y++) for (var x = 0; x < 14; x++) {
+        var dx = x + 0.5 - 7, dy = y + 0.5 - 7, d = Math.sqrt(dx * dx + dy * dy); if (d > 6.8) continue;
+        var arm = Math.cos((Math.atan2(dy, dx) + d * 0.5) * 2);
+        g.set(x, y, d < 2.5 ? 'ink' : (arm > 0.5 ? (d > 5 ? 'white' : 'pink') : (arm > -0.2 ? 'purple' : 'plum')));
+      }
+    });
+    icon('i_cat_destruction', function (g) {
+      for (var y = 0; y < 14; y++) for (var x = 0; x < 14; x++) {
+        var dx = x + 0.5 - 7, dy = y + 0.5 - 7, d = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx);
+        var rr = 4.5 + Math.abs(Math.cos(a * 4)) * 2.3;
+        if (d <= rr) g.set(x, y, d < 2.2 ? 'white' : (d < 3.6 ? 'goldL' : (d < rr - 1 ? 'fireY' : 'fireO')));
+      }
+    });
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -530,7 +530,7 @@
     var DR = ['Tl', 'T', 'Td'];
     var DRG = [AC(null, '#9fd46a'), AC(null, '#5fa646'), AC(null, '#3a7238')], DRB = AC(null, '#f2e09a');
     [0, 1].forEach(function (f) {
-      var g = new Grid(24, 18);
+      var g = new Grid(24, 19);
       // Schwanz
       g.line(0, 9, 5, 11, DRG[2]); g.line(0, 10, 5, 12, DRG[1]); g.set(0, 8, DRG[0]); g.set(1, 8, DRG[1]);
       // Körper
@@ -541,13 +541,21 @@
       g.replace('leaf', DRG[1]); g.replace('leafD', DRG[2]);
       // Beine
       g.paint(7, 14, ['E..E', 'E..E']); g.replace('leafD', DRG[2]);
-      // Flügel (Teamfarbe als Flughaut)
+      // Flügel: gefüllte Flughaut (Teamfarbe) mit Knochenstreben
+      function tri(ax, ay, bx, by, cx, cy) {
+        for (var yy = 0; yy < g.h; yy++) for (var xx = 0; xx < g.w; xx++) {
+          var px = xx + 0.5, py = yy + 0.5;
+          var d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by), d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy), d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+          var neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+          if (!(neg && pos)) g.set(xx, yy, ((xx + yy) % 4 === 0) ? 'Td' : (py < ay - 3 ? 'Tl' : 'T'));
+        }
+      }
       if (f === 0) {
-        for (var k = 0; k < 7; k++) { g.line(9, 9, 4 + k, 1 + (k > 3 ? k - 3 : 0), k & 1 ? 'Td' : 'T'); }
-        g.line(9, 9, 3, 0, DRG[2]); g.line(9, 9, 11, 2, DRG[2]); g.set(3, 0, 'ink');
+        tri(12, 9, 2, 0, 15, 2); tri(12, 9, 6, 0, 15, 2);
+        g.line(12, 9, 2, 0, DRG[2]); g.line(12, 9, 8, 1, DRG[2]); g.line(2, 0, 15, 2, DRG[2]);
       } else {
-        for (k = 0; k < 7; k++) { g.line(9, 10, 3 + k, 15 + (k > 3 ? 0 : 1), k & 1 ? 'Td' : 'T'); }
-        g.line(9, 10, 2, 16, DRG[2]); g.line(9, 10, 11, 16, DRG[2]);
+        tri(12, 10, 2, 17, 14, 16);
+        g.line(12, 10, 2, 17, DRG[2]); g.line(12, 10, 8, 17, DRG[2]); g.line(2, 17, 14, 16, DRG[2]);
       }
       def('a_dragon_' + f, g.pad(1, 1, 1, 1).outline(), { group: 'animal', anchor: 'unit', lift: 10 });
     });
@@ -642,16 +650,20 @@
     })();
     // Baumhirte: wandelnder Baum mit Gesicht
     crit('a_treant', [
-      '...fffef...',
-      '..ffeeeeE..',
-      '.feeeeeeEE.',
-      '.eeeeeeeEE.',
-      '..EEeeeEE..',
-      '...wvwW....',
-      '.w.lwlw.w..',
-      '..wwoWw.w..',
-      '...wwwWw...',
-      '...wwwW....'], ['...W..W....', '...W..W....'], ['....WW.....', '...W...W...'], { edge: 'leafDD' });
+      '....ffeff....',
+      '..ffeeeeeeE..',
+      '.feeeefeeeEE.',
+      'feeeeeeeeeeEE',
+      'eeeefeeeeeeEE',
+      '.eeeeeeeeeEE.',
+      '..EEeeeeEEE..',
+      '.e..wvwwW..e.',
+      '.ee.wlwlW.ee.',
+      '..wwwwwwWww..',
+      '....wwoWw....',
+      '....wwwwW....',
+      '....vwwwW....',
+      '....wwwWW....'], ['...WW..WW....', '...W....W....'], ['....WWWW.....', '...W....W....'], { edge: 'leafDD' });
     // Kristallgolem
     crit('a_golem', [
       '...bbb...',
@@ -754,6 +766,168 @@
       c.line(3, 8, 6, 13, 'skin'); c.line(4, 8, 7, 13, 'skinD');
       def('fx_hand_closed', c.pad(1, 1, 1, 1).outline(), { group: 'fx', anchor: 'unit', lift: 0 });
     })();
+
+    // ================================================================== Zerstörung
+    // Flugzeuge von oben, Nase nach rechts (Osten). Der Renderer dreht sie per ctx.rotate um die Mitte
+    // (Pixel bleiben scharf, am saubersten in 45°-Schritten). Schatten = gleiche Silhouette, eigener Schlüssel.
+    function fillTri(g, ax, ay, bx, by, cx, cy, colFn) {
+      for (var yy = 0; yy < g.h; yy++) for (var xx = 0; xx < g.w; xx++) {
+        var px = xx + 0.5, py = yy + 0.5;
+        var d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by), d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy), d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+        if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) g.set(xx, yy, colFn(xx, yy));
+      }
+    }
+    function shadowOf(g) {
+      var s = new Grid(g.w, g.h);
+      for (var i = 0; i < g.d.length; i++) if (g.d[i]) s.d[i] = L.C.shade;
+      return s;
+    }
+    var PL = [AC(null, '#b9c0b4'), AC(null, '#8e978a'), AC(null, '#646c62')];   // Kanonenflugzeug: olivgrau
+    var BM = [AC(null, '#e4e6ea'), AC(null, '#b4b8c2'), AC(null, '#82889a')];   // Bomber: hellgrau
+    (function () {
+      var g = new Grid(28, 22), cy = 11;
+      // Tragflächen quer (Spannweite 22), Licht von oben links
+      g.rect(11, 0, 5, 22, PL[1]); g.vline(11, 0, 22, PL[0]); g.vline(15, 0, 22, PL[2]);
+      g.rect(11, 0, 5, 2, 'T'); g.rect(11, 20, 5, 2, 'T'); g.hline(11, 1, 5, 'Td'); g.hline(11, 21, 5, 'Td');   // Flügelspitzen in Teamfarbe
+      // Rumpf, bullig
+      g.rect(1, cy - 2, 25, 5, PL[1]); g.hline(1, cy - 2, 25, PL[0]); g.hline(1, cy + 2, 25, PL[2]);
+      g.rect(24, cy - 1, 3, 3, PL[1]); g.set(27, cy, PL[2]); g.set(26, cy - 2, PL[1]); g.set(26, cy + 2, PL[2]);
+      g.rect(21, cy - 1, 3, 2, 'glass'); g.set(21, cy - 1, 'white');                     // Cockpit
+      // Leitwerk
+      g.rect(0, cy - 6, 4, 13, PL[1]); g.vline(0, cy - 6, 13, PL[0]); g.vline(3, cy - 6, 13, PL[2]);
+      // vier Motoren mit Propellerscheiben
+      [3, 7, 14, 18].forEach(function (y) { g.rect(15, y, 3, 2, PL[2]); g.vline(18, y - 1, 4, 'stoneL'); g.set(18, y - 2, 'snowD'); g.set(18, y + 2, 'snowD'); });
+      // Seitenkanonen nach Süden
+      g.set(8, cy + 3, 'ink'); g.set(8, cy + 4, 'ink'); g.set(6, cy + 3, 'ink'); g.set(17, cy + 3, 'ink');
+      var o = g.pad(1, 1, 1, 1).outline();
+      def('fx_gunship', o, { group: 'fx', anchor: 'center' });
+      def('fx_gunship_shadow', shadowOf(o), { group: 'fx', anchor: 'center' });
+    })();
+    (function () {
+      var g = new Grid(26, 20), cy = 10;
+      fillTri(g, 15, cy - 1, 8, 0, 11, 0, function () { return BM[1]; }); fillTri(g, 15, cy - 1, 8, 0, 15, cy, function () { return BM[1]; });
+      fillTri(g, 15, cy + 1, 8, 19, 11, 19, function () { return BM[2]; }); fillTri(g, 15, cy + 1, 8, 19, 15, cy, function () { return BM[2]; });
+      g.line(15, cy - 1, 8, 0, BM[0]);
+      g.rect(1, cy - 1, 23, 3, BM[1]); g.hline(1, cy - 1, 23, BM[0]); g.hline(1, cy + 1, 23, BM[2]);
+      g.set(24, cy, BM[1]); g.set(25, cy, BM[2]); g.rect(20, cy - 1, 2, 2, 'glass');
+      fillTri(g, 4, cy, 0, cy - 5, 2, cy - 5, function () { return BM[1]; }); fillTri(g, 4, cy, 0, cy + 5, 2, cy + 5, function () { return BM[2]; });
+      [4, 15].forEach(function (y) { g.rect(10, y, 4, 2, BM[2]); g.set(10, y, 'ink'); });   // Triebwerke
+      g.set(9, 2, 'T'); g.set(9, 17, 'T'); g.set(1, cy, 'T');
+      var o = g.pad(1, 1, 1, 1).outline();
+      def('fx_bomber', o, { group: 'fx', anchor: 'center' });
+      def('fx_bomber_shadow', shadowOf(o), { group: 'fx', anchor: 'center' });
+    })();
+    def('fx_rocket', fx(['.W....', 'WmmmnrR', 'WmmmmrR', '.W....'], { outline: 'ink' }), { group: 'fx', anchor: 'center' });
+    def('fx_trail_0', fx(['.gq.', 'qqqg', '.qg.']), { group: 'fx', anchor: 'center' });
+    def('fx_trail_1', fx(['..q..', '.q.g.', 'g...q', '.g.q.']), { group: 'fx', anchor: 'center' });
+    def('fx_bombdrop', fx(['.M.M.', '..M..', '.oOo.', '.OdO.', '.OdO.', '..O..'], { outline: 'ink' }), { group: 'fx', anchor: 'center' });
+    def('fx_tracer', fx(['jFFFFFQ', '.QQQQ..']), { group: 'fx', anchor: 'center' });
+    // große Explosion (zweite Größe)
+    [[5, 0], [9, 1], [12, 2], [12, 3]].forEach(function (p, i) {
+      var r = p[0], g = new Grid(31, 31);
+      g.ellipse(15.5, 15.5, r + 0.5, r + 0.5, function (x, y, nx, ny) {
+        var d = Math.sqrt(nx * nx + ny * ny), h = L.hash(x >> 1, y >> 1, i + 950);
+        if (i === 3) return d > 0.5 && h > 0.3 ? (h > 0.8 ? 'stoneL' : (h > 0.55 ? 'stone' : 'stoneD')) : null;
+        if (i === 2 && d < 0.4) return h > 0.6 ? 'stone' : null;
+        return d < 0.3 ? 'white' : (d < 0.55 ? 'goldL' : (d < 0.78 ? 'fireY' : (h > 0.5 ? 'fireO' : 'red')));
+      });
+      def('fx_explosion_l_' + i, g, { group: 'fx', anchor: 'center' });
+    });
+    // Blitz und Druckwelle (werden skaliert)
+    var FW1 = AC(null, '#ffffff', 230), FW2 = AC(null, '#fff6d8', 150), FW3 = AC(null, '#fff0c0', 70);
+    (function () {
+      var g = new Grid(16, 16);
+      g.ellipse(8, 8, 8, 8, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d < 0.25 ? FW1 : (d < 0.6 ? FW2 : FW3); });
+      def('fx_flash', g, { group: 'fx', anchor: 'center' });
+      var r = new Grid(32, 32), RW = AC(null, '#ffffff', 200), RB = AC(null, '#bfe6ff', 140);
+      r.ellipse(16, 16, 16, 16, function (x, y, nx, ny) { var d = Math.sqrt(nx * nx + ny * ny); return d > 0.9 ? RW : (d > 0.8 ? RB : null); });
+      def('fx_shockwave', r, { group: 'fx', anchor: 'center' });
+    })();
+    // Pilzwolke: 6 Phasen, 40×48, unten mittig an der Einschlagkachel verankert
+    var MC = {
+      hot: ['white', 'goldL', 'fireY', 'fireO'], warm: ['fireY', 'fireO', 'red', 'redD'],
+      cool: [AC(null, '#f2c08a'), AC(null, '#c98a6a'), AC(null, '#8e6a62'), AC(null, '#5e4a52')],
+      grey: ['stoneL', 'stone', 'stoneD', AC(null, '#5a5660')], pale: [AC(null, '#e4e0e4', 200), AC(null, '#c8c4cc', 170), AC(null, '#a8a4ae', 140), AC(null, '#8c8894', 110)]
+    };
+    function puff(g, cx, cy, r, pal, seed) {
+      g.ellipse(cx, cy, r, r * 0.9, function (x, y, nx, ny) {
+        var s2 = nx * 0.7 + ny + (L.hash(x, y, seed) - 0.5) * 0.3;
+        return s2 < -0.7 ? pal[0] : (s2 < 0 ? pal[1] : (s2 < 0.6 ? pal[2] : pal[3]));
+      });
+    }
+    var STAGES = [
+      { cap: [20, 38, 7], stem: 0, pal: 'hot', ring: 0 },
+      { cap: [20, 26, 8], stem: 1, pal: 'hot', ring: 1 },
+      { cap: [20, 14, 11], stem: 1, pal: 'warm', ring: 1 },
+      { cap: [20, 11, 13], stem: 1, pal: 'cool', ring: 1 },
+      { cap: [20, 10, 14], stem: 1, pal: 'grey', ring: 1, frayed: 0.15 },
+      { cap: [20, 9, 15], stem: 1, pal: 'pale', ring: 0, frayed: 0.45 }
+    ];
+    STAGES.forEach(function (st, i) {
+      var g = new Grid(40, 48), pal = MC[st.pal];
+      var cx = st.cap[0], cy = st.cap[1], r = st.cap[2];
+      if (st.ring) { g.ellipse(20, 44, 18, 3.5, function (x, y, nx, ny) { return ny < 0 ? pal[1] : pal[2]; }); }
+      if (st.stem) for (var y = cy + r - 2; y < 45; y++) { var w2 = 2.5 + (y > 40 ? (y - 40) * 1.2 : 0); for (var x = Math.floor(20 - w2); x <= Math.ceil(20 + w2); x++) g.set(x, y, x < 19 ? pal[1] : (x < 21 ? pal[0] : pal[2])); }
+      // Hut aus mehreren Wolkenbällen
+      puff(g, cx - r * 0.6, cy + r * 0.25, r * 0.6, pal, i * 7 + 1);
+      puff(g, cx + r * 0.6, cy + r * 0.25, r * 0.6, pal, i * 7 + 2);
+      puff(g, cx, cy, r * 0.75, pal, i * 7 + 3);
+      puff(g, cx - r * 0.25, cy - r * 0.35, r * 0.45, pal, i * 7 + 4);
+      if (i >= 2 && i <= 3) g.hline(Math.round(cx - r * 0.5), Math.round(cy + r * 0.55), Math.round(r), pal[3]);   // Kragen
+      if (st.frayed) for (var k = 0; k < g.d.length; k++) if (g.d[k] && L.hash(k % 40, Math.floor(k / 40), i + 40) < st.frayed) g.d[k] = 0;
+      def('fx_mushroom_' + i, i < 4 ? g.pad(1, 1, 1, 0).outline(i < 2 ? 'fireO' : 'redD') : g, { group: 'fx', anchor: 'unit', lift: 0 });
+    });
+    // Fallout: schwebende Partikel (kachelbar) und Bodenschimmer
+    var FA = AC(null, '#8a9480', 200), FB = AC(null, '#b8c4a0', 170);
+    (function () {
+      var g = new Grid(8, 8); [[1, 1, FA], [5, 2, FB], [3, 5, FA], [7, 6, FB], [0, 7, FB]].forEach(function (p) { g.set(p[0], p[1], p[2]); });
+      def('fx_fallout', g, { group: 'fx', anchor: 'tile' });
+      var t = new Grid(8, 8), TF = AC(null, '#a8b890', 70), TF2 = AC(null, '#c8dca0', 110);
+      for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) t.set(x, y, L.hash(x, y, 990) < 0.12 ? TF2 : TF);
+      def('t_fallout', t, { group: 'ground' });
+    })();
+    // Orbitallaser: senkrechter Strahl (8 px hohe Kachel, beliebig oft untereinander) und Einschlag
+    (function () {
+      var LA = AC(null, '#7fe8ff', 130), LB = AC(null, '#c8f8ff', 220);
+      var g = new Grid(7, 8);
+      for (var y = 0; y < 8; y++) { g.set(0, y, LA); g.set(6, y, LA); g.set(1, y, LB); g.set(5, y, LB); g.vline(2, y, 1, 'white'); g.set(3, y, 'white'); g.set(4, y, 'white'); }
+      def('fx_laser', g, { group: 'fx', anchor: 'tile' });
+      [0, 1].forEach(function (f) {
+        var h = new Grid(18, 10);
+        h.ellipse(9, 7, 8 - f, 3, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d < 0.3 ? 'white' : (d < 0.7 ? LB : LA); });
+        [[2, 2], [15, 3], [5, 0], [12, 1]].forEach(function (p, k) { if ((k + f) & 1) h.set(p[0], p[1], 'white'); });
+        def('fx_laser_hit_' + f, h, { group: 'fx', anchor: 'unit', lift: 0 });
+      });
+    })();
+    // Schwarzes Loch: dunkler Wirbel mit hellem Rand, 4 Drehphasen
+    [0, 1, 2, 3].forEach(function (f) {
+      var g = new Grid(24, 24), BH = AC(null, '#1a1028'), BV = AC(null, '#5a2a8a'), BL = AC(null, '#c89cff');
+      for (var y = 0; y < 24; y++) for (var x = 0; x < 24; x++) {
+        var dx = x + 0.5 - 12, dy = y + 0.5 - 12, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 11.5) continue;
+        var ang = Math.atan2(dy, dx) + d * 0.35 + f * Math.PI / 2, arm = Math.cos(ang * 2);
+        var c = d < 4 ? BH : (arm > 0.55 ? (d > 8.5 ? 'white' : BL) : (arm > 0 ? BV : (d > 9 ? null : BH)));
+        if (d > 10.5 && arm < 0.3) c = null;
+        if (c) g.set(x, y, c);
+      }
+      def('fx_blackhole_' + f, g, { group: 'fx', anchor: 'center' });
+    });
+    // Krater in zwei weiteren Größen (Überlagerung mit durchsichtigem Rand)
+    function crater(n) {
+      var S2 = n * 8, g = new Grid(S2, S2), c = S2 / 2;
+      var SO = [AC(null, '#b07c4c'), AC(null, '#8a5a34'), AC(null, '#5e3c24'), AC(null, '#2e2026')];
+      g.ellipse(c, c, c, c * 0.92, function (x, y, nx, ny) {
+        var d = Math.sqrt(nx * nx + ny * ny), h = L.hash(x, y, n * 31);
+        if (d > 0.9 && h < 0.4) return null;
+        if (d > 0.78) return (nx + ny < 0) ? SO[1] : SO[0];                     // aufgeworfener Rand
+        if (d < 0.35) return n >= 5 ? SO[3] : SO[2];                           // dunkles Zentrum
+        return (nx + ny < -0.2) ? SO[2] : SO[1];                               // Innenhang, Schatten oben links
+      });
+      for (var k = 0; k < n * 3; k++) { var a = L.hash(k, n, 7) * 6.28, rr = c * (0.95 + L.hash(k, n, 8) * 0.25); g.set(Math.round(c + Math.cos(a) * rr), Math.round(c + Math.sin(a) * rr * 0.92), SO[1]); }
+      return g;
+    }
+    def('t_crater_m', crater(3), { group: 'ground', fw: 3, fh: 3 });
+    def('t_crater_l', crater(5), { group: 'ground', fw: 5, fh: 5 });
   });
 
   WW.SPRITE_RACES = RACES;

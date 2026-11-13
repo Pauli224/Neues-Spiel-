@@ -55,7 +55,7 @@
 
   // Suchradius für Bauplätze = Reichweite der Landnahme (Fluren, siehe growth.js)
   function territoryRadius(city, sim) {
-    if (sim && WW.Growth) return Math.max(9, WW.Growth.reach(sim, city) + 2);
+    if (sim && WW.Growth) return Math.max(9, Math.round(WW.Growth.reach(sim, city) + 2));
     return WW.CONFIG.TERRITORY_BASE + city.tier * 2;
   }
 

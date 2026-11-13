@@ -71,7 +71,7 @@
     if (kind === 'kingdom') {
       const st = this.game.sim.query.kingdomStats(o.id) || {};
       const rel = Object.keys(o.relations).map(k => k + ':' + o.relations[k].status + ':' + Math.round(o.relations[k].opinion / 5)).join(',');
-      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, JSON.stringify(o.ruler || o.leaderStats || null), plotSig(this.game.sim)].join('|');
+      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'city') {
       const w = o.wall || {};
@@ -110,37 +110,52 @@
   function opinionWord(v) { return v >= 50 ? 'herzlich' : v >= 20 ? 'freundlich' : v > -20 ? 'neutral' : v > -50 ? 'frostig' : 'feindselig'; }
   const STATUS = { war: 'Krieg', peace: 'Frieden', alliance: 'Bündnis' };
 
-  // Werte einer Person (Statthalter, Herrscher) generisch anzeigen; nur Zahlen, bekannte Namen deutsch
-  const STAT_NAMES = { skill: 'Geschick', ability: 'Können', loyalty: 'Treue', ambition: 'Ehrgeiz', greed: 'Gier', charisma: 'Ausstrahlung',
-    martial: 'Kriegskunst', stewardship: 'Verwaltung', intrigue: 'Ränke', diplomacy: 'Diplomatie', competence: 'Tüchtigkeit', honor: 'Ehre',
-    courage: 'Mut', wisdom: 'Weisheit', cruelty: 'Härte', popularity: 'Beliebtheit', age: 'Alter' };
-  function personBlock(title, p) {
+  // Werte einer Person (Statthalter, Herrscher): Zahlen 1–5 als Punkte, Eigenart als Text
+  const STAT_NAMES = { war: 'Kriegskunst', diplo: 'Diplomatie', admin: 'Verwaltung', skill: 'Geschick', loyalty: 'Treue', ambition: 'Ehrgeiz', charisma: 'Ausstrahlung' };
+  const SKIP = { id: 1, since: 1, female: 1 };
+  function pips(v) {
+    const { h } = D();
+    const n = Math.max(0, Math.min(5, Math.round(v)));
+    return h('span', { style: { letterSpacing: '1px', fontFamily: 'var(--font-pixel)' }, title: n + ' von 5' }, [h('span', { style: { color: 'var(--bernstein)' } }, '■'.repeat(n)), h('span', { style: { color: 'var(--pult-hell)' } }, '■'.repeat(5 - n))]);
+  }
+  function personBlock(title, p, name) {
     const { h } = D();
     if (!p || typeof p !== 'object') return null;
     const kv = h('dl.kv');
     for (const k in p) {
       const v = p[k];
-      if (typeof v !== 'number' || k === 'id' || /Id$/.test(k) || k.charAt(0) === '_') continue;
+      if (SKIP[k] || /Id$/.test(k) || k.charAt(0) === '_' || typeof v !== 'number') continue;
       kv.appendChild(h('dt', STAT_NAMES[k] || (k.charAt(0).toUpperCase() + k.slice(1))));
-      kv.appendChild(h('dd', String(Math.round(v * (v > 0 && v < 1 ? 100 : 1)) + (v > 0 && v < 1 ? ' %' : ''))));
+      kv.appendChild(h('dd', v >= 0 && v <= 5 ? pips(v) : String(Math.round(v))));
     }
-    const nm = p.name || p.title || '';
-    return h('div.sec', [h('h3', title), nm ? h('div', { style: { fontWeight: '700', marginBottom: '4px' } }, (p.title && p.name ? p.title + ' ' : '') + (p.name || '')) : null, kv.firstChild ? kv : null]);
+    const nm = name || p.name || '';
+    const quirk = typeof p.quirk === 'string' ? p.quirk : (p.quirk && p.quirk.name) || '';
+    return h('div.sec', [h('h3', title), nm ? h('div', { style: { fontWeight: '700', marginBottom: '4px' } }, nm) : null,
+      quirk ? h('div.muted', { style: { marginBottom: '4px' } }, 'Eigenart: ' + quirk) : null, kv.firstChild ? kv : null]);
   }
   function plotsFor(sim, pred) {
     const pl = sim.state.plots;
     if (!Array.isArray(pl)) return [];
     return pl.filter(p => p && pred(p));
   }
-  function plotList(list) {
+  function plotText(sim, p) {
+    const k = sim.query.kingdom(p.targetId), c = sim.query.city(p.cityId) || sim.query.city(p.targetId);
+    switch (p.type) {
+      case 'war': return 'Rüstet zum Krieg' + (k ? ' gegen ' + k.name : '');
+      case 'alliance': return 'Bündnis' + (k ? ' mit ' + k.name : '') + ' in Arbeit';
+      case 'revolt': return 'Aufstand' + (c ? ' in ' + c.name : '') + ' gärt';
+      case 'secession': return (c ? c.name : 'Eine Stadt') + ' will sich abspalten';
+      default: return p.text || p.name || 'Vorhaben';
+    }
+  }
+  function plotList(sim, list) {
     const { h } = D();
     return h('div', list.map(p => {
       const v = Math.round(100 * Math.max(0, Math.min(1, +p.progress || 0)));
-      return h('div', { style: { marginBottom: '6px' } }, [h('div.barline', [h('span', p.text || p.name || p.label || p.type || 'Vorhaben'), h('b', v + ' %')]),
-        h('div.bar.warn', [h('b', { style: { width: v + '%' } })])]);
+      return h('div', { style: { marginBottom: '6px' } }, [h('div.barline', [h('span', plotText(sim, p)), h('b', v + ' %')]),
+        h('div.bar' + (p.type === 'alliance' ? '' : '.warn'), [h('b', { style: { width: v + '%' } })])]);
     }));
   }
-
   Panels.prototype.renderKingdom = function (k) {
     const { h, icon } = D();
     const game = this.game, sim = game.sim, body = this.$('infoBody');
@@ -159,10 +174,10 @@
       k.policy && k.policy.party ? h('div.muted', { style: { marginTop: '4px' } }, 'Regierungspartei: ' + k.policy.party) : null,
       k.policy && k.policy.plan ? h('div.muted', { style: { marginTop: '4px' } }, 'Fünfjahresplan: ' + (k.policy.plan.goal || k.policy.plan.focus)) : null
     ]));
-    const rs = k.ruler || k.leaderStats || (leader && leader.stats);
-    if (rs) { const b = personBlock('Herrscher', rs); if (b) body.appendChild(b); }
-    const kp = plotsFor(sim, p => p.kingdomId === k.id || p.targetKingdomId === k.id);
-    if (kp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(kp)]));
+    const rs = k.ruler && (k.ruler.leaderId == null || k.ruler.leaderId === k.leaderId) ? k.ruler : null;
+    if (rs && !g.noLeader) { const b = personBlock('Herrscherwerte', rs, ''); if (b) body.appendChild(b); }
+    const kp = plotsFor(sim, p => p.kingdomId === k.id || ((p.type === 'war' || p.type === 'alliance') && p.targetId === k.id));
+    if (kp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(sim, kp)]));
     body.appendChild(h('div.sec', [
       h('dl.kv', [h('dt', 'Einwohner'), h('dd', String(ks.pop)), h('dt', 'Städte'), h('dd', String(ks.cities)), h('dt', 'Soldaten'), h('dd', String(ks.soldiers)),
         h('dt', 'Stimmung'), h('dd', moodWord(ks.happiness))]),
@@ -236,12 +251,12 @@
     body.appendChild(h('div.sec', [h('h3', stock === c.stock ? 'Lager' : 'Gemeinsames Lager'),
       h('div.stock', [['food', 'Essen'], ['wood', 'Holz'], ['stone', 'Stein'], ['gold', 'Gold']].map(r => h('div', { title: r[1] }, [icon('i_' + r[0], 22), h('span', String(Math.floor(stock[r[0]] || 0)))])))]));
     if (typeof c.loyalty === 'number') {
-      const lv = c.loyalty <= 1 ? c.loyalty * 100 : c.loyalty;
+      const lv = Math.max(0, Math.min(100, c.loyalty));
       body.appendChild(h('div.sec', [h('h3', 'Loyalität'), h('div.barline', [h('span', lv >= 60 ? 'treu' : lv >= 35 ? 'wankelmütig' : 'abtrünnig'), h('b', Math.round(lv) + ' %')]), happyBar(lv)]));
     }
-    if (c.governor) { const b = personBlock('Statthalter', c.governor); if (b) body.appendChild(b); }
-    const cp = plotsFor(sim, p => p.cityId === c.id || p.targetCityId === c.id);
-    if (cp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(cp)]));
+    if (c.governor && !(k && k.capitalId === c.id)) { const b = personBlock(c.governor.female ? 'Statthalterin' : 'Statthalter', c.governor); if (b) body.appendChild(b); }
+    const cp = plotsFor(sim, p => (p.type === 'revolt' || p.type === 'secession') && (p.cityId === c.id || p.targetId === c.id));
+    if (cp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(sim, cp)]));
     body.appendChild(h('div.sec', [h('h3', 'Stimmung'), h('div.barline', [h('span', moodWord(c.happiness)), h('b', Math.round(c.happiness) + ' %')]), happyBar(c.happiness)]));
     // Mauer
     const w = c.wall || {};

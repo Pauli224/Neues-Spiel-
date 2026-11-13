@@ -81,7 +81,7 @@
     let prevSep = true;
     for (const t of WW.UI.Tools.inCat(this.cat)) {
       if (t.requires && !(this.game.sim && this.game.sim.actions && this.game.sim.actions[t.requires])) continue;
-      if (t.kind === 'sep') { if (!prevSep) row.appendChild(h('span.tool-sep')); prevSep = true; continue; }
+      if (t.kind === 'sep') { if (t.label) row.appendChild(h('span.tool-group', t.label)); else if (!prevSep) row.appendChild(h('span.tool-sep')); prevSep = true; continue; }
       prevSep = false;
       const b = h('button.tool', { type: 'button', title: t.name, 'aria-pressed': this.game.toolId === t.id ? 'true' : 'false',
         on: { click: () => { if (t.kind === 'action') t.run(this.game); else this.game.setTool(t.id); } } },
@@ -161,6 +161,19 @@
     SPEEDS.forEach((s, i) => this.speedBtns[i].setAttribute('aria-pressed', s.v === v ? 'true' : 'false'));
   };
 
+  // leere Welt: dezenter Hinweis, antippen wählt das Siedler-Werkzeug
+  Hud.prototype.updateEmpty = function () {
+    const sim = this.game.sim, el = this.$('emptyHint');
+    const empty = sim && sim.state.cities.length === 0 && this.game.tool.id !== 'settlers' && !this.game.ui.modalOpen();
+    if (empty && !el.firstChild) {
+      const { h, icon } = D();
+      el.appendChild(icon('i_settlers', 36));
+      el.appendChild(h('span', [h('b', 'Noch wohnt hier niemand.'), 'Unter „Leben" Siedler aussetzen – hier tippen.']));
+      el.addEventListener('click', () => { this.pickCat('life', true); this.game.setTool('settlers'); });
+    }
+    if (el.hidden === empty) el.hidden = !empty;
+  };
+
   Hud.prototype.updateStats = function () {
     const sim = this.game.sim;
     if (!sim) return;
@@ -170,6 +183,7 @@
     set('stPop', D().fmt(ws.pop));
     set('stKing', ws.kingdoms);
     set('tbWorld', sim.state.worldName || '');
+    this.updateEmpty();
   };
 
   // Meldung (Chronik-Eintrag oder Hinweis); ev mit x/y → antippen springt hin
