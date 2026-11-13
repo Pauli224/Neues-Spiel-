@@ -124,10 +124,10 @@
   // ---------------------------------------------------------------------------
   // Explosionen, Blitz, Naturgewalten
   // ---------------------------------------------------------------------------
-  def('explosion', { prio: 7, cls: 'loud', gap: 0.06, vol: 0.9,
+  def('explosion', { prio: 7, cls: 'loud', gap: 0.06, vol: 1.6,
     fn(R, out, t, p) { const s = p.size != null ? p.size : sizeFromR(p.r); return boomCore(R, out, t, s); } });
 
-  def('nuke', { prio: 10, cls: 'huge', gap: 1.5, vol: 1,
+  def('nuke', { prio: 10, cls: 'huge', gap: 1.5, vol: 1.15,
     fn(R, out, t, p) {
       const s = p.big ? 1 : 0.85, dur = boomDur(s);
       boomCore(R, out, t, s);
@@ -145,7 +145,7 @@
       return dur + 0.3;
     } });
 
-  def('thunder', { prio: 8, cls: 'loud', gap: 0.25, vol: 0.95,
+  def('thunder', { prio: 8, cls: 'loud', gap: 0.25, vol: 1.27,
     fn(R, out, t, p) {
       // Knall
       for (const dt of [0, 0.025 + R.rr(0, 0.02), 0.07]) {
@@ -166,7 +166,7 @@
       return t2 - t + len + 0.1;
     } });
 
-  def('spark', { prio: 4, cls: 'mid', gap: 0.1, vol: 0.5,
+  def('spark', { prio: 4, cls: 'mid', gap: 0.1, vol: 2.0,
     fn(R, out, t) {
       for (let i = 0; i < 3; i++) R.tick(out, t + i * R.rr(0.02, 0.05), R.rr(3000, 6000), 0.8, 0.35, 0.03);
       const o = R.osc('sawtooth', 110, t, t + 0.3), bp = R.f('bandpass', 1800, 2), g = R.g(0);
@@ -174,7 +174,7 @@
       return 0.35;
     } });
 
-  def('meteor', { prio: 8, cls: 'loud', gap: 0.3, vol: 0.95,
+  def('meteor', { prio: 8, cls: 'loud', gap: 0.3, vol: 1.57,
     fn(R, out, t) {
       const L = 0.55;
       const o = R.osc('sine', 2400, t, t + L + 0.05), g = R.g(0); R.c(o, g, out);
@@ -183,14 +183,14 @@
       return L + boomCore(R, out, t + L, 0.52);
     } });
 
-  def('bombfall', { prio: 5, cls: 'mid', gap: 0.15, vol: 0.5,
+  def('bombfall', { prio: 5, cls: 'mid', gap: 0.15, vol: 1.75,
     fn(R, out, t) {
       const L = 0.9, o = R.osc('sine', 1700, t, t + L + 0.05), g = R.g(0); R.c(o, g, out);
       R.xpts(o.frequency, [[t, 1700], [t + L, 520]]); R.pts(g.gain, [[t, 0], [t + 0.2, 0.12], [t + L * 0.9, 0.2], [t + L, 0]]);
       return L + 0.05;
     } });
 
-  def('quake', { prio: 8, cls: 'loud', gap: 1, vol: 1,
+  def('quake', { prio: 8, cls: 'loud', gap: 1, vol: 1.15,
     fn(R, out, t) {
       const L = 4.2;
       const n = R.noise('brown', t, t + L + 0.2), lp = R.f('lowpass', 120, 1.2), g = R.g(0), am = R.g(1);
@@ -203,7 +203,7 @@
       return L + 0.1;
     } });
 
-  def('eruption', { prio: 8, cls: 'loud', gap: 1.2, vol: 0.95,
+  def('eruption', { prio: 8, cls: 'loud', gap: 1.2, vol: 1.65,
     fn(R, out, t) {
       boomCore(R, out, t, 0.33);
       const L = 4, n = R.noise('brown', t, t + L), lp = R.f('lowpass', 150, 1), g = R.g(0); R.c(n, lp, g, out);
@@ -212,19 +212,19 @@
       return L + 0.1;
     } });
 
-  def('lava', { prio: 2, cls: 'detail', gap: 0.2, vol: 0.5,
+  def('lava', { prio: 2, cls: 'detail', gap: 0.2, vol: 1.25,
     fn(R, out, t) {
       for (let i = 0; i < 2; i++) { const at = t + i * R.rr(0.1, 0.3); const o = R.osc('sine', 120, at, at + 0.2), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[at, R.rr(80, 140)], [at + 0.12, R.rr(260, 420)]]); R.env(g.gain, at, 0.01, 0.25, 0.1); }
       return 0.7;
     } });
 
-  def('steam', { prio: 2, cls: 'detail', gap: 0.3, vol: 0.4,
+  def('steam', { prio: 2, cls: 'detail', gap: 0.3, vol: 0.75,
     fn(R, out, t) {
       const n = R.noise('white', t, t + 1.2), hp = R.f('highpass', 2600, 0.7), g = R.g(0); R.c(n, hp, g, out);
       R.pts(g.gain, [[t, 0], [t + 0.06, 0.25], [t + 1.1, 0]]); return 1.15;
     } });
 
-  def('flood', { prio: 6, cls: 'loud', gap: 1.5, vol: 0.8,
+  def('flood', { prio: 6, cls: 'loud', gap: 1.5, vol: 1.6,
     fn(R, out, t) {
       const L = 3, n = R.noise('pink', t, t + L, true), lp = R.f('lowpass', 300, 0.8), g = R.g(0); R.c(n, lp, g, out);
       R.xpts(lp.frequency, [[t, 300], [t + 0.9, 2600], [t + L, 600]]); R.pts(g.gain, [[t, 0], [t + 0.8, 0.8], [t + L, 0]]);
@@ -232,7 +232,7 @@
       return L + 0.05;
     } });
 
-  def('rainburst', { prio: 3, cls: 'mid', gap: 0.8, vol: 0.6,
+  def('rainburst', { prio: 3, cls: 'mid', gap: 0.8, vol: 1.3,
     fn(R, out, t) {
       const L = 3.5, n = R.noise('white', t, t + L, true), bp = R.f('bandpass', 3500, 0.5), g = R.g(0); R.c(n, bp, g, out);
       R.pts(g.gain, [[t, 0], [t + 0.6, 0.35], [t + 2.2, 0.3], [t + L, 0]]);
@@ -240,7 +240,7 @@
       return L;
     } });
 
-  def('acid', { prio: 3, cls: 'mid', gap: 1, vol: 0.6,
+  def('acid', { prio: 3, cls: 'mid', gap: 1, vol: 1.0,
     fn(R, out, t) {
       RECIPES.rainburst.fn(R, out, t, {});
       const n = R.noise('white', t, t + 2.5), hp = R.f('highpass', 5000, 1), g = R.g(0), am = R.g(1); R.c(n, hp, am, g, out);
@@ -248,7 +248,7 @@
       return 3.5;
     } });
 
-  def('laser', { prio: 8, cls: 'loud', gap: 0.4, vol: 0.8,
+  def('laser', { prio: 8, cls: 'loud', gap: 0.4, vol: 1.15,
     fn(R, out, t) {
       const L = 1.8;
       const f = R.fm(out, t, 1400, 0.5, 4, 1, 0.01, 0.22, L);
@@ -260,14 +260,14 @@
       return L + 0.1;
     } });
 
-  def('bang', { prio: 9, cls: 'loud', gap: 0.5, vol: 0.95,
+  def('bang', { prio: 9, cls: 'loud', gap: 0.5, vol: 1.75,
     fn(R, out, t) {   // Implosion: Sog, dann Knall
       const L = 0.8, n = R.noise('pink', t, t + L + 0.05), bp = R.f('bandpass', 300, 1), g = R.g(0); R.c(n, bp, g, out);
       R.xpts(bp.frequency, [[t, 200], [t + L, 3000]]); R.pts(g.gain, [[t, 0], [t + L - 0.02, 0.6], [t + L, 0]]);
       return L + boomCore(R, out, t + L, 0.38);
     } });
 
-  def('collapse', { prio: 6, cls: 'mid', gap: 0.15, vol: 0.75,
+  def('collapse', { prio: 6, cls: 'mid', gap: 0.15, vol: 1.15,
     fn(R, out, t, p) {
       const big = C.clamp((C.fin(p.count, 1) - 1) / 4, 0, 1), L = 1.2 + big * 0.8;
       const n = R.noise('brown', t, t + L + 0.1), lp = R.f('lowpass', 700, 0.8), g = R.g(0); R.c(n, lp, g, out);
@@ -278,35 +278,35 @@
       return L + 0.1;
     } });
 
-  def('hit', { prio: 2, cls: 'detail', gap: 0.08, vol: 0.45,
+  def('hit', { prio: 2, cls: 'detail', gap: 0.08, vol: 1.2,
     fn(R, out, t) { R.tick(out, t, R.rr(300, 700), 2, 0.4, 0.06, 'pink'); thud(R, out, t, 130, 70, 0.3, 0.07); return 0.15; } });
 
-  def('build', { prio: 3, cls: 'detail', gap: 0.25, vol: 0.55,
+  def('build', { prio: 3, cls: 'detail', gap: 0.25, vol: 2.2,
     fn(R, out, t) {
       for (let i = 0; i < 3; i++) hammerHit(R, out, t + i * 0.16, false, 0.4);
       const n = R.noise('pink', t + 0.5, t + 1), lp = R.f('lowpass', 600, 0.7), g = R.g(0); R.c(n, lp, g, out); R.env(g.gain, t + 0.5, 0.02, 0.3, 0.3);
       return 0.95;
     } });
 
-  def('tornadoFx', { prio: 6, cls: 'loud', gap: 1, vol: 0.6,
+  def('tornadoFx', { prio: 6, cls: 'loud', gap: 1, vol: 4.6,
     fn(R, out, t) { whoosh(R, out, t, 200, 900, 1.6, 0.6, 1, 'pink'); return 1.7; } });
 
-  def('debris', { prio: 3, cls: 'mid', gap: 0.12, vol: 0.4,
+  def('debris', { prio: 3, cls: 'mid', gap: 0.12, vol: 2.5,
     fn(R, out, t) { whoosh(R, out, t, 500, 1500, 0.35, 0.3, 1.5); for (let i = 0; i < 4; i++) R.tick(out, t + 0.2 + R.rnd() * 0.3, R.rr(500, 2000), 4, 0.12, 0.03); return 0.6; } });
 
-  def('fling', { prio: 2, cls: 'detail', gap: 0.12, vol: 0.45,
+  def('fling', { prio: 2, cls: 'detail', gap: 0.12, vol: 2.1,
     fn(R, out, t) { whoosh(R, out, t, 400, 1800, 0.3, 0.35, 2); return 0.4; } });
 
-  def('roof', { prio: 3, cls: 'detail', gap: 0.15, vol: 0.5,
+  def('roof', { prio: 3, cls: 'detail', gap: 0.15, vol: 1.5,
     fn(R, out, t) { for (let i = 0; i < 6; i++) R.tick(out, t + R.rnd() * 0.3, R.rr(200, 900), 3, 0.25, 0.05); thud(R, out, t, 110, 60, 0.3, 0.12); return 0.5; } });
 
-  def('wreck', { prio: 6, cls: 'mid', gap: 0.3, vol: 0.8,
+  def('wreck', { prio: 6, cls: 'mid', gap: 0.3, vol: 1.3,
     fn(R, out, t) { RECIPES.collapse.fn(R, out, t, { count: 3 }); for (let i = 0; i < 8; i++) R.tick(out, t + R.rnd() * 0.5, R.rr(1500, 4000), 6, 0.12, 0.02); return 2; } });
 
   // ---------------------------------------------------------------------------
   // Waffen und Belagerung
   // ---------------------------------------------------------------------------
-  def('tracer', { prio: 4, cls: 'mid', gap: 0.07, vol: 0.5,
+  def('tracer', { prio: 4, cls: 'mid', gap: 0.07, vol: 1.65,
     fn(R, out, t, p) {
       const heavy = !!p.heavy, n = C.clamp(Math.round(2 + C.fin(p.count, 1) * 1.5), 3, 12), dt = heavy ? 0.11 : 0.075;
       for (let i = 0; i < n; i++) {
@@ -317,7 +317,7 @@
       return n * dt + 0.15;
     } });
 
-  def('arrow', { prio: 3, cls: 'detail', gap: 0.05, vol: 0.5,
+  def('arrow', { prio: 3, cls: 'detail', gap: 0.05, vol: 3.0,
     fn(R, out, t, p) {
       const n = C.clamp(Math.round(C.fin(p.count, 1)), 1, 4);
       let end = 0;
@@ -330,7 +330,7 @@
       return end;
     } });
 
-  def('ballista', { prio: 5, cls: 'mid', gap: 0.15, vol: 0.6,
+  def('ballista', { prio: 5, cls: 'mid', gap: 0.15, vol: 0.88,
     fn(R, out, t) {
       const o = R.osc('sawtooth', 115, t, t + 0.5), lp = R.f('lowpass', 1500, 3), g = R.g(0); R.c(o, lp, g, out);
       R.xpts(o.frequency, [[t, 125], [t + 0.4, 100]]); R.lfo('sine', 22, 0.3, g.gain, t, t + 0.4); R.env(g.gain, t, 0.002, 0.28, 0.35);
@@ -339,7 +339,7 @@
       return 0.55;
     } });
 
-  def('catapult', { prio: 5, cls: 'mid', gap: 0.2, vol: 0.65,
+  def('catapult', { prio: 5, cls: 'mid', gap: 0.2, vol: 1.0,
     fn(R, out, t) {
       const o = R.osc('sawtooth', 55, t, t + 0.35), bp = R.f('bandpass', 500, 8), g = R.g(0); R.c(o, bp, g, out);
       R.lfo('sine', 6, 12, o.frequency, t, t + 0.35); R.ahr(g.gain, t, 0.05, 0.25, 0.15, 0.1);
@@ -348,7 +348,7 @@
       return 0.8;
     } });
 
-  def('cannon', { prio: 6, cls: 'loud', gap: 0.15, vol: 0.8,
+  def('cannon', { prio: 6, cls: 'loud', gap: 0.15, vol: 0.92,
     fn(R, out, t) {
       const n = R.noise('white', t, t + 0.3), lp = R.f('lowpass', 5000, 0.7), g = R.g(0); R.c(n, lp, g, out); R.env(g.gain, t, 0.001, 0.7, 0.08);
       thud(R, out, t, 140, 45, 0.85, 0.5);
@@ -356,7 +356,7 @@
       return 1.2;
     } });
 
-  def('ram', { prio: 5, cls: 'mid', gap: 0.25, vol: 0.8,
+  def('ram', { prio: 5, cls: 'mid', gap: 0.25, vol: 0.87,
     fn(R, out, t) {
       thud(R, out, t, 75, 40, 0.9, 0.3);
       const n = R.noise('pink', t, t + 0.4), lp = R.f('lowpass', 450, 1), g = R.g(0); R.c(n, lp, g, out); R.env(g.gain, t, 0.002, 0.6, 0.2);
@@ -365,26 +365,26 @@
       return 0.5;
     } });
 
-  def('ward', { prio: 2, cls: 'detail', gap: 0.5, vol: 0.4,
+  def('ward', { prio: 2, cls: 'detail', gap: 0.5, vol: 1.0,
     fn(R, out, t) {
       for (const f of [220, 330, 440.5]) { const o = R.osc('sine', f, t, t + 1.3), g = R.g(0); R.c(o, g, out); R.lfo('sine', 4.5, 0.03, g.gain, t, t + 1.3); R.ahr(g.gain, t, 0.3, 0.08, 0.4, 0.5); }
       return 1.3;
     } });
 
-  def('spikes', { prio: 2, cls: 'detail', gap: 0.2, vol: 0.4,
+  def('spikes', { prio: 2, cls: 'detail', gap: 0.2, vol: 1.1,
     fn(R, out, t) { R.fm(out, t, 1900, 3.5, 2, 0.1, 0.001, 0.2, 0.15); R.tick(out, t, 3000, 3, 0.3, 0.02); return 0.25; } });
 
-  def('dud', { prio: 2, cls: 'detail', gap: 0.3, vol: 0.5,
+  def('dud', { prio: 2, cls: 'detail', gap: 0.3, vol: 1.9,
     fn(R, out, t) {
       const n = R.noise('pink', t, t + 0.6), lp = R.f('lowpass', 900, 3), g = R.g(0); R.c(n, lp, g, out);
       R.xpts(lp.frequency, [[t, 1200], [t + 0.5, 200]]); R.pts(g.gain, [[t, 0], [t + 0.03, 0.35], [t + 0.5, 0]]);
       return 0.6;
     } });
 
-  def('alarm', { prio: 5, cls: 'mid', gap: 3, vol: 0.5,
+  def('alarm', { prio: 5, cls: 'mid', gap: 3, vol: 1.5,
     fn(R, out, t) { for (let i = 0; i < 4; i++) bell(R, out, t + i * 0.38, 880, 0.25, 0.9, 2.76, 2.5); return 2.1; } });
 
-  def('napalm', { prio: 7, cls: 'loud', gap: 0.5, vol: 0.85,
+  def('napalm', { prio: 7, cls: 'loud', gap: 0.5, vol: 2.2,
     fn(R, out, t) {
       const L = 2.6, n = R.noise('pink', t, t + L), bp = R.f('bandpass', 500, 0.7), g = R.g(0); R.c(n, bp, g, out);
       R.xpts(bp.frequency, [[t, 300], [t + 0.4, 1200], [t + L, 300]]); R.env(g.gain, t, 0.08, 0.8, L - 0.1);
@@ -397,48 +397,48 @@
   // Segen, Leben, Seuche, Gelände
   // ---------------------------------------------------------------------------
   const PENTA = [74, 76, 78, 81, 83, 86, 88, 90, 93];   // D-Dur pentatonisch, hoch
-  def('bless', { prio: 5, cls: 'mid', gap: 0.6, vol: 0.55,
+  def('bless', { prio: 5, cls: 'mid', gap: 0.6, vol: 1.6,
     fn(R, out, t) {
       const start = R.rnd() * 3 | 0;
       for (let i = 0; i < 6; i++) bell(R, out, t + i * 0.075, C.mtof(PENTA[start + i]), 0.12, 1.4, 2, 0.8);
       return 1.9;
     } });
-  def('heal', { prio: 4, cls: 'mid', gap: 0.6, vol: 0.55,
+  def('heal', { prio: 4, cls: 'mid', gap: 0.6, vol: 1.4,
     fn(R, out, t) {
       for (const [m, d] of [[62, 0], [66, 0.15], [69, 0.3], [74, 0.45]]) {
         const o = R.osc('sine', C.mtof(m), t + d, t + d + 2), g = R.g(0); R.c(o, g, out); R.ahr(g.gain, t + d, 0.12, 0.09, 0.5, 1.1);
       }
       return 2.1;
     } });
-  def('hearts', { prio: 3, cls: 'mid', gap: 0.8, vol: 0.5,
+  def('hearts', { prio: 3, cls: 'mid', gap: 0.8, vol: 1.75,
     fn(R, out, t) {
       for (const [m, d] of [[69, 0], [73, 0.12], [76, 0.24]]) {
         const o = R.osc('triangle', C.mtof(m), t + d, t + d + 1.5), g = R.g(0); R.c(o, g, out); R.lfo('sine', 5.5, 6, o.detune, t + d, t + d + 1.5); R.ahr(g.gain, t + d, 0.08, 0.08, 0.5, 0.7);
       }
       return 1.8;
     } });
-  def('goldrain', { prio: 4, cls: 'mid', gap: 0.8, vol: 0.5,
+  def('goldrain', { prio: 4, cls: 'mid', gap: 0.8, vol: 2.5,
     fn(R, out, t) { for (let i = 0; i < 12; i++) R.fm(out, t + R.rnd() * 1.3, R.rr(2600, 4800), 3.1, 1.2, 0.1, 0.001, 0.08, 0.25); return 1.7; } });
-  def('seeds', { prio: 2, cls: 'mid', gap: 0.6, vol: 0.45,
+  def('seeds', { prio: 2, cls: 'mid', gap: 0.6, vol: 2.5,
     fn(R, out, t) { for (let i = 0; i < 6; i++) { const at = t + R.rnd() * 0.8; const o = R.osc('sine', 300, at, at + 0.1), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[at, 300], [at + 0.05, 900]]); R.env(g.gain, at, 0.004, 0.12, 0.05); } return 1; } });
-  def('breeze', { prio: 3, cls: 'mid', gap: 1, vol: 0.5,
+  def('breeze', { prio: 3, cls: 'mid', gap: 1, vol: 3.4,
     fn(R, out, t) { whoosh(R, out, t, 400, 900, 2.4, 0.45, 0.8, 'pink'); return 2.5; } });
-  def('frost', { prio: 4, cls: 'mid', gap: 1, vol: 0.5,
+  def('frost', { prio: 4, cls: 'mid', gap: 1, vol: 3.3,
     fn(R, out, t) {
       for (let i = 0; i < 10; i++) R.fm(out, t + R.rnd() * 1.2, R.rr(3000, 6500), 1.5, 0.6, 0.05, 0.002, 0.05, 0.5);
       whoosh(R, out, t, 1500, 3000, 1.8, 0.15, 3);
       return 2;
     } });
-  def('drought', { prio: 3, cls: 'mid', gap: 1, vol: 0.5,
+  def('drought', { prio: 3, cls: 'mid', gap: 1, vol: 2.1,
     fn(R, out, t) { whoosh(R, out, t, 2500, 1200, 2, 0.25, 0.7); for (let i = 0; i < 16; i++) R.tick(out, t + R.rnd() * 1.8, R.rr(2000, 6000), 2, 0.05, 0.008); return 2.1; } });
-  def('terrain', { prio: 3, cls: 'mid', gap: 0.4, vol: 0.6,
+  def('terrain', { prio: 3, cls: 'mid', gap: 0.4, vol: 1.8,
     fn(R, out, t, p) {   // Heben/Senken: Mahlen mit Tonhöhe hoch bzw. runter
       const L = 0.9, n = R.noise('brown', t, t + L), bp = R.f('bandpass', 160, 2), g = R.g(0), am = R.g(1); R.c(n, bp, am, g, out);
       R.xpts(bp.frequency, p.up ? [[t, 110], [t + L, 260]] : [[t, 260], [t + L, 100]]); R.lfo('sine', 14, 0.5, am.gain, t, t + L);
       R.pts(g.gain, [[t, 0], [t + 0.15, 1], [t + L, 0]]);
       return L + 0.05;
     } });
-  def('plague', { prio: 5, cls: 'mid', gap: 1.2, vol: 0.6,
+  def('plague', { prio: 5, cls: 'mid', gap: 1.2, vol: 1.3,
     fn(R, out, t) {
       const L = 2.6, lp = R.f('lowpass', 420, 1), g = R.g(0); R.c(lp, g, out);
       for (const f of [73.4, 77.8, 103.8]) { const o = R.osc('sawtooth', f, t, t + L); o.connect(lp); }
@@ -446,7 +446,7 @@
       for (const at of [t + 0.6, t + 0.8, t + 1.6, t + 1.75]) R.tick(out, at, R.rr(700, 1000), 3, 0.18, 0.09, 'pink');
       return L;
     } });
-  def('chime', { prio: 3, cls: 'mid', gap: 0.5, vol: 0.45,
+  def('chime', { prio: 3, cls: 'mid', gap: 0.5, vol: 1.9,
     fn(R, out, t, p) {
       const ms = p.big ? [62, 66, 69, 74] : [69, 74];
       ms.forEach((m, i) => bell(R, out, t + i * 0.11, C.mtof(m + 12), 0.12, 1.2, 2, 1));
@@ -456,38 +456,38 @@
   // ---------------------------------------------------------------------------
   // Kleinkram
   // ---------------------------------------------------------------------------
-  def('poof', { prio: 1, cls: 'detail', gap: 0.1, vol: 0.4,
+  def('poof', { prio: 1, cls: 'detail', gap: 0.1, vol: 1.5,
     fn(R, out, t) { const n = R.noise('pink', t, t + 0.3), lp = R.f('lowpass', 900, 0.7), g = R.g(0); R.c(n, lp, g, out); R.env(g.gain, t, 0.01, 0.3, 0.18); return 0.3; } });
-  def('splash', { prio: 2, cls: 'detail', gap: 0.15, vol: 0.5,
+  def('splash', { prio: 2, cls: 'detail', gap: 0.15, vol: 1.2,
     fn(R, out, t) {
       const n = R.noise('white', t, t + 0.5), bp = R.f('bandpass', 1500, 0.8), g = R.g(0); R.c(n, bp, g, out); R.env(g.gain, t, 0.005, 0.35, 0.3);
       thud(R, out, t, 400, 150, 0.15, 0.1);
       for (let i = 0; i < 4; i++) { const at = t + 0.1 + R.rnd() * 0.3; const o = R.osc('sine', 900, at, at + 0.06), og = R.g(0); R.c(o, og, out); R.xpts(o.frequency, [[at, 900], [at + 0.04, 1600]]); R.env(og.gain, at, 0.002, 0.05, 0.04); }
       return 0.55;
     } });
-  def('fishjump', { prio: 1, cls: 'detail', gap: 0.3, vol: 0.4,
+  def('fishjump', { prio: 1, cls: 'detail', gap: 0.3, vol: 1.4,
     fn(R, out, t) { const o = R.osc('sine', 800, t, t + 0.1), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[t, 700], [t + 0.05, 1400]]); R.env(g.gain, t, 0.002, 0.12, 0.06); R.tick(out, t, 2500, 1, 0.08, 0.05); return 0.15; } });
-  def('grab', { prio: 3, cls: 'detail', gap: 0.2, vol: 0.4,
+  def('grab', { prio: 3, cls: 'detail', gap: 0.2, vol: 2.6,
     fn(R, out, t) { whoosh(R, out, t, 500, 1600, 0.2, 0.25, 2); thud(R, out, t + 0.18, 500, 900, 0.1, 0.05); return 0.3; } });
-  def('drop', { prio: 3, cls: 'detail', gap: 0.2, vol: 0.4,
+  def('drop', { prio: 3, cls: 'detail', gap: 0.2, vol: 1.2,
     fn(R, out, t) { whoosh(R, out, t, 1400, 400, 0.22, 0.25, 2); thud(R, out, t + 0.22, 140, 80, 0.3, 0.1); return 0.4; } });
-  def('scare', { prio: 3, cls: 'detail', gap: 0.4, vol: 0.4,
+  def('scare', { prio: 3, cls: 'detail', gap: 0.4, vol: 2.0,
     fn(R, out, t) { const o = R.osc('triangle', 300, t, t + 0.6), g = R.g(0); R.c(o, g, out); R.lfo('sine', 11, 40, o.frequency, t, t + 0.6); R.xpts(o.frequency, [[t, 260], [t + 0.5, 520]]); R.env(g.gain, t, 0.02, 0.15, 0.5); return 0.6; } });
-  def('split', { prio: 2, cls: 'detail', gap: 0.3, vol: 0.5,
+  def('split', { prio: 2, cls: 'detail', gap: 0.3, vol: 0.87,
     fn(R, out, t) { return RECIPES.slime.fn(R, out, t, {}); } });
-  def('sandburst', { prio: 4, cls: 'mid', gap: 0.4, vol: 0.6,
+  def('sandburst', { prio: 4, cls: 'mid', gap: 0.4, vol: 2.2,
     fn(R, out, t) {
       whoosh(R, out, t, 3000, 900, 0.7, 0.35, 0.8);
       const n = R.noise('brown', t, t + 1), lp = R.f('lowpass', 150, 1), g = R.g(0); R.c(n, lp, g, out); R.env(g.gain, t, 0.05, 0.7, 0.8);
       return 1.05;
     } });
-  def('snowball', { prio: 2, cls: 'detail', gap: 0.2, vol: 0.45,
+  def('snowball', { prio: 2, cls: 'detail', gap: 0.2, vol: 1.9,
     fn(R, out, t) {
       whoosh(R, out, t, 900, 500, 0.3, 0.2, 1.5);
       const n = R.noise('pink', t + 0.3, t + 0.6), lp = R.f('lowpass', 1400, 0.7), g = R.g(0); R.c(n, lp, g, out); R.env(g.gain, t + 0.3, 0.003, 0.4, 0.15);
       return 0.55;
     } });
-  def('firebreath', { prio: 7, cls: 'loud', gap: 0.6, vol: 0.85,
+  def('firebreath', { prio: 7, cls: 'loud', gap: 0.6, vol: 1.8,
     fn(R, out, t) {
       RECIPES.dragon.fn(R, out, t, { short: true });
       const L = 1.4, n = R.noise('pink', t + 0.2, t + 0.2 + L), bp = R.f('bandpass', 700, 0.8), g = R.g(0); R.c(n, bp, g, out);
@@ -499,7 +499,7 @@
   // ---------------------------------------------------------------------------
   // Tiere und Monster
   // ---------------------------------------------------------------------------
-  def('sheep', { prio: 2, cls: 'detail', gap: 0.8, vol: 0.5,
+  def('sheep', { prio: 2, cls: 'detail', gap: 0.8, vol: 1.5,
     fn(R, out, t) {
       const f0 = R.rr(230, 320), L = R.rr(0.55, 0.8), o = R.osc('sawtooth', f0, t, t + L + 0.1), pre = R.g(1), g = R.g(0), lp = R.f('lowpass', 400, 0.7);
       R.xpts(o.frequency, [[t, f0], [t + L, f0 * 0.9]]); R.lfo('sine', R.rr(22, 28), f0 * 0.03, o.frequency, t, t + L);
@@ -509,7 +509,7 @@
       g.connect(out); R.ahr(g.gain, t, 0.04, 0.6, L - 0.25, 0.2);
       return L + 0.1;
     } });
-  def('cow', { prio: 2, cls: 'detail', gap: 1.2, vol: 0.55,
+  def('cow', { prio: 2, cls: 'detail', gap: 1.2, vol: 1.0,
     fn(R, out, t) {
       const L = R.rr(1.1, 1.6), f0 = R.rr(95, 115), o = R.osc('sawtooth', f0, t, t + L + 0.1), lp = R.f('lowpass', 300, 4), g = R.g(0);
       R.xpts(o.frequency, [[t, f0], [t + L * 0.35, f0 * 1.18], [t + L, f0 * 0.88]]);
@@ -533,13 +533,13 @@
     }
     return at - t + 0.3;
   }
-  def('chicken', { prio: 2, cls: 'detail', gap: 0.6, vol: 0.45,
+  def('chicken', { prio: 2, cls: 'detail', gap: 0.6, vol: 2.2,
     fn(R, out, t) { return cluck(R, out, t, R.rr(420, 560), 0.4); } });
-  def('egg', { prio: 1, cls: 'detail', gap: 0.5, vol: 0.4,
+  def('egg', { prio: 1, cls: 'detail', gap: 0.5, vol: 2.1,
     fn(R, out, t) { const o = R.osc('square', 480, t, t + 0.1), g = R.g(0); formants(R, o, g, [[1100, 3, 1]]); g.connect(out); R.env(g.gain, t, 0.004, 0.35, 0.06); R.tick(out, t + 0.2, 1800, 5, 0.2, 0.02); return 0.3; } });
-  def('giantchicken', { prio: 6, cls: 'mid', gap: 1, vol: 0.7,
+  def('giantchicken', { prio: 6, cls: 'mid', gap: 1, vol: 1.27,
     fn(R, out, t) { const g = R.g(1), d = R.drive(2); R.c(g, d, out); return cluck(R, g, t, R.rr(170, 220), 0.6); } });
-  def('wolf', { prio: 3, cls: 'mid', gap: 2, vol: 0.45,
+  def('wolf', { prio: 3, cls: 'mid', gap: 2, vol: 1.2,
     fn(R, out, t) {
       const L = R.rr(2, 2.8), f = R.rr(320, 380), o = R.osc('triangle', f, t, t + L + 0.1), o2 = R.osc('sine', f * 2, t, t + L + 0.1), g = R.g(0), g2 = R.g(0.15), bp = R.f('bandpass', 900, 0.6);
       for (const x of [o, o2]) { R.xpts(x.frequency, [[t, f * (x === o2 ? 2 : 1)], [t + 0.6, f * 1.75 * (x === o2 ? 2 : 1)], [t + L * 0.75, f * 1.6 * (x === o2 ? 2 : 1)], [t + L, f * 1.2 * (x === o2 ? 2 : 1)]]); R.lfo('sine', 5.5, 10, x.detune, t + 0.5, t + L); }
@@ -555,11 +555,11 @@
     R.ahr(g.gain, t, 0.12, peak, L - 0.5, 0.35);
     return lp;
   }
-  def('bear', { prio: 3, cls: 'detail', gap: 1.5, vol: 0.6,
+  def('bear', { prio: 3, cls: 'detail', gap: 1.5, vol: 1.1,
     fn(R, out, t) { const L = R.rr(1, 1.5); growl(R, out, t, R.rr(70, 90), L, 0.5); return L + 0.1; } });
-  def('yeti', { prio: 5, cls: 'mid', gap: 1.5, vol: 0.7,
+  def('yeti', { prio: 5, cls: 'mid', gap: 1.5, vol: 1.36,
     fn(R, out, t) { const L = 1.8, lp = growl(R, out, t, 120, L, 0.55, 1100); R.xpts(lp.frequency, [[t, 500], [t + 0.5, 1500], [t + L, 600]]); return L + 0.1; } });
-  def('dragon', { prio: 7, cls: 'loud', gap: 1.5, vol: 0.9,
+  def('dragon', { prio: 7, cls: 'loud', gap: 1.5, vol: 2.0,
     fn(R, out, t, p) {
       const L = p.short ? 1.2 : R.rr(2, 2.6), f0 = R.rr(85, 100);
       const src = R.g(1), am = R.g(1), d = R.drive(3), g = R.g(0);
@@ -573,9 +573,9 @@
       R.ahr(g.gain, t, 0.15, 0.55, L - 0.6, 0.45);
       return L + 0.1;
     } });
-  def('demon', { prio: 6, cls: 'mid', gap: 1.5, vol: 0.75,
+  def('demon', { prio: 6, cls: 'mid', gap: 1.5, vol: 1.4,
     fn(R, out, t) { const L = 1.8; growl(R, out, t, 55, L, 0.55, 800); for (let i = 0; i < 8; i++) R.tick(out, t + R.rnd() * L, R.rr(1500, 4000), 1, 0.06, 0.01); return L + 0.1; } });
-  def('zombie', { prio: 3, cls: 'detail', gap: 1.2, vol: 0.55,
+  def('zombie', { prio: 3, cls: 'detail', gap: 1.2, vol: 1.47,
     fn(R, out, t) {
       const L = R.rr(1.1, 1.6), f0 = R.rr(85, 110), o = R.osc('sawtooth', f0, t, t + L + 0.1), g = R.g(0), am = R.g(1);
       R.lfo('sine', 3, 7, o.frequency, t, t + L); R.xpts(o.frequency, [[t, f0], [t + L, f0 * 0.8]]);
@@ -583,16 +583,16 @@
       R.c(am, g, out); R.ahr(g.gain, t, 0.2, 0.7, L - 0.6, 0.4);
       return L + 0.1;
     } });
-  def('skeleton', { prio: 2, cls: 'detail', gap: 1, vol: 0.5,
+  def('skeleton', { prio: 2, cls: 'detail', gap: 1, vol: 5.4,
     fn(R, out, t) { const n = 10 + (R.rnd() * 6 | 0); let at = t; for (let i = 0; i < n; i++) { R.tick(out, at, R.rr(1700, 3200), 8, 0.25, 0.02); at += R.rr(0.03, 0.055); } return at - t + 0.1; } });
-  def('slime', { prio: 2, cls: 'detail', gap: 0.8, vol: 0.5,
+  def('slime', { prio: 2, cls: 'detail', gap: 0.8, vol: 1.0,
     fn(R, out, t) {
       const n = R.noise('brown', t, t + 0.45), lp = R.f('lowpass', 200, 9), g = R.g(0); R.c(n, lp, g, out);
       R.xpts(lp.frequency, [[t, 200], [t + 0.15, 1500], [t + 0.4, 300]]); R.env(g.gain, t, 0.03, 0.7, 0.35);
       thud(R, out, t + 0.05, 180, 80, 0.2, 0.12);
       return 0.5;
     } });
-  def('ghost', { prio: 3, cls: 'detail', gap: 2, vol: 0.45,
+  def('ghost', { prio: 3, cls: 'detail', gap: 2, vol: 1.75,
     fn(R, out, t) {
       const L = 2.2;
       for (const k of [1, 1.5]) {
@@ -602,9 +602,9 @@
       }
       return L + 0.1;
     } });
-  def('sandworm', { prio: 5, cls: 'mid', gap: 2, vol: 0.7,
+  def('sandworm', { prio: 5, cls: 'mid', gap: 2, vol: 1.33,
     fn(R, out, t) { RECIPES.sandburst.fn(R, out, t, {}); growl(R, out, t + 0.2, 45, 1.4, 0.4, 300); return 1.7; } });
-  def('treant', { prio: 3, cls: 'detail', gap: 2, vol: 0.6,
+  def('treant', { prio: 3, cls: 'detail', gap: 2, vol: 1.8,
     fn(R, out, t) {
       const L = 1.6, o = R.osc('sawtooth', 45, t, t + L + 0.1), g = R.g(0);
       R.xpts(o.frequency, [[t, 35], [t + L * 0.5, 70], [t + L, 40]]); R.lfo('sine', 3, 8, o.frequency, t, t + L);
@@ -612,7 +612,7 @@
       thud(R, out, t, 60, 45, 0.3, 0.8);
       return L + 0.1;
     } });
-  def('golem', { prio: 3, cls: 'detail', gap: 2, vol: 0.6,
+  def('golem', { prio: 3, cls: 'detail', gap: 2, vol: 0.98,
     fn(R, out, t) {
       const L = 1.2, n = R.noise('brown', t, t + L), bp = R.f('bandpass', 300, 2), am = R.g(1), g = R.g(0); R.c(n, bp, am, g, out);
       R.lfo('square', 12, 0.5, am.gain, t, t + L); R.ahr(g.gain, t, 0.1, 0.9, L - 0.4, 0.3);
@@ -623,7 +623,7 @@
   // ---------------------------------------------------------------------------
   // Umgebung (Einzelklänge; von audio-ambient.js geplant)
   // ---------------------------------------------------------------------------
-  def('bird', { prio: 1, cls: 'detail', gap: 0.15, vol: 0.35,
+  def('bird', { prio: 1, cls: 'detail', gap: 0.15, vol: 1.8,
     fn(R, out, t, p) {
       const kind = p.variant != null ? p.variant : (R.rnd() * 5 | 0);
       if (kind === 0) {           // Zwitschern
@@ -659,7 +659,7 @@
       for (let i = 0; i < n; i++) { const at = t + i * R.rr(0.1, 0.18), o = R.osc('sine', 6000, at, at + 0.06), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[at, R.rr(5000, 6500)], [at + 0.035, R.rr(2200, 3000)]]); R.env(g.gain, at, 0.003, 0.16, 0.04); }
       return n * 0.18 + 0.1;
     } });
-  def('jungleBird', { prio: 1, cls: 'detail', gap: 0.3, vol: 0.35,
+  def('jungleBird', { prio: 1, cls: 'detail', gap: 0.3, vol: 5.8,
     fn(R, out, t) {
       if (R.rnd() < 0.5) {
         for (let i = 0; i < 3; i++) { const at = t + i * 0.28, o = R.osc('sine', 800, at, at + 0.25), g = R.g(0); R.c(o, g, out); R.xpts(o.frequency, [[at, R.rr(700, 900)], [at + 0.2, R.rr(1400, 1900)]]); R.ahr(g.gain, at, 0.02, 0.18, 0.08, 0.1); }
@@ -669,7 +669,7 @@
       formants(R, o, g, [[1500, 4, 1], [3000, 6, 0.4]]); g.connect(out); R.ahr(g.gain, t, 0.01, 0.2, 0.15, 0.12);
       return 0.45;
     } });
-  def('gull', { prio: 1, cls: 'detail', gap: 0.5, vol: 0.35,
+  def('gull', { prio: 1, cls: 'detail', gap: 0.5, vol: 3.5,
     fn(R, out, t) {
       const n = 2 + (R.rnd() * 2 | 0);
       for (let i = 0; i < n; i++) {
@@ -679,9 +679,9 @@
       }
       return n * 0.42 + 0.1;
     } });
-  def('woodpecker', { prio: 1, cls: 'detail', gap: 1, vol: 0.35,
+  def('woodpecker', { prio: 1, cls: 'detail', gap: 1, vol: 10,
     fn(R, out, t) { const n = 12 + (R.rnd() * 8 | 0), f = R.rr(1000, 1400); for (let i = 0; i < n; i++) R.tick(out, t + i * 0.05, f, 8, 0.25 * (1 - i / n * 0.5), 0.02); return n * 0.05 + 0.1; } });
-  def('cricket', { prio: 1, cls: 'detail', gap: 0.1, vol: 0.25,
+  def('cricket', { prio: 1, cls: 'detail', gap: 0.1, vol: 1.8,
     fn(R, out, t) {
       const f = R.rr(4200, 5200), L = R.rr(1.6, 2.6), o = R.osc('sine', f, t, t + L + 0.1), g = R.g(0); R.c(o, g, out);
       const pts = [[t, 0]], per = R.rr(0.35, 0.55), pk = R.rr(0.07, 0.12);
@@ -690,7 +690,7 @@
       R.pts(g.gain, pts);
       return L + 0.1;
     } });
-  def('frog', { prio: 1, cls: 'detail', gap: 0.2, vol: 0.35,
+  def('frog', { prio: 1, cls: 'detail', gap: 0.2, vol: 1.4,
     fn(R, out, t) {
       const n = 1 + (R.rnd() * 3 | 0), f0 = R.rr(100, 180);
       for (let i = 0; i < n; i++) {
@@ -700,7 +700,7 @@
       }
       return n * 0.45 + 0.1;
     } });
-  def('wave', { prio: 2, cls: 'mid', gap: 1.2, vol: 0.55,
+  def('wave', { prio: 2, cls: 'mid', gap: 1.2, vol: 1.6,
     fn(R, out, t, p) {
       const L = R.rr(4.5, 6.5), pk = R.rr(0.5, 0.8) * C.clamp(C.fin(p.amp, 1), 0, 1.5);
       const n = R.noise('pink', t, t + L + 0.1, true), lp = R.f('lowpass', 300, 0.7), g = R.g(0); R.c(n, lp, g, out);
@@ -710,29 +710,29 @@
       R.pts(fg.gain, [[t + L * 0.25, 0], [t + L * 0.33, pk * 0.25], [t + L, 0]]);
       return L + 0.1;
     } });
-  def('hammer', { prio: 1, cls: 'detail', gap: 0.15, vol: 0.4,
+  def('hammer', { prio: 1, cls: 'detail', gap: 0.15, vol: 2.2,
     fn(R, out, t, p) { const n = 1 + (R.rnd() * 3 | 0), metal = !!p.metal; for (let i = 0; i < n; i++) hammerHit(R, out, t + i * R.rr(0.3, 0.42), metal, 0.35); return n * 0.42 + 0.3; } });
-  def('crackle', { prio: 1, cls: 'detail', gap: 0.05, vol: 0.4,
+  def('crackle', { prio: 1, cls: 'detail', gap: 0.05, vol: 2.5,
     fn(R, out, t, p) {
       const n = 3 + Math.floor(R.rnd() * 6 * C.clamp(C.fin(p.amp, 1), 0.3, 2));
       for (let i = 0; i < n; i++) R.tick(out, t + R.rnd() * 0.7, R.rr(1200, 5000), R.rr(0.7, 2), R.rr(0.1, 0.35), R.rr(0.004, 0.02));
       if (R.rnd() < 0.4) thud(R, out, t + R.rnd() * 0.5, R.rr(150, 300), 100, 0.12, 0.04);
       return 0.8;
     } });
-  def('clang', { prio: 2, cls: 'detail', gap: 0.08, vol: 0.4,
+  def('clang', { prio: 2, cls: 'detail', gap: 0.08, vol: 1.6,
     fn(R, out, t) { R.fm(out, t, R.rr(1300, 2300), 2.76, 3, 0.1, 0.001, 0.2, 0.3); R.tick(out, t, 4000, 2, 0.25, 0.015); return 0.4; } });
-  def('shout', { prio: 1, cls: 'mid', gap: 0.4, vol: 0.35,
+  def('shout', { prio: 1, cls: 'mid', gap: 0.4, vol: 1.5,
     fn(R, out, t) {
       const L = R.rr(0.6, 1), lp = R.f('lowpass', 2000, 0.7), g = R.g(0);
       for (let i = 0; i < 4; i++) { const f = R.rr(150, 260), o = R.osc('sawtooth', f, t, t + L + 0.1); R.xpts(o.frequency, [[t, f], [t + L * 0.4, f * 1.15], [t + L, f * 0.9]]); R.lfo('sine', R.rr(4, 7), 8, o.frequency, t, t + L); formants(R, o, lp, [[750, 5, 0.25], [1250, 6, 0.15]]); }
       R.c(lp, g, out); R.ahr(g.gain, t, 0.15, 0.8, L - 0.4, 0.3);
       return L + 0.1;
     } });
-  def('drum', { prio: 2, cls: 'mid', gap: 0.5, vol: 0.5,
+  def('drum', { prio: 2, cls: 'mid', gap: 0.5, vol: 1.0,
     fn(R, out, t) { const n = 2 + (R.rnd() * 3 | 0); for (let i = 0; i < n; i++) timpani(R, out, t + i * 0.42, 0.45 - i * 0.05, 75); return n * 0.42 + 0.9; } });
-  def('boomFar', { prio: 2, cls: 'mid', gap: 0.3, vol: 0.5,
+  def('boomFar', { prio: 2, cls: 'mid', gap: 0.3, vol: 1.05,
     fn(R, out, t) { return boomCore(R, out, t, R.rr(0.15, 0.3)); } });
-  def('clank', { prio: 1, cls: 'detail', gap: 0.3, vol: 0.4,
+  def('clank', { prio: 1, cls: 'detail', gap: 0.3, vol: 1.9,
     fn(R, out, t) { R.tick(out, t, 600, 10, 0.3, 0.08); R.fm(out, t, R.rr(260, 340), 1.41, 4, 0.2, 0.002, 0.18, 0.25); return 0.4; } });
 
   // ---------------------------------------------------------------------------
@@ -790,26 +790,26 @@
   // ---------------------------------------------------------------------------
   // Bedienung
   // ---------------------------------------------------------------------------
-  def('ui_click', { prio: 9, cls: 'global', gap: 0.03, vol: 0.5,
+  def('ui_click', { prio: 9, cls: 'global', gap: 0.03, vol: 1.9,
     fn(R, out, t) { const o = R.osc('sine', 1700, t, t + 0.06), g = R.g(0); R.c(o, g, out); R.env(g.gain, t, 0.001, 0.2, 0.035); R.tick(out, t, 3500, 1, 0.08, 0.006); return 0.08; } });
-  def('ui_select', { prio: 9, cls: 'global', gap: 0.05, vol: 0.5,
+  def('ui_select', { prio: 9, cls: 'global', gap: 0.05, vol: 2.5,
     fn(R, out, t) { R.fm(out, t, 1174.7, 4, 0.8, 0.05, 0.002, 0.16, 0.18); R.fm(out, t + 0.06, 1760, 4, 0.8, 0.05, 0.002, 0.14, 0.22); return 0.32; } });
-  def('ui_tool', { prio: 9, cls: 'global', gap: 0.05, vol: 0.5,
+  def('ui_tool', { prio: 9, cls: 'global', gap: 0.05, vol: 2.0,
     fn(R, out, t) { thud(R, out, t, 950, 700, 0.2, 0.06); R.tick(out, t, 1800, 3, 0.12, 0.02); return 0.1; } });
-  def('ui_error', { prio: 9, cls: 'global', gap: 0.2, vol: 0.5,
+  def('ui_error', { prio: 9, cls: 'global', gap: 0.2, vol: 1.6,
     fn(R, out, t) {
       for (const [f, d] of [[330, 0], [311, 0.13]]) { const o = R.osc('triangle', f, t + d, t + d + 0.2), lp = R.f('lowpass', 1200, 0.7), g = R.g(0); R.c(o, lp, g, out); R.ahr(g.gain, t + d, 0.008, 0.2, 0.06, 0.06); }
       return 0.32;
     } });
-  def('ui_open', { prio: 9, cls: 'global', gap: 0.08, vol: 0.5,
+  def('ui_open', { prio: 9, cls: 'global', gap: 0.08, vol: 3.3,
     fn(R, out, t) { whoosh(R, out, t, 500, 2000, 0.16, 0.1, 1.5); R.fm(out, t + 0.1, 880, 3, 0.6, 0.05, 0.002, 0.1, 0.2); return 0.35; } });
-  def('ui_close', { prio: 9, cls: 'global', gap: 0.08, vol: 0.5,
+  def('ui_close', { prio: 9, cls: 'global', gap: 0.08, vol: 3.6,
     fn(R, out, t) { whoosh(R, out, t, 1800, 500, 0.16, 0.1, 1.5); R.fm(out, t + 0.08, 660, 3, 0.6, 0.05, 0.002, 0.08, 0.18); return 0.3; } });
 
   // ---------------------------------------------------------------------------
   // Chronik-Signale (nicht räumlich)
   // ---------------------------------------------------------------------------
-  def('st_war', { prio: 8, cls: 'global', gap: 3, vol: 0.55,
+  def('st_war', { prio: 8, cls: 'global', gap: 3, vol: 0.78,
     fn(R, out, t) {
       for (let i = 0; i < 6; i++) timpani(R, out, t + i * (0.14 - i * 0.012), 0.25 + i * 0.05, 82);
       brass(R, out, t + 0.75, 50, 0.6, 0.12); brass(R, out, t + 0.75, 57, 0.6, 0.1);
@@ -817,20 +817,20 @@
       timpani(R, out, t + 1.55, 0.5, 70);
       return 3.2;
     } });
-  def('st_peace', { prio: 7, cls: 'global', gap: 3, vol: 0.5,
+  def('st_peace', { prio: 7, cls: 'global', gap: 3, vol: 3.1,
     fn(R, out, t) {
       [74, 78, 81, 86].forEach((m, i) => bell(R, out, t + i * 0.18, C.mtof(m), 0.12, 2.2, 2, 1));
       for (const m of [50, 57, 62, 66]) { const o = R.osc('triangle', C.mtof(m), t, t + 3.2), g = R.g(0); R.c(o, g, out); R.ahr(g.gain, t, 0.5, 0.05, 1.2, 1.4); }
       return 3.3;
     } });
-  def('st_alliance', { prio: 7, cls: 'global', gap: 3, vol: 0.5,
+  def('st_alliance', { prio: 7, cls: 'global', gap: 3, vol: 2.9,
     fn(R, out, t) {
       for (const m of [55, 62, 71]) brass(R, out, t, m, 0.6, 0.07);
       for (const m of [57, 64, 73]) brass(R, out, t + 0.75, m, 0.5, 0.07);
       for (const m of [50, 62, 66, 69]) brass(R, out, t + 1.4, m, 1.0, 0.07);
       return 3;
     } });
-  def('st_crown', { prio: 7, cls: 'global', gap: 3, vol: 0.5,
+  def('st_crown', { prio: 7, cls: 'global', gap: 3, vol: 1.3,
     fn(R, out, t) {
       timpani(R, out, t, 0.4, 98);
       brass(R, out, t, 62, 0.12, 0.13); brass(R, out, t + 0.18, 62, 0.12, 0.13); brass(R, out, t + 0.36, 69, 0.28, 0.13);
@@ -839,16 +839,16 @@
       bell(R, out, t + 0.72, C.mtof(86), 0.06, 2, 2, 1);
       return 2.8;
     } });
-  def('st_revolt', { prio: 7, cls: 'global', gap: 3, vol: 0.5,
+  def('st_revolt', { prio: 7, cls: 'global', gap: 3, vol: 1.4,
     fn(R, out, t) {
       for (let i = 0; i < 22; i++) R.tick(out, t + i * 0.045, 1800, 0.8, 0.05 + i * 0.006, 0.05, 'white');
       for (const m of [50, 56, 61]) brass(R, out, t + 1.0, m, 0.35, 0.1);
       timpani(R, out, t + 1.0, 0.5, 70);
       return 2.2;
     } });
-  def('st_found', { prio: 6, cls: 'global', gap: 3, vol: 0.45,
+  def('st_found', { prio: 6, cls: 'global', gap: 3, vol: 4.4,
     fn(R, out, t) { [69, 71, 74, 81].forEach((m, i) => R.fm(out, t + i * 0.12, C.mtof(m), 4, 1, 0.05, 0.002, 0.13, 0.6)); return 1.2; } });
-  def('st_gone', { prio: 8, cls: 'global', gap: 3, vol: 0.55,
+  def('st_gone', { prio: 8, cls: 'global', gap: 3, vol: 2.6,
     fn(R, out, t) {
       bell(R, out, t, C.mtof(50), 0.22, 4, 1.4, 4); bell(R, out, t + 1.7, C.mtof(50), 0.18, 4, 1.4, 4);
       const o = R.osc('sine', C.mtof(38), t, t + 5.5), g = R.g(0); R.c(o, g, out); R.ahr(g.gain, t, 1, 0.12, 2.5, 1.8);

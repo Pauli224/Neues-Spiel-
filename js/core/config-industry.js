@@ -38,11 +38,11 @@
       DIFFUSE: 0.04,        // Anteil, der in die vier Nachbarzellen verläuft
       DECAY: 0.955,         // Abbau je Schritt (Faktor) …
       DECAY_SUB: 0.35,      // … und Abzug
-      TH_HAZE: 60, TH_TREES: 85, TH_MURK: 70, TH_SICK: 105, TH_ANIMALS: 95, TH_ACID: 170,
+      TH_HAZE: 60, TH_TREES: 75, TH_MURK: 70, TH_SICK: 105, TH_ANIMALS: 95, TH_ACID: 170,
       TH_BARREN: 45,        // ab dieser Luftverschmutzung laugt der Boden aus (state.barren steigt) …
       TH_BARREN_HEAL: 30,   // … unter dieser heilt er (BARREN_HEAL je Folgen-Durchlauf)
       BARREN_HEAL: 4, SOOT: 3, SOOT_R: 3.5,   // Ruß im Umkreis aktiver Fabriken
-      BARREN_DEADTREES: 110, BARREN_ASH: 230, BARREN_FIELD: 80,   // Stufen: tote Bäume, Aschefeld, Feld trägt weniger
+      BARREN_DEADTREES: 95, BARREN_ASH: 230, BARREN_FIELD: 80,   // Stufen: tote Bäume, Aschefeld, Feld trägt weniger
       CLOSE_YEARS: 1,       // stillgelegt -> nach so vielen Jahren Ruine
       RAIN_CLEAN: 0.35,     // Regen: übrig bleibender Anteil
       BREEZE_CLEAN: 0.12    // Frische Brise: übrig bleibender Anteil

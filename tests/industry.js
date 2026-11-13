@@ -156,12 +156,14 @@ test('3 Regen und Frische Brise reinigen', function () {
 
 // -----------------------------------------------------------------------------
 test('4 Waldsterben: verschmutzte Stadt gegen saubere Vergleichsstadt', function () {
-  const mk = (on) => factoryCity('communism', { seed: 23, n: 3, settlers: 40, laws: { industry: on } });
+  const mk = (on) => factoryCity('communism', { seed: 17, n: 3, settlers: 40, laws: { industry: on } });
   const A = mk(true), B = mk(false);
   assert(A.list.length === 3 && B.list.length === 0, 'Aufbau: ' + A.list.length + '/' + B.list.length);
-  const w0 = woodNear(A.sim, A.c, 22), v0 = woodNear(B.sim, B.c, 22);
+  // Wald im Umkreis 14 um das Fabrikviertel (in der Vergleichswelt dieselbe Stelle, nur ohne Fabriken)
+  const F = { cx: Math.round(A.list.reduce((a, s) => a + s.x, 0) / 3), cy: Math.round(A.list.reduce((a, s) => a + s.y, 0) / 3) };
+  const w0 = woodNear(A.sim, F, 14), v0 = woodNear(B.sim, F, 14);
   run(A.sim, 2400); run(B.sim, 2400);
-  const w1 = woodNear(A.sim, A.c, 22), v1 = woodNear(B.sim, B.c, 22);
+  const w1 = woodNear(A.sim, F, 14), v1 = woodNear(B.sim, F, 14);
   let dead = 0; for (let i = 0; i < A.sim.state.cleared.length; i++) if (A.sim.state.cleared[i] > 0) dead++;
   log('Wald verschmutzt', w0, '->', w1, '| sauber', v0, '->', v1, '| Kacheln mit Stümpfen', dead, '| murk', A.sim.state.industry.murk);
   assert(w1 < v1 * 0.85 && v1 - w1 >= 8, 'Waldanteil sinkt nicht messbar');

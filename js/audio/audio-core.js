@@ -91,9 +91,10 @@
         const at = Math.floor(sr * (0.007 + r * 0.011 + Math.random() * 0.006));
         if (at < n) d[at] += (Math.random() < 0.5 ? -1 : 1) * 0.5 * Math.pow(0.75, r);
       }
-      let pk = 0;
-      for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(d[i]));
-      const s = 0.7 / (pk || 1);
+      // Energie auf 1 normieren: Rauschen kommt mit gleichem Effektivwert zurück
+      let e = 0;
+      for (let i = 0; i < n; i++) e += d[i] * d[i];
+      const s = 1 / Math.sqrt(e || 1);
       for (let i = 0; i < n; i++) d[i] *= s;
     }
     c[key] = buf;
@@ -127,9 +128,9 @@
     const master = ctx.createGain(); master.gain.value = 0.8;
     const pre = ctx.createGain(); pre.gain.value = 1;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.knee.value = 8; comp.ratio.value = 6; comp.attack.value = 0.004; comp.release.value = 0.25;
+    comp.threshold.value = -10; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.3;
     const lim = ctx.createDynamicsCompressor();
-    lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.12;
+    lim.threshold.value = -2; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.15;
     const clip = ctx.createWaveShaper(); clip.curve = clipCurve(ctx); clip.oversample = '2x';
     pre.connect(master); master.connect(comp); comp.connect(lim); lim.connect(clip); clip.connect(dest);
     const conv = ctx.createConvolver(); conv.normalize = false; conv.buffer = impulse(ctx, 2.6, 2.6);

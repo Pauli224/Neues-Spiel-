@@ -228,7 +228,13 @@
       if (job.waves) for (let t = 0.2; t < secs - 6.5; t += 3.5 + Math.random() * 2) { const v = { srcs: [] }, wg = oc.createGain(); wg.gain.value = 0.55; wg.connect(dest); WW.AudioSfx.play(oc, wg, 'wave', t, { amp: 1 }, v); }
     } else {
       const rc = WW.AudioSfx.RECIPES[job.name], g = oc.createGain(); g.gain.value = job.raw ? 1 : (rc.vol != null ? rc.vol : 1); g.connect(dest);
-      job.dur = WW.AudioSfx.play(oc, g, job.name, T0, job.p || {}, { srcs: [] });
+      const v = { srcs: [] };
+      job.dur = WW.AudioSfx.play(oc, g, job.name, T0, job.p || {}, v);
+      if (rc.loop) {   // Dauerklang: nach 3,3 s ausblenden wie WW.AudioCore.stopVoice
+        g.gain.setValueAtTime(g.gain.value, 3.3); g.gain.linearRampToValueAtTime(0, 3.9);
+        for (const s of v.srcs) s.stop(4);
+        job.dur = 3.9 - T0;
+      }
     }
     const buf = await oc.startRendering();
     return analyse(buf, T0, job);
@@ -290,6 +296,10 @@
   for (const [l, r] of [['Knall r1,4', 1.4], ['Kanone r1,6', 1.6], ['Bomber r1,9', 1.9], ['Bombe r2,5', 2.5], ['Rakete r3', 3], ['Groß r4', 4]]) JOBS.push({ name: 'explosion', label: 'Explosion ' + l, p: { r }, secs: 7 });
   JOBS.push({ name: 'meteor', secs: 8 }, { name: 'nuke', label: 'Atombombe', p: {}, secs: 14 }, { name: 'nuke', label: 'Zar-Bombe', p: { big: true }, secs: 22 });
   for (const n of Object.keys(WW.AudioSfx.RECIPES)) if (!/^(explosion|nuke|meteor)$/.test(n) && !WW.AudioSfx.RECIPES[n].loop) JOBS.push({ name: n, secs: 8 });
+  for (const b of Object.keys(WW.AudioAmbient.BEDS)) JOBS.push({ bed: b, label: 'Schicht ' + b, bus: 'ambient', secs: 10, waves: b === 'sea' });
+  for (const k of ['gunship', 'bomber', 'rocket']) JOBS.push({ name: 'engine', loopKind: k, label: 'Dauer engine ' + k, p: { kind: k }, secs: 5 });
+  for (const n of ['tornado', 'blackhole', 'volcano', 'floodLoop']) JOBS.push({ name: n, label: 'Dauer ' + n, secs: 5 });
+  for (const m of ['peace', 'war', 'dark']) JOBS.push({ music: m, label: 'Musik ' + m, bus: 'music', secs: 20 });
   window.WWMeasure.JOBS = JOBS;
   $('measure').onclick = async () => {
     $('report').textContent = 'Rendere ' + JOBS.length + ' Klänge …';
