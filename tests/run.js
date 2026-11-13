@@ -727,7 +727,7 @@ test('11 Vorhaben: Krieg kündigt sich an und kann abgesagt werden', function ()
   sim.actions.setRelation(a.id, b.id, 'peace');
   const p2 = WW.Growth.planWar(sim, a, b, false);
   p2.progress = 0.5;
-  run(sim, 4 * WW.CONFIG.TPY, 40, () => { a.relations[b.id].opinion = 40; return sim.state.plots.indexOf(p2) < 0; });
+  run(sim, 4 * WW.CONFIG.TPY, 40, () => { a.relations[b.id].opinion = b.relations[a.id].opinion = 40; return sim.state.plots.indexOf(p2) < 0; });
   assert(sim.state.plots.indexOf(p2) < 0 && a.relations[b.id].status !== 'war', 'Kriegsvorhaben wurde nicht abgesagt');
   log('Abgesagt:', (sim.state.events.filter(e => e.type === 'plotWarOff').pop() || {}).text);
   const D = WW.Sim.load(sim.serialize());
@@ -837,11 +837,13 @@ test('14 Kahlschlag (exploit) gegen Naturschutz (care)', function () {
   const [a, b] = sim.state.kingdoms;
   a.govLocked = b.govLocked = true;
   sim.actions.setLaw('wars', false);
+  sim.actions.setLaw('disasters', false);   // Waldbrände würden den Vergleich verfälschen
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
   assert(WW.Growth.natureMode(sim, a) === 'exploit' && WW.Growth.natureMode(sim, b) === 'care', 'Naturmodus falsch');
   const fa0 = forestShare(sim, ca), fb0 = forestShare(sim, cb);
   run(sim, 20000, 2000, () => checkInvariants(sim, 'Wald'));
   const fa = forestShare(sim, ca), fb = forestShare(sim, cb);
+  log('Todesursachen:', JSON.stringify(sim._deaths || {}));
   let cleared = 0; for (let i = 0; i < sim.state.cleared.length; i++) if (sim.state.cleared[i] && Math.hypot(i % sim.state.W - ca.cx, Math.floor(i / sim.state.W) - ca.cy) < 30) cleared++;
   log('Waldanteil im Gebiet:', a.name, (fa0 * 100).toFixed(0) + ' % → ' + (fa * 100).toFixed(0) + ' %', '(nature ' + ca.nature + ', Stümpfe ' + cleared + ')', '|', b.name, (fb0 * 100).toFixed(0) + ' % → ' + (fb * 100).toFixed(0) + ' %', '(nature ' + cb.nature + ')');
   const ev = sim.state.events.filter(e => e.type === 'clearcut' || e.type === 'natureComplaint').map(e => e.text);

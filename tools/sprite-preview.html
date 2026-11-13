@@ -298,6 +298,40 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Mauerstufen je Regierung
+  if (want('wallstages') || Q.get('wallstages')) (function () {
+    var r = section('wallstages', 'Mauerstufen je Regierung (Stufe 1 … 6, Stamm und Anarchie bis 4): Turm, Mauer, Tor, Gerät, Ecke mit senkrechtem Stück und Wassertor');
+    var GV = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'], TEAM = [9, 5, 4, 3, 0, 2, 1, 7];
+    var DEV = { tribe: 's_walldev_spikes', monarchy: 's_walldev_ballista_1', democracy: 's_walldev_post', fascism: 's_walldev_mgnest_1', communism: 's_walldev_selfshot_1', theocracy: 's_walldev_ward_1', republic: 's_walldev_cannon_1', anarchy: 's_walldev_trap' };
+    var box = document.createElement('div'); box.id = 'wallstagecv'; box.style.display = 'flex'; box.style.flexDirection = 'column'; box.style.alignItems = 'flex-start'; box.style.gap = '4px';
+    r.appendChild(box);
+    GV.forEach(function (gv, gi) {
+      var maxL = S.wallMaxLevel(gv), TW = 7, W = maxL * TW, H = 7;
+      var k = canvas(W * 8, H * 8, 3);
+      var rows = []; for (var y = 0; y < H; y++) { rows.push([]); for (var x = 0; x < W; x++) rows[y].push(WW.T.GRASS); }
+      for (var lv = 1; lv <= maxL; lv++) { var ox = (lv - 1) * TW; rows[6][ox + 6] = WW.T.RIVER; rows[5][ox + 6] = WW.T.RIVER; }
+      groundRect(k.x, rows, 0, 0);
+      for (lv = 1; lv <= maxL; lv++) {
+        var o = (lv - 1) * TW, items = [];
+        // waagrechtes Stück y=2 von x=0..5, Ecke bei x=5, senkrecht nach unten bis y=4 (Fluss bei y=3..4 -> Wassertor)
+        var tw = S.towerKey(gv, lv);
+        items.push([tw || S.wallKey(gv, lv, 2), o + 0, 4]);
+        items.push([S.wallKey(gv, lv, 10), o + 1, 4]);
+        items.push([S.gateKey(gv, lv, 'h'), o + 2, 4]);
+        items.push([S.wallKey(gv, lv, 10), o + 3, 4]);
+        items.push([S.wallKey(gv, lv, 10), o + 4, 4]);
+        items.push([S.wallKey(gv, lv, 12), o + 5, 4]);
+        items.push([S.wallKey(gv, lv, 5), o + 5, 5]);
+        items.push([S.wallKey(gv, lv, 3), o + 5, 6]);
+        items.push([S.waterWallKey(gv, lv, 'h'), o + 6, 6]);
+        items.forEach(function (it) { if (it[0]) S.draw(k.x, it[0], it[1] * 8, it[2] * 8, { team: TEAM[gi] }); });
+        if (lv >= 2) { var dk = DEV[gv]; S.draw(k.x, dk, (o + 4) * 8, 4 * 8 + S.wallDevOffset(gv, lv, dk) + (/spikes|trap/.test(dk) ? 8 : 0), { team: TEAM[gi] }); }
+        k.x.fillStyle = '#f3ead2'; k.x.font = '5px sans-serif'; k.x.fillText(gv + ' ' + lv, o * 8 + 1, 5);
+      }
+      box.appendChild(k.c);
+    });
+  })();
+
   // ---------------------------------------------------------------- Soldaten aller Regierungen
   if (want('soldiers') || Q.get('soldiers')) (function () {
     var r = section('soldiers', 'Soldaten aller acht Regierungen: stehend, laufend, Angriff; daneben ein Bürger zum Vergleich (Maßstab 2, 3, 4)');

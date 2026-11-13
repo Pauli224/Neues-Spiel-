@@ -1986,9 +1986,11 @@
       return _matFace(m, x, row, hh, merlon);
     };
     var LVMAX = { tribe: 4, anarchy: 4 };
+    var DOUBLE = { monarchy5: 1, communism6: 1 };
     function matOf(st, lv) { if (st === 'tribe' || st === 'anarchy') return MAT[st + lv]; return MAT[st]; }
     function geom(st, lv) {   // Mauer-Geometrie: Stamm/Anarchie nutzen eigene Stärken
       if (st === 'tribe' || st === 'anarchy') return { 2: { a: 2, b: 5, h: 6 }, 3: { a: 1, b: 6, h: 7 }, 4: { a: 1, b: 6, h: 10 } }[lv];
+      if (DOUBLE[st + lv]) return { a: 0, b: 3, h: WALL[lv].h };   // Doppelmauer: Hauptmauer hinten, Vormauer vorn, Gasse dazwischen
       return WALL[lv];
     }
     // Hilfen für Aufbauten: Kronenpunkte entlang der Mittellinie, Vorderfläche
@@ -2016,7 +2018,7 @@
         function (g, c, f) { var y = g.h - 2; [1, 5].forEach(function (x) { g.line(x - 1, y - 2, x + 1, y, 'metalD'); g.line(x + 1, y - 2, x - 1, y, 'metal'); }); }],
       communism: [null, function (g, c) { c.forEach(function (p) { g.set(p[0], p[1] - 1, 'stoneL'); g.set(p[0], p[1] - 2, 'white'); g.set(p[0], p[1], 'stone'); }); },
         function (g, c) { var y = g.h - 1; for (var x = 0; x < 8; x++) { g.set(x, y - 3, (x & 1) ? 'metalL' : 'metalD'); if (x % 3 === 0) { g.vline(x, y - 4, 5, 'metalD'); } } },
-        function (g, c) { var y = g.h - 1; for (var x = 0; x < 8; x++) { g.set(x, y, SANDS); g.set(x, y - 1, SANDS); } c.forEach(function (p, i) { if (i === 3) { g.vline(p[0], p[1] - 8, 8, 'metalD'); g.hline(p[0], p[1] - 9, 3, 'metalD'); g.set(p[0] + 2, p[1] - 8, LAMP); g.set(p[0] + 2, p[1] - 7, GLOWG); } }); }],
+        function (g, c) { var y = g.h - 1; for (var x = 0; x < 8; x++) for (var yy = y - 4; yy <= y - 3; yy++) if (!g.get(x, yy)) g.set(x, yy, SANDS); c.forEach(function (p, i) { if (i === 3) { g.vline(p[0], p[1] - 8, 8, 'metalD'); g.hline(p[0], p[1] - 9, 3, 'metalD'); g.set(p[0] + 2, p[1] - 8, LAMP); g.set(p[0] + 2, p[1] - 7, GLOWG); } }); }],
       theocracy: [null, function (g, c, f) { f.forEach(function (q, i) { g.set(q[0], q[1] + 2, i & 1 ? 'gold' : 'goldL'); g.set(q[0], q[1] + 3, 'goldD'); }); },
         function (g, c, f) { f.forEach(function (q, i) { if (i % 4 === 1) { var y = q[1] + 4; g.set(q[0], y, GLOW); g.set(q[0] + 1, y, GLOW); g.set(q[0], y + 1, GLOW); g.set(q[0] + 1, y + 1, 'white'); } }); },
         function (g, c) { c.forEach(function (p, i) { if (i === 2 || i === 6) for (var y = 0; y < p[1] - 1; y++) if (!g.get(p[0], y)) { g.set(p[0], y, GLOWG); if (y > p[1] - 6) g.set(p[0] + 1, y, GLOWG); } }); }],
@@ -2029,13 +2031,14 @@
         function (g, c) { c.forEach(function (p, i) { if (i % 3 === 1) { g.set(p[0], p[1] - 1, 'metalD'); g.set(p[0], p[1] - 2, 'fireO'); } }); },
         function (g, c) { c.forEach(function (p, i) { g.set(p[0], p[1] - 1, ARTC[i % ARTC.length]); }); }]
     };
-    function decoFor(st, lv) { var d = DECO[st]; if (!d) return null; return d[st === 'tribe' || st === 'anarchy' ? lv : lv - 2]; }
+    function decoFor(st, lv) { var d = DECO[st]; if (!d) return null; return d[st === 'tribe' || st === 'anarchy' ? lv : lv - 3]; }
     // Zellen mit Zusatzgeometrie: 'outer' = niedrige Vormauer, 'double' = zweite Pfahlreihe, 'earth' = Erdwall davor
     function cellsFor(st, lv, mask) {
       var m = matOf(st, lv), P = geom(st, lv), dec = decoFor(st, lv);
       var saveW = WALL[lv]; WALL[lv] = P;
       var base = wallCellsS(m, lv, mask);
       WALL[lv] = saveW;
+      if (DOUBLE[st + lv]) dec = 'outer';
       if (dec === 'outer' || dec === 'earth' || dec === 'double') {
         return function (gx, gy) {
           var c = base(gx, gy); if (c) return c;
@@ -2043,7 +2046,8 @@
           if (occ(mask, line, line, gx, gy) && !occ(mask, P.a, P.b, gx, gy)) {
             if (dec === 'earth') return { h: 3, top: function () { return EARTH; }, face: function (x, row, y, hh) { return row === hh - 1 ? EARTHD : EARTH; } };
             if (dec === 'double') return { h: 5 + ((gx + gy) & 1), top: function () { return 'woodL'; }, face: function (x) { return (x & 1) ? 'wood' : 'woodD'; } };
-            return { h: 5, top: function () { return m.topL; }, face: function (x, row, y, hh) { return matFace(m, x, row, hh, false); } };
+            var oh = 5, mer = st === 'monarchy' && ((gx >> 1) & 1) === 0;
+            return { h: oh + (mer ? 1 : 0), top: function () { return m.topL; }, face: function (x, row, y, hh) { return matFace(m, x, row, hh, mer); } };
           }
           return null;
         };

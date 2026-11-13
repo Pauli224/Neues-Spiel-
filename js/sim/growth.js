@@ -479,8 +479,10 @@
       const o = st.owner[i];
       const m = o >= 0 ? modeOf.get(o) : null;
       if (st.cleared[i]) {
-        // unter Kahlschlag bleibt gerodetes Land kahl (Stümpfe), sonst verblassen die Spuren
+        // unter Kahlschlag bleibt gerodetes Land kahl (Stümpfe, nachgewachsener Wald wird wieder abgeräumt),
+        // sonst verblassen die Spuren
         if (m !== 'exploit') st.cleared[i] = Math.max(0, st.cleared[i] - 24);
+        else if (LUT.wood[st.terrain[i]]) { const t0 = st.terrain[i], nt = WW.Walls.deforested(t0); if (nt !== t0) { st.terrain[i] = nt; sim.markDirty(i); } }
       }
       if (o < 0) continue;
       const t = st.terrain[i];

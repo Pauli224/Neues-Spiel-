@@ -683,6 +683,261 @@
       'Der große Zirkus Kunterbunt tourt um die Welt. Überall laufen ihm Leute hinterher und bleiben irgendwo hängen.',
       'Akrobaten, Gaukler und ein singender Esel besuchen jedes Reich der Welt. Die Laune steigt überall.'] });
 
+  // ===========================================================================
+  // MEHR POLITIK
+  // ===========================================================================
+  ev('volkszorn_steuern', 'politics', 'kingdom', 'Steuersenkung', { weight: 0.9, prio: 1.5, cooldown: 8, when: c => c.L.happy < 40 && !c.law('niedrige_steuern') ? 1.5 : 0,
+    effects: [{ law: 'niedrige_steuern' }, { mod: 'happiness', add: 3, years: 2 }],
+    texts: ['Um den Volkszorn zu dämpfen, senkt {kingdom} die Steuern. Der Steuereintreiber geht in Kurzarbeit.',
+      '{Leader} verkündet Steuersenkungen. Die Leute jubeln, die Schatzmeister weinen leise ins Kassenbuch.',
+      'Weil {capital} murrt, gibt es Steuererleichterungen. {Person} rechnet nach und ist sehr zufrieden.'] });
+  ev('rekrutierung', 'politics', 'kingdom', 'Mobilmachung', { weight: 1, prio: 1.5, cooldown: 8, when: c => c.L.atWar && !c.law('wehrpflicht') && c.gov !== 'anarchy' ? 2 : 0,
+    effects: [{ law: 'wehrpflicht' }, { mod: 'soldiers', add: 0.04, years: 3 }],
+    texts: ['Der Krieg verlangt Opfer: {kingdom} führt die Wehrpflicht ein. Die Schneider nähen Uniformen im Akkord.',
+      '{Leader} ruft alle Waffenfähigen zu den Fahnen. Auch {person}, der eigentlich nur Brot holen wollte.',
+      'In {capital} hängen Plakate: „Das Reich braucht dich!“ Darunter hat jemand geschrieben: „Wofür?“'] });
+  ev('mauerbeschluss', 'politics', 'kingdom', 'Mauerbeschluss', { weight: 0.9, prio: 1.5, cooldown: 8, when: c => c.L.threat && !c.law('mauerpflicht') && c.gov !== 'anarchy' ? 1.5 : 0,
+    effects: [{ law: 'mauerpflicht' }, { stock: 'stone', add: [10, 20] }],
+    texts: ['Die Nachbarn sind unheimlich geworden: {kingdom} beschließt die Mauerpflicht. Jeder bringt Steine mit.',
+      '{Leader} lässt verkünden: Mauern schützen, Mauern verbinden, Mauern sind schön. Die Mauerpflicht ist da.',
+      'In {capital} wird über Nacht ein Mauergesetz beschlossen. Morgens stehen alle mit Kellen bereit.'] });
+  ev('amnestie', 'politics', 'kingdom', 'Amnestie', { weight: 0.9, cooldown: 10, when: c => c.L.happy < 50 ? 1.5 : 0.4,
+    effects: [{ mod: 'happiness', add: 4, years: 3 }, { loyal: 5 }],
+    texts: ['{Leader} verkündet eine Amnestie. Alle Diebe von Kuchen werden begnadigt, sogar die Wiederholungstäter.',
+      'In {capital} werden die Kerker geöffnet. Heraus kommen drei Hühnerdiebe und ein verwirrter Dachs.',
+      'Zur Feier von {@anlass} vergibt {kingdom} allen kleinen Sündern. Die Stimmung hellt sich auf.'] });
+  ev('provinz_privileg', 'politics', 'city', 'Stadtrecht', { weight: 1, cooldown: 8, when: c => c.k && c.c && c.c.id !== c.k.capitalId ? 1.5 : 0.2,
+    effects: [{ loyal: 12 }, { mod: 'gold', mul: 1.1, years: 5 }],
+    texts: ['{city} erhält das Marktrecht. Der Bürgermeister trägt ab jetzt eine Kette aus Blech, aber mit Stolz.',
+      '{Leader} verleiht {city} ein eigenes Wappen: eine {@essen}-Schüssel auf grünem Grund. Die Bürger sind gerührt.',
+      '{city} darf jetzt eigene Feiertage beschließen. Erste Amtshandlung: der Tag des freien Nachmittags.'] });
+  ev('provinz_aufbegehren', 'politics', 'city', 'Eigensinn', { weight: 1, cooldown: 7, when: c => c.k && c.c && c.c.id !== c.k.capitalId && (c.c.loyalty == null ? 50 : c.c.loyalty) < 40 ? 2 : 0,
+    effects: [{ loyal: -10 }, { stock: 'gold', add: [8, 18], on: 'city' }],
+    texts: ['{city} weigert sich, Abgaben nach {capital} zu schicken. „Wir brauchen das Gold selbst, für Blumenkübel.“',
+      'Die Leute von {city} hissen eine eigene Fahne neben der des Reichs. Sie ist größer.',
+      'In {city} wird über Unabhängigkeit gemurmelt. Das Gold bleibt vorerst im eigenen Keller.'] });
+  ev('rathausuhr', 'politics', 'city', 'Rathausuhr', { weight: 0.9, cooldown: 8, when: c => c.c && c.c.pop >= 20 ? 1.2 : 0,
+    effects: [{ stock: 'gold', add: [-20, -10] }, { mod: 'work', mul: 1.06, years: 4 }],
+    texts: ['{city} bekommt eine Rathausuhr. Seitdem kommt niemand mehr zu spät, außer der Uhrmacher.',
+      'Die neue Turmuhr von {city} schlägt dreizehn. Alle arbeiten trotzdem pünktlicher.',
+      'In {city} wird die erste Uhr aufgestellt. {Person} glaubt, sie mache die Zeit.'] });
+
+  // ===========================================================================
+  // MEHR WIRTSCHAFT
+  // ===========================================================================
+  ev('muenzfaelscher', 'economy', 'kingdom', 'Falschgeld', { weight: 0.9, cooldown: 8, when: c => c.L.gold > 30 ? 1.2 : 0.3,
+    effects: [{ stock: 'gold', pct: -0.2 }, { mod: 'gold', mul: 0.9, years: 2 }],
+    texts: ['Falschmünzer {kingdom_in}! Die Münzen sind aus angemaltem Holz. Sie schwimmen.',
+      'In {capital} tauchen Münzen mit dem Gesicht eines Esels auf. Das Original zeigt {leader}. Man merkt den Unterschied kaum.',
+      '{@schuldiger} hat Falschgeld in Umlauf gebracht. Die Händler {kingdom_dat} beißen jetzt in jede Münze.'] });
+  ev('salzfund', 'economy', 'city', 'Salzquelle', { weight: 1, cooldown: 10,
+    effects: [{ mod: 'food', mul: 1.1, years: 5 }, { stock: 'gold', add: [10, 25] }],
+    texts: ['Bei {city} wird eine Salzquelle entdeckt. Endlich schmeckt der {@essen} nach etwas.',
+      '{Person} leckt in {city} an einem Felsen und ruft „Salz!“. Eine Saline entsteht.',
+      'Salz aus {city} wird zum Exportschlager. Die Vorräte halten länger, die Kasse klingelt.'] });
+  ev('muehle', 'economy', 'city', 'Neue Mühle', { weight: 1, cooldown: 8,
+    effects: [{ stock: 'wood', add: -15 }, { mod: 'food', mul: 1.12, years: 6 }],
+    texts: ['In {city} dreht sich eine neue Windmühle. Sie quietscht im Takt eines Volksliedes.',
+      'Die neue Wassermühle von {city} mahlt so fein, dass das Mehl beim Niesen davonfliegt.',
+      '{city} baut eine Mühle. Der Müller {person} ist sofort die wichtigste Person im Ort.'] });
+  ev('preisverfall', 'economy', 'kingdom', 'Rübenschwemme', { weight: 1, cooldown: 8, when: c => c.L.foodPer > 5 ? 1.5 : 0.4,
+    effects: [{ stock: 'gold', add: [-20, -8] }, { stock: 'food', add: [10, 20] }],
+    texts: ['Es gibt zu viele Rüben {kingdom_in}. Der Preis fällt so tief, dass man Rüben mit Rüben bezahlt.',
+      'Rübenschwemme in {capital}! Die Bauern verschenken Rüben an Fremde, die Fremden flüchten.',
+      'Die Märkte {kingdom_dat} sind überflutet mit {@essen}. Die Händler verlieren Gold, die Speisekammern quellen.'] });
+  ev('werkzeugmangel', 'economy', 'city', 'Werkzeugmangel', { weight: 1, cooldown: 6,
+    effects: [{ mod: 'build', mul: 0.85, years: 2 }, { mod: 'work', mul: 0.95, years: 2 }],
+    texts: ['In {city} sind alle Hämmer verschwunden. Man nagelt jetzt mit Kartoffeln.',
+      'Der Schmied von {city} ist im Urlaub. Die Werkzeuge werden stumpf, die Laune auch.',
+      'Ein Hammerstiel bricht in {city}, dann noch einer. Es entsteht eine Werkzeugkrise.'] });
+  ev('handwerkermeister', 'economy', 'city', 'Wandernder Meister', { weight: 1, cooldown: 6,
+    effects: [{ mod: 'build', mul: 1.2, years: 3 }, { pop: 1 }],
+    texts: ['Ein wandernder Baumeister lässt sich in {city} nieder. Die Häuser werden plötzlich gerade.',
+      'In {city} zieht ein {@beruf} aus der Fremde ein und bringt neue Kniffe mit.',
+      'Meister {person} kommt nach {city} und zeigt allen, wie man ein Dach deckt, ohne vom Dach zu fallen.'] });
+  ev('lagerbrand', 'economy', 'city', 'Lagerbrand', { weight: 0.7, cooldown: 10, when: c => c.sim.state.laws.disasters,
+    effects: [{ stock: 'wood', pct: -0.4 }, { power: 'fire' }],
+    texts: ['Das Holzlager von {city} geht in Flammen auf. Schuld war ein Funke und {@schuldiger}.',
+      'Feuer im Lager von {city}! Die Löschkette reicht bis zum Brunnen, aber nicht ganz.',
+      'In {city} brennt das Brennholz – nur leider zu früh und auf einmal.'] });
+
+  // ===========================================================================
+  // MEHR NATUR
+  // ===========================================================================
+  ev('wolfsrudel', 'nature', 'city', 'Wolfsheulen', { weight: 1, cooldown: 6,
+    effects: [{ mod: 'happiness', add: -3, years: 1 }, { stock: 'food', add: [-15, -6] }],
+    texts: ['Wölfe heulen nachts um {city}. Die Schafe zählen sich vor Angst ständig selbst.',
+      'Ein Wolfsrudel holt sich Vorräte aus {city}. Es war offenbar ein sehr gut organisiertes Rudel.',
+      'In {city} verschwinden Würste. Die Spuren führen zu den Wölfen, die Würste nicht wieder zurück.'] });
+  ev('aufforstung', 'nature', 'kingdom', 'Aufforstung', { weight: 1, prio: 1.5, cooldown: 10, when: c => c.L.bare > 0.5 && c.law('naturschutz') ? 3 : (c.L.bare > 0.7 ? 0.8 : 0),
+    effects: [{ flag: 'nature', value: 'care', years: 8 }, { mod: 'happiness', add: 3, years: 4 }, { stock: 'wood', add: -8 }],
+    texts: ['{Kingdom_nom} pflanzt Bäume rund um {capital}. Jedes Kind bekommt einen Setzling und eine Gießkanne.',
+      'Ein Aufforstungsplan grünt {kingdom_acc} ein. Die Holzfäller bekommen Urlaub, die Spechte Arbeit.',
+      '{Leader} pflanzt eigenhändig die erste Eiche. Sie ist noch klein, aber sehr feierlich.'] });
+  ev('ueberschwemmung', 'nature', 'city', 'Hochwasser', { weight: 0.8, cooldown: 10, when: c => c.sim.state.laws.disasters,
+    effects: [{ stock: 'food', pct: -0.2 }, { damage: 0.4, n: [1, 2] }, { power: 'rain' }],
+    texts: ['Hochwasser in {city}! Die Keller laufen voll, die Frösche ziehen ein.',
+      'Der Fluss bei {city} tritt über die Ufer. {Person} rudert in einer Badewanne zur Arbeit.',
+      'Nach {@wetter} steht {city} knietief im Wasser. Zwei Hütten schwimmen ein Stück.'] });
+  ev('pilzschwemme', 'nature', 'city', 'Pilzjahr', { weight: 1, cooldown: 6,
+    effects: [{ stock: 'food', add: [15, 30] }, { happy: 2 }],
+    texts: ['Ein Pilzjahr bei {city}! Die Körbe sind voll, und nur ein einziger Pilz war verdächtig blau.',
+      'Im Wald bei {city} sprießen Pilze, groß wie Regenschirme. Man benutzt sie auch so.',
+      'Die Leute von {city} sammeln Pilze, bis die Pfannen glühen.'] });
+  ev('duerre', 'nature', 'kingdom', 'Dürre', { weight: 0.8, prio: 1.5, cooldown: 12, when: c => c.sim.state.laws.disasters,
+    effects: [{ mod: 'food', mul: 0.75, years: 2 }, { mod: 'happiness', add: -4, years: 2 }, { follow: 'missernte', chance: 0.4, years: [1, 1] }],
+    texts: ['Dürre {kingdom_in}! Der Fluss ist so flach, dass die Fische zu Fuß gehen.',
+      'Kein Tropfen Regen über {kingdom_dat} seit Monaten. Die Brunnen seufzen, die Felder vertrocknen.',
+      '{Kingdom_nom} leidet unter Dürre. {Leader} betet, tanzt und droht den Wolken – erfolglos.'] });
+  ev('vogelzug', 'nature', 'city', 'Störche', { weight: 1, cooldown: 5,
+    effects: [{ mod: 'growth', mul: 1.15, years: 2 }, { happy: 3 }],
+    texts: ['Störche nisten auf allen Dächern von {city}. Die Leute halten das für ein gutes Zeichen, und siehe da: Kinder!',
+      'Ein Schwarm Zugvögel rastet in {city}. Alle schauen zu, und irgendwie wird es gemütlich.',
+      'Der erste Storch des Jahres landet auf dem Rathaus von {city}. Es wird gefeiert.'] });
+  ev('bergrutsch', 'nature', 'city', 'Steinschlag', { weight: 0.7, cooldown: 12, when: c => c.sim.state.laws.disasters,
+    effects: [{ stock: 'stone', add: [20, 40] }, { damage: 0.5 }],
+    texts: ['Ein Steinschlag trifft {city}. Ein Haus wird getroffen, aber jetzt gibt es Steine im Überfluss.',
+      'Bei {city} rutscht ein Hang ab. Die Steinmetze freuen sich, die Hausbesitzer nicht.',
+      'Ein Felsbrocken rollt nach {city} und bleibt vor dem Brunnen liegen. Er wird zerlegt und verbaut, nachdem er eine Scheune gestreift hat.'] });
+
+  // ===========================================================================
+  // MEHR ALLTAG UND KURIOSES
+  // ===========================================================================
+  ev('entlaufene_ziege', 'daily', 'city', 'Entlaufene Ziege', { weight: 1.2, cooldown: 4,
+    effects: [{ mod: 'work', mul: 0.96, years: 1 }, { happy: 2 }],
+    texts: ['Eine Ziege entkommt in {city} und frisst die Wäsche von {num} Haushalten. Die ganze Stadt jagt sie lachend.',
+      'In {city} wird eine Ziege zur Stadträtin gewählt. Es war ein Scherz, aber sie bleibt im Amt.',
+      'Die Ziege von {person} steigt auf das Dach des Rathauses von {city}. Niemand arbeitet, alle schauen zu.'] });
+  ev('kuchenwettbewerb', 'daily', 'city', 'Backwettbewerb', { weight: 1.1, cooldown: 4,
+    effects: [{ stock: 'food', add: [-12, -5] }, { mod: 'happiness', add: 4, years: 2 }],
+    texts: ['Backwettbewerb in {city}! {Person} gewinnt mit einem Kuchen, der wie das Rathaus aussieht. Das Rathaus ist neidisch.',
+      'In {city} wird der längste Streuselkuchen der Welt gebacken. Er reicht vom Markt bis {@ort}.',
+      'Der Backwettbewerb von {city} endet unentschieden, weil die Jury alles aufgegessen hat.'] });
+  ev('nachtwaechter', 'daily', 'city', 'Verschlafener Wächter', { weight: 1, cooldown: 5,
+    effects: [{ stock: 'gold', add: [-10, -4] }, { mod: 'loyalty', add: -2, years: 1 }],
+    texts: ['Der Nachtwächter von {city} verschläft die ganze Nacht. Am Morgen fehlen {@ding} und etwas Gold.',
+      'In {city} ruft der Nachtwächter jede Stunde „Alles ruhig!“ – auch als jemand die Stadtkasse wegträgt.',
+      'Der Nachtwächter von {city} schnarcht so laut, dass Diebe sich ungestört fühlen.'] });
+  ev('liebesbrief', 'daily', 'city', 'Liebesbrief', { weight: 1.1, cooldown: 4,
+    effects: [{ happy: 5 }, { mod: 'growth', mul: 1.1, years: 2 }],
+    texts: ['Ein Liebesbrief wird {@ort} von {city} vorgelesen, versehentlich. Seitdem flirtet die ganze Stadt.',
+      '{Person} singt {person2} ein Ständchen unter dem Fenster in {city}. Die Nachbarn singen mit.',
+      'In {city} verliebt sich {person} in den {@beruf}. Die Stadt spricht von nichts anderem, sehr romantisch.'] });
+  ev('spukhaus', 'daily', 'city', 'Spukhaus', { weight: 1, cooldown: 6,
+    effects: [{ mod: 'happiness', add: -2, years: 2 }, { stock: 'gold', add: [5, 15] }],
+    texts: ['In einem Haus in {city} spukt es. Es stellt sich heraus: eine Eule mit Schluckauf. Die Besichtigungen kosten trotzdem Eintritt.',
+      'Ein Geist geht in {city} um. Er ist sehr höflich und bittet nur um Ruhe. Touristen kommen trotzdem.',
+      'Nachts klappert es in {city}. {Person} schwört, es sei ein Gespenst, der Rest vermutet einen Waschbären.'] });
+  ev('schulfest', 'daily', 'city', 'Kinderfest', { weight: 1.1, cooldown: 4,
+    effects: [{ mod: 'happiness', add: 3, years: 2 }, { mod: 'growth', mul: 1.05, years: 2 }],
+    texts: ['Kinderfest in {city}: Sackhüpfen, Eierlaufen und ein sehr ernst geführtes Murmelturnier.',
+      'Die Kinder von {city} bauen eine Burg aus Heu. Die Erwachsenen dürfen nur mit Erlaubnis hinein.',
+      'In {city} wird ein Drachensteigfest gefeiert. Ein Drachen fliegt bis ins Nachbarreich.'] });
+  ev('erbsenzaehler', 'daily', 'kingdom', 'Volkszählung', { weight: 1, cooldown: 8,
+    effects: [{ mod: 'taxes', add: 0.005, years: 4 }, { mod: 'happiness', add: -2, years: 1 }],
+    texts: ['{Kingdom_nom} zählt seine Bewohner. Ergebnis: {big}, plus Hühner. Die Steuerlisten werden länger.',
+      'Volkszählung {kingdom_in}: Jeder muss sich in eine Liste eintragen. {Person} trägt sich dreimal ein, weil es so schön war.',
+      'Die Beamten {kingdom_dat} zählen alles: Menschen, Kühe, Löffel. Die Steuer folgt der Zählung.'] });
+
+  // ===========================================================================
+  // MEHR GLAUBE
+  // ===========================================================================
+  ev('prophezeiung', 'faith', 'kingdom', 'Prophezeiung', { weight: 1, cooldown: 8,
+    effects: [{ mod: 'happiness', add: 2, years: 3 }, { mod: 'loyalty', add: 4, years: 3 }],
+    texts: ['Eine Seherin {kingdom_dat} prophezeit: „Wer viel isst, wird satt.“ Das Volk ist tief beeindruckt.',
+      'Eine alte Prophezeiung wird in {capital} gefunden. Sie handelt von einem goldenen Kürbis. Alle sind hoffnungsvoll.',
+      '{Person} hat eine Vision: {kingdom} wird groß und schön. Die Leute glauben es gern.'] });
+  ev('tempelbau', 'faith', 'city', 'Neuer Schrein', { weight: 1, cooldown: 8, when: c => (c.gov === 'theocracy' ? 2 : 0.6),
+    effects: [{ stock: 'stone', add: [-25, -10] }, { mod: 'happiness', add: 6, years: 5 }],
+    texts: ['In {city} wird ein Schrein für {deity} errichtet. Er ist klein, aber er glänzt.',
+      'Die Leute von {city} bauen einen Tempel aus Feldsteinen. Er wackelt bei Wind, aber das gilt als heilig.',
+      '{city} ehrt die Götter mit einem neuen Schrein. {Person} stiftet eine Glocke, die nur „pling“ macht.'] });
+  ev('glaubensstreit', 'faith', 'pair', 'Glaubensstreit', { weight: 1, cooldown: 8, when: c => c.gov === 'theocracy' || (c.o && c.o.gov === 'theocracy') ? 2 : 0, rel: ['peace'],
+    effects: [{ opinion: [-30, -15] }, { mod: 'aggression', add: 0.08, years: 3 }],
+    texts: ['{Kingdom_nom} und {other} streiten, ob die Welt eine Scheibe oder ein Pfannkuchen ist.',
+      'Die Priester {kingdom_dat} bezeichnen die Götter {other_dat} als „überbewertet“. Die Stimmung kippt.',
+      'Ein theologischer Disput: Darf man {deity} mit Senf essen? {Other_nom} sagt ja. Skandal!'] });
+  ev('segensjahr', 'faith', 'city', 'Gesegnetes Jahr', { weight: 0.8, cooldown: 8,
+    effects: [{ power: 'bless' }, { stock: 'food', add: [10, 25] }],
+    texts: ['Ein goldenes Leuchten liegt über {city}. Die Kranken werden gesund, die Ernte reift.',
+      'Die Gebete von {city} werden erhört: Es regnet genau richtig, und alle sind gesund.',
+      '{Person} findet in {city} ein vierblättriges Kleeblatt. Danach geht alles gut, für ein ganzes Jahr.'] });
+  ev('wunderheiler', 'faith', 'city', 'Wunderheiler', { weight: 1, cooldown: 6, when: c => c.c && c.c.sick > 0 ? 2.5 : 0.4,
+    effects: [{ power: 'bless' }, { stock: 'gold', add: [-15, -5] }],
+    texts: ['Ein Wunderheiler kommt nach {city} und heilt mit Kräutertee und sehr viel Zuversicht.',
+      'In {city} verteilt eine Kräuterfrau Salben. Sie riechen fürchterlich, helfen aber.',
+      'Ein Heiler aus der Fremde legt in {city} Hände auf. Die Kranken stehen auf, er nimmt ein paar Münzen.'] });
+
+  // ===========================================================================
+  // MEHR KRIEG UND DIPLOMATIE
+  // ===========================================================================
+  ev('heiratsangebot', 'war', 'pair', 'Heiratsangebot', { weight: 0.9, prio: 1.5, cooldown: 12, rel: ['peace'],
+    when: c => c.gov === 'monarchy' && c.rel && c.rel.opinion > 20 ? 2.5 : (c.rel && c.rel.opinion > 40 ? 0.6 : 0),
+    effects: [{ relation: 'alliance' }, { mod: 'happiness', add: 3, years: 3, on: 'both' }],
+    texts: ['Eine Hochzeit vereint die Herrscherhäuser von {kingdom} und {other}. Das Bündnis ist besiegelt, der Kuchen war riesig.',
+      '{Leader} und {otherLeader} besiegeln ein Bündnis mit einer Heirat ihrer Nichten. Die Nichten sind sich einig, nur nicht über die Musik.',
+      'Ein Bündnis aus Liebe und Kalkül: {kingdom} und {other} feiern gemeinsam.'] });
+  ev('handelsvertrag', 'war', 'pair', 'Handelsvertrag', { weight: 1.1, cooldown: 8, rel: ['peace', 'alliance'], when: c => c.rel && c.rel.opinion > 0 ? 1.5 : 0.3,
+    effects: [{ opinion: [10, 20] }, { mod: 'gold', mul: 1.15, years: 5, on: 'both' }],
+    texts: ['{Kingdom_nom} und {other} schließen einen Handelsvertrag: Rüben gegen Ritterrüstungen.',
+      'Händler aus {capital} und {otherCity} dürfen jetzt zollfrei handeln. Die Märkte blühen.',
+      'Ein Vertrag regelt den Austausch von {@essen} zwischen {kingdom} und {other}. Beide Seiten fühlen sich übervorteilt, also fair.'] });
+  ev('spion_erwischt', 'war', 'pair', 'Spion erwischt', { weight: 1, prio: 1.5, cooldown: 8, rel: ['peace', 'war'],
+    effects: [{ opinion: [-25, -12] }, { mod: 'loyalty', add: 3, years: 2 }],
+    texts: ['In {capital} wird ein Spion {other_dat} erwischt. Er trug einen falschen Bart und eine Karte, auf der „Geheim“ stand.',
+      'Ein Kundschafter aus {otherCity} wird beim Abzeichnen der Stadtmauer von {capital} ertappt. Er hatte nicht mal einen Bleistift.',
+      '{Kingdom_nom} entlarvt eine Spionin {other_dat}. Sie arbeitete drei Jahre als Köchin, und die Suppe war hervorragend.'] });
+  ev('friedensangebot', 'war', 'pair', 'Friedensangebot', { weight: 1.2, prio: 2, cooldown: 4, rel: ['war'],
+    when: c => c.rel && c.rel.status === 'war' && (c.L.happy < 45 || (c.rel.weariness || 0) > 3) ? 2 : 0.4,
+    effects: [{ relation: 'peace' }, { mod: 'happiness', add: 4, years: 2, on: 'both' }],
+    texts: ['{Kingdom_nom} schickt {other_dat} einen Friedenskuchen. {Other_nom} probiert und unterschreibt.',
+      'Nach langem Krieg reichen sich {leader} und {otherLeader} die Hände. Die Soldaten gehen nach Hause und kochen.',
+      'Ein weißes Bettlaken über {capital}: {kingdom} bietet Frieden an. {Other_nom} nimmt an, erleichtert.'] });
+  ev('soeldner_kommen', 'war', 'kingdom', 'Söldnertrupp', { weight: 1, cooldown: 6, when: c => c.L.atWar && c.L.gold > 30 ? 2 : 0,
+    effects: [{ stock: 'gold', add: [-40, -20] }, { mod: 'strength', mul: 1.15, years: 2 }, { pop: [2, 3] }],
+    texts: ['Ein Söldnertrupp bietet {kingdom_dat} seine Dienste an. Sie kämpfen für Gold und warmes Essen.',
+      '{Leader} heuert die „Eisernen Löffel“ an, eine Söldnertruppe mit beeindruckenden Schnurrbärten.',
+      'Söldner ziehen nach {capital}. Sie sind teuer, laut und erstaunlich gute Sänger.'] });
+  ev('grenzfest', 'war', 'pair', 'Grenzfest', { weight: 1, cooldown: 8, rel: ['peace', 'alliance'], when: c => c.rel && c.rel.opinion > -10 ? 1 : 0,
+    effects: [{ opinion: [8, 16] }, { stock: 'food', add: -10 }],
+    texts: ['An der Grenze zwischen {kingdom} und {other} wird ein Fest gefeiert. Man tauscht {@essen} und Lieder.',
+      'Ein Tauziehen über die Grenze: {kingdom} gegen {other}. Das Seil reißt, alle fallen um und lachen.',
+      'Bauern aus {capital} und {otherCity} feiern gemeinsam {@anlass}. Die Diplomaten sind überflüssig.'] });
+
+  // ===========================================================================
+  // MEHR PERSÖNLICHKEITEN
+  // ===========================================================================
+  ev('dichter', 'people', 'city', 'Hofdichter', { weight: 1, cooldown: 5,
+    effects: [{ mod: 'happiness', add: 4, years: 3 }, { mod: 'loyalty', add: 3, years: 3 }],
+    texts: ['{Person} aus {city} dichtet ein Lied über die Stadt. Jeder kann es mitsingen, keiner bekommt es mehr aus dem Kopf.',
+      'Die Gedichte von {person} machen {city} berühmt. Reimwort auf {city}: keins, aber das stört niemanden.',
+      'Ein Dichter in {city} schreibt ein Epos über {@ding}. Es hat {big} Strophen und alle lieben es.'] });
+  ev('held_rettung', 'people', 'city', 'Lebensretter', { weight: 1, cooldown: 5,
+    effects: [{ happy: 6 }, { loyal: 4 }],
+    texts: ['{Person} rettet in {city} ein Kind aus dem Brunnen. Das Kind war nur zum Wasserholen drin, aber egal: Held!',
+      'Bei einem Brand in {city} trägt {person} {num} Hühner aus dem Stall. Die Hühner gründen einen Fanklub.',
+      '{Person} {@spitz} hält in {city} einen durchgehenden Ochsen auf. Die Stadt feiert.'] });
+  ev('gelehrte', 'people', 'kingdom', 'Akademie', { weight: 0.9, cooldown: 10, when: c => c.L.pop > 30 ? 1.5 : 0.3,
+    effects: [{ mod: 'build', mul: 1.1, years: 6 }, { mod: 'food', mul: 1.05, years: 6 }, { stock: 'gold', add: -15 }],
+    texts: ['{Kingdom_nom} gründet eine Akademie. Erste Erkenntnis: Rüben wachsen besser, wenn man sie pflanzt.',
+      'Die Gelehrten von {capital} erfinden das Fruchtwechselsystem. Die Felder bedanken sich.',
+      '{Person} schreibt ein Buch über Ackerbau, das alle lesen. Danach ackert {kingdom} schlauer.'] });
+  ev('querulant', 'people', 'city', 'Querulant', { weight: 1, cooldown: 5,
+    effects: [{ loyal: -5 }, { mod: 'build', mul: 0.93, years: 1 }],
+    texts: ['{Person} aus {city} beschwert sich über alles: das Wetter, die Mauer, die Zahl der Wolken. Die Arbeiten stocken.',
+      'Ein Querulant in {city} reicht {num} Beschwerden an einem Tag ein. Die Beamten tun nichts anderes mehr.',
+      '{Person} stellt sich in {city} auf eine Kiste und schimpft über {leader}. Einige hören zu, andere bauen langsamer.'] });
+  ev('alter_weiser', 'people', 'city', 'Alter Weiser', { weight: 1, cooldown: 6,
+    effects: [{ mod: 'happiness', add: 3, years: 4 }, { mod: 'work', mul: 1.03, years: 4 }],
+    texts: ['Der älteste Bewohner von {city} feiert seinen {big}. Geburtstag. Sein Rat: „Immer warm frühstücken.“ Alle folgen.',
+      'Eine weise Frau in {city} schlichtet jeden Streit mit einer Geschichte. Die Stadt wird friedlich.',
+      '{Person} aus {city} hat auf jede Frage eine Antwort, meistens „Schlaf erst mal drüber“. Es hilft.'] });
+  ev('abenteurer', 'people', 'city', 'Abenteurer', { weight: 1, cooldown: 6,
+    effects: [{ stock: 'gold', add: [15, 40] }, { mod: 'immigration', mul: 1.2, years: 3 }],
+    texts: ['{Person} kehrt nach Jahren der Reise nach {city} zurück, mit einem Sack Gold und unglaublichen Geschichten.',
+      'Eine Abenteurerin aus {city} bringt einen Schatz aus fernen Höhlen. Ihre Erzählungen locken Neugierige an.',
+      '{Person} {@spitz} hat angeblich das Ende der Welt gesehen. Es war ein Zaun. Aber das Gold ist echt.'] });
+
   // @@MEHR@@
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

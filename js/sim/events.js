@@ -525,7 +525,7 @@
       else c = capitalOf(sim, k);
     }
     let oth = o.otherId != null ? sim._kingdoms.get(o.otherId) : null;
-    if (k && (!oth || oth === k || !k.relations[oth.id])) oth = pickOther(sim, k, d);
+    if (k && (!oth || oth === k || !k.relations[oth.id])) oth = pickOther(sim, k, d) || pickOther(sim, k, null);
     return { def: d, scope: d.scope, k: k || null, c: c || null, o: oth || null, sim: sim, rng: sim.rng };
   }
   // anderes Reich: bevorzugt nah und mit passender Beziehung

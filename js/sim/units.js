@@ -124,6 +124,10 @@
 
   function hostile(sim, a, b) {
     if (a === b || a.dead || b.dead) return false;
+    // Wildnis: Räuber sind allen feind, Wahnsinnige ebenso
+    if (a.role === 'bandit' || b.role === 'bandit') return a.role !== b.role;
+    const t = sim.state.tick;
+    if ((a.wMad && a.wMad > t) || (b.wMad && b.wMad > t)) return true;
     if (a.kingdomId === b.kingdomId) {
       const ar = a.role === 'rebel', br = b.role === 'rebel';
       if (ar === br) return false;
