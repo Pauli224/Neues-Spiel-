@@ -22,7 +22,15 @@
   function addStock(sim, city, res, amount) {
     const s = stock(sim, city);
     if (!(res in s) || !WW.SimUtil.isNum(amount)) return;
-    s[res] = Math.max(0, s[res] + amount);
+    s[res] = Math.min(stockCap(sim, city, res), Math.max(0, s[res] + amount));
+  }
+  // Lagergrenze (verhindert absurde Vorräte; Gold unbegrenzt bis 9999)
+  function stockCap(sim, city, res) {
+    if (res === 'gold') return 9999;
+    const k = sim._kingdoms.get(city.kingdomId);
+    let pop = city.pop;
+    if (k && k.stock && WW.GOVERNMENTS[k.gov].sharedStock) { pop = 0; for (const id of k.cityIds) { const c = sim._cities.get(id); if (c) pop += c.pop; } }
+    return 300 + pop * 15;
   }
   function canPay(sim, city, cost) {
     const s = stock(sim, city);
@@ -262,7 +270,8 @@
     let rest = n - want.soldier - want.builder - want.farmer - want.miner - want.lumberjack;
     if (rest < 0) {
       // Kürzung: erst Steinmetze, dann Holzfäller bis auf einen, Baumeister bis auf einen, Soldaten, Bauern
-      const order = [['miner', 0], ['builder', sites >= 8 && n >= 5 ? 2 : (sites ? 1 : 0)], ['lumberjack', 1], ['soldier', 0], ['builder', sites ? 1 : 0], ['lumberjack', 0], ['farmer', 1]];
+      const minSold = Math.floor(want.soldier * (g.war === 'mass' ? 0.8 : 0.3));
+      const order = [['miner', 0], ['builder', sites >= 8 && n >= 5 ? 2 : (sites ? 1 : 0)], ['soldier', minSold], ['lumberjack', 1], ['builder', sites ? 1 : 0], ['lumberjack', 0], ['farmer', 1], ['soldier', 0]];
       for (const o of order) { while (rest < 0 && want[o[0]] > o[1]) { want[o[0]]--; rest++; } }
     }
     // Überschuss: Holz, wenn knapp, sonst Felder; Kommunismus mit Plan-Schwerpunkt
@@ -506,6 +515,11 @@
       return;
     }
     if (!city.centerOk) return;
+    // hängende Ausbauten (seit Jahren unbezahlt) aufgeben
+    for (const id of city.sites) {
+      const o = sim._structs.get(id);
+      if (o && o.type === 'house' && o.upgradeTo && !o.paid && o.built && st.year - (o.siteYear == null ? st.year : o.siteYear) >= 4) { o.upgradeTo = 0; o.progress = 1; o.towerOnUpgrade = false; }
+    }
     const open = countSites(sim, city, true);
     const maxOpen = 2 + city.tier;
     // Häuser
@@ -587,8 +601,10 @@
     }
     if (!best) return false;
     const cost = WW.Structs.costFor(sim, 'house', best.level + 1, city.id);
-    if (sk.stone < cost.stone || sk.wood < cost.wood) return false;
-    best.upgradeTo = best.level + 1; best.progress = 0; best.paid = false;
+    if (!canPay(sim, city, cost)) return false;
+    // nicht mehrere Ausbauten gleichzeitig beginnen, die das Lager nicht trägt
+    for (const id of city.sites) { const o = sim._structs.get(id); if (o && o.type === 'house' && o.upgradeTo && !o.paid) return false; }
+    best.upgradeTo = best.level + 1; best.progress = 0; best.paid = false; best.siteYear = sim.state.year;
     city.sites.push(best.id);
     return true;
   }

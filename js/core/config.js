@@ -248,13 +248,13 @@
   // core: zählt als Kerngebäude für den Mauerring; inside: wird innerhalb der Mauer gebaut
   WW.STRUCT_INFO = {
     center:   { name: 'Zentrum', w: 3, h: 3, core: true, inside: true, work: 200, hp: [360, 360, 360], cost: [{ wood: 12 }], burn: 0.3 },
-    house:    { name: 'Haus', w: 2, h: 2, core: true, inside: true, work: 70, hp: [50, 90, 140], cost: [{ wood: 5 }, { wood: 4, stone: 5 }, { stone: 8, gold: 3 }], burn: 1 },
+    house:    { name: 'Haus', w: 2, h: 2, core: true, inside: true, work: 70, hp: [50, 90, 140], cost: [{ wood: 5 }, { wood: 4, stone: 5 }, { wood: 4, stone: 8 }], burn: 1 },
     field:    { name: 'Feld', w: 1, h: 1, work: 22, hp: [20], cost: [{}], burn: 1 },
     lumber:   { name: 'Holzfällerhütte', w: 2, h: 2, work: 60, hp: [60], cost: [{ wood: 4 }], burn: 1 },
     quarry:   { name: 'Steinbruch', w: 2, h: 2, work: 60, hp: [80], cost: [{ wood: 4 }], burn: 0.4 },
     barracks: { name: 'Kaserne', w: 2, h: 2, core: true, inside: true, work: 130, hp: [180], cost: [{ wood: 8, stone: 4 }], burn: 0.6 },
     market:   { name: 'Markt', w: 2, h: 2, core: true, inside: true, work: 120, hp: [120], cost: [{ wood: 8, stone: 2 }], burn: 1 },
-    monument: { name: 'Denkmal', w: 1, h: 1, core: true, inside: true, work: 160, hp: [160], cost: [{ stone: 8, gold: 3 }], burn: 0 },
+    monument: { name: 'Denkmal', w: 1, h: 1, core: true, inside: true, work: 160, hp: [160], cost: [{ wood: 2, stone: 8 }], burn: 0 },
     wall:     { name: 'Mauer', w: 1, h: 1, work: 16, hp: [200, 600, 1100], cost: [{ wood: 1 }, { stone: 1 }, { stone: 2 }], burn: 1 },
     gate:     { name: 'Tor', w: 1, h: 1, work: 40, hp: [180, 520, 950], cost: [{ wood: 2 }, { stone: 3 }, { stone: 4 }], burn: 1 },
     tower:    { name: 'Turm', w: 1, h: 1, work: 50, hp: [240, 750, 1300], cost: [{ wood: 2 }, { stone: 3 }, { stone: 5 }], burn: 0.5 },

@@ -288,7 +288,10 @@
   function plan(sim, city, margin, level, expanding) {
     const st = sim.state, W = st.W;
     const C = WW.CONFIG;
-    const reserve = C.WALL_RESERVE + C.WALL_RESERVE_STEP * ((city.wall.expansions || 0) + (expanding ? 1 : 0));
+    const want = C.WALL_RESERVE + C.WALL_RESERVE_STEP * ((city.wall.expansions || 0) + (expanding ? 1 : 0));
+    const lim = maxReserve(sim, city);
+    if (expanding && want > lim + 0.5) return false;          // Nachbarstadt zu nah: nicht weiter wachsen
+    const reserve = Math.max(3, Math.min(want, lim));
     const ring = computeRing(sim, city, margin, reserve);
     if (!ring) return false;
     const k = sim._kingdoms.get(city.kingdomId);
@@ -357,6 +360,17 @@
     return true;
   }
 
+  // Größte Wachstumsfläche, ohne einer Nachbarstadt zu nahe zu kommen
+  function maxReserve(sim, city) {
+    let lim = 99;
+    for (const c of sim.state.cities) {
+      if (c === city || c.dead) continue;
+      const d = Math.sqrt((c.cx - city.cx) * (c.cx - city.cx) + (c.cy - city.cy) * (c.cy - city.cy));
+      lim = Math.min(lim, d / 2 - WW.CONFIG.WALL_MARGIN - 2);
+    }
+    return lim;
+  }
+
   function pieceDone(s, target) {
     return s.built && !s.upgradeTo && s.level >= target;
   }
@@ -370,6 +384,8 @@
       if (gaps && gaps.has(t)) continue;
       const s = sim._structs.get(st.structAt[t]);
       if (!s || s.cityId !== city.id || !WW.Structs.isWallish(s)) {
+        // fremde Bauwerke auf dem Ring (Nachbarmauer, fremdes Feld) zählen nicht: dort kann nicht gebaut werden
+        if (s && s.cityId !== -1 && s.cityId !== city.id) continue;
         if (WW.TERRAIN_LUT.walk[st.terrain[t]] > 0) total++;
         continue;
       }
@@ -497,7 +513,8 @@
     if (city.noSpace && st.year - (w.plannedYear || 0) >= WW.CONFIG.WALL_EXPAND_YEARS && city.pop >= city.housing - 3) {
       const lv = gov.barricades ? 1 : Math.max(1, w.level);
       const before = w.plan ? w.plan.length : 0;
-      if (plan(sim, city, WW.CONFIG.WALL_MARGIN, lv, true)) {
+      if (!plan(sim, city, WW.CONFIG.WALL_MARGIN, lv, true)) { w.plannedYear = st.year; w.maxed = true; }
+      else {
         if (w.plan.length <= before * 0.9) {
           // Ring wurde nicht größer (Platz verbaut) – alte Pläne behalten
           w.state = 'expanding';
@@ -525,7 +542,7 @@
   WW.Walls = {
     computeRing: computeRing, plan: plan, update: update, refreshCounts: refreshCounts,
     startUpgrade: startUpgrade, demolishAll: demolishAll, emptyWall: emptyWall, wallStyle: wallStyle,
-    deforested: deforested, CORE: CORE
+    deforested: deforested, CORE: CORE, maxReserve: maxReserve
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
