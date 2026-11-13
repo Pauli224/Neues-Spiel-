@@ -267,14 +267,21 @@
     if (!ev.length) return;
     const last = ev[ev.length - 1];
     if (last.id <= game.lastEventId) return;
-    const fresh = ev.filter(e => e.id > game.lastEventId);
+    // Nur Wichtiges wird als Meldung eingeblendet (Krieg, Frieden, Bündnis, Eroberung, Untergang,
+    // neue Reiche, Abspaltung, Regierungswechsel, Umsturz, Thronfolge, Seuche). Alles andere
+    // steht still in der Chronik.
+    const fresh = ev.filter(e => e.id > game.lastEventId && TOAST_TYPES.test(e.type));
     game.lastEventId = last.id;
-    // höchstens zwei neue zeigen, die neuesten
-    for (const e of fresh.slice(-2)) {
-      game.hud.toast(e.text, { year: e.year, sub: e.effectText || null, warn: /war|revolt|gone|fall|conquer|plague|coup|fire/i.test(e.type),
-        onClick: (e.x >= 0 ? () => game.jumpToEvent(e) : null) });
-    }
+    if (!fresh.length) return;
+    // höchstens eine Meldung alle paar Sekunden, auch bei hohem Tempo
+    const now = Date.now();
+    if (now - (game._toastAt || 0) < 4000) return;
+    game._toastAt = now;
+    const e = fresh[fresh.length - 1];
+    game.hud.toast(e.text, { year: e.year, sub: e.effectText || null, warn: /war|revolt|gone|fall|conquer|plague|coup|fire/i.test(e.type),
+      onClick: (e.x >= 0 ? () => game.jumpToEvent(e) : null) });
   };
+  const TOAST_TYPES = /^(war|holyWar|peace|alliance|allianceEnd|conquest|fallen|kingdomGone|newRealm|secede|secedeLoyalty|gov|govChoice|reform|strongman|collapse|evolve|revolution|regimeFall|coup|succession|throneFeud|revolt|cityAbandoned|centerLost|randomPlague)$/;
 
   // ------------------------------------------------------------------ Welt starten
   function attachSim(sim) {

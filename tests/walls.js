@@ -184,10 +184,11 @@ test('5 Stufe 6 mit Geräten hält länger als Stufe 3, ist aber mit Gerät und 
       sim.tick();
       if (i % 50 === 0) {
         if (CB.dead || CB.kingdomId !== B.id || B.dead) { fell = i; break; }
-        if (A.dead) { console.log('    Angreifer-Reich untergegangen bei Tick', i); break; }
+        if (A.dead) { console.log('    Angreifer-Reich untergegangen bei Tick', i, sim.state.events.filter((e) => e.kingdomId === A.id || e.cityId === CA.id).slice(-6).map((e) => e.type + ': ' + e.text).join(' | ')); break; }
         const r = A.relations[B.id];
         if (r && r.status !== 'war') sim.actions.setRelation(A.id, B.id, 'war');
         if (r && B.relations[A.id]) { r.weariness = 0; B.relations[A.id].weariness = 0; }
+        feed(sim, CA);   // das Heer der Angreifer verhungert nicht (Testaufbau)
         // Verteidiger bleiben zu Hause (reine Belagerung, kein Gegenangriff)
         for (const u of sim.state.units) if (!u.dead && u.kingdomId === B.id && u.order && u.order.kind === 'march') { u.order = null; u.path = null; }
         // Nachschub für die Angreifer (Übermacht)

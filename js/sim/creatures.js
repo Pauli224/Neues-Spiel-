@@ -403,7 +403,12 @@
         const home = a.home >= 0 ? sim._structs.get(a.home) : null;
         // angegriffen: zurückfauchen
         const foe = a.foe >= 0 ? WW.Units.entity(sim, a.foe) : null;
-        if (foe && !foe.dead && dist2(a, foe) < 16 && a.cd <= 0) breathe(sim, a, foe.x, foe.y);
+        const nearTown = !a.byPlayer && WW.Wild && foe && WW.Wild.cityDist2(sim, foe.x, foe.y) < 16 * 16;
+        if (foe && !foe.dead && nearTown && a.state !== 3) {
+          // natürlicher Drache: nahe einer Siedlung angegriffen -> zieht sich zurück statt zu brennen
+          a.state = 3; a.foe = -1;
+          if (home) a.tx = home.y * st.W + home.x; else wanderTarget(sim, a, cr, 20);
+        } else if (foe && !foe.dead && !nearTown && dist2(a, foe) < 16 && a.cd <= 0) breathe(sim, a, foe.x, foe.y);
         else if (foe && (foe.dead || dist2(a, foe) >= 16)) a.foe = -1;
         if (a.state === 0) {                       // ruht
           a.t -= THINK;
