@@ -53,30 +53,15 @@
     return (city.cy - o.oy + Math.floor(n / o.w)) * W + city.cx - o.ox + (n % o.w);
   }
 
-  function territoryRadius(city) { return WW.CONFIG.TERRITORY_BASE + city.tier * 2 + Math.min(3, (city.wall && city.wall.expansions) || 0); }
-
-  function claimTerritory(sim, city) {
-    const st = sim.state, W = st.W, H = st.H, T = WW.T;
-    const r = territoryRadius(city);
-    const px = city.cx + 0.5, py = city.cy + 0.5;
-    for (let y = Math.max(0, Math.floor(py - r)); y <= Math.min(H - 1, Math.ceil(py + r)); y++) {
-      for (let x = Math.max(0, Math.floor(px - r)); x <= Math.min(W - 1, Math.ceil(px + r)); x++) {
-        const dx = x + 0.5 - px, dy = y + 0.5 - py;
-        if (dx * dx + dy * dy > r * r) continue;
-        const i = y * W + x;
-        if (st.owner[i] !== -1) continue;
-        const t = st.terrain[i];
-        if (t === T.DEEP || t === T.WATER) continue;
-        st.owner[i] = city.id;
-        sim.markDirty(i);
-      }
-    }
+  // Suchradius für Bauplätze = Reichweite der Landnahme (Fluren, siehe growth.js)
+  function territoryRadius(city, sim) {
+    if (sim && WW.Growth) return Math.max(9, WW.Growth.reach(sim, city) + 2);
+    return WW.CONFIG.TERRITORY_BASE + city.tier * 2;
   }
 
-  function releaseTerritory(sim, city) {
-    const st = sim.state;
-    for (let i = 0; i < st.owner.length; i++) if (st.owner[i] === city.id) { st.owner[i] = -1; sim.markDirty(i); }
-  }
+  // Gebiet in Fluren: Anfangsgebiet (weitere Fluren nimmt WW.Growth bei Bedarf)
+  function claimTerritory(sim, city) { WW.Growth.claimInitial(sim, city); }
+  function releaseTerritory(sim, city) { WW.Growth.releaseCity(sim, city); }
 
   // Neue Stadt mit fertigem Zentrum, (x, y) = mittlere Kachel des Zentrums
   function found(sim, x, y, kingdomId, race, name) {
@@ -99,7 +84,8 @@
       founded: st.year, jobs: {}, sites: [], fields: [], drops: [], houses: 0,
       hasBarracks: false, hasMarket: false, hasMonument: false,
       hungry: false, starve: 0, unhappyYears: 0, lastSettlers: st.year, blessUntil: 0,
-      noSpace: false, empty: 0, centerOk: true, centerLost: 0, revolt: false, propaganda: 0, sick: 0
+      noSpace: false, empty: 0, centerOk: true, centerLost: 0, revolt: false, propaganda: 0, sick: 0,
+      loyalty: 80, joinedYear: st.year, flurs: 0, needLand: false, governor: null
     };
     sim._usedNames.add(city.name);
     st.cities.push(city);
@@ -109,6 +95,7 @@
     k.cityIds.push(city.id);
     if (k.capitalId < 0) k.capitalId = city.id;
     claimTerritory(sim, city);
+    WW.Growth.makeGovernor(sim, city);
     refreshLists(sim, city);
     return city;
   }
@@ -365,12 +352,12 @@
     const inf = WW.STRUCT_INFO[type || 'house'];
     const w = inf.w, h = inf.h;
     const ringed = !!(city.wall.plan && city.wall.state !== 'none');
-    const r = Math.min(16, territoryRadius(city));
+    const r = Math.min(16, territoryRadius(city, sim));
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const owner = st.owner, inRing = st.inRing, id = city.id;
     const area = ringed
       ? (i) => inRing[i] === id
-      : (i) => (owner[i] === id || owner[i] === -1) && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i)));
+      : (i) => owner[i] === id && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i)));
     const o = { area: area, fieldOk: true, race: city.race, cityId: id, needWalkBorder: true };
     let best = -1, bs = -1e9;
     const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
@@ -397,7 +384,7 @@
   }
   function findFieldSpotMin(sim, city, minFert) {
     const st = sim.state, W = st.W, H = st.H;
-    const r = territoryRadius(city) + 1;
+    const r = territoryRadius(city, sim) + 1;
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const ringed = !!city.wall.plan;
     const minD = ringed ? 0 : WW.CONFIG.WALL_RESERVE + WW.CONFIG.WALL_MARGIN + 1.2;
@@ -405,8 +392,7 @@
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
         const i = y * W + x;
-        const ow = st.owner[i];
-        if (ow !== city.id && ow !== -1) continue;
+        if (st.owner[i] !== city.id) continue;
         if (st.structAt[i] !== -1 || st.inRing[i] !== -1) continue;
         const t = st.terrain[i];
         const fert = WW.TERRAIN_LUT.fertile[t];
@@ -447,12 +433,12 @@
   function findDropSpot(sim, city, res, type) {
     const st = sim.state, W = st.W, H = st.H;
     const inf = WW.STRUCT_INFO[type];
-    const r = territoryRadius(city) + 3;
+    const r = territoryRadius(city, sim) + 3;
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const LUT = WW.TERRAIN_LUT;
     const owner = st.owner, inRing = st.inRing, id = city.id;
     const o = {
-      area: (i, inner) => (owner[i] === id || owner[i] === -1) && inRing[i] === -1 && !(inner && LUT[res][st.terrain[i]]),
+      area: (i, inner) => (owner[i] === id || (!inner && owner[i] === -1)) && inRing[i] === -1 && !(inner && LUT[res][st.terrain[i]]),
       fieldOk: false, race: city.race, cityId: id, needWalkBorder: false
     };
     const minD = (city.wall.plan ? 0 : WW.CONFIG.WALL_RESERVE) + WW.CONFIG.WALL_MARGIN + 2;
@@ -523,7 +509,12 @@
     const open = countSites(sim, city, true);
     const maxOpen = 2 + city.tier;
     // Häuser
-    if (open < maxOpen && city.pop + 2 >= city.housing && st.units.length < WW.CONFIG.MAX_UNITS) {
+    const houseCap = 2 + Math.floor((city.flurs || 1) * WW.CONFIG.HOUSES_PER_FLUR);
+    if (open < maxOpen && city.pop + 2 >= city.housing && city.houses >= houseCap) {
+      // wer wachsen will, muss Land nehmen; bis dahin Häuser aufstocken
+      city.needLand = true;
+      upgradeHouse(sim, city, sk);
+    } else if (open < maxOpen && city.pop + 2 >= city.housing && st.units.length < WW.CONFIG.MAX_UNITS) {
       const cost = WW.Structs.costFor(sim, 'house', 1, city.id);
       if (sk.wood >= cost.wood || open === 0) {
         const i = findCoreSpot(sim, city, 'house');
@@ -532,7 +523,7 @@
           if (s) { city.sites.push(s.id); city.houses++; }
           city.noSpace = false;
         } else {
-          if (city.wall.plan) city.noSpace = true;
+          if (city.wall.plan) city.noSpace = true; else city.needLand = true;
           // Platz schaffen: Häuser aufstocken
           upgradeHouse(sim, city, sk);
         }
@@ -550,8 +541,8 @@
       const i = findFieldSpot(sim, city);
       if (i >= 0) {
         const s = WW.Structs.create(sim, 'field', i % W, Math.floor(i / W), city.id, { built: true });
-        if (s) { city.fields.push(s.id); if (st.owner[i] === -1) { st.owner[i] = city.id; sim.markDirty(i); } }
-      }
+        if (s) city.fields.push(s.id);
+      } else city.needLand = true;
     }
     if (open >= maxOpen) return;
     // Holzfällerhütte / Steinbruch
@@ -560,10 +551,12 @@
     for (const id of city.sites) { const s = sim._structs.get(id); if (s && s.type === 'lumber') hasLumber = true; if (s && s.type === 'quarry') hasQuarry = true; }
     if (!hasLumber && (city.jobs.lumberjack || 0) >= 2 && sk.wood >= 4 && city.pop >= 7 && sim.rng.chance(0.5)) {
       const i = findDropSpot(sim, city, 'wood', 'lumber');
+      if (i < 0) city.needLand = true;
       if (i >= 0) { const s = placeStruct(sim, city, 'lumber', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
     }
     if (!hasQuarry && (city.jobs.miner || 0) >= 1 && sk.wood >= 4 && city.pop >= 10 && sim.rng.chance(0.5)) {
       const i = findDropSpot(sim, city, 'stone', 'quarry');
+      if (i < 0) city.needLand = true;
       if (i >= 0) { const s = placeStruct(sim, city, 'quarry', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
     }
     // Kaserne, Markt, Denkmal: Bauprogramm der Regierung (WW.GOVERNMENTS[gov].build)
@@ -722,7 +715,7 @@
   // Rohstoffe in Reichweite? (einmal je Jahr)
   function scanResources(sim, city) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
-    const r = territoryRadius(city) + 5;
+    const r = territoryRadius(city, sim) + 5;
     const px = city.cx, py = city.cy;
     let wood = 0, stone = 0, water = 0;
     for (let y = Math.max(0, py - r); y <= Math.min(H - 1, py + r); y++) for (let x = Math.max(0, px - r); x <= Math.min(W - 1, px + r); x++) {
@@ -747,13 +740,13 @@
       const dist = WW.CONFIG.SETTLER_DIST_MIN + sim.rng.next() * (WW.CONFIG.SETTLER_DIST_MAX - WW.CONFIG.SETTLER_DIST_MIN);
       const x = Math.round(px + dir[0] * dist), y = Math.round(py + dir[1] * dist);
       if (x < 3 || y < 3 || x >= W - 4 || y >= H - 4) continue;
-      if (!canFoundAt(sim, x, y, city.race)) continue;
+      if (!canFoundAt(sim, x, y, city.race, WW.CONFIG.DAUGHTER_MIN_DIST)) continue;
       if (sim.comp[y * W + x] !== myComp) continue;
       let free = 0, owned = 0, fav = 0;
       for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
         const i = (y + dy) * W + x + dx;
         if (x + dx < 0 || y + dy < 0 || x + dx >= W || y + dy >= H) continue;
-        if (st.owner[i] !== -1) owned++;
+        if (st.owner[i] !== -1) { owned++; const oc = sim._cities.get(st.owner[i]); if (oc && oc.kingdomId !== city.kingdomId) owned += 2; }
         if (WW.TERRAIN_LUT.build[st.terrain[i]]) free++;
         if (race.favTerrain.indexOf(WW.TERRAIN[st.terrain[i]].key) >= 0) fav++;
       }
@@ -767,15 +760,16 @@
   function sendSettlers(sim, city) {
     const st = sim.state;
     const k = kingdomOf(sim, city);
-    if (!k || k.cityIds.length >= 8) return;
+    if (!k || k.cityIds.length >= WW.Growth.cityLimit(sim, k) + 2) return;
     const site = findSettleSite(sim, city);
     city.lastSettlers = st.year;
     if (!site) return;
     const group = st.nextId++;
     let n = 0;
+    const want = 6 + sim.rng.int(5);
     for (const u of city._members) {
-      if (n >= 7) break;
-      if (u.role === 'leader' || u.role === 'child' || u.role === 'rebel' || u.role === 'soldier' || u.merc) continue;
+      if (n >= want) break;
+      if (u.role === 'leader' || u.role === 'child' || u.role === 'rebel' || u.role === 'soldier' || u.merc || u.order) continue;
       WW.Units.setRole(sim, u, 'settler');
       u.group = group; u.site = site.y * st.W + site.x; u.fails = 0;
       n++;
@@ -816,6 +810,8 @@
     const old = kingdomOf(sim, city);
     const nk = sim._kingdoms.get(newKingdomId);
     if (!nk || old === nk) return;
+    city.joinedYear = sim.state.year;
+    WW.Growth.makeGovernor(sim, city);
     if (old) {
       // Kommunismus: Anteil am Reichslager mitnehmen
       if (WW.GOVERNMENTS[old.gov].sharedStock && old.stock) {
@@ -875,7 +871,10 @@
       // Unzufriedenheit zählt für Aufstände
       const limit = g.key === 'fascism' ? 28 : 20;
       if (city.happiness < limit) city.unhappyYears++; else city.unhappyYears = Math.max(0, city.unhappyYears - 1);
-      if ((city.tier >= 2 || city.pop >= 26) && city.adults >= 14 && st.year - city.lastSettlers >= 7 && city.centerOk) sendSettlers(sim, city);
+      // Tochterstadt: genug Erwachsene, Frieden, Anführer lebt
+      const k = kingdomOf(sim, city);
+      const leaderOk = k && (g.noLeader || (sim._units.get(k.leaderId) && !sim._units.get(k.leaderId).dead));
+      if (city.adults >= WW.CONFIG.DAUGHTER_ADULTS && leaderOk && !WW.Diplo.atWar(sim, k.id) && st.year - city.lastSettlers >= 4 && city.centerOk) sendSettlers(sim, city);
     }
   }
 

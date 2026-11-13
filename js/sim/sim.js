@@ -249,6 +249,8 @@
     if (st.tick % 10 === 0) WW.Cities.updateAll(this);
     if (st.tick % 20 === 5) WW.Gov.update(this);
     if (st.tick % 40 === 15) WW.Diplo.update(this);
+    if (st.tick % 30 === 20) WW.Growth.update(this);
+    if (st.tick % 40 === 25) WW.Growth.updatePlots(this);
     if (st.tick % TPY === 0) {
       st.year++;
       WW.Units.yearly(this);
@@ -257,6 +259,7 @@
       WW.Cities.yearly(this);
       WW.Gov.yearly(this);
       WW.Diplo.yearly(this);
+      WW.Growth.yearly(this);
       WW.Env.yearly(this);
     }
     compact(this);
@@ -276,7 +279,7 @@
     const st = this.state;
     const o = {};
     for (const k in st) {
-      if (k.charCodeAt(0) === 95 || k === 'version' || k === 'game' || k === 'rng' || k === 'usedNames') continue;
+      if (k.charCodeAt(0) === 95 || k === 'version' || k === 'game' || k === 'rng' || k === 'usedNames' || k === 'flur') continue;
       let isR = false;
       for (const r of RASTERS) if (r[0] === k) isR = true;
       if (isR) continue;
@@ -291,6 +294,7 @@
     o.game = 'wuselwelt';
     o.rasters = {};
     for (const r of RASTERS) o.rasters[r[0]] = U().encodeArray(st[r[0]]);
+    if (st.flur) o.rasters.flur = U().encodeArray(st.flur);
     return JSON.stringify(o, replacer);
   };
   Sim.prototype.hash = function () { return U().hashString(this.serialize()); };
@@ -304,11 +308,13 @@
     const st = {};
     for (const k in o) if (k !== 'rasters' && k !== 'rng' && k !== 'game' && k !== 'version') st[k] = o[k];
     for (const r of RASTERS) st[r[0]] = U().decodeArray(o.rasters[r[0]] || '', r[1], N);
+    if (o.rasters.flur) st.flur = U().decodeArray(o.rasters.flur, Int32Array, Math.ceil(o.W / 6) * Math.ceil(o.H / 6));
     if (!o.rasters.owner) st.owner.fill(-1);
     if (!o.rasters.structAt) st.structAt.fill(-1);
     if (!o.rasters.inRing) st.inRing.fill(-1);
     defaults(st);
     const sim = new Sim(st, o.rng);
+    WW.Growth.ensure(sim);
     return sim;
   }
 
@@ -320,6 +326,7 @@
     st.tick = st.tick | 0; st.year = st.year | 0; st.nextId = st.nextId || 1;
     st.pathVersion = st.pathVersion | 0; st.fireCount = st.fireCount | 0; st.markCount = st.markCount | 0;
     st.eventSeq = st.eventSeq | 0;
+    st.plots = st.plots || [];
     st.worldName = st.worldName || 'Wuselwelt';
   }
 
@@ -349,7 +356,7 @@
       inRing: new Int32Array(N).fill(-1), mark: new Uint8Array(N),
       structs: [], units: [], animals: [], cities: [], kingdoms: [], events: [],
       laws: Object.assign({}, WW.LAW_DEFAULTS, opts.laws || {}),
-      pathVersion: 0, fireCount: 0, markCount: 0, eventSeq: 0
+      pathVersion: 0, fireCount: 0, markCount: 0, eventSeq: 0, plots: []
     };
     const nT = WW.TERRAIN.length;
     for (let i = 0; i < N; i++) {
@@ -360,6 +367,7 @@
     }
     for (const k in st.laws) if (!(k in WW.LAW_DEFAULTS)) delete st.laws[k];
     const sim = new Sim(st, null);
+    WW.Growth.ensure(sim);
     sim._startSpots = (world.startSpots || []).slice();
 
     // Startreiche

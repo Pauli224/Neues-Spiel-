@@ -537,6 +537,216 @@
       g.paint(7, 0, ['..j....', '.jlj.j.', 'jlllj..', '.jlj...', '..j..j.', '......j']);
       g.set(12, 9, 'purple'); g.set(11, 10, 'pink'); g.set(4, 2, 'purple');
     });
+
+    // ================================================================== Stufe 3: Kräfte-Icons
+    function arrow(g, x, y, up, c, cd) {
+      if (up) { g.hline(x + 2, y, 1, c); g.hline(x + 1, y + 1, 3, c); g.hline(x, y + 2, 5, c); g.rect(x + 1, y + 3, 3, 3, c); g.vline(x + 3, y + 3, 3, cd); }
+      else { g.rect(x + 1, y, 3, 3, c); g.vline(x + 3, y, 3, cd); g.hline(x, y + 3, 5, c); g.hline(x + 1, y + 4, 3, c); g.hline(x + 2, y + 5, 1, cd); }
+    }
+    function landBlock(g, y) { g.rect(0, y, 14, 14 - y, 'soil'); g.hline(0, y, 14, 'grassL'); g.hline(0, y + 1, 14, 'grass'); }
+    icon('i_raise', function (g) { landBlock(g, 9); g.ellipse(7, 9, 4, 3, function (x, y, nx, ny) { return ny < 0 ? (nx < 0 ? 'grassL' : 'grass') : null; }); arrow(g, 5, 0, true, 'goldL', 'gold'); });
+    icon('i_lower', function (g) { landBlock(g, 8); g.ellipse(7, 9, 4, 2, function (x, y, nx, ny) { return ny > -0.2 ? 'soil' : null; }); g.hline(4, 9, 7, 'woodD'); arrow(g, 5, 0, false, 'glass', 'waterD'); });
+    icon('i_seeds', [
+      '..............',
+      '....vwwwv.....',
+      '...vwwwwwW....',
+      '..vwwvwwwwW...',
+      '..wwwwwwwwW...',
+      '..wwwwwwwWW...',
+      '...WWWWWWW....',
+      '..........f...',
+      '...y.....fe...',
+      '..y.y...f.e...',
+      '.....y....e...',
+      '.hhhhhhhhhhhh.',
+      '.WWWWWWWWWWWW.']);
+    function bomb(g, r, cx, cy) {
+      g.ellipse(cx, cy, r, r, function (x, y, nx, ny) { return nx + ny < -0.8 ? 'dusk' : (nx + ny > 0.6 ? 'ink' : 'plum'); });
+      g.set(Math.round(cx - r * 0.4), Math.round(cy - r * 0.4), 'stoneL');
+    }
+    icon('i_bomb', function (g) { bomb(g, 4.5, 6, 8.5); g.rect(8, 3, 2, 2, 'stoneD'); g.line(10, 3, 12, 1, 'woodL'); g.set(12, 0, 'fireY'); g.set(13, 1, 'fireO'); g.set(11, 0, 'goldL'); });
+    icon('i_bigbomb', function (g) { bomb(g, 6.4, 6.5, 7.5); g.rect(9, 0, 2, 2, 'stoneD'); g.set(11, 0, 'fireY'); g.set(12, 0, 'goldL'); g.paint(3, 6, ['.ll.', 'l..l', '.ll.']); });
+    icon('i_earthquake', function (g) { landBlock(g, 5); g.line(7, 5, 5, 8, 'ink'); g.line(5, 8, 8, 10, 'ink'); g.line(8, 10, 6, 13, 'ink'); g.line(8, 5, 6, 8, 'plum'); g.line(1, 2, 3, 0, 'white'); g.line(10, 0, 12, 2, 'white'); g.line(0, 3, 1, 3, 'white'); });
+    icon('i_volcano', [
+      '....F..Q......',
+      '...QFFQ.......',
+      '....QQ........',
+      '.....rQ.......',
+      '....GrrG......',
+      '...gGQrGG.....',
+      '...ggrQGGG....',
+      '..qgggQrGGG...',
+      '..qggggrGGG...',
+      '.qgggggQGGGG..',
+      '.qggggggGGGG..',
+      'qggggggggGGGG.',
+      'GGGGGGGGGGGGG.']);
+    icon('i_tornado', function (g) {
+      for (var y = 0; y < 14; y++) { var half = 6.5 - y * 0.42, cx = 7 + Math.sin(y * 0.6) * 1.2; for (var x = 0; x < 14; x++) { var dx = x + 0.5 - cx; if (Math.abs(dx) <= half) g.set(x, y, ((y + Math.floor(dx)) & 3) === 0 ? 'stoneD' : (dx < 0 ? 'stoneL' : 'stone')); } }
+    });
+    icon('i_acidrain', [
+      '.....XXX......',
+      '...XXXXXfX....',
+      '..XXXXXXXXX...',
+      '.XXXXXXXXXXX..',
+      'XXXXXXXXXXXXX.',
+      'EEEEEEEEEEEEE.',
+      '..............',
+      '..f...f...f...',
+      '.f...f...f....',
+      '..............',
+      '...f...f...f..',
+      '..f...f...f...']);
+    icon('i_flood', function (g) {
+      g.rect(0, 6, 14, 8, 'water'); for (var x = 0; x < 14; x++) { var y = 6 + Math.round(Math.sin(x * 0.9) * 1.2); g.set(x, y - 1, 'white'); g.set(x, y, 'waterL'); for (var yy = 0; yy < y - 1; yy++) g.set(x, yy, 0); }
+      g.paint(2, 0, ['.vw.', 'vwwW', 'WccW']);
+    });
+    icon('i_frost', function (g) {
+      g.line(7, 0, 7, 13, 'white'); g.line(0, 7, 13, 7, 'white'); g.line(2, 2, 12, 12, 'snowD'); g.line(12, 2, 2, 12, 'snowD');
+      [[7, 2], [7, 11], [2, 7], [11, 7]].forEach(function (p) { g.set(p[0] - 1, p[1], 'glass'); g.set(p[0] + 1, p[1], 'glass'); g.set(p[0], p[1] - 1, 'glass'); g.set(p[0], p[1] + 1, 'glass'); });
+      g.set(7, 7, 'glass');
+    });
+    icon('i_drought', function (g) {
+      g.ellipse(9, 4, 3.5, 3.5, function (x, y, nx, ny) { return nx + ny < -0.4 ? 'goldL' : 'fireY'; });
+      g.set(9, 0, 'fireO'); g.set(13, 4, 'fireO'); g.set(5, 4, 'fireO');
+      g.rect(0, 9, 14, 5, 'sand'); g.hline(0, 9, 14, 'strawL');
+      g.line(2, 10, 4, 12, 'sandD'); g.line(4, 12, 7, 11, 'sandD'); g.line(7, 11, 9, 13, 'sandD'); g.line(9, 10, 12, 12, 'sandD');
+      g.paint(1, 6, ['.W.', 'WWW', '.W.']);
+    });
+    icon('i_madness', function (g) {
+      g.ellipse(7, 7, 6.5, 6.5, 'pink');
+      for (var a = 0; a < 26; a++) { var r = a * 0.24, t = a * 0.55; g.set(Math.round(7 + Math.cos(t) * r), Math.round(7 + Math.sin(t) * r), 'purple'); }
+    });
+    icon('i_love', [
+      '..............',
+      '..rrr...rrr...',
+      '.rpprr.rrrrR..',
+      '.rprrrrrrrrR..',
+      '.rrrrrrrrrrR..',
+      '..rrrrrrrrR...',
+      '...rrrrrrR....',
+      '....rrrrR.....',
+      '.....rrR......',
+      '......R.......']);
+    icon('i_goldrain', [
+      '.....lll......',
+      '...lllllNl....',
+      '..llllllllN...',
+      '.lllllllllNN..',
+      'NNNNNNNNNNNN..',
+      '..............',
+      '..jk...jk.....',
+      '..kK...kK..jk.',
+      '.....jk....kK.',
+      '.....kK.......',
+      '..jk.....jk...',
+      '..kK.....kK...']);
+    icon('i_heal', function (g) {
+      g.ellipse(7, 7, 6.5, 6.5, shade('white', 'white', 'snowD'));
+      g.rect(5, 2, 4, 10, 'leafL'); g.rect(2, 5, 10, 4, 'leafL'); g.vline(8, 2, 10, 'leaf'); g.hline(2, 8, 10, 'leaf');
+    });
+    icon('i_wrecker', function (g) {
+      g.line(1, 0, 8, 6, 'metalD'); g.set(0, 0, 'woodD');
+      g.ellipse(9.5, 9.5, 4, 4, function (x, y, nx, ny) { return nx + ny < -0.6 ? 'stone' : (nx + ny > 0.5 ? 'ink' : 'stoneD'); });
+      g.set(8, 8, 'stoneL'); g.line(0, 10, 2, 12, 'red'); g.line(1, 13, 3, 11, 'red');
+    });
+    icon('i_wallbrush', function (g) {
+      g.rect(0, 7, 9, 6, 'stone'); g.hline(0, 7, 9, 'stoneL'); for (var x = 0; x < 9; x += 3) g.vline(x + 2, 8, 5, 'stoneD'); g.hline(0, 10, 9, 'stoneD');
+      g.set(0, 6, 'stoneL'); g.set(4, 6, 'stoneL'); g.set(8, 6, 'stoneL');
+      g.line(13, 0, 9, 6, 'woodL'); g.line(12, 0, 8, 6, 'wood'); g.rect(7, 6, 3, 2, 'metal'); g.set(7, 8, 'white'); g.set(8, 8, 'white');
+    });
+    icon('i_hand', function (g) {
+      g.paint(1, 0, [
+        '....ss......',
+        '....sS.ss...',
+        '.ss.sS.sS...',
+        '.sS.sS.sS.ss',
+        '.sS.sS.sS.sS',
+        '.sSssSssSssS',
+        '.ssssssssssS',
+        '.sssssssssS.',
+        'ssssssssssS.',
+        '.ssssssssS..',
+        '..sssssssS..',
+        '..TTTTTTTt..',
+        '..tttttttt..']);
+    });
+    icon('i_breeze', function (g) {
+      g.line(0, 3, 9, 3, 'white'); g.line(9, 3, 11, 1, 'white'); g.set(10, 0, 'white');
+      g.line(0, 7, 12, 7, 'snowD'); g.line(12, 7, 13, 5, 'snowD');
+      g.line(2, 11, 8, 11, 'white'); g.line(8, 11, 10, 13, 'white');
+      g.set(4, 5, 'leafL'); g.set(5, 5, 'leaf'); g.set(11, 9, 'pink');
+    });
+
+    // Klarere Neufassungen: Holz, Kommunismus (Planrübe), Faschismus (Lautsprecher)
+    icon('i_wood', [
+      '..............',
+      '..............',
+      '.....zyz......',
+      '....zyYyz.....',
+      '....yYoYy.....',
+      '..zyzyYyzyz...',
+      '.zyYyz.zyYyz..',
+      '.yYoYy.yYoYy..',
+      '.zyYyzwzyYyz..',
+      '..zyz.w.zyz...',
+      '..wwwwwwwwwW..',
+      '..WWWWWWWWWW..']);
+    icon('i_gov_communism', [
+      '....f..f......',
+      '...fe.fe......',
+      '....eefe......',
+      '.....Ee.......',
+      '...PPPPPP.....',
+      '..PlPPPPPP....',
+      '..lPPPPPPP....',
+      '..PPPPPPPP....',
+      '...PPPPPP.....',
+      '....PPPP......',
+      '.....PP.......',
+      '.....P........']);
+    icon('i_gov_fascism', [
+      '..............',
+      '..........mn..',
+      '.........mnn..',
+      '.....MmmmnnnM.',
+      '..ggMmmnnnnnM.',
+      '..ggMmmnnnnnM.',
+      '..ggMmmnnnnnM.',
+      '.....MmmmnnnM.',
+      '...W.....mnn..',
+      '...W......mn..',
+      '...W..........',
+      '..WWW.........']);
+
+    // Geländeproben zum Malen: i_t_<key> (Kachelprobe 14×14 mit Rahmen, Aufragendes als Mini-Deko)
+    var TT = WW.TERRAIN || [];
+    var DECO = { forest: 'd_tree_s_0', jungle: 'd_jtree_2', taiga: 'd_pine_s_0', mushroom: 'd_shroom_s_0', crystal: 'd_crystal_2', mountain: 'd_peak_2',
+      snow: 'd_icepeak_0', swamp: 'd_reed_0', desert: 'd_cactus_1', savanna: 'd_bush_dry_0', hill: 'd_rock_1', ash: 'd_stump_0', tundra: 'd_shrub_0' };
+    TT.forEach(function (t) {
+      var src = L.DEFS['t_' + t.key + '_0'];
+      var g = new Grid(14, 14);
+      for (var y = 0; y < 14; y++) for (var x = 0; x < 14; x++) g.d[y * 14 + x] = src.grid.d[(y % 8) * 8 + (x % 8)];
+      var dk = DECO[t.key] && L.DEFS[DECO[t.key]];
+      if (dk) { var dg = dk.grid, ox = Math.floor((14 - dg.w) / 2), oy = 14 - dg.h; for (var yy = 0; yy < dg.h; yy++) for (var xx = 0; xx < dg.w; xx++) { var c = dg.d[yy * dg.w + xx]; if (c && c !== L.C.shade && c !== L.C.shadeL) g.set(ox + xx, oy + yy, c); } }
+      g.hline(0, 0, 14, 'white'); g.vline(0, 0, 14, 'white');
+      def('i_t_' + t.key, g.pad(1, 1, 1, 1).outline(), { group: 'icon', anchor: 'icon' });
+    });
+    // Kreatur-Icons i_a_<kind>: Sprite (Frame 0) mittig, große Sprites halb so groß
+    ['sheep', 'wolf', 'cow', 'chicken', 'rabbit', 'deer', 'bear', 'crab', 'fish', 'dragon', 'zombie', 'skeleton', 'slime', 'ghost', 'demon', 'giantchicken', 'yeti', 'sandworm', 'treant', 'golem']
+      .forEach(function (k) {
+        var d = L.DEFS['a_' + k + '_0']; if (!d) return;
+        var src = d.grid, sc = (src.w > 16 || src.h > 16) ? 2 : 1;
+        var w = Math.ceil(src.w / sc), h = Math.ceil(src.h / sc), g = new Grid(16, 16);
+        var ox = Math.floor((16 - w) / 2), oy = Math.max(0, Math.floor((16 - h) / 2));
+        for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+          var c = src.get(x * sc, y * sc);
+          if (sc === 2 && (!c || c === L.C.shade)) c = src.get(x * sc + 1, y * sc + 1) || src.get(x * sc + 1, y * sc) || c;
+          if (c && c !== L.C.shade && c !== L.C.shadeL) g.set(ox + x, oy + y, c);
+        }
+        if (sc === 2) g = (function (o) { var t = new Grid(16, 16); for (var i = 0; i < o.d.length; i++) t.d[i] = (o.d[i] === L.C.ink) ? 0 : o.d[i]; return t.outline(); })(g);
+        def('i_a_' + k, g, { group: 'icon', anchor: 'icon' });
+      });
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

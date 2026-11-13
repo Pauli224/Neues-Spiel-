@@ -697,6 +697,19 @@
       def('d_peak_' + i, finishDecor(peak(s[0], s[1], s[2], PK, CAP, 480 + i).pad(1, 1, 1, 0), RKO, s[0] / 2 + 2, s[1] - 0.2, s[0] / 2 - 0.5, 1.2), { group: 'decor' });
     });
     def('d_icepeak_0', finishDecor(peak(11, 12, 12, PK, [K('#ffffff'), K('#c8d9ea')], 490).pad(1, 1, 1, 0), K('#4a5f80'), 7.5, 11.8, 5, 1.1), { group: 'decor' });
+    // Beerensträucher und Blumenbüschel (Wachstum der Wildnis)
+    [[K('#ee4a4a'), K('#ff9a8a')], [K('#5a5ad8'), K('#9a9af0')]].forEach(function (bc, i) {
+      var o = blob(8, 6, [[4, 3.5, 4, 2.8], [2.5, 4, 2.2]], LEAF, LEAFO, 520 + i);
+      [[1, 2], [4, 1], [6, 3], [3, 4], [5, 4]].forEach(function (p) { o.set(p[0], p[1], bc[0]); });
+      o.set(4, 0, bc[1]); o.set(1, 1, bc[1]);
+      def('d_berry_' + i, finishDecor(o.pad(1, 1, 1, 1), LEAFO, 6, 7, 4, 1), { group: 'decor' });
+    });
+    [[K('#ffe066'), K('#ffffff')], [K('#f7a1c4'), K('#ee6a5a')], [K('#b48ae6'), K('#8fc2ff')]].forEach(function (fc, i) {
+      var o = new Grid(7, 5), st = K('#4f9a3c');
+      [[1, 2], [3, 1], [5, 2], [2, 3], [4, 3]].forEach(function (p, k) { o.set(p[0], p[1] + 1, st); o.set(p[0], p[1], k & 1 ? fc[1] : fc[0]); });
+      o.set(0, 4, st); o.set(6, 4, st);
+      def('d_flower_' + i, o, { group: 'decor' });
+    });
     // Strauch (Tundra), toter Baum und Stumpf (Asche)
     [0, 1].forEach(function (i) {
       var o = blob(6, 4, [[3, 2.4, 3, 1.8]], [K('#c4c9a0'), K('#8f9a72'), K('#6a7556')], 0, 500 + i);

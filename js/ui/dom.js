@@ -28,10 +28,10 @@
 
   // Pixel-Icon als Canvas (CSS-Größe px), gecacht je Schlüssel/Team/Maßstab
   const cache = new Map();
-  function icon(key, px, team) {
+  function icon(key, px, team, label) {
     const S = WW.Sprites;
     px = px || 32;
-    if (!S.has(key)) key = 'b_question';
+    if (!S.has(key)) return placeholder(label || key.replace(/^(i_a_|i_t_|i_|a_|t_|s_|u_)/, ''), px);
     const inf = S.info(key);
     const dpr = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));
     const big = inf ? Math.max(inf.w, inf.h) : 16;
@@ -50,6 +50,22 @@
     cv.setAttribute('aria-hidden', 'true');
     return cv;
   }
+  // neutrales Platzhalter-Icon: Pixel-Kachel mit Anfangsbuchstaben
+  function placeholder(label, px) {
+    const dpr = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+    const n = 16, sc = Math.max(1, Math.round(px * dpr / n));
+    const cv = document.createElement('canvas'); cv.width = n * sc; cv.height = n * sc;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#0a1a21'; g.fillRect(sc, sc, 14 * sc, 14 * sc);
+    g.fillStyle = '#2a5261'; g.fillRect(2 * sc, 2 * sc, 12 * sc, 12 * sc);
+    g.fillStyle = '#f2b541'; g.font = '700 ' + (10 * sc) + 'px ' + (WW.Renderer ? WW.Renderer.FONT_PIXEL : 'monospace');
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(label || '?').charAt(0).toUpperCase(), 8 * sc, 8.6 * sc);
+    cv.className = 'ico'; cv.style.width = px + 'px'; cv.style.height = px + 'px';
+    cv.setAttribute('aria-hidden', 'true');
+    return cv;
+  }
+
   // Icon in quadratischem Rahmen zentriert (gleich große Knöpfe)
   function iconBox(key, px, team) {
     const c = icon(key, px, team);

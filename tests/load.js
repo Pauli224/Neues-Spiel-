@@ -7,7 +7,7 @@ const FILES = [
   'js/data/names.js', 'js/data/texts.js',
   'js/sim/util.js', 'js/sim/world.js', 'js/sim/worldgen.js', 'js/sim/path.js', 'js/sim/structs.js',
   'js/sim/walls.js', 'js/sim/cities.js', 'js/sim/units.js', 'js/sim/gov.js', 'js/sim/diplo.js',
-  'js/sim/creatures.js', 'js/sim/env.js', 'js/sim/powers.js', 'js/sim/sim.js'
+  'js/sim/growth.js', 'js/sim/creatures.js', 'js/sim/env.js', 'js/sim/powers.js', 'js/sim/sim.js'
 ];
 function load(opts) {
   for (const f of FILES) {

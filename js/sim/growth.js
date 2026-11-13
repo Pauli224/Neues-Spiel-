@@ -1,0 +1,516 @@
+// Wachstum (Stufe 3a): Landnahme in Fluren, Zuzug, Statthalter und Herrscherwerte, Loyalität und
+// Abspaltung, neue Reiche von selbst, Vorhaben mit Fortschritt (state.plots).
+(function (WW) { 'use strict';
+
+  const F = 6;   // Flur = 6×6 Kacheln
+
+  function C() { return WW.CONFIG; }
+  function dims(st) { return { fw: Math.ceil(st.W / F), fh: Math.ceil(st.H / F) }; }
+
+  // Flur-Raster anlegen (auch für alte Spielstände: aus owner ableiten)
+  function ensure(sim) {
+    const st = sim.state, d = dims(st);
+    if (st.flur && st.flur.length === d.fw * d.fh) return;
+    st.flur = new Int32Array(d.fw * d.fh).fill(-1);
+    for (let i = 0; i < st.W * st.H; i++) {
+      const o = st.owner[i];
+      if (o < 0) continue;
+      const x = i % st.W, y = (i - x) / st.W;
+      const fi = Math.floor(y / F) * d.fw + Math.floor(x / F);
+      if (st.flur[fi] === -1) st.flur[fi] = o;
+    }
+  }
+  function flurAt(st, x, y) { const d = dims(st); return Math.floor(y / F) * d.fw + Math.floor(x / F); }
+  function flurCenter(st, fi) { const d = dims(st); const fx = fi % d.fw, fy = (fi - fx) / d.fw; return { x: fx * F + F / 2, y: fy * F + F / 2, fx: fx, fy: fy }; }
+
+  // Flur setzen; Besitz-Raster folgt (offenes Meer bleibt herrenlos)
+  function setFlur(sim, fi, cid) {
+    const st = sim.state, d = dims(st);
+    const old = st.flur[fi];
+    if (old === cid) return;
+    st.flur[fi] = cid;
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    const T = WW.T;
+    for (let y = fy * F; y < Math.min(st.H, fy * F + F); y++) for (let x = fx * F; x < Math.min(st.W, fx * F + F); x++) {
+      const i = y * st.W + x;
+      const t = st.terrain[i];
+      const nv = (cid >= 0 && t !== T.DEEP && t !== T.WATER) ? cid : -1;
+      if (st.owner[i] === nv) continue;
+      if (nv >= 0 || st.owner[i] === old) { st.owner[i] = nv; sim.markDirty(i); }
+    }
+  }
+  function countFlurs(sim, city) {
+    const st = sim.state;
+    let n = 0;
+    for (let i = 0; i < st.flur.length; i++) if (st.flur[i] === city.id) n++;
+    return n;
+  }
+
+  // Reichweite der Landnahme ums Zentrum (Kacheln)
+  function reach(sim, city) {
+    const k = sim._kingdoms.get(city.kingdomId);
+    const g = WW.GOVERNMENTS[(k && k.gov) || 'tribe'];
+    const race = WW.RACES[city.race] || WW.RACES.human;
+    const gv = city.governor;
+    return C().FLUR_REACH + city.tier * 3 + (g.landReach || 0) + (race.landReach || 0) + (gv ? (gv.admin - 3) * 1.5 : 0);
+  }
+
+  // Land einer Flur bewerten (begehbar, bebaubar, fruchtbar)
+  function flurLand(sim, fi, race) {
+    const st = sim.state, d = dims(st), LUT = WW.TERRAIN_LUT;
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    let walk = 0, fert = 0, res = 0;
+    for (let y = fy * F; y < Math.min(st.H, fy * F + F); y++) for (let x = fx * F; x < Math.min(st.W, fx * F + F); x++) {
+      const t = st.terrain[y * st.W + x];
+      if (LUT.walk[t] > 0) walk++;
+      fert += LUT.fertile[t];
+      if (LUT.wood[t] || LUT.stone[t]) res++;
+    }
+    return { walk: walk, fert: fert, res: res };
+  }
+
+  // Erstes Gebiet: Flur des Zentrums und die umliegenden, soweit frei und nah
+  function claimInitial(sim, city) {
+    ensure(sim);
+    const st = sim.state, d = dims(st);
+    const cf = flurAt(st, city.cx, city.cy);
+    const cfx = cf % d.fw, cfy = (cf - cfx) / d.fw;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const fx = cfx + dx, fy = cfy + dy;
+      if (fx < 0 || fy < 0 || fx >= d.fw || fy >= d.fh) continue;
+      const fi = fy * d.fw + fx;
+      if (st.flur[fi] !== -1 && st.flur[fi] !== city.id) continue;
+      const c = flurCenter(st, fi);
+      const dd = Math.hypot(c.x - city.cx - 0.5, c.y - city.cy - 0.5);
+      if (dd > 9.5 && !(dx === 0 && dy === 0)) continue;
+      if (flurLand(sim, fi, city.race).walk < 4 && !(dx === 0 && dy === 0)) continue;
+      setFlur(sim, fi, city.id);
+    }
+    city.flurs = countFlurs(sim, city);
+  }
+
+  // Nächste Flur nehmen (angrenzend, frei, in Reichweite). true = genommen
+  function claimNext(sim, city) {
+    ensure(sim);
+    const st = sim.state, d = dims(st);
+    const R = reach(sim, city);
+    let best = -1, bs = -1e9;
+    for (let fi = 0; fi < st.flur.length; fi++) {
+      if (st.flur[fi] !== -1) continue;
+      const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+      let adj = 0;
+      if (fx > 0 && st.flur[fi - 1] === city.id) adj++;
+      if (fx < d.fw - 1 && st.flur[fi + 1] === city.id) adj++;
+      if (fy > 0 && st.flur[fi - d.fw] === city.id) adj++;
+      if (fy < d.fh - 1 && st.flur[fi + d.fw] === city.id) adj++;
+      if (!adj) continue;
+      const c = flurCenter(st, fi);
+      const dist = Math.hypot(c.x - city.cx - 0.5, c.y - city.cy - 0.5);
+      if (dist > R) continue;
+      const land = flurLand(sim, fi, city.race);
+      if (land.walk < 6) continue;
+      const score = land.walk * 0.08 + land.fert * 0.06 + land.res * 0.04 + adj * 0.8 - dist * 0.35 + sim._hashNoise(fi * 7 + city.id) * 0.5;
+      if (score > bs) { bs = score; best = fi; }
+    }
+    if (best < 0) return false;
+    setFlur(sim, best, city.id);
+    city.flurs = (city.flurs || 0) + 1;
+    const c = flurCenter(st, best);
+    sim.fx({ type: 'claim', x: c.x, y: c.y, cityId: city.id });
+    return true;
+  }
+
+  // Alle Fluren (und Tile-Besitz) einer Stadt freigeben
+  function releaseCity(sim, city) {
+    ensure(sim);
+    const st = sim.state;
+    for (let fi = 0; fi < st.flur.length; fi++) if (st.flur[fi] === city.id) setFlur(sim, fi, -1);
+    for (let i = 0; i < st.owner.length; i++) if (st.owner[i] === city.id) { st.owner[i] = -1; sim.markDirty(i); }
+  }
+
+  // Fluren unter einem Mauerring dazunehmen (soweit frei)
+  function claimTiles(sim, city, tiles) {
+    ensure(sim);
+    const st = sim.state;
+    const seen = new Set();
+    for (const t of tiles) {
+      const x = t % st.W, y = (t - x) / st.W;
+      const fi = flurAt(st, x, y);
+      if (seen.has(fi)) continue;
+      seen.add(fi);
+      if (st.flur[fi] === -1) setFlur(sim, fi, city.id);
+    }
+    city.flurs = countFlurs(sim, city);
+  }
+
+  // Abgeschnittene Fluren verfallen (nicht mehr über eigene Fluren mit dem Zentrum verbunden)
+  function cutOff(sim, city) {
+    const st = sim.state, d = dims(st);
+    const start = flurAt(st, city.cx, city.cy);
+    if (st.flur[start] !== city.id) setFlur(sim, start, city.id);
+    const seen = new Uint8Array(st.flur.length);
+    const q = [start]; seen[start] = 1;
+    while (q.length) {
+      const fi = q.pop();
+      const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+      const nb = [fx > 0 ? fi - 1 : -1, fx < d.fw - 1 ? fi + 1 : -1, fy > 0 ? fi - d.fw : -1, fy < d.fh - 1 ? fi + d.fw : -1];
+      for (const n of nb) if (n >= 0 && !seen[n] && st.flur[n] === city.id) { seen[n] = 1; q.push(n); }
+    }
+    let lost = 0;
+    for (let fi = 0; fi < st.flur.length; fi++) {
+      if (st.flur[fi] !== city.id || seen[fi]) continue;
+      // Felder dort verwildern
+      removeFieldsIn(sim, city, fi);
+      setFlur(sim, fi, -1);
+      lost++;
+    }
+    if (lost) city.flurs = countFlurs(sim, city);
+    return lost;
+  }
+  function removeFieldsIn(sim, city, fi) {
+    const st = sim.state, d = dims(st);
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    for (let y = fy * F; y < Math.min(st.H, fy * F + F); y++) for (let x = fx * F; x < Math.min(st.W, fx * F + F); x++) {
+      const s = sim._structs.get(st.structAt[y * st.W + x]);
+      if (s && s.type === 'field' && s.cityId === city.id) WW.Structs.remove(sim, s);
+    }
+  }
+  // Hat die Flur wichtige Bauwerke der Stadt (Kern, Mauer)?
+  function flurHasCore(sim, city, fi) {
+    const st = sim.state, d = dims(st);
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    for (let y = fy * F; y < Math.min(st.H, fy * F + F); y++) for (let x = fx * F; x < Math.min(st.W, fx * F + F); x++) {
+      const i = y * st.W + x;
+      if (st.inRing[i] === city.id) return true;
+      const s = sim._structs.get(st.structAt[i]);
+      if (s && s.cityId === city.id && (WW.STRUCT_INFO[s.type].core || WW.Structs.isWallish(s))) return true;
+    }
+    return false;
+  }
+
+  // Krieg: Grenzfluren wechseln, wo nur noch feindliche Soldaten stehen
+  function warFlips(sim) {
+    const st = sim.state;
+    const sold = new Map();   // flur -> { kingdomId: n }
+    for (const u of st.units) {
+      if (u.dead || (u.role !== 'soldier' && u.role !== 'rebel')) continue;
+      const fi = flurAt(st, Math.floor(u.x), Math.floor(u.y));
+      let m = sold.get(fi);
+      if (!m) { m = {}; sold.set(fi, m); }
+      m[u.kingdomId] = (m[u.kingdomId] || 0) + 1;
+    }
+    const d = dims(st);
+    for (const [fi, m] of sold) {
+      const cid = st.flur[fi];
+      if (cid < 0) continue;
+      const city = sim._cities.get(cid);
+      if (!city) continue;
+      const own = m[city.kingdomId] || 0;
+      if (own > 0) continue;
+      let bestK = -1, bn = 1;
+      for (const k in m) {
+        if (+k === city.kingdomId || !WW.Path.hostileKingdoms(sim, +k, city.kingdomId)) continue;
+        if (m[k] > bn) { bn = m[k]; bestK = +k; }
+      }
+      if (bestK < 0 || flurHasCore(sim, city, fi)) continue;
+      // angrenzende Stadt des Siegers übernimmt die Flur
+      const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+      let taker = null;
+      for (const n of [fx > 0 ? fi - 1 : -1, fx < d.fw - 1 ? fi + 1 : -1, fy > 0 ? fi - d.fw : -1, fy < d.fh - 1 ? fi + d.fw : -1]) {
+        if (n < 0) continue;
+        const oc = sim._cities.get(st.flur[n]);
+        if (oc && oc.kingdomId === bestK) { taker = oc; break; }
+      }
+      removeFieldsIn(sim, city, fi);
+      setFlur(sim, fi, taker ? taker.id : -1);
+      city.flurs = countFlurs(sim, city);
+      if (taker) taker.flurs = countFlurs(sim, taker);
+      if (city.lastFlurLoss !== st.year) {
+        city.lastFlurLoss = st.year;
+        const k = sim._kingdoms.get(bestK);
+        sim.event('flurLost', { city: city.name, other: k ? k.name : '' }, WW.Cities.atCity(city));
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Herrscher und Statthalter
+  // ---------------------------------------------------------------------------
+  const QUIRKS = ['sammelt Löffel', 'hat Angst vor Schafen', 'redet mit Hühnern', 'zählt ständig Steine', 'trägt zwei Hüte übereinander',
+    'schläft im Stehen', 'liebt Kohlsuppe über alles', 'pfeift beim Regieren', 'hält Tauben für Spione', 'schreibt Gedichte über Rüben',
+    'verliert dauernd den Schlüssel', 'misstraut runden Dingen', 'badet nur montags', 'sammelt Kriegsgeschichten', 'kann nicht Nein sagen',
+    'grüßt jeden Baum', 'hortet Senf', 'hält lange Reden', 'ist ein begeisterter Gärtner', 'erfindet ständig Feiertage'];
+  function rollStats(sim) {
+    const r = () => 1 + sim.rng.int(5);
+    return { war: r(), diplo: r(), admin: r(), quirk: QUIRKS[sim.rng.int(QUIRKS.length)] };
+  }
+  function makeGovernor(sim, city) {
+    const female = sim.rng.chance(0.5);
+    const s = rollStats(sim);
+    city.governor = { name: WW.Names.person(sim.rng, city.race, female), female: female, war: s.war, diplo: s.diplo, admin: s.admin, quirk: s.quirk, since: sim.state.year };
+    return city.governor;
+  }
+  function ensureRuler(sim, k) {
+    if (k.ruler && k.ruler.leaderId === k.leaderId) return k.ruler;
+    const s = rollStats(sim);
+    k.ruler = { leaderId: k.leaderId, war: s.war, diplo: s.diplo, admin: s.admin, quirk: s.quirk };
+    return k.ruler;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Weiches Stadtlimit und Loyalität
+  // ---------------------------------------------------------------------------
+  function cityLimit(sim, k) {
+    const g = WW.GOVERNMENTS[k.gov] || WW.GOVERNMENTS.tribe;
+    const race = WW.RACES[k.race] || WW.RACES.human;
+    const r = k.ruler || { admin: 3 };
+    return Math.max(1, (g.cityLimit || 3) + (race.cityLimit || 0) + Math.round((r.admin - 3) * 0.7));
+  }
+
+  function loyaltyTarget(sim, city, k) {
+    const st = sim.state;
+    if (k.capitalId === city.id) return 100;
+    const cap = sim._cities.get(k.capitalId);
+    let l = 55;
+    l += (city.happiness - 50) * 0.5;
+    if (cap) { const dd = Math.hypot(cap.cx - city.cx, cap.cy - city.cy); if (dd > 30) l -= (dd - 30) * 0.6; }
+    if (city.race !== k.race) l -= 18;
+    const prefs = (WW.RACES[city.race] || WW.RACES.human).govPrefs;
+    const pv = prefs[k.gov] || 1;
+    if (pv < 1) l -= 12; else if (pv >= 3) l += 6;
+    const over = k.cityIds.length - cityLimit(sim, k);
+    if (over > 0) l -= over * 14;
+    const years = st.year - (city.joinedYear == null ? city.founded : city.joinedYear);
+    l += Math.min(20, years * 0.8);
+    if (city.conqueredYear != null && st.year - city.conqueredYear < 12) l -= 30 * (1 - (st.year - city.conqueredYear) / 12);
+    if (city.occupiedUntil && st.year < city.occupiedUntil) l -= 15;
+    if (city.governor) l += (city.governor.diplo - 3) * 4;
+    if (k.ruler) l += (k.ruler.admin - 3) * 3;
+    if (city.hungry) l -= 10;
+    if (k.policy && k.policy.unrest && st.year < k.policy.unrest) l -= 20;
+    if (city.agitated && st.year - city.agitated < 4) l -= 10;
+    return WW.SimUtil.clamp(l, -100, 100);
+  }
+
+  // Stadt spaltet sich ab; Nachbarn mit schwacher Bindung gehen mit
+  function secedeByLoyalty(sim, city) {
+    const old = sim._kingdoms.get(city.kingdomId);
+    if (!old || old.cityIds.length < 2 || old.capitalId === city.id) return null;
+    const nk = WW.Diplo.secede(sim, city, 'tribe', null, true);
+    if (!nk) return null;
+    const ch = WW.Gov.chooseGov(sim, nk);
+    WW.Gov.applyGov(sim, nk, ch.gov, { lock: false, reason: 'silent' });
+    city.loyalty = 60; city.joinedYear = sim.state.year; city.conqueredYear = null;
+    let followers = 0;
+    for (const id of old.cityIds.slice()) {
+      const c = sim._cities.get(id);
+      if (!c || c.id === old.capitalId) continue;
+      if (Math.hypot(c.cx - city.cx, c.cy - city.cy) > 34 || (c.loyalty == null ? 50 : c.loyalty) > 22) continue;
+      WW.Cities.transferCity(sim, c, nk.id);
+      c.loyalty = 50; c.joinedYear = sim.state.year;
+      followers++;
+    }
+    sim.event('secedeLoyalty', { city: city.name, kingdom: nk.name, other: old.name, gov: WW.GOVERNMENTS[nk.gov].name, n: followers, why: ch.why }, WW.Cities.atCity(city));
+    return nk;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vorhaben (state.plots): { id, type, kingdomId, targetId, cityId, progress 0..1, x, y, since }
+  // type: 'war' (rüstet zum Krieg gegen targetId), 'alliance', 'revolt' (Stadt cityId), 'secession' (Stadt cityId)
+  // ---------------------------------------------------------------------------
+  function findPlot(sim, type, a, b) {
+    for (const p of sim.state.plots) if (p.type === type && p.kingdomId === a && p.targetId === b) return p;
+    return null;
+  }
+  function addPlot(sim, type, kingdomId, targetId, cityId, x, y) {
+    const st = sim.state;
+    let p = findPlot(sim, type, kingdomId, targetId);
+    if (p) return p;
+    p = { id: st.nextId++, type: type, kingdomId: kingdomId, targetId: targetId, cityId: cityId == null ? -1 : cityId, progress: 0, x: x, y: y, since: st.year };
+    st.plots.push(p);
+    return p;
+  }
+  function removePlot(sim, p) { const st = sim.state; const i = st.plots.indexOf(p); if (i >= 0) st.plots.splice(i, 1); }
+
+  // Kriegsvorhaben eines Reichs gegen ein anderes beginnen (statt sofortiger Erklärung)
+  function planWar(sim, a, b, holy) {
+    const pa = WW.Gov.capital(sim, a);
+    const p = addPlot(sim, 'war', a.id, b.id, pa ? pa.id : -1, pa ? pa.cx + 0.5 : -1, pa ? pa.cy + 0.5 : -1);
+    if (p.progress === 0 && !p.announced) {
+      p.announced = true; p.holy = !!holy;
+      sim.event('plotWar', { kingdom: a.name, other: b.name, city: pa ? pa.name : a.name }, { kingdomId: a.id, cityId: pa ? pa.id : -1, x: p.x, y: p.y });
+    }
+    return p;
+  }
+  function planAlliance(sim, a, b) {
+    const pa = WW.Gov.capital(sim, a);
+    const p = addPlot(sim, 'alliance', a.id, b.id, pa ? pa.id : -1, pa ? pa.cx + 0.5 : -1, pa ? pa.cy + 0.5 : -1);
+    if (!p.announced) { p.announced = true; sim.event('plotAlliance', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: pa ? pa.id : -1, x: p.x, y: p.y }); }
+    return p;
+  }
+
+  // alle 40 Ticks
+  function updatePlots(sim) {
+    const st = sim.state;
+    for (const p of st.plots.slice()) {
+      const a = sim._kingdoms.get(p.kingdomId);
+      if (!a) { removePlot(sim, p); continue; }
+      if (p.type === 'war' || p.type === 'alliance') {
+        const b = sim._kingdoms.get(p.targetId);
+        const r = b && a.relations[b.id];
+        if (!b || !r || r.status !== 'peace') { removePlot(sim, p); continue; }
+        const ruler = a.ruler || { war: 3, diplo: 3 };
+        if (p.type === 'war') {
+          if (!st.laws.wars || WW.GOVERNMENTS[a.gov].neverWar || r.opinion > -5) { p.progress -= 0.08; if (p.progress <= 0) { removePlot(sim, p); sim.event('plotWarOff', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: p.cityId, x: p.x, y: p.y }); } continue; }
+          p.progress += (0.04 + ruler.war * 0.012) * (WW.GOVERNMENTS[a.gov].war === 'mass' ? 1.5 : 1);
+          if (p.progress >= 1) { removePlot(sim, p); WW.Diplo.declareWar(sim, a, b, p.holy ? 'holyWar' : 'war'); }
+        } else {
+          if (r.opinion < 30) { p.progress -= 0.1; if (p.progress <= 0) removePlot(sim, p); continue; }
+          p.progress += 0.04 + ruler.diplo * 0.012;
+          if (p.progress >= 1) { removePlot(sim, p); WW.Diplo.makeAlliance(sim, a, b); }
+        }
+      } else if (p.type === 'revolt' || p.type === 'secession') {
+        const c = sim._cities.get(p.cityId);
+        if (!c || c.kingdomId !== p.kingdomId || c.revolt) { removePlot(sim, p); continue; }
+        if (p.type === 'revolt') {
+          const limit = a.gov === 'fascism' ? 28 : 22;
+          if (c.happiness > limit + 6) { p.progress -= 0.12; if (p.progress <= 0) removePlot(sim, p); continue; }
+          p.progress += 0.05;
+          if (p.progress >= 1) { removePlot(sim, p); WW.Diplo.startRevolt(sim, c); }
+        } else {
+          if ((c.loyalty == null ? 50 : c.loyalty) > 10 || a.capitalId === c.id || a.cityIds.length < 2) { p.progress -= 0.1; if (p.progress <= 0) removePlot(sim, p); continue; }
+          p.progress += 0.05;
+          if (p.progress >= 1) { removePlot(sim, p); if (st.laws.govChanges || true) secedeByLoyalty(sim, c); }
+        }
+      }
+      p.progress = Math.min(1, Math.max(0, p.progress));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Neue Reiche von selbst: Auswanderer, Verbannte, Flüchtlinge
+  // ---------------------------------------------------------------------------
+  function freeSite(sim, x0, y0, race, minD, maxD) {
+    const st = sim.state, W = st.W, H = st.H;
+    if (sim._compDirty) WW.Path.updateComponents(sim);
+    const comp = sim.comp[Math.floor(y0) * W + Math.floor(x0)];
+    let best = null, bs = -1e9;
+    for (let n = 0; n < 60; n++) {
+      const dir = WW.Cities.DIRS16[sim.rng.int(16)];
+      const dist = minD + sim.rng.next() * (maxD - minD);
+      const x = Math.round(x0 + dir[0] * dist), y = Math.round(y0 + dir[1] * dist);
+      if (x < 4 || y < 4 || x >= W - 4 || y >= H - 4) continue;
+      if (!WW.Cities.canFoundAt(sim, x, y, race, C().NEW_REALM_MIN_DIST)) continue;
+      const sameLand = sim.comp[y * W + x] === comp;
+      let free = 0, owned = 0;
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const i = yy * W + xx;
+        if (st.owner[i] !== -1) owned++;
+        if (WW.TERRAIN_LUT.build[st.terrain[i]]) free++;
+      }
+      if (free < 50 || owned > 20) continue;
+      const score = free - owned * 3 + (sameLand ? 40 : -200);
+      if (score > bs) { bs = score; best = { x: x, y: y, sameLand: sameLand }; }
+    }
+    return best && best.sameLand ? best : null;
+  }
+
+  // n Leute verlassen city und ziehen als neuer Stamm los. type = 'exodus' | 'exiles' | 'refugees'
+  function emigrate(sim, city, n, type) {
+    const st = sim.state;
+    if (!st.laws.newRealms || !city._members) return null;
+    const site = freeSite(sim, city.cx + 0.5, city.cy + 0.5, city.race, 14, 38);
+    if (!site) return null;
+    const old = sim._kingdoms.get(city.kingdomId);
+    const k = WW.Gov.createKingdom(sim, { race: city.race, gov: 'tribe', baseName: WW.Names.town(sim.rng, city.race, sim._usedNames) });
+    const group = st.nextId++;
+    let m = 0;
+    for (const u of city._members) {
+      if (m >= n) break;
+      if (u.dead || u.role === 'leader' || u.role === 'child' || u.role === 'soldier' || u.role === 'settler' || u.merc || u.order) continue;
+      WW.Units.setRole(sim, u, 'settler');
+      u.kingdomId = k.id; u.cityId = -1; u.group = group; u.site = site.y * st.W + site.x; u.fails = 0; u.homeK = city.kingdomId; u.homeC = city.id;
+      m++;
+    }
+    if (!m) { WW.Gov.removeKingdom(sim, k, true); return null; }
+    // Meinung: Flüchtlinge/Verbannte nehmen es übel
+    if (old && k.relations[old.id]) { const op = type === 'exodus' ? -5 : -35; k.relations[old.id].opinion = op; old.relations[k.id].opinion = op; }
+    sim.event(type, { city: city.name, kingdom: k.name, other: old ? old.name : '', n: m }, WW.Cities.atCity(city));
+    return k;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Aktualisierung
+  // ---------------------------------------------------------------------------
+  // alle 30 Ticks je Stadt: Land nehmen, wenn gebraucht
+  function update(sim) {
+    ensure(sim);
+    const st = sim.state;
+    for (const city of st.cities) {
+      if (city.dead) continue;
+      if (!city.governor) makeGovernor(sim, city);
+      if (city.flurs == null) city.flurs = countFlurs(sim, city);
+      if (city.needLand && st.tick - (city.lastClaim || 0) >= C().FLUR_CLAIM_TICKS) {
+        city.lastClaim = st.tick;
+        if (!claimNext(sim, city)) city.landFull = true; else city.landFull = false;
+        city.needLand = false;
+      }
+    }
+    for (const k of st.kingdoms) if (k.leaderId >= 0 || WW.GOVERNMENTS[k.gov].noLeader) ensureRuler(sim, k);
+  }
+
+  function yearly(sim) {
+    ensure(sim);
+    const st = sim.state;
+    // abgeschnittene Fluren, Grenzfluren im Krieg
+    for (const city of st.cities) if (!city.dead) cutOff(sim, city);
+    let anyWar = false;
+    for (const k of st.kingdoms) for (const o in k.relations) if (k.relations[o].status === 'war') anyWar = true;
+    if (anyWar) warFlips(sim);
+    for (const city of st.cities.slice()) {
+      if (city.dead) continue;
+      const k = sim._kingdoms.get(city.kingdomId);
+      if (!k) continue;
+      // Loyalität nähert sich dem Ziel
+      const target = loyaltyTarget(sim, city, k);
+      if (city.loyalty == null) city.loyalty = target;
+      city.loyalty += (target - city.loyalty) * 0.3;
+      city.loyalty = WW.SimUtil.clamp(city.loyalty, -100, 100);
+      if (city.loyalty < 8 && k.capitalId !== city.id && k.cityIds.length >= 2 && st.laws.govChanges) {
+        const p = addPlot(sim, 'secession', k.id, city.id, city.id, city.cx + 0.5, city.cy + 0.5);
+        if (!p.announced) { p.announced = true; sim.event('plotSecession', { city: city.name, kingdom: k.name }, WW.Cities.atCity(city)); }
+      }
+      // Zuzug in kleine Dörfer mit Nahrung
+      const sk = WW.Cities.stock(sim, city);
+      if (city.pop < 30 && city.pop > 0 && city.centerOk && sk.food > city.pop * 2 + 10 && city.housing > city.pop && st.units.length < C().MAX_UNITS - 50) {
+        const n = 1 + sim.rng.int(3);
+        let made = 0;
+        for (let m = 0; m < n && city.housing > city.pop + made; m++) {
+          const t = WW.Path.nearestFree(sim, WW.Cities.centerTile(sim, city, sim.rng.int(9)), city.kingdomId, 6);
+          if (t < 0) break;
+          const u = WW.Units.create(sim, { x: (t % st.W) + 0.5, y: Math.floor(t / st.W) + 0.5, role: 'farmer', kingdomId: city.kingdomId, cityId: city.id, race: sim.rng.chance(0.85) ? city.race : sim.rng.pick(WW.RACE_KEYS), age: WW.CONFIG.ADULT_AGE + 2 + sim.rng.int(14) });
+          if (u) { made++; WW.Units.bubble(u, 'question', 40); }
+        }
+        if (made && sim.rng.chance(0.25)) sim.event('migrants', { city: city.name, n: made }, WW.Cities.atCity(city));
+      }
+      // Neue Reiche von selbst
+      if (st.laws.newRealms && city.pop >= 18 && st.units.length < C().MAX_UNITS - 100) {
+        const g = WW.GOVERNMENTS[k.gov];
+        if ((city.pop > city.housing + 2 || city.happiness < 32) && sim.rng.chance(0.08)) emigrate(sim, city, 4 + sim.rng.int(4), 'exodus');
+        else if ((g.key === 'fascism' || g.key === 'monarchy' || g.key === 'theocracy') && city.happiness < 45 && sim.rng.chance(0.04)) emigrate(sim, city, 3 + sim.rng.int(3), 'exiles');
+      }
+    }
+  }
+
+  WW.Growth = {
+    FLUR: F, dims: dims, ensure: ensure, flurAt: flurAt, flurCenter: flurCenter, setFlur: setFlur, countFlurs: countFlurs,
+    reach: reach, claimInitial: claimInitial, claimNext: claimNext, claimTiles: claimTiles, releaseCity: releaseCity,
+    cutOff: cutOff, warFlips: warFlips, makeGovernor: makeGovernor, ensureRuler: ensureRuler, cityLimit: cityLimit,
+    loyaltyTarget: loyaltyTarget, secedeByLoyalty: secedeByLoyalty, planWar: planWar, planAlliance: planAlliance,
+    addPlot: addPlot, removePlot: removePlot, updatePlots: updatePlots, emigrate: emigrate, freeSite: freeSite,
+    update: update, yearly: yearly, QUIRKS: QUIRKS
+  };
+
+})(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

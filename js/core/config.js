@@ -9,7 +9,7 @@
     VERSION: 1,
     TPS: 10,                  // Ticks pro Sekunde bei 1×
     TPY: 240,                 // Ticks pro Jahr (24 s bei 1×)
-    MAX_UNITS: 1500,
+    MAX_UNITS: 2200,
     MAX_ANIMALS: 240,
     MAX_EVENTS: 400,
     UNIT_SPEED: 0.1,         // Kacheln pro Tick bei walk = 1
@@ -34,7 +34,13 @@
     PATH_LIMIT_LONG: 14000,   // Siedler, Heere, Händler
     TERRITORY_BASE: 9,
     SETTLER_DIST_MIN: 24, SETTLER_DIST_MAX: 40,
-    CITY_MIN_DIST: 22,        // Mindestabstand Tochterstadt / Startstadt zu anderen Städten (Mitte zu Mitte)
+    CITY_MIN_DIST: 20,
+    FLUR_REACH: 12,           // Grundreichweite der Landnahme (Kacheln ums Zentrum), + 3 je Stadtstufe
+    FLUR_CLAIM_TICKS: 120,    // frühestens alle n Ticks eine neue Flur je Stadt
+    HOUSES_PER_FLUR: 1.3,     // Häuser je Flur (plus 2 Grundstock)
+    NEW_REALM_MIN_DIST: 18,   // Mindestabstand für Auswanderer-Stämme
+    DAUGHTER_MIN_DIST: 18,    // Tochterstadt: Abstand zu jeder Stadt (Plan: ≥ 16)
+    DAUGHTER_ADULTS: 30,        // Mindestabstand Tochterstadt / Startstadt zu anderen Städten (Mitte zu Mitte)
     PLAYER_CITY_MIN_DIST: 12  // Siedler vom Spieler dürfen näher heran
   };
 
@@ -58,7 +64,7 @@
     wallThreshold: 10, wallMax: 3, wallHpMul: 1, wallSpeedMul: 1, buildMul: 1, workMul: 1,
     happiness: 0, growthMul: 1, soldierShare: 0.1, goldMul: 1, taxes: 0, aggression: 0.35,
     militia: false, noLeader: false, sharedStock: false, noMarket: false, barricades: false,
-    neverWar: false, traders: false, mercenaries: false, buysPeace: false,
+    neverWar: false, traders: false, mercenaries: false, buysPeace: false, cityLimit: 3, landReach: 0,
     // Kriegsführung: raid | knights | defend | mass | agitate | holy | mercs | militia
     war: 'raid', soldierMul: 1, unitHpMul: 1, unitDmgMul: 1,
     // Bauprogramm: je Typ { first: ab Einwohnern, per: je weitere n Einwohner, max }; towerSpacing 0 = keine Türme
@@ -77,7 +83,8 @@
       cons: ['Nur Palisaden (Stufe 1)', 'Mauer erst ab 14 Einwohnern'],
       wallThreshold: 14, wallMax: 1, happiness: 5, soldierShare: 0.08, aggression: 0.35,
       war: 'raid', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 99, max: 1 }, towerSpacing: 0 },
-      looks: { center: 'Langhaus mit Lagerfeuer', wall: 'Palisade, hölzerner Ausguck', house: 'Strohhütte', monument: 'Hinkelstein' }
+      looks: { center: 'Langhaus mit Lagerfeuer', wall: 'Palisade, hölzerner Ausguck', house: 'Strohhütte', monument: 'Hinkelstein' },
+      cityLimit: 2, landReach: -2
     },
     monarchy: {
       name: 'Monarchie', titleM: 'König', titleF: 'Königin', realm: 'Königreich',
@@ -87,7 +94,8 @@
       cons: ['Erbfolge mit Thronstreit-Gefahr', 'Steuern drücken die Laune'],
       wallThreshold: 8, wallHpMul: 1.3, taxes: 0.02, happiness: -3, soldierShare: 0.13, aggression: 0.5,
       war: 'knights', unitHpMul: 1.3, unitDmgMul: 1.2, build: { barracks: { first: 14, per: 25, max: 2 }, market: { first: 18, per: 40, max: 1 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 5 },
-      looks: { center: 'Burg', wall: 'grauer Stein, runde Türme mit Kegeldach und Wimpel', house: 'Fachwerkhaus', monument: 'Königsstatue' }
+      looks: { center: 'Burg', wall: 'grauer Stein, runde Türme mit Kegeldach und Wimpel', house: 'Fachwerkhaus', monument: 'Königsstatue' },
+      cityLimit: 5, landReach: 1
     },
     democracy: {
       name: 'Demokratie', titleM: 'Kanzler', titleF: 'Kanzlerin', realm: 'Freistaat',
@@ -97,7 +105,8 @@
       cons: ['Wenige Soldaten', 'Erklärt selten Krieg'],
       happiness: 15, growthMul: 1.15, soldierShare: 0.05, aggression: 0.12,
       war: 'defend', build: { barracks: { first: 35, per: 60, max: 1 }, market: { first: 14, per: 25, max: 2 }, monument: { first: 20, per: 60, max: 1 }, towerSpacing: 8 },
-      looks: { center: 'Rathaus mit Uhrturm und Säulen', wall: 'heller Sandstein, Türme mit Fahne', house: 'buntes Bürgerhaus', monument: 'Rednerpult mit Wahlurne' }
+      looks: { center: 'Rathaus mit Uhrturm und Säulen', wall: 'heller Sandstein, Türme mit Fahne', house: 'buntes Bürgerhaus', monument: 'Rednerpult mit Wahlurne' },
+      cityLimit: 4, landReach: 0
     },
     fascism: {
       name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Strammstaat',
@@ -107,7 +116,8 @@
       cons: ['Zufriedenheit −25', 'Widerstand und Aufstände', 'Keiner mag das Regime', 'Keine Märkte, besetzte Städte murren'],
       wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9,
       war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3 },
-      looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' }
+      looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' },
+      cityLimit: 4, landReach: 2
     },
     communism: {
       name: 'Kommunismus', titleM: 'Generalsekretär', titleF: 'Generalsekretärin', realm: 'Volksrepublik',
@@ -117,7 +127,8 @@
       cons: ['Arbeitstempo −10 % (Schlendrian)', 'Kein Markt, kein Gold'],
       buildMul: 1.25, workMul: 0.9, sharedStock: true, noMarket: true, goldMul: 0, soldierShare: 0.12, aggression: 0.45,
       war: 'agitate', build: { barracks: { first: 22, per: 50, max: 1 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 18, per: 60, max: 1 }, towerSpacing: 7 },
-      looks: { center: 'Volkshaus mit Fahne und Schornstein', wall: 'Betonplatten, schlichte Blocktürme', house: 'Plattenbau', monument: 'Denkmal der Planübererfüllung (Riesenrübe)' }
+      looks: { center: 'Volkshaus mit Fahne und Schornstein', wall: 'Betonplatten, schlichte Blocktürme', house: 'Plattenbau', monument: 'Denkmal der Planübererfüllung (Riesenrübe)' },
+      cityLimit: 5, landReach: 1
     },
     theocracy: {
       name: 'Theokratie', titleM: 'Hohepriester', titleF: 'Hohepriesterin', realm: 'Gottesstaat',
@@ -127,7 +138,8 @@
       cons: ['Arbeit −10 % (Beten)', 'Heilige Kriege gegen Andersgläubige'],
       happiness: 5, workMul: 0.9, soldierShare: 0.1, aggression: 0.55,
       war: 'holy', build: { barracks: { first: 24, per: 60, max: 1 }, market: { first: 22, per: 60, max: 1 }, monument: { first: 10, per: 12, max: 3 }, towerSpacing: 6 },
-      looks: { center: 'Tempel mit Kuppel und goldener Spitze', wall: 'weißer Stein mit goldenen Kappen, Kuppeltürme', house: 'Fachwerk mit Türmchen', monument: 'Schrein der Gottheit' }
+      looks: { center: 'Tempel mit Kuppel und goldener Spitze', wall: 'weißer Stein mit goldenen Kappen, Kuppeltürme', house: 'Fachwerk mit Türmchen', monument: 'Schrein der Gottheit' },
+      cityLimit: 3, landReach: 0
     },
     republic: {
       name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsrepublik',
@@ -137,7 +149,8 @@
       cons: ['Kaum eigene Soldaten', 'Abhängig vom Geldbeutel'],
       goldMul: 2, taxes: 0.01, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true,
       war: 'mercs', build: { barracks: { first: 30, per: 60, max: 1 }, market: { first: 10, per: 14, max: 3 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 7 },
-      looks: { center: 'Kontor mit Treppengiebel und Kran', wall: 'roter Backstein, Türme mit Handelsflaggen', house: 'Giebelhaus', monument: 'Goldene Waage' }
+      looks: { center: 'Kontor mit Treppengiebel und Kran', wall: 'roter Backstein, Türme mit Handelsflaggen', house: 'Giebelhaus', monument: 'Goldene Waage' },
+      cityLimit: 4, landReach: 0
     },
     anarchy: {
       name: 'Anarchie', titleM: '', titleF: '', realm: 'Freie Kommune',
@@ -148,7 +161,8 @@
       wallThreshold: 12, wallMax: 1, wallHpMul: 0.55, happiness: 10, soldierShare: 0, aggression: 0,
       militia: true, noLeader: true, barricades: true, neverWar: true,
       war: 'militia', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 16, per: 99, max: 1 }, towerSpacing: 0 },
-      looks: { center: 'Kommune (bunter Flickenbau)', wall: 'Barrikaden aus Gerümpel', house: 'Bauwagen und Flickenhütten', monument: 'bemalte Wand' }
+      looks: { center: 'Kommune (bunter Flickenbau)', wall: 'Barrikaden aus Gerümpel', house: 'Bauwagen und Flickenhütten', monument: 'bemalte Wand' },
+      cityLimit: 2, landReach: -1
     }
   };
   WW.GOVERNMENTS = {};
@@ -188,7 +202,7 @@
   WW.RACE_KEYS = ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'];
   const RACE_BASE = {
     speed: 1, hp: 1, strength: 1, lifespan: 1, fertility: 1,
-    yields: { food: 1, wood: 1, stone: 1 }, wallMul: 1, housingBonus: 0, aggression: 0,
+    yields: { food: 1, wood: 1, stone: 1 }, wallMul: 1, housingBonus: 0, aggression: 0, cityLimit: 0, landReach: 0,
     favTerrain: ['grass'], walkOverride: null, buildOn: null, noDeforest: false, ranged: false, fishing: false
   };
   const R = {
@@ -201,7 +215,7 @@
     elf: {
       name: 'Elfen', singular: 'Elf', adjective: 'elfisch',
       desc: 'Schlank, schnell, uralt und ein wenig hochnäsig gegenüber Bäumefällern.',
-      speed: 1.15, hp: 0.9, strength: 0.95, lifespan: 2.2, fertility: 0.5,
+      speed: 1.15, hp: 0.9, strength: 0.95, lifespan: 2.2, fertility: 0.5, cityLimit: 1,
       yields: { food: 0.9, wood: 1.1, stone: 0.8 }, noDeforest: true, ranged: true,
       favTerrain: ['forest', 'jungle', 'mushroom', 'taiga'],
       govPrefs: { tribe: 1, monarchy: 2, democracy: 2, fascism: 0.2, communism: 0.5, theocracy: 3, republic: 2, anarchy: 1 }
@@ -217,7 +231,7 @@
     orc: {
       name: 'Orks', singular: 'Ork', adjective: 'orkisch',
       desc: 'Stark, laut, kinderreich und überzeugt, dass jeder Streit eine Einladung ist.',
-      hp: 1.5, strength: 1.4, lifespan: 0.8, fertility: 1.4, aggression: 0.3,
+      hp: 1.5, strength: 1.4, lifespan: 0.8, fertility: 1.4, aggression: 0.3, landReach: 2, cityLimit: -1,
       yields: { food: 0.7, wood: 1, stone: 1.1 },
       favTerrain: ['savanna', 'desert', 'ash'],
       govPrefs: { tribe: 4, monarchy: 2, democracy: 0.4, fascism: 1.6, communism: 1, theocracy: 1, republic: 0.5, anarchy: 1 }
@@ -225,7 +239,7 @@
     gnome: {
       name: 'Wichtel', singular: 'Wichtel', adjective: 'wichtelig',
       desc: 'Winzig, flink und so zahlreich, dass keiner sie je vollständig gezählt hat.',
-      speed: 1.15, hp: 0.6, strength: 0.6, lifespan: 0.9, fertility: 1.9, housingBonus: 2,
+      speed: 1.15, hp: 0.6, strength: 0.6, lifespan: 0.9, fertility: 1.9, housingBonus: 2, landReach: -2,
       favTerrain: ['flowers', 'mushroom', 'grass'],
       govPrefs: { tribe: 1, monarchy: 0.5, democracy: 3, fascism: 0.2, communism: 2, theocracy: 1, republic: 1, anarchy: 4 }
     },
@@ -266,14 +280,14 @@
   // ---------------------------------------------------------------------------
   // Rollen, Sprechblasen, Tiere
   // ---------------------------------------------------------------------------
-  WW.ROLE_KEYS = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'leader', 'child', 'trader', 'rebel', 'settler'];
+  WW.ROLE_KEYS = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'leader', 'child', 'trader', 'rebel', 'settler', 'ram', 'catapult'];
   WW.ROLE_NAMES = {
     farmer: 'Bauer', lumberjack: 'Holzfäller', miner: 'Steinmetz', builder: 'Baumeister', soldier: 'Soldat',
-    leader: 'Anführer', child: 'Kind', trader: 'Händler', rebel: 'Rebell', settler: 'Siedler'
+    leader: 'Anführer', child: 'Kind', trader: 'Händler', rebel: 'Rebell', settler: 'Siedler', ram: 'Rammbock', catapult: 'Katapult'
   };
   WW.ROLE_NAMES_F = {
     farmer: 'Bäuerin', lumberjack: 'Holzfällerin', miner: 'Steinmetzin', builder: 'Baumeisterin', soldier: 'Soldatin',
-    leader: 'Anführerin', child: 'Kind', trader: 'Händlerin', rebel: 'Rebellin', settler: 'Siedlerin'
+    leader: 'Anführerin', child: 'Kind', trader: 'Händlerin', rebel: 'Rebellin', settler: 'Siedlerin', ram: 'Rammbock', catapult: 'Katapult'
   };
   WW.BUBBLES = ['heart', 'bread', 'skull', 'exclaim', 'zzz', 'ballot', 'crown', 'angry', 'note', 'hammer', 'question'];
 
@@ -285,6 +299,7 @@
     { key: 'wars', name: 'Kriege erlaubt', desc: 'Reiche dürfen sich von selbst den Krieg erklären.', def: true },
     { key: 'hunger', name: 'Hunger', desc: 'Ohne Essen wird man grantig und irgendwann gar nichts mehr.', def: true },
     { key: 'aging', name: 'Altern', desc: 'Bewohner werden alt und sterben irgendwann friedlich.', def: true },
+    { key: 'newRealms', name: 'Neue Reiche von selbst', desc: 'Auswanderer, Verbannte und Flüchtlinge gründen eigene Stämme.', def: true },
     { key: 'disasters', name: 'Zufallskatastrophen', desc: 'Ab und zu schlägt ein Blitz ein oder eine Seuche geht um.', def: true }
   ];
   WW.LAW_DEFAULTS = {};

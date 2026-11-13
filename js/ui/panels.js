@@ -71,12 +71,12 @@
     if (kind === 'kingdom') {
       const st = this.game.sim.query.kingdomStats(o.id) || {};
       const rel = Object.keys(o.relations).map(k => k + ':' + o.relations[k].status + ':' + Math.round(o.relations[k].opinion / 5)).join(',');
-      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length].join('|');
+      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, JSON.stringify(o.ruler || o.leaderStats || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'city') {
       const w = o.wall || {};
       return [o.name, o.kingdomId, o.tier, o.pop, o.housing, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
-        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt].join('|');
+        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name].join('|');
     return [o.kind, Math.round(o.hp)].join('|');
@@ -100,6 +100,7 @@
     body.appendChild(h('p.muted', s.kind === 'unit' ? 'Diese Figur weilt nicht mehr unter uns. Die Chronik weiß vielleicht mehr.' : 'Davon ist nur noch eine Erinnerung übrig.'));
   };
 
+  function plotSig(sim) { const p = sim.state.plots; return Array.isArray(p) ? p.map(x => x && Math.round((x.progress || 0) * 20)).join(',') : ''; }
   function happyBar(v) {
     const { h } = D();
     const p = Math.max(0, Math.min(100, v));
@@ -108,6 +109,37 @@
   function moodWord(v) { return v >= 75 ? 'glücklich' : v >= 55 ? 'zufrieden' : v >= 35 ? 'grantig' : v >= 18 ? 'wütend' : 'kurz vorm Aufstand'; }
   function opinionWord(v) { return v >= 50 ? 'herzlich' : v >= 20 ? 'freundlich' : v > -20 ? 'neutral' : v > -50 ? 'frostig' : 'feindselig'; }
   const STATUS = { war: 'Krieg', peace: 'Frieden', alliance: 'Bündnis' };
+
+  // Werte einer Person (Statthalter, Herrscher) generisch anzeigen; nur Zahlen, bekannte Namen deutsch
+  const STAT_NAMES = { skill: 'Geschick', ability: 'Können', loyalty: 'Treue', ambition: 'Ehrgeiz', greed: 'Gier', charisma: 'Ausstrahlung',
+    martial: 'Kriegskunst', stewardship: 'Verwaltung', intrigue: 'Ränke', diplomacy: 'Diplomatie', competence: 'Tüchtigkeit', honor: 'Ehre',
+    courage: 'Mut', wisdom: 'Weisheit', cruelty: 'Härte', popularity: 'Beliebtheit', age: 'Alter' };
+  function personBlock(title, p) {
+    const { h } = D();
+    if (!p || typeof p !== 'object') return null;
+    const kv = h('dl.kv');
+    for (const k in p) {
+      const v = p[k];
+      if (typeof v !== 'number' || k === 'id' || /Id$/.test(k) || k.charAt(0) === '_') continue;
+      kv.appendChild(h('dt', STAT_NAMES[k] || (k.charAt(0).toUpperCase() + k.slice(1))));
+      kv.appendChild(h('dd', String(Math.round(v * (v > 0 && v < 1 ? 100 : 1)) + (v > 0 && v < 1 ? ' %' : ''))));
+    }
+    const nm = p.name || p.title || '';
+    return h('div.sec', [h('h3', title), nm ? h('div', { style: { fontWeight: '700', marginBottom: '4px' } }, (p.title && p.name ? p.title + ' ' : '') + (p.name || '')) : null, kv.firstChild ? kv : null]);
+  }
+  function plotsFor(sim, pred) {
+    const pl = sim.state.plots;
+    if (!Array.isArray(pl)) return [];
+    return pl.filter(p => p && pred(p));
+  }
+  function plotList(list) {
+    const { h } = D();
+    return h('div', list.map(p => {
+      const v = Math.round(100 * Math.max(0, Math.min(1, +p.progress || 0)));
+      return h('div', { style: { marginBottom: '6px' } }, [h('div.barline', [h('span', p.text || p.name || p.label || p.type || 'Vorhaben'), h('b', v + ' %')]),
+        h('div.bar.warn', [h('b', { style: { width: v + '%' } })])]);
+    }));
+  }
 
   Panels.prototype.renderKingdom = function (k) {
     const { h, icon } = D();
@@ -127,6 +159,10 @@
       k.policy && k.policy.party ? h('div.muted', { style: { marginTop: '4px' } }, 'Regierungspartei: ' + k.policy.party) : null,
       k.policy && k.policy.plan ? h('div.muted', { style: { marginTop: '4px' } }, 'Fünfjahresplan: ' + (k.policy.plan.goal || k.policy.plan.focus)) : null
     ]));
+    const rs = k.ruler || k.leaderStats || (leader && leader.stats);
+    if (rs) { const b = personBlock('Herrscher', rs); if (b) body.appendChild(b); }
+    const kp = plotsFor(sim, p => p.kingdomId === k.id || p.targetKingdomId === k.id);
+    if (kp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(kp)]));
     body.appendChild(h('div.sec', [
       h('dl.kv', [h('dt', 'Einwohner'), h('dd', String(ks.pop)), h('dt', 'Städte'), h('dd', String(ks.cities)), h('dt', 'Soldaten'), h('dd', String(ks.soldiers)),
         h('dt', 'Stimmung'), h('dd', moodWord(ks.happiness))]),
@@ -199,6 +235,13 @@
     const stock = (k && k.stock && WW.GOVERNMENTS[k.gov].sharedStock) ? k.stock : c.stock;
     body.appendChild(h('div.sec', [h('h3', stock === c.stock ? 'Lager' : 'Gemeinsames Lager'),
       h('div.stock', [['food', 'Essen'], ['wood', 'Holz'], ['stone', 'Stein'], ['gold', 'Gold']].map(r => h('div', { title: r[1] }, [icon('i_' + r[0], 22), h('span', String(Math.floor(stock[r[0]] || 0)))])))]));
+    if (typeof c.loyalty === 'number') {
+      const lv = c.loyalty <= 1 ? c.loyalty * 100 : c.loyalty;
+      body.appendChild(h('div.sec', [h('h3', 'Loyalität'), h('div.barline', [h('span', lv >= 60 ? 'treu' : lv >= 35 ? 'wankelmütig' : 'abtrünnig'), h('b', Math.round(lv) + ' %')]), happyBar(lv)]));
+    }
+    if (c.governor) { const b = personBlock('Statthalter', c.governor); if (b) body.appendChild(b); }
+    const cp = plotsFor(sim, p => p.cityId === c.id || p.targetCityId === c.id);
+    if (cp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(cp)]));
     body.appendChild(h('div.sec', [h('h3', 'Stimmung'), h('div.barline', [h('span', moodWord(c.happiness)), h('b', Math.round(c.happiness) + ' %')]), happyBar(c.happiness)]));
     // Mauer
     const w = c.wall || {};

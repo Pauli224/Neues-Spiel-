@@ -220,7 +220,11 @@
     let newOwner = att;
     if (ag.war === 'defend' && prev && prev !== att && prev !== def) newOwner = prev;
     city.prevKingdomId = def.id;
+    // Flüchtlinge ziehen los und gründen anderswo einen Stamm
+    if (st.laws.newRealms && city.pop >= 12 && sim.rng.chance(0.5)) WW.Growth.emigrate(sim, city, 3 + sim.rng.int(4), 'refugees');
     WW.Cities.transferCity(sim, city, newOwner.id);
+    city.conqueredYear = st.year;
+    city.loyalty = (city.race !== newOwner.race || !WW.RACES[city.race] || (WW.RACES[city.race].govPrefs[newOwner.gov] || 1) < 1) ? -10 : 15;
     if (newOwner !== att) {
       if (ctr && !ctr.built) { const rs = ctr.restyle; WW.Structs.complete(sim, ctr); ctr.restyle = rs; ctr.progress = rs ? 0 : 1; }
       for (const u of st.units) if (!u.dead && u.order && u.order.city === city.id) { u.order = null; u.path = null; u.breach = -1; }
@@ -252,15 +256,15 @@
   }
 
   // Stadt spaltet sich ab und wird eigenes Reich
-  function secede(sim, city, gov, leaderName) {
+  function secede(sim, city, gov, leaderName, silent) {
     const old = sim._kingdoms.get(city.kingdomId);
     if (!old || old.cityIds.length < 2) return null;
     const nk = WW.Gov.createKingdom(sim, { race: city.race, gov: gov, baseName: city.name });
     WW.Cities.transferCity(sim, city, nk.id);
     nk.capitalId = city.id;
     for (const r of [nk.relations[old.id], old.relations[nk.id]]) if (r) r.opinion = -45;
-    WW.Gov.appointLeader(sim, nk, leaderName);
-    sim.event('secede', { city: city.name, kingdom: nk.name, other: old.name, gov: WW.GOVERNMENTS[nk.gov].name }, WW.Cities.atCity(city));
+    WW.Gov.appointLeader(sim, nk, leaderName || undefined);
+    if (!silent) sim.event('secede', { city: city.name, kingdom: nk.name, other: old.name, gov: WW.GOVERNMENTS[nk.gov].name }, WW.Cities.atCity(city));
     return nk;
   }
 
@@ -378,7 +382,7 @@
         continue;
       }
       // Frieden: Krieg oder Bündnis?
-      if (op > 60 && sim.rng.chance(0.15)) { makeAlliance(sim, a, b); continue; }
+      if (op > 55 + ((a.ruler && a.ruler.diplo) || 3) * -2 && sim.rng.chance(0.25)) { WW.Growth.planAlliance(sim, a, b); continue; }
       // Monarchien: Heiratsbündnis
       if (a.gov === 'monarchy' && b.gov === 'monarchy' && op > 15 && sim.rng.chance(0.12)) {
         if (setStatus(sim, a, b, 'alliance')) {
@@ -404,8 +408,10 @@
         if (p.gov === 'democracy') need = 100;
         if (op > need) continue;
         if (sp < sq * 0.8 && p.gov !== 'democracy') continue;
-        const chance = (g.aggression + race.aggression) * 0.22;
-        if (sim.rng.chance(chance)) { declareWar(sim, p, q, holy ? 'holyWar' : 'war'); break; }
+        const ruler = p.ruler || { war: 3, diplo: 3 };
+        const chance = (g.aggression + race.aggression) * 0.22 * (0.7 + ruler.war * 0.12) * (1.25 - ruler.diplo * 0.08);
+        // Krieg kündigt sich als Vorhaben an (state.plots), Erklärung erst bei 100 %
+        if (sim.rng.chance(chance)) { WW.Growth.planWar(sim, p, q, holy); break; }
       }
     }
     // Kommunismus schürt Aufstände beim Nachbarn
@@ -435,7 +441,9 @@
       if (c.unhappyYears >= 2) {
         // Propagandaturm dämpft nur vorübergehend
         if (k.gov === 'fascism' && c.propaganda > 8 && sim.rng.chance(0.6)) continue;
-        startRevolt(sim, c);
+        // Aufstand kündigt sich als Vorhaben an
+        const pl = WW.Growth.addPlot(sim, 'revolt', k.id, c.id, c.id, c.cx + 0.5, c.cy + 0.5);
+        if (!pl.announced) { pl.announced = true; sim.event('plotRevolt', { city: c.name, kingdom: k.name }, WW.Cities.atCity(c)); }
       }
     }
   }

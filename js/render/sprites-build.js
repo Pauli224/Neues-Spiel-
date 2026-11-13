@@ -359,13 +359,18 @@
     // Stacheldraht (Faschismus): Pfosten und Drahtpixel über der Mauerkrone, ohne Kontur
     function addWire(g, m, level, mask, Htot) {
       var P = WALL[level], sp = Math.floor((P.a + P.b) / 2), h = P.h + (m.dh || 0) + (level === 3 ? 1 : 0);
-      for (var x = 0; x < 8; x++) if (occ(mask, P.a, P.b, x, sp) && !(x >= P.a && x <= P.b && !(mask & 10))) {
-        var y = sp - h - 2 + Htot;
-        g.set(x, y, (x & 1) ? 'metal' : 'metalD'); if (x % 3 === 0) g.set(x, y + 1, 'metalD');
+      function put(x, y, k) {
+        if (x < 0 || x > 7) return;
+        var post = k % 3 === 0;
+        g.set(x, y, (k & 1) ? 'metalL' : 'ink');
+        g.set(x, y - 1, post ? 'ink' : ((k & 1) ? 'ink' : 'metalL'));
+        if (post) g.set(x, y - 2, 'ink');
       }
-      for (var gy = 0; gy < 8; gy++) if (occ(mask, P.a, P.b, sp, gy) && (mask & 5 || !(mask & 10))) {
-        var yy = gy - h - 2 + Htot;
-        if (!g.get(sp, yy) || g.get(sp, yy) === C.ink) g.set(sp, yy, (gy & 1) ? 'metal' : 'metalD');
+      var horiz = (mask & 10) || !(mask & 5);
+      if (horiz) for (var x = 0; x < 8; x++) if (occ(mask, P.a, P.b, x, sp)) put(x, sp - h - 1 + Htot, x);
+      if (mask & 5) for (var gy = 0; gy < 8; gy++) if (occ(mask, P.a, P.b, sp, gy) && !(horiz && gy === sp)) {
+        var yy = gy - h - 1 + Htot; g.set(sp, yy, (gy & 1) ? 'metalL' : 'ink'); g.set(sp + 1, yy, (gy & 1) ? 'ink' : 'metalL');
+        if (gy % 3 === 0) g.set(sp, yy - 1, 'ink');
       }
     }
     function styledWall(st, level, mask) {
@@ -540,8 +545,9 @@
         g.rect(5, G0 + 3 - F, 2, 3, 'T'); g.vline(6, G0 + 3 - F, 3, 'Td');
         // offener Durchgang gy 2..5: Schatten des Blocks, Weg, aufgeschlagene Flügel
         for (x = 2; x <= 9; x++) { g.set(x, G0 + 2, 'shade'); g.set(x, G0 + 3, PATHC); g.set(x, G0 + 4, PATHD); }
-        g.rect(0, G0 + 2, 2, 3, 'woodL'); g.vline(1, G0 + 2, 3, 'woodD');
-        g.rect(10, G0 + 4, 2, 3, 'wood'); g.vline(11, G0 + 4, 3, 'woodD');
+        g.rect(0, G0 - 1, 2, 6, 'woodL'); g.vline(1, G0 - 1, 6, 'wood'); g.set(0, G0, 'metalD'); g.set(0, G0 + 3, 'metalD');
+        g.rect(10, G0 + 1, 2, 6, 'wood'); g.vline(11, G0 + 1, 6, 'woodD'); g.set(10, G0 + 2, 'metalD'); g.set(10, G0 + 5, 'metalD');
+        for (x = 3; x <= 8; x += 2) g.set(x, G0 + 3, PATHD);
         // niedriger Südpfosten gy 7
         for (x = 2; x <= 9; x++) { g.set(x, G0 + 5, x === 2 ? m.topL : m.top); g.set(x, G0 + 6, gateFace(m, x - 2, 0, 2)); g.set(x, G0 + 7, m.base); }
       }
@@ -1651,6 +1657,75 @@
       '..rW.f..',
       '........']);
     def('s_grave', g.outline(), { group: 'build' });
+    // ======================================================================
+    // Stufe 3: Orte in der Wildnis (ohne Stadt, ohne Teamfarbe), neutrale Spielermauer, Holz-Ausguck
+    var RKT = [AC(null, '#c9c6cf'), AC(null, '#9d9aa8'), AC(null, '#77748a')];
+    function rockMound(gr, cx, cy, rx, ry, t, seed) {
+      gr.ellipse(cx, cy, rx, ry, function (x, y, nx, ny) {
+        var s2 = nx * 0.8 + ny + (hash(x, y, seed) - 0.5) * 0.5;
+        return s2 < -0.6 ? t[0] : (s2 > 0.5 ? t[2] : t[1]);
+      });
+    }
+    function cave(gr, cx, by, w, h) {
+      gr.ellipse(cx, by, w / 2, h, function (x, y, nx, ny) { return y >= by ? null : (ny < -0.6 ? 'ink' : 'plum'); });
+      gr.hline(Math.round(cx - w / 2 + 1), by - 1, w - 2, 'ink');
+    }
+    function bones(gr, x, y) { gr.set(x, y, 'white'); gr.set(x + 1, y + 1, 'cream'); gr.set(x + 2, y, 'white'); }
+    // Wolfsbau 2×2: niedriger Felshügel mit Höhle, Knochen
+    g = new Grid(14, 13);
+    rockMound(g, 7, 8, 6.8, 5, RKT, 501); g.set(3, 4, 'leaf'); g.set(4, 3, 'leafL'); g.set(10, 4, 'leaf');
+    cave(g, 7, 12, 6, 4);
+    bones(g, 1, 11); bones(g, 10, 11);
+    defB('s_lair_wolfden', finishB(g), 2, 'lair');
+    // Bärenhöhle 2×2: größerer Felsen mit Moos und dunkler Höhle
+    g = new Grid(14, 18);
+    rockMound(g, 7, 10, 7, 8, RKT, 502);
+    g.paint(2, 2, ['.ff..', 'feeEf', '.EeE.']); g.paint(9, 4, ['fe', 'eE']);
+    cave(g, 7, 17, 7, 6);
+    g.paint(11, 15, ['wW', 'Ww']); bones(g, 2, 16);
+    defB('s_lair_bearcave', finishB(g), 2, 'lair');
+    // Drachenhort 3×3: Felsbogen, Goldhaufen, Knochen
+    g = new Grid(22, 26);
+    rockMound(g, 11, 12, 11, 11, RKT, 503);
+    cave(g, 11, 22, 14, 11);
+    g.ellipse(11, 22, 8, 4, function (x, y, nx, ny) { var h = hash(x, y, 504); return y > 23 ? null : (h < 0.2 ? 'goldL' : (h < 0.7 ? 'gold' : 'goldD')); });
+    g.paint(4, 21, ['kjk', 'KkK']); g.paint(15, 21, ['jkk.', 'kKkK']);
+    g.paint(6, 18, ['.r.', 'rbr', '.r.']);                                              // Edelstein
+    g.paint(13, 17, ['kKkK', 'KoKo', 'kkkK']);                                          // Truhe
+    bones(g, 1, 24); bones(g, 18, 24); g.paint(9, 23, ['lll', 'lol']);                   // Knochen, Schädel
+    g.set(5, 4, 'ink'); g.set(16, 3, 'ink'); g.line(4, 2, 2, 0, 'stoneD'); g.line(17, 2, 19, 0, 'stoneD');
+    defB('s_lair_dragonhoard', finishB(g), 3, 'lair');
+    // Räuberlager 2×2: zwei Zelte, Lagerfeuer, Kiste
+    g = new Grid(14, 15);
+    function tent(x, y, w, h, a, b) { for (var j = 0; j < h; j++) { var hw = 0.5 + j * (w / 2) / h; for (var i = 0; i < w; i++) { var dx = i + 0.5 - w / 2; if (Math.abs(dx) <= hw) g.set(x + i, y + j, dx < 0 ? a : b); } } g.vline(x + Math.floor(w / 2), y + h - 3, 3, 'ink'); }
+    tent(0, 1, 8, 8, 'dusk', 'plum'); tent(7, 3, 7, 7, 'wood', 'woodD');
+    g.paint(4, 10, ['..j..', '.jFQ.', 'QFjFQ', 'gWQWg']);
+    g.paint(10, 11, ['vwW', 'wWW']);
+    defB('s_lair_banditcamp', finishB(g), 2, 'lair');
+    // Verfallene Ruine mit Truhe 2×2
+    g = new Grid(14, 18);
+    g.rect(1, 3, 3, 13, 'stone'); g.vline(1, 3, 13, 'stoneL'); g.vline(3, 3, 13, 'stoneD'); g.hline(0, 2, 5, 'stoneL');
+    g.rect(10, 7, 3, 9, 'stone'); g.vline(10, 7, 9, 'stoneL'); g.vline(12, 7, 9, 'stoneD'); g.set(10, 6, 'stone');
+    g.hline(1, 15, 12, 'stoneD'); g.paint(4, 14, ['qg.qg', 'gGqgG']);
+    g.paint(5, 10, ['.kkkk.', 'kKKKKk', 'kkokkk', 'KKKKKK']);
+    g.paint(1, 6, ['e', 'E']); g.paint(11, 9, ['f', 'e', 'E']);
+    defB('s_lair_treasure', finishB(g), 2, 'lair');
+    // Erzbrocken und Goldader 1×1
+    function oreRock(speck, speck2, key) {
+      var o = new Grid(8, 8);
+      rockMound(o, 4, 4.5, 3.8, 3.2, RKT, key.length);
+      [[2, 3], [5, 4], [3, 6], [6, 2]].forEach(function (p, i) { o.set(p[0], p[1], i & 1 ? speck2 : speck); });
+      def(key, o.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 1).footShade(), { group: 'lair' });
+    }
+    oreRock(AC(null, '#b0603a'), AC(null, '#3a3040'), 's_lair_ore');
+    oreRock('goldL', 'gold', 's_lair_goldvein');
+    var gv2 = L.DEFS.s_lair_goldvein.grid; gv2.set(4, 3, 'gold'); gv2.set(5, 3, 'goldL'); gv2.set(3, 5, 'gold');
+
+    // Holz-Ausguck (Stamm/Palisade) unter neuem Namen
+    def('s_tower_1', L.DEFS.s_tower_tribe.grid, { group: 'wall', ox: -2 });
+    // Neutrale Spielermauer (Werkzeug „Mauer malen"): schlichter heller Stein ohne Zinnen
+    MAT.player = { top: AC(null, '#bdb8b0'), topL: AC(null, '#d6d2ca'), face: AC(null, '#aaa59c'), faceL: AC(null, '#c6c2ba'), joint: AC(null, '#8a857c'), base: AC(null, '#76716a'), pat: 'ashlar', merlon: 0 };
+    for (var pmk = 0; pmk < 16; pmk++) def('s_wall_player_' + pmk, styledWall('player', 2, pmk), { group: 'wall' });
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

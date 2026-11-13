@@ -108,21 +108,48 @@
     c.decorDirty = true;
   };
 
-  // Deko-Block: alle Deko-Sprites des Blocks in ein Canvas (für weite Ansicht)
+  // Deko-Block für die weite Ansicht: Deko und Bauwerke des Blocks, zeilenweise, in ein Canvas
+  const DL = 8, DR = 24;
   Renderer.prototype.buildDecor = function (c) {
     const st = this.st, W = st.W, S = this.S;
-    if (!c.decor) { c.decor = document.createElement('canvas'); c.decor.width = CPX + 16; c.decor.height = CPX + DECOR_TOP; }
+    if (!c.decor) { c.decor = document.createElement('canvas'); c.decor.width = CPX + DL + DR; c.decor.height = CPX + DECOR_TOP; }
     const g = c.decor.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, c.decor.width, c.decor.height);
-    g.setTransform(1, 0, 0, 1, -c.cx * CPX + 8, -c.cy * CPX + DECOR_TOP);
-    const x1 = Math.min(st.W, (c.cx + 1) * CH), y1 = Math.min(st.H, (c.cy + 1) * CH);
-    for (let y = c.cy * CH; y < y1; y++) for (let x = c.cx * CH; x < x1; x++) {
-      const i = y * W + x;
-      const d = this.decorAt(i);
-      if (d) S.drawFast(g, d.key, x * 8 + d.dx, y * 8 + d.dy, 0, false);
+    g.setTransform(1, 0, 0, 1, -c.cx * CPX + DL, -c.cy * CPX + DECOR_TOP);
+    const x0 = c.cx * CH, y0 = c.cy * CH;
+    const x1 = Math.min(st.W, x0 + CH), y1 = Math.min(st.H, y0 + CH);
+    // Bauwerke, deren Anker (links, unterste Zeile) im Block liegt
+    const rows = [];
+    if (st.structs) {
+      const cityK = this.cityKingdoms();
+      for (const s of st.structs) {
+        if (s.dead) continue;
+        const by = s.y + s.h - 1;
+        if (s.x < x0 || s.x >= x1 || by < y0 || by >= y1) continue;
+        (rows[by - y0] || (rows[by - y0] = [])).push(s);
+      }
+      this._cityKTmp = cityK;
+    }
+    const bars = [];
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const d = this.decorAt(y * W + x);
+        if (d) S.drawFast(g, d.key, x * 8 + d.dx, y * 8 + d.dy, 0, false);
+      }
+      const ls = rows[y - y0];
+      if (ls) { ls.sort((p, q) => p.x - q.x); for (const s of ls) this.drawStruct(g, s, this._cityKTmp, false, bars); }
     }
     c.decorDirty = false;
+    c.decorT = this.time;
+  };
+
+  // Stadt-ID -> Reich (für Teamfarben)
+  Renderer.prototype.cityKingdoms = function () {
+    const st = this.st, kings = new Map(), m = new Map();
+    if (st.kingdoms) for (const k of st.kingdoms) kings.set(k.id, k);
+    if (st.cities) for (const c of st.cities) m.set(c.id, kings.get(c.kingdomId));
+    return m;
   };
 
   Renderer.prototype.decorAt = function (i) {
@@ -277,7 +304,7 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
@@ -289,6 +316,15 @@
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
       if (f.type === 'meteor') this.shake = 0.35;
     }
+  };
+
+  Renderer.prototype.fxFrames = function (type) {
+    const c = this._fxF || (this._fxF = {});
+    if (c[type]) return c[type];
+    const out = [];
+    for (let n = 0; n < 12 && this.S.has('fx_' + type + '_' + n); n++) out.push('fx_' + type + '_' + n);
+    if (!out.length && this.S.has('fx_' + type)) out.push('fx_' + type);
+    return (c[type] = out);
   };
 
   function rnd(seed, k) { let h = (seed * 374761393 + k * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -362,7 +398,7 @@
           g.globalAlpha = 1;
           break;
         }
-        case 'sparkle': case 'restyle': case 'govchange': case 'hit': {
+        case 'sparkle': case 'restyle': case 'govchange': case 'hit': case 'spark': {
           const r = (f.r || (f.type === 'hit' ? 0.4 : 2.2)) * 8, n = f.type === 'hit' ? 2 : (f.type === 'sparkle' ? 14 : 18);
           for (let j = 0; j < n; j++) {
             const ph = (k * 2 + rnd(f.seed, j)) % 1;
@@ -373,10 +409,14 @@
           g.globalAlpha = 1;
           break;
         }
-        default:
-          g.globalAlpha = 1 - k;
-          S.drawFast(g, 'fx_sparkle_0', px - 4, py - 6, 0, false);
+        default: {
+          // unbekannte Effekte: Sprites fx_<typ>_<n> der Reihe nach, sonst nichts
+          const fr = this.fxFrames(f.type);
+          if (!fr.length) break;
+          g.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+          S.drawFast(g, fr[Math.min(fr.length - 1, (k * fr.length) | 0)], px - 4, py - 4, 0, false);
           g.globalAlpha = 1;
+        }
       }
     }
     this.fx = out;
@@ -401,18 +441,24 @@
         if (style === 'anarchy') return S.wallKey(style, s.level, s.mask);
         return S.gateKey(style, s.level, s.orient === 'v' ? 'v' : 'h');
       case 'tower': return S.towerKey(style, s.level) || S.wallKey(style, s.level, s.mask);
+      case 'lair': return this.S.has('s_lair_' + s.kind) ? 's_lair_' + s.kind : 's_ruin';
       case 'ruin': return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
-      default: return 's_' + s.type;
+      default: return this.S.has('s_' + s.type) ? 's_' + s.type : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
     }
   };
 
+  // Figuren-Schlüssel: u_<volk>_<rolle>, sonst u_<rolle> (Banditen, Rammen …), sonst Mensch, sonst Bauer
   Renderer.prototype.unitKey = function (u, gov, frame) {
-    const S = this.S, race = u.race || 'human';
-    let k;
-    if (u.role === 'leader') k = gov === 'anarchy' ? 'u_' + race + '_punk_' + frame : 'u_' + race + '_leader_' + (gov || 'tribe') + '_' + frame;
-    else k = 'u_' + race + '_' + u.role + '_' + frame;
-    if (!S.has(k)) k = 'u_human_' + (u.role === 'leader' ? 'leader_' + (gov === 'anarchy' ? 'tribe' : gov || 'tribe') : u.role) + '_' + frame;
-    if (!S.has(k)) k = 'u_human_farmer_' + frame;
+    const S = this.S, race = u.race || 'human', role = u.role || 'farmer';
+    const ck = this._ukCache || (this._ukCache = new Map());
+    const id = race + '|' + role + '|' + gov + '|' + frame;
+    let k = ck.get(id);
+    if (k) return k;
+    const cands = role === 'leader'
+      ? (gov === 'anarchy' ? ['u_' + race + '_punk_' + frame, 'u_human_punk_' + frame] : ['u_' + race + '_leader_' + (gov || 'tribe') + '_' + frame, 'u_human_leader_' + (gov || 'tribe') + '_' + frame, 'u_human_leader_tribe_' + frame])
+      : ['u_' + race + '_' + role + '_' + frame, 'u_' + role + '_' + frame, 'u_human_' + role + '_' + frame];
+    k = cands.find(c => S.has(c)) || 'u_human_farmer_' + frame;
+    ck.set(id, k);
     return k;
   };
 
@@ -487,19 +533,22 @@
     }
 
     // (3) Deko, Bauwerke, Figuren
+    let refreshed = false;
     if (low) {
-      const dcy1 = Math.min(this.chh - 1, ((vt.y1 + 2) / CH) | 0);
-      for (let cy = cy0; cy <= dcy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const dcy1 = Math.min(this.chh - 1, ((vt.y1 + 5) / CH) | 0);
+      const dcx0 = Math.max(0, ((vt.x0 - 3) / CH) | 0);
+      for (let cy = cy0; cy <= dcy1; cy++) for (let cx = dcx0; cx <= cx1; cx++) {
         const c = this.chunks[cy * this.cw + cx];
         if (!c.built) continue;
-        if (c.decorDirty) this.buildDecor(c);
-        const X = cx * CPX - 8, Y = cy * CPX - DECOR_TOP;
+        if (c.decorDirty || c.decorT == null) this.buildDecor(c);
+        else if (!refreshed && this.time - c.decorT > 0.8) { this.buildDecor(c); refreshed = true; }
+        const X = cx * CPX - DL, Y = cy * CPX - DECOR_TOP;
         const dx = rx(X), dy = ry(Y);
-        ctx.drawImage(c.decor, dx, dy, rx(X + CPX + 16) - dx, ry(Y + CPX + DECOR_TOP) - dy);
+        ctx.drawImage(c.decor, dx, dy, rx(X + CPX + DL + DR) - dx, ry(Y + CPX + DECOR_TOP) - dy);
       }
     }
     ctx.setTransform(s, 0, 0, s, ox, oy);
-    let drawn = this.drawObjects(ctx, vt, low, opts);
+    let drawn = low && (opts.scale || 1) < 0.9 ? this.drawDots(ctx, vt, opts) : this.drawObjects(ctx, vt, low, opts);
 
     // Feuer auf Kacheln
     if (st.fire && st.fireCount > 0) {
@@ -516,6 +565,8 @@
     // (5) Auswahl und Pinsel
     if (opts.select) this.drawSelection(ctx, opts.select, opts);
     if (opts.brush) this.drawBrush(ctx, opts.brush);
+    if (opts.held) this.drawHeld(ctx, opts.held);
+    if (st.plots && st.plots.length) this.drawPlots(ctx, vt);
 
     // Stadtnamen in Bildschirmpixeln
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -544,8 +595,8 @@
     cityK.clear();
     if (st.cities) for (const c of st.cities) cityK.set(c.id, kings.get(c.kingdomId));
 
-    // Bauwerke nach unterster Zeile einsortieren
-    if (st.structs) {
+    // Bauwerke nach unterster Zeile einsortieren (weite Ansicht: stecken im Deko-Block)
+    if (st.structs && !low) {
       const sx0 = vt.x0 - 3, sx1 = vt.x1 + 1;
       for (const s of st.structs) {
         if (s.dead) continue;
@@ -573,6 +624,7 @@
     const time = this.time;
     const bubbles = [];
     const bars = [];
+    const flyers = [];
     const zoomBig = opts.scale >= 2.5;
     for (let r = 0; r < nrows; r++) {
       const y = y0 + r;
@@ -588,9 +640,8 @@
           const frame = u.moving ? (((time * 5 + (u.id & 7) * 0.37) | 0) & 1) : 0;
           const px = Math.round(it.x * 8 - 4), py = Math.round(it.y * 8 - 6);
           if (it.animal) {
-            const key = 'a_' + u.kind + '_' + frame;
-            if (S.has(key)) S.drawFast(ctx, key, px, py, 0, u.dir < 0);
-            else { ctx.fillStyle = '#fbf7ee'; ctx.fillRect(px + 2, py + 3, 4, 3); }
+            if (u.flying) { flyers.push(it); continue; }
+            this.drawAnimal(ctx, u, px, py, frame);
           } else {
             const k = kings.get(u.kingdomId);
             const team = k ? k.colorIndex | 0 : 10;
@@ -611,7 +662,16 @@
       }
       for (const s of ls) if (s.type !== 'field') { this.drawStruct(ctx, s, cityK, zoomBig, bars); drawn++; }
     }
+    // Fliegende Wesen über allem, mit Schatten am Boden
+    for (const it of flyers) {
+      const u = it.u, px = Math.round(it.x * 8 - 4), py = Math.round(it.y * 8 - 6);
+      const frame = (((time * 5 + (u.id & 7) * 0.37) | 0) & 1);
+      if (S.has('a_' + u.kind + '_shadow')) S.drawFast(ctx, 'a_' + u.kind + '_shadow', px, py, 0, u.dir < 0);
+      else { ctx.fillStyle = 'rgba(10,26,33,0.3)'; ctx.fillRect(px + 1, py + 6, 6, 2); }
+      this.drawAnimal(ctx, u, px, py - 14 - Math.round(Math.sin(time * 3 + u.id) * 2), frame);
+    }
     // Sprechblasen über allem
+    if (low) bubbles.length = 0;
     for (const b of bubbles) {
       if (!S.has('b_' + b.icon)) continue;
       S.drawFast(ctx, 'b_frame', b.x, b.y - 19, 0, false);
@@ -622,6 +682,48 @@
       ctx.fillStyle = b.col; ctx.fillRect(b.x, b.y, Math.max(1, Math.round(b.w * Math.max(0, Math.min(1, b.v)))), 1);
     }
     return drawn;
+  };
+
+  // weite Ansicht: Figuren als kleine Punkte in Reichsfarbe (Tiere hell/dunkel)
+  Renderer.prototype.drawDots = function (ctx, vt, opts) {
+    const st = this.st;
+    const kings = this._kings || (this._kings = new Map());
+    kings.clear();
+    if (st.kingdoms) for (const k of st.kingdoms) kings.set(k.id, k);
+    const sz = Math.max(2, Math.min(4, 1.6 / (opts.scale || 1)));
+    const x0 = vt.x0 - 1, x1 = vt.x1 + 2, y0 = vt.y0 - 1, y1 = vt.y1 + 2;
+    const groups = this._dotGroups || (this._dotGroups = new Map());
+    for (const arr of groups.values()) arr.length = 0;
+    let n = 0;
+    const push = (col, x, y) => { let a = groups.get(col); if (!a) groups.set(col, a = []); a.push(x, y); n++; };
+    if (st.units) for (const u of st.units) {
+      if (u.dead || u.x < x0 || u.x > x1 || u.y < y0 || u.y > y1) continue;
+      const k = kings.get(u.kingdomId);
+      push(k ? this.teamCss[k.colorIndex | 0].main : '#f3ead2', u.x, u.y);
+    }
+    if (st.animals) for (const a of st.animals) {
+      if (a.dead || a.x < x0 || a.x > x1 || a.y < y0 || a.y > y1) continue;
+      const cr = WW.CREATURES && WW.CREATURES[a.kind];
+      push(cr && cr.hostile ? '#3e3150' : '#fbf7ee', a.x, a.y);
+    }
+    // dunkle Unterlage, dann Farbe
+    ctx.fillStyle = 'rgba(10,26,33,0.85)';
+    for (const arr of groups.values()) for (let i = 0; i < arr.length; i += 2) ctx.fillRect(arr[i] * 8 - sz / 2 - 0.5, arr[i + 1] * 8 - sz / 2 - 0.5, sz + 1, sz + 1);
+    for (const [col, arr] of groups) {
+      if (!arr.length) continue;
+      ctx.fillStyle = col;
+      for (let i = 0; i < arr.length; i += 2) ctx.fillRect(arr[i] * 8 - sz / 2, arr[i + 1] * 8 - sz / 2, sz, sz);
+    }
+    return n;
+  };
+
+  Renderer.prototype.drawAnimal = function (ctx, a, px, py, frame) {
+    const S = this.S, key = 'a_' + a.kind + '_' + frame;
+    if (a.ghost) ctx.globalAlpha = 0.55;
+    if (S.has(key)) S.drawFast(ctx, key, px, py, 0, a.dir < 0);
+    else if (S.has('a_' + a.kind + '_0')) S.drawFast(ctx, 'a_' + a.kind + '_0', px, py, 0, a.dir < 0);
+    else { ctx.fillStyle = '#0a1a21'; ctx.fillRect(px + 1, py + 2, 6, 5); ctx.fillStyle = '#fbf7ee'; ctx.fillRect(px + 2, py + 3, 4, 3); }
+    ctx.globalAlpha = 1;
   };
 
   Renderer.prototype.drawStruct = function (ctx, s, cityK, zoomBig, bars) {
@@ -637,6 +739,31 @@
     if (!zoomBig) return;
     if (!s.built && s.progress > 0) bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.progress, col: '#f2b541' });
     else if (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin') bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.hp / s.maxHp, col: '#e2543d' });
+  };
+
+  // Figur an der Göttlichen Hand: hängt am Zeiger, zappelt
+  Renderer.prototype.drawHeld = function (ctx, h) {
+    const u = h.obj, px = Math.round(h.x * 8 - 4), py = Math.round(h.y * 8 - 16);
+    ctx.fillStyle = 'rgba(10,26,33,0.3)'; ctx.fillRect(px + 1, py + 18, 6, 2);
+    const frame = ((this.time * 8) | 0) & 1;
+    if (h.animal) this.drawAnimal(ctx, u, px, py, frame);
+    else {
+      const k = this._kings && this._kings.get(u.kingdomId);
+      this.S.drawFast(ctx, this.unitKey(u, k ? k.gov : 'tribe', frame), px, py, k ? k.colorIndex | 0 : 10, frame === 1);
+    }
+  };
+
+  // Vorhaben (state.plots) als Marker mit Fortschritt
+  Renderer.prototype.drawPlots = function (ctx, vt) {
+    for (const p of this.st.plots) {
+      if (!p || !(p.x >= 0) || !(p.y >= 0)) continue;
+      if (p.x < vt.x0 - 1 || p.x > vt.x1 + 1 || p.y < vt.y0 - 1 || p.y > vt.y1 + 1) continue;
+      const x = Math.round(p.x * 8), y = Math.round(p.y * 8) - 22, v = Math.max(0, Math.min(1, +p.progress || 0));
+      ctx.fillStyle = '#0a1a21'; ctx.fillRect(x - 6, y - 6, 12, 12);
+      ctx.fillStyle = '#2a5261'; ctx.fillRect(x - 5, y - 5, 10, 10);
+      ctx.fillStyle = '#f2b541'; ctx.fillRect(x - 5, y + 5 - Math.round(10 * v), 10, Math.round(10 * v));
+      ctx.fillStyle = '#f3ead2'; ctx.fillRect(x - 1, y - 3, 2, 4); ctx.fillRect(x - 1, y + 2, 2, 2);
+    }
   };
 
   Renderer.prototype.drawSelection = function (ctx, sel, opts) {

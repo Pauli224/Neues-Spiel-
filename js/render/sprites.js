@@ -56,8 +56,8 @@
     { name: 'Magenta',    main: '#d03f9e', dark: '#84205f', light: '#f283c9' },
     { name: 'Rosa',       main: '#f58fb0', dark: '#bd5378', light: '#ffc6d8' },
     { name: 'Braun',      main: '#9c6235', dark: '#5e3519', light: '#cf9561' },
-    { name: 'Elfenbein',  main: '#ece5d3', dark: '#a69b88', light: '#ffffff' },
-    { name: 'Schiefer',   main: '#4d566b', dark: '#262c3b', light: '#7f8aa3' }
+    { name: 'Elfenbein',  main: '#eadfc4', dark: '#a8977a', light: '#fffaec' },
+    { name: 'Schiefer',   main: '#5d6984', dark: '#3a4259', light: '#94a1c0' }
   ];
 
   // Zeichen-Legende für String-Pixelkunst.
@@ -245,8 +245,11 @@
   NAMES.forEach(function (n) { HEX.push(PALETTE[n]); });
   var BY_HEX = {};
   NAMES.forEach(function (n, i) { if (!BY_HEX[PALETTE[n]]) BY_HEX[PALETTE[n]] = i + 1; });
-  function addColor(name, hex) {
+  function addColor(name, hex, alpha) {
     hex = hex.toLowerCase();
+    if (alpha != null && alpha < 255) {   // halbdurchsichtig: eigener Index, keine Zusammenlegung
+      var ia = HEX.length; HEX.push(hex); RGBA[ia] = rgbaOf(hex, alpha); if (name) C[name] = ia; return ia;
+    }
     if (name && C[name]) return C[name];
     var idx = BY_HEX[hex];
     if (!idx) {

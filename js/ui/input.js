@@ -51,6 +51,7 @@
       const tool = this.game.tool;
       if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || this.space)) { this.mode = 'pan'; }
       else if (e.pointerType === 'mouse' && e.button !== 0) { this.mode = 'ignore'; }
+      else if (tool.kind === 'grab') { this.mode = this.game.grabAt(p.x, p.y) ? 'grab' : 'pendTap'; }
       else if (tool.kind === 'paint') {
         if (e.pointerType === 'mouse') { this.mode = 'paint'; this.paintTo(p, true); }
         else this.mode = 'pendPaint';
@@ -59,6 +60,7 @@
     } else if (this.ptrs.size === 2) {
       // zweiter Finger: immer zoomen/verschieben
       if (this.mode === 'paint') this.game.endStroke();
+      if (this.mode === 'grab') { const q0 = Array.from(this.ptrs.values())[0]; this.game.dropAt(q0.x, q0.y, false); }
       this.mode = 'pinch';
       this.pinchStart();
     }
@@ -93,6 +95,9 @@
       case 'paint':
         this.paintTo(p, false);
         break;
+      case 'grab':
+        this.game.grabMove(p.x, p.y);
+        break;
       case 'pinch': {
         const a = Array.from(this.ptrs.values());
         if (a.length < 2) break;
@@ -121,6 +126,7 @@
     if (this.ptrs.size === 0) {
       this.mode = null;
       this.cv.classList.remove('panning');
+      if (mode === 'grab') { this.game.dropAt(p.x, p.y, cancel); return; }
       if (cancel) { if (mode === 'paint') this.game.endStroke(); return; }
       if (mode === 'pendTap') this.game.tapAt(p.x, p.y);
       else if (mode === 'pendPaint') { this.paintTo(p, true); this.game.endStroke(); }

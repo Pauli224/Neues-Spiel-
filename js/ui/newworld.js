@@ -18,7 +18,7 @@
     this.game = game;
     this.el = document.getElementById('newworld');
     this.o = Object.assign({}, WW.WorldGen.DEFAULTS, { seed: randSeed() });
-    this.start = { count: 3, races: 'random', govs: 'mixed', animals: true };
+    this.start = { count: 0, races: 'random', govs: 'mixed', animals: true };
     this.built = false;
     this.tplJob = 0;
   }

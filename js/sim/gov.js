@@ -253,12 +253,8 @@
     const claimant = WW.Names.person(sim.rng, k.race, sim.rng.chance(0.5));
     k.policy.unrest = st.year + 3;
     sim.event('throneFeud', { kingdom: k.name, leader: leaderFull(k), claimant: claimant }, atK(sim, k));
-    // evtl. spaltet sich eine Stadt ab
-    if (k.cityIds.length >= 2 && sim.rng.chance(0.5)) {
-      const id = k.cityIds.find(i => i !== k.capitalId);
-      const c = sim._cities.get(id);
-      if (c) WW.Diplo.secede(sim, c, 'monarchy', claimant);
-    }
+    // Thronstreit kostet Loyalität (Abspaltung über das Loyalitäts-System)
+    for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && id !== k.capitalId) c.loyalty = (c.loyalty == null ? 50 : c.loyalty) - 35; }
   }
 
   function election(sim, k) {

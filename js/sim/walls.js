@@ -294,6 +294,8 @@
     const reserve = Math.max(3, Math.min(want, lim));
     const ring = computeRing(sim, city, margin, reserve);
     if (!ring) return false;
+    // Land unter Ring und Innenfläche gehört der Stadt (Fluren)
+    WW.Growth.claimTiles(sim, city, ring.all.concat(ring.inside));
     const k = sim._kingdoms.get(city.kingdomId);
     const gov = WW.GOVERNMENTS[k ? k.gov : 'tribe'];
     const w = city.wall;

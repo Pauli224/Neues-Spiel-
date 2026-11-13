@@ -78,11 +78,14 @@
     const row = this.$('toolRow');
     clear(row);
     this.toolBtns = {};
+    let prevSep = true;
     for (const t of WW.UI.Tools.inCat(this.cat)) {
-      if (t.kind === 'sep') { row.appendChild(h('span.tool-sep')); continue; }
+      if (t.requires && !(this.game.sim && this.game.sim.actions && this.game.sim.actions[t.requires])) continue;
+      if (t.kind === 'sep') { if (!prevSep) row.appendChild(h('span.tool-sep')); prevSep = true; continue; }
+      prevSep = false;
       const b = h('button.tool', { type: 'button', title: t.name, 'aria-pressed': this.game.toolId === t.id ? 'true' : 'false',
         on: { click: () => { if (t.kind === 'action') t.run(this.game); else this.game.setTool(t.id); } } },
-      [icon(t.icon, 32), h('span', t.name)]);
+      [icon(t.icon, 32, null, t.name), h('span', t.name)]);
       row.appendChild(b);
       this.toolBtns[t.id] = b;
     }

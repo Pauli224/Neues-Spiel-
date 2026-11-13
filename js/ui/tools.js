@@ -42,7 +42,7 @@
     for (const k of extra) {
       const d = WW.TERRAIN_BY_KEY[k];
       if (!d) continue;
-      addTool({ id: 'paint_' + k, cat: 'land', icon: 't_' + k + '_0', iconBig: true, name: d.name, kind: 'paint', options: 'brush', terrain: d.id,
+      addTool({ id: 'paint_' + k, cat: 'land', icon: pickIcon(['i_t_' + k, 't_' + k + '_0']), name: d.name, kind: 'paint', options: 'brush', terrain: d.id,
         hint: d.name + ' malen: über die Karte ziehen.' });
     }
 
@@ -50,12 +50,27 @@
     addTool({ id: 'settlers', cat: 'life', icon: 'i_settlers', name: 'Siedler', kind: 'tap', options: 'settler',
       hint: 'Auf freies Land tippen: Sechs Siedler gründen ein neues Reich. In einer Stadt schließen sie sich an.',
       apply(game, x, y) { return game.spawnSettlers(x, y); } });
-    for (const kind of Object.keys(WW.CREATURES || { sheep: 1, wolf: 1 })) {
-      const cr = WW.CREATURES ? WW.CREATURES[kind] : { name: kind };
-      addTool({ id: 'animal_' + kind, cat: 'life', icon: WW.Sprites.has('i_' + kind) ? 'i_' + kind : 'a_' + kind + '_0', name: cr.name || kind, kind: 'tap',
-        hint: (cr.name || kind) + ' aussetzen: auf Land tippen.', repeat: true,
-        apply(game, x, y) { return game.spawnAnimal(x, y, kind); } });
-    }
+    // Tiere und Wesen aus WW.CREATURES (gibt es ein Feld spawnable, nur diese), gruppiert nach group/hostile
+    const CR = WW.CREATURES || {};
+    const ckeys = Object.keys(CR);
+    const flagged = ckeys.some(k => 'spawnable' in CR[k]);
+    const groupOf = (cr) => cr.group || cr.category || (cr.hostile ? 'wild' : 'tame');
+    const groups = [];
+    for (const kind of ckeys) { const cr = CR[kind]; if (flagged && !cr.spawnable) continue; const g = groupOf(cr); if (groups.indexOf(g) < 0) groups.push(g); }
+    groups.forEach((g, gi) => {
+      addTool({ id: 'sep_life_' + g, cat: 'life', kind: 'sep' });
+      for (const kind of ckeys) {
+        const cr = CR[kind];
+        if ((flagged && !cr.spawnable) || groupOf(cr) !== g) continue;
+        addTool({ id: 'animal_' + kind, cat: 'life', icon: pickIcon(['i_a_' + kind, 'i_' + kind, 'a_' + kind + '_0']), name: cr.name || kind, kind: 'tap',
+          hint: cr.desc || ((cr.name || kind) + ' aussetzen: auf Land tippen.'),
+          apply(game, x, y) { return game.spawnAnimal(x, y, kind); } });
+      }
+      void gi;
+    });
+    // Göttliche Hand (erscheint nur, wenn die Simulation sie kennt)
+    addTool({ id: 'grab', cat: 'life', icon: pickIcon(['i_grab', 'i_hand', 'i_inspect']), name: 'Hand', kind: 'grab', requires: 'grab',
+      hint: 'Göttliche Hand: Figur antippen und halten, ziehen, loslassen setzt sie ab.' });
 
     // Herrschaft: Regierungs-Stempel, Diplomatie
     for (const g of WW.GOV_KEYS) {
@@ -70,18 +85,25 @@
         hint: r[1] + ': erst ein Reich antippen, dann das zweite.' });
     }
 
-    // Kräfte (aus WW.POWERS, Reihenfolge wie im Plan)
+    // Kräfte aus WW.POWERS, gruppiert nach category (Reihenfolge der Grundkräfte wie im Plan)
     const order = ['lightning', 'fire', 'rain', 'meteor', 'plague', 'bless'];
-    const keys = (WW.POWER_KEYS || order).slice().sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
     const PH = { lightning: 'Blitz: tippen, wo es einschlagen soll.', fire: 'Feuer legen: Wald und Palisaden brennen gut.',
       rain: 'Regen löscht Brände und lässt Wald wachsen.', meteor: 'Meteor: Krater, zerstört auch Steinmauern.',
       plague: 'Seuche: macht Bewohner krank.', bless: 'Segen: heilt, macht glücklich, Felder reifen.' };
-    for (const k of keys) {
-      const p = WW.POWERS ? WW.POWERS[k] : { name: k, radius: 2 };
-      addTool({ id: 'power_' + k, cat: 'power', icon: WW.Sprites.has('i_' + k) ? 'i_' + k : 'i_cat_power', name: p.name || k, kind: 'tap', power: k,
-        radius: p.radius || 2, repeat: true, hint: PH[k] || (p.name + ': auf die Karte tippen.'),
-        apply(game, x, y) { return game.strike(x, y, k); } });
-    }
+    const P = WW.POWERS || {};
+    const pkeys = (WW.POWER_KEYS || Object.keys(P)).slice().sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+    const pcats = [];
+    for (const k of pkeys) { const c = (P[k] && P[k].category) || 'basic'; if (pcats.indexOf(c) < 0) pcats.push(c); }
+    pcats.forEach((c, ci) => {
+      if (ci) addTool({ id: 'sep_power_' + c, cat: 'power', kind: 'sep' });
+      for (const k of pkeys) {
+        const p = P[k] || { name: k, radius: 2 };
+        if (((p.category) || 'basic') !== c) continue;
+        addTool({ id: 'power_' + k, cat: 'power', icon: pickIcon(['i_' + k]), name: p.name || k, kind: 'tap', power: k,
+          radius: p.radius || 2, hint: PH[k] || p.desc || ((p.name || k) + ': auf die Karte tippen.'),
+          apply(game, x, y) { return game.strike(x, y, k); } });
+      }
+    });
 
     // Welt: Aktionen
     addTool({ id: 'w_new', cat: 'world', icon: 'i_newworld', name: 'Neue Welt', kind: 'action', run(game) { game.ui.openNewWorld(); } });
@@ -91,6 +113,9 @@
     addTool({ id: 'w_chron', cat: 'world', icon: 'i_chronicle', name: 'Chronik', kind: 'action', run(game) { game.ui.openChronicle(); } });
     addTool({ id: 'w_map', cat: 'world', icon: 'i_map', name: 'Karte', kind: 'action', run(game) { game.ui.toggleMinimap(); } });
   }
+
+  // erstes vorhandene Sprite; sonst Schlüssel (dom.icon zeichnet dann einen Platzhalter mit Anfangsbuchstaben)
+  function pickIcon(list) { for (const k of list) if (WW.Sprites.has(k)) return k; return list[0]; }
 
   function shortGov(n) {
     return ({ 'Handelsrepublik': 'Republik', 'Stammesrat': 'Stamm' })[n] || n;

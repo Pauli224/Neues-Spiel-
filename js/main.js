@@ -66,6 +66,29 @@
     }
   };
 
+  // Göttliche Hand: aufnehmen, tragen, absetzen
+  game.grabAt = function (sx, sy) {
+    const sim = game.sim, a = sim.actions, p = tileOf(sx, sy);
+    if (!a.grab) return false;
+    const u = sim.query.unitNear(p.x, p.y - 0.3, Math.max(0.8, 12 / (game.cam.zoom * 8)));
+    const an = !u && sim.query.animalNear ? sim.query.animalNear(p.x, p.y - 0.2, Math.max(0.8, 12 / (game.cam.zoom * 8))) : null;
+    const obj = u || an;
+    if (!obj) return false;
+    let ok = false;
+    try { ok = a.grab(obj.id) !== false; } catch (e) { ok = false; }
+    if (!ok) return false;
+    game.held = { obj: obj, animal: !u, x: p.x, y: p.y };
+    return true;
+  };
+  game.grabMove = function (sx, sy) { if (game.held) { const p = tileOf(sx, sy); game.held.x = p.x; game.held.y = p.y; } };
+  game.dropAt = function (sx, sy) {
+    if (!game.held) return;
+    const p = tileOf(sx, sy);
+    try { game.sim.actions.drop(Math.max(0, Math.min(game.sim.state.W - 0.5, p.x)), Math.max(0, Math.min(game.sim.state.H - 0.5, p.y + 0.4))); } catch (e) { /* egal */ }
+    game.held = null;
+    game.afterAction();
+  };
+
   game.inspectAt = function (sx, sy, p) {
     const sim = game.sim, q = sim.query;
     const lc = game.renderer.labelAt(sx, sy);
@@ -245,7 +268,7 @@
     showBoot('Die Welt wird geknetet …');
     setTimeout(() => {
       const races = o.races && o.races !== 'random' ? [o.races] : null;
-      const sim = WW.Sim.create({ seed: o.seed, world: o.world, populate: o.populate == null ? 3 : o.populate, races: races,
+      const sim = WW.Sim.create({ seed: o.seed, world: o.world, populate: o.populate == null ? 0 : o.populate, races: races,
         govs: o.govs === 'tribe' ? null : 'mixed', animals: o.animals !== false });
       prewarm(sim, sim.state.cities.length ? 1200 : 0, () => {
         attachSim(sim);
@@ -351,7 +374,7 @@
       else brush = { x: p.x, y: p.y, kind: 'tile' };
     }
     const sel = game.select && game.select.obj && !game.select.obj.dead ? game.select : null;
-    game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
+    game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
 
     statT -= dt; infoT -= dt;
     if (statT <= 0) { statT = 0.25; game.hud.updateStats(); }
@@ -419,8 +442,8 @@
     else {
       const seed = WW.UI.randSeed();
       setTimeout(() => {
-        const s = WW.Sim.create({ seed: seed, worldOpts: { template: 'continents' }, size: 'medium', populate: 3, govs: 'mixed' });
-        prewarm(s, 1200, () => { go(s); game.saveAuto(); });
+        const s = WW.Sim.create({ seed: seed, worldOpts: { template: 'continents' }, size: 'medium', populate: 0 });
+        prewarm(s, s.state.cities.length ? 1200 : 0, () => { go(s); game.saveAuto(); });
       }, 20);
     }
     // beim Verlassen sichern
