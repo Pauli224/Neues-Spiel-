@@ -224,7 +224,8 @@
     const { h } = D();
     opt = opt || {};
     const box = this.$('toasts');
-    const el = h('div.toast' + (opt.warn ? '.warn' : ''), { role: 'status' }, [opt.year != null ? h('span.yr', 'Jahr ' + opt.year) : null, h('span', text)]);
+    const el = h('div.toast' + (opt.warn ? '.warn' : ''), { role: 'status' }, [opt.year != null ? h('span.yr', 'Jahr ' + opt.year) : null,
+      h('span', [text, opt.sub ? h('span.fx-line', opt.sub) : null])]);
     el.addEventListener('click', () => { if (opt.onClick) opt.onClick(); el.remove(); });
     box.insertBefore(el, box.firstChild);
     while (box.children.length > (window.innerWidth < 760 ? 1 : 2)) box.lastChild.remove();

@@ -290,7 +290,7 @@
     if (city.hungry) l -= 10;
     if (k.policy && k.policy.unrest && st.year < k.policy.unrest) l -= 20;
     if (city.agitated && st.year - city.agitated < 4) l -= 10;
-    return WW.SimUtil.clamp(l, -100, 100);
+    return WW.SimUtil.clamp(WW.SimUtil.mod(sim, k, city, 'loyalty', l), -100, 100);
   }
 
   // Stadt spaltet sich ab; Nachbarn mit schwacher Bindung gehen mit
@@ -486,7 +486,7 @@
       // Zuzug in kleine Dörfer mit Nahrung
       const sk = WW.Cities.stock(sim, city);
       if (city.pop < 30 && city.pop > 0 && city.centerOk && sk.food > city.pop * 2 + 10 && city.housing > city.pop && st.units.length < C().MAX_UNITS - 50) {
-        const n = 1 + sim.rng.int(3);
+        const n = Math.max(0, Math.round(WW.SimUtil.mod(sim, k, city, 'immigration', WW.SimUtil.mod(sim, k, city, 'growth', 1) * (1 + sim.rng.int(3)))));
         let made = 0;
         for (let m = 0; m < n && city.housing > city.pop + made; m++) {
           const t = WW.Path.nearestFree(sim, WW.Cities.centerTile(sim, city, sim.rng.int(9)), city.kingdomId, 6);

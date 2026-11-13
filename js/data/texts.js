@@ -5,8 +5,30 @@
 
   const T = {
     // ---------------------------------------------------------------- Städte
+    hallStart: [
+      'In {city} wird eine Dorfhalle gezimmert. Das Lagerfeuer bekommt endlich ein Dach.',
+      '{city} hat genug vom Zelten: Eine richtige Halle soll her.',
+      'Die Leute von {city} stapeln Balken. Wer zuletzt kommt, muss den Dachfirst festhalten.'
+    ],
+    hallDone: [
+      'Die Dorfhalle von {city} steht! Zum ersten Mal regnet es nicht ins Abendessen.',
+      '{city} feiert seine neue Dorfhalle mit einem Tanz, der drei Bänke kostet.',
+      'Aus dem Lager {city} wird ein Dorf mit Halle. Die Zelte schauen neidisch.'
+    ],
+    seatStart: [
+      '{city} beginnt mit dem Bau eines Regierungssitzes. Der Architekt verspricht „etwas Großes“.',
+      'In {city} wird der Grundstein für ein prächtiges Regierungsgebäude gelegt. Die Kasse seufzt.',
+      '{city} will repräsentieren: Ein richtiger Regierungssitz muss her.'
+    ],
+    seatDone: [
+      'Der Regierungssitz von {city} ist fertig: {center}. Man sieht ihn schon von Weitem.',
+      '{city} hat jetzt ein richtiges Zentrum ({center}). Die alte Halle wird zum Lagerraum.',
+      'Feierliche Eröffnung in {city}: {center}! Die Fahne klemmt, alle klatschen trotzdem.'
+    ],
     found: [
       '{NWord} mutige Siedler gründen {city}. Der erste Streit um den besten Zeltplatz folgt sofort.',
+      'Ein Lager wird aufgeschlagen: {city}. Lagerfeuer, Fahnenstange, ein Haufen Vorräte. Mehr braucht es vorerst nicht.',
+      '{NWord} Siedler schlagen ihr Lager auf und nennen es {city}. Das Zelt des Anführers ist das schiefste.',
       '{city} wird gegründet. Die Gründer sind sich einig: Hier ist es schön. Über alles andere wird noch gestritten.',
       'Auf einer Wiese rammt jemand einen Pflock in den Boden und ruft „{city}!“. So entstehen Städte.',
       '{NWord} Siedler packen aus und nennen den Ort {city}. Der Name war ein Missverständnis, bleibt aber.',

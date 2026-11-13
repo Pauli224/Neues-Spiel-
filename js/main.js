@@ -265,7 +265,7 @@
     game.lastEventId = last.id;
     // höchstens zwei neue zeigen, die neuesten
     for (const e of fresh.slice(-2)) {
-      game.hud.toast(e.text, { year: e.year, warn: /war|revolt|gone|fall|conquer|plague|coup|fire/i.test(e.type),
+      game.hud.toast(e.text, { year: e.year, sub: e.effectText || null, warn: /war|revolt|gone|fall|conquer|plague|coup|fire/i.test(e.type),
         onClick: (e.x >= 0 ? () => game.jumpToEvent(e) : null) });
     }
   };

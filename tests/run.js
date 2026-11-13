@@ -415,6 +415,7 @@ function siege(save, mode, engines, maxTicks) {
     }
     cb.wall.level = 1; cb.wall.target = 1; cb.wall.state = 'done'; cb.wall.style = 'palisade';
     cb.noSpace = false; cb.wall.plannedYear = sim.state.year + 100;
+    sim._noWallUpgrade = true;   // Testaufbau: Palisade bleibt Palisade
   }
   if (mode === 'stone') { cb.wall.plannedYear = sim.state.year + 100; }
   const made = [];
@@ -430,7 +431,12 @@ function siege(save, mode, engines, maxTicks) {
   for (let i = 1; i <= (maxTicks || 30000); i++) {
     sim.tick();
     if (i % 50 === 0) {
-      if (cb.dead || cb.kingdomId !== b.id || b.dead) { fell = sim.state.tick - t0; break; }
+      if (cb.dead || cb.kingdomId !== b.id || b.dead) {
+        fell = sim.state.tick - t0;
+        const why = sim.state.events.filter(e => e.cityId === cb.id && e.tick > t0).map(e => e.type).join(',') + ' leak=' + leaks(sim, cb).leak + ' deaths=' + JSON.stringify(sim._deaths || {});
+        log('  [' + mode + (engines ? '+Gerät' : '') + '] Ende durch: ' + why + (cb.kingdomId === a.id ? ' (Angreifer)' : ' (an ' + cb.kingdomId + ')'));
+        break;
+      }
       if (a.dead) break;
       const r = a.relations[b.id];
       if (r && r.status !== 'war') sim.actions.setRelation(a.id, b.id, 'war');
@@ -714,6 +720,45 @@ test('11 Vorhaben: Krieg kündigt sich an und kann abgesagt werden', function ()
   log('Abgesagt:', (sim.state.events.filter(e => e.type === 'plotWarOff').pop() || {}).text);
   const D = WW.Sim.load(sim.serialize());
   assert(D && Array.isArray(D.state.plots), 'Vorhaben werden nicht gespeichert');
+});
+
+// --------------------------------------------------------------------------
+// 12. Vom Lager zur Stadt
+// --------------------------------------------------------------------------
+test('12 Vom Lager zur Stadt (Zentrum-Stufen, Zelte, Speichern im Ausbau)', function () {
+  const world = meadowWorld(100, 76, { hills: true, spots: [{ x: 50, y: 38 }] });
+  const sim = makeSim({ seed: 'lager', world: world, populate: 1, govs: ['monarchy'], races: ['human'], animals: false });
+  const c = sim.state.cities[0];
+  const ctr = () => sim._structs.get(c.centerId);
+  assert(ctr().stage === 0 && !ctr().upgrading, 'neue Siedlung hat kein Lager (Stufe ' + ctr().stage + ')');
+  let tents = 0, tHall = -1, tSeat = -1, tWall = -1, saved = null, savedAt = -1;
+  run(sim, 40 * WW.CONFIG.TPY, 10, (i) => {
+    for (const s of sim.state.structs) if (!s.dead && s.cityId === c.id && s.type === 'house' && s.level === 0) { tents++; assert(s.variant >= 0 && s.variant < 256, 'Haus ohne variant'); }
+    const z = ctr();
+    if (!z) return;
+    if (tWall < 0 && c.wall.state !== 'none') { tWall = i; assert(z.stage >= 1, 'Mauer schon im Zeltlager geplant'); }
+    if (z.upgrading && !saved) { saved = sim.serialize(); savedAt = i; }
+    if (tHall < 0 && z.stage >= 1) tHall = i;
+    if (tSeat < 0 && z.stage >= 2) { tSeat = i; return true; }
+  });
+  log('Zelte gesehen:', tents > 0, '· Dorfhalle nach', (tHall / 600).toFixed(1), 'min · Mauer geplant nach', (tWall / 600).toFixed(1), 'min · Regierungssitz nach', (tSeat / 600).toFixed(1), 'min (Stadtstufe', WW.CITY_TIERS[c.tier].name + ')');
+  for (const e of sim.state.events.filter(e => /hall|seat/.test(e.type))) log('  [' + e.year + '] ' + e.text);
+  assert(tents > 0, 'im Lager wurden keine Zelte gebaut');
+  assert(tHall > 0 && tHall < 6 * 600, 'Dorfhalle nicht in angemessener Zeit');
+  assert(tSeat > tHall, 'kein Regierungssitz');
+  // Speichern/Laden mitten im Ausbau
+  assert(saved, 'kein Ausbau beobachtet');
+  const A = WW.Sim.load(saved), B = WW.Sim.load(saved);
+  for (let i = 0; i < 1500; i++) { A.tick(); B.tick(); }
+  assert(A.hash() === B.hash(), 'nach Laden im Ausbau nicht deterministisch');
+  // alter Spielstand ohne stage: Zentrum gilt als Regierungssitz
+  const o = JSON.parse(saved);
+  for (const s of o.structs) { delete s.stage; delete s.upgrading; delete s.variant; }
+  const old = WW.Sim.load(JSON.stringify(o));
+  const oc = old.state.structs.find(s => s.type === 'center');
+  assert(oc && oc.stage === 2 && !oc.upgrading, 'alter Spielstand: Zentrum ohne Stufe 2');
+  for (let i = 0; i < 500; i++) old.tick();
+  log('Alter Spielstand ohne stage lädt: Zentrum Stufe', oc.stage);
 });
 
 // --------------------------------------------------------------------------

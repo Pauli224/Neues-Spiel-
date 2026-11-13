@@ -502,7 +502,7 @@
     // fertig: Ausbau oder Erweiterung?
     const stock = WW.Cities.stock(sim, city);
     const maxLv = Math.min(gov.wallMax, 3);
-    if (w.built >= w.total && !gov.barricades && w.level < maxLv) {
+    if (w.built >= w.total && !gov.barricades && w.level < maxLv && !sim._noWallUpgrade) {
       if (w.level === 1 && city.pop >= Math.max(15, gov.wallThreshold + 5) && stock.stone >= 12) {
         startUpgrade(sim, city, 2); w.style = 'stone';
         sim.event('wallStone', vars, at);

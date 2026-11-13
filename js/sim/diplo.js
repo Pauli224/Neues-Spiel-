@@ -429,7 +429,7 @@
         if (op > need) continue;
         if (sp < sq * 0.8 && p.gov !== 'democracy') continue;
         const ruler = p.ruler || { war: 3, diplo: 3 };
-        const chance = (g.aggression + race.aggression) * 0.22 * (0.7 + ruler.war * 0.12) * (1.25 - ruler.diplo * 0.08);
+        const chance = WW.SimUtil.mod(sim, p, null, 'aggression', g.aggression + race.aggression) * 0.22 * (0.7 + ruler.war * 0.12) * (1.25 - ruler.diplo * 0.08);
         // Krieg kündigt sich als Vorhaben an (state.plots), Erklärung erst bei 100 %
         if (sim.rng.chance(chance)) { WW.Growth.planWar(sim, p, q, holy); break; }
       }

@@ -336,5 +336,50 @@
     ctx.drawImage(top, 0, 64, W2 * 8 * scale, H2 * 8 * scale);
   }
 
-  WW.SpriteScene = { render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Vom Lager zur Stadt: drei Siedlungen nebeneinander
+  function renderStages(canvas, scale) {
+    S.init();
+    var TW = 16, TH = 14, W2 = TW * 3, H2 = TH;
+    var ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2);
+    for (var i = 0; i < ter.length; i++) { ter[i] = T.GRASS; vari[i] = Math.floor(h2(i % W2, Math.floor(i / W2), 79) * 256); }
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d');
+    S.drawGroundMap(tx, ter, vari, W2, H2);
+    var items = [], team = 5;
+    function b(key, x, y) { items.push({ key: key, x: x, y: y, team: team }); }
+    function u(key, x, y, f) { items.push({ key: key, x: x, y: y, team: team, unit: true, flip: f }); }
+    // 1) Zeltlager
+    b(S.campKey(0, 0), 6, 5);
+    [[2, 2, 0], [10, 2, 1], [2, 9, 2], [10, 9, 3], [6, 10, 1]].forEach(function (t) { b(S.tentKey(t[2]), t[0], t[1]); });
+    b('s_deco_woodpile', 13, 6); b('s_deco_hay', 1, 6);
+    u('u_human_settler_0', 7.2, 8.6); u('u_human_settler_1', 9.4, 8.4, true); u('u_human_child_0', 5.2, 9.0); u('u_human_builder_0', 12.3, 7.5, true);
+    // 2) Dorf mit Halle, Hütten, Feldern
+    var ox = TW;
+    b(S.hallKey(0), ox + 6, 4);
+    [[ox + 2, 2, 0], [ox + 11, 2, 1], [ox + 2, 7, 2], [ox + 11, 7, 3], [ox + 2, 10, 5]].forEach(function (h, k) { b(S.houseKey('tribe', 1, h[2]), h[0], h[1]); });
+    b(S.tentKey(2), ox + 11, 10);
+    for (var fx = ox + 6; fx <= ox + 9; fx++) for (var fy = 10; fy <= 12; fy++) b('s_field_' + (fy === 12 ? 2 : 3), fx, fy);
+    b('s_deco_well', ox + 8, 8); b('s_deco_garden_0', ox + 5, 9); b('s_deco_cart', ox + 14, 5);
+    u('u_human_farmer_0', ox + 7.3, 11.2); u('u_human_lumberjack_1', ox + 13.4, 9.3); u('u_human_child_1', ox + 9.4, 8.6, true);
+    // 3) Stadt mit Regierungssitz, gemischten Häusern, Deko
+    ox = TW * 2;
+    b('s_center_monarchy', ox + 6, 4);
+    var hv = 0;
+    [[ox + 1, 1, 2], [ox + 4, 1, 3], [ox + 10, 1, 2], [ox + 13, 1, 3], [ox + 1, 4, 3], [ox + 13, 4, 2], [ox + 1, 8, 2], [ox + 4, 8, 1], [ox + 10, 8, 3], [ox + 13, 8, 2], [ox + 1, 11, 1], [ox + 13, 11, 3]]
+      .forEach(function (h) { b(S.houseKey('monarchy', h[2], hv++), h[0], h[1]); });
+    b('s_market', ox + 10, 4); b('s_deco_well', ox + 8, 9); b('s_deco_stall', ox + 6, 9); b('s_deco_barrels', ox + 4, 11); b('s_deco_laundry', ox + 5, 12);
+    b('s_deco_garden_1', ox + 10, 11); b('s_deco_garden_2', ox + 11, 11); b('s_deco_hay', ox + 4, 5); b('s_deco_cart', ox + 7, 11);
+    u('u_human_leader_monarchy_0', ox + 8.2, 7.6); u('u_human_trader_0', ox + 6.3, 10.6); u('u_human_child_0', ox + 9.2, 10.4, true); u('u_human_soldier_1', ox + 12.4, 7.4);
+    items.forEach(function (it) { it._s = sortY(it); });
+    items.sort(function (a, c) { return a._s - c._s || a.x - c.x; });
+    items.forEach(function (it) { if (S.has(it.key)) S.draw(tx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team, flip: it.flip }); else console.warn('fehlt', it.key); });
+    // Ausbau-Gerüst als Beispiel über der Halle im Dorf
+    S.draw(tx, 's_scaffold_3', (TW + 6) * 8, 4 * 8);
+    canvas.width = W2 * 8 * scale; canvas.height = H2 * 8 * scale;
+    var ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(top, 0, 0, canvas.width, canvas.height);
+  }
+
+  WW.SpriteScene = { renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

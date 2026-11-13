@@ -145,7 +145,7 @@
     if (u.merc) d *= 1.2;
     if (u.role === 'soldier') d *= gov(sim, u).unitDmgMul;
     if (u.role === 'child') d = 1;
-    return d * race.strength;
+    return WW.SimUtil.mod(sim, sim._kingdoms.get(u.kingdomId), sim._cities.get(u.cityId), 'strength', d * race.strength);
   }
 
   function hitUnit(sim, att, t, dmg) {
@@ -320,7 +320,7 @@
     let m = g.workMul;
     if (k && k.policy && k.policy.bonus === 'nap') m *= 0.95;
     if (u.sick) m *= 0.6;
-    return m;
+    return WW.SimUtil.mod(sim, k, sim._cities.get(u.cityId), 'work', m);
   }
 
   // zufällige begehbare Kachel nahe dem Zentrum (innerhalb der Mauer, wenn vorhanden)
@@ -434,7 +434,7 @@
         const f = sim._structs.get(id);
         if (!f || f.dead) continue;
         if (f.skipUntil && f.skipUntil > st.tick) continue;
-        if (city.besieged > st.tick && st.inRing[f.y * W + f.x] !== city.id) continue;   // Belagerung: niemand geht hinaus
+        if (city.besieged > st.tick && st.inRing[f.y * W + f.x] !== city.id && ((f.id + (st.tick >> 6)) % 3)) continue;   // Belagerung: kaum jemand geht hinaus
         const d = distTo(u, f.x + 0.5, f.y + 0.5) + (f.growth >= 3 ? 0 : 12 + f.growth * 2) + f.workers * 6;
         if (d < bs) { bs = d; best = f; }
       }
@@ -472,7 +472,7 @@
       u.tt -= THINK * workMul(sim, u);
       if (u.tt > 0) return;
       const k = sim._kingdoms.get(u.kingdomId);
-      let mul = race.yields.food;
+      let mul = WW.SimUtil.mod(sim, k, city, 'food', race.yields.food);
       if (k && k.policy && k.policy.bonus === 'bread') mul *= 1.25;
       if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'food') mul *= 1.5;
       if (u.task === 'fish') {
@@ -531,13 +531,13 @@
       const k = sim._kingdoms.get(u.kingdomId);
       const plan = k && k.policy && k.policy.plan;
       if (res === 'wood') {
-        u.carrying = 'wood'; u.carryAmt = C().CHOP * race.yields.wood * (plan && plan.focus === 'wood' ? 1.5 : 1);
+        u.carrying = 'wood'; u.carryAmt = C().CHOP * WW.SimUtil.mod(sim, k, city, 'wood', race.yields.wood) * (plan && plan.focus === 'wood' ? 1.5 : 1);
         if (!race.noDeforest && sim.rng.chance(0.2)) {
           const t = st.terrain[u.target], nt = WW.Walls.deforested(t);
           if (nt !== t) { st.terrain[u.target] = nt; sim.markDirty(u.target); }
         }
       } else {
-        u.carrying = 'stone'; u.carryAmt = C().MINE * race.yields.stone * (plan && plan.focus === 'stone' ? 1.5 : 1);
+        u.carrying = 'stone'; u.carryAmt = C().MINE * WW.SimUtil.mod(sim, k, city, 'stone', race.yields.stone) * (plan && plan.focus === 'stone' ? 1.5 : 1);
       }
       if (sim.rng.chance(0.15)) bubble(u, 'hammer', 20);
       u.phase = 3;
@@ -616,8 +616,8 @@
     u.path = null; u.tt = 0;
     const k = sim._kingdoms.get(u.kingdomId);
     const g = gov(sim, u);
-    let rate = workMul(sim, u) * g.buildMul;
-    if (WW.Structs.isWallish(s)) { rate *= g.wallSpeedMul; if (k && k.policy && k.policy.bonus === 'walls') rate *= 1.3; }
+    let rate = workMul(sim, u) * WW.SimUtil.mod(sim, k, city, 'build', g.buildMul);
+    if (WW.Structs.isWallish(s)) { rate *= WW.SimUtil.mod(sim, k, city, 'wallSpeed', g.wallSpeedMul); if (k && k.policy && k.policy.bonus === 'walls') rate *= 1.3; }
     if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'build') rate *= 1.5;
     const work = WW.Structs.siteWork(s);
     s.progress = Math.min(1, s.progress + THINK * rate / work);
@@ -672,7 +672,7 @@
       u.path = null; u.moving = false;
       if (u.cd <= 0) {
         sim.fx({ type: 'rock', x: u.x, y: u.y - 0.3, x2: best.x + 0.5, y2: best.y + 0.5 });
-        if (WW.Structs.damage(sim, best, C().CATAPULT_DMG, 'hit')) {
+        if (WW.Structs.damage(sim, best, C().CATAPULT_DMG * (best.level >= 3 ? 0.45 : (best.level === 2 ? 0.6 : 1.3)), 'hit')) {
           const ak = sim._kingdoms.get(u.kingdomId);
           if (ak && tc.lastBreach !== st.year) { tc.lastBreach = st.year; sim.event('wallBreach', { city: tc.name, other: ak.name }, WW.Cities.atCity(tc)); }
         }
@@ -700,7 +700,8 @@
           const ram = u.role === 'ram';
           if (u.cd <= 0 && (ram || s.siegeN < 3)) {
             if (!ram) s.siegeN++;
-            const dmg = ram ? (s.type === 'gate' ? C().RAM_GATE_DMG : C().RAM_WALL_DMG) : damageOf(sim, u) * (s.level >= 3 ? 0.22 : (s.level === 2 ? 0.4 : 0.8));
+            const lvf = s.level >= 3 ? 0.45 : (s.level === 2 ? 0.6 : 1.3);   // Belagerungsgerät: Palisade splittert, Stein hält länger
+            const dmg = ram ? (s.type === 'gate' ? C().RAM_GATE_DMG : C().RAM_WALL_DMG) * lvf : damageOf(sim, u) * (s.level >= 3 ? 0.04 : (s.level === 2 ? 0.08 : 0.8));   // ohne Gerät kaum gegen Stein
             if (ram) sim.fx({ type: 'ram', x: s.x + 0.5, y: s.y + 0.5 });
             if (WW.Structs.damage(sim, s, dmg, 'hit')) {
               const wc = sim._cities.get(s.cityId), ak = sim._kingdoms.get(u.kingdomId);

@@ -187,7 +187,7 @@
       if (st.terrain[i] === e.into && st.structAt[i] === -1) { st.terrain[i] = t; sim.markDirty(i); ch = true; }
     }
     e.saved = keep;
-    if (ch) sim.terrainChanged();
+    if (ch) W_().finishTerrain(sim);
   }
   function endEffect(sim, e) {
     if (e.type === 'flood' || e.type === 'frost') restoreSaved(sim, e, null);
@@ -267,7 +267,7 @@
         st.terrain[i] = WW.T.SHALLOW; sim.markDirty(i);
         WW.Env.extinguish(sim, i);
       }
-      if (add.length) sim.terrainChanged();
+      if (add.length) W_().finishTerrain(sim);
     },
     frost: function () {},
     volcano: function (sim, e) {

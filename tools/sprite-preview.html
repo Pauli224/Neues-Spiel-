@@ -298,6 +298,34 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Vom Lager zur Stadt
+  if (want('stages') || Q.get('stages')) {
+    var rsg = section('stages', 'Vom Lager zur Stadt: Zeltlager mit Lagerfeuer → Dorf mit Halle und Hütten (Gerüst = Ausbau läuft) → Stadt mit Regierungssitz');
+    var scv = document.createElement('canvas'); scv.id = 'stagecv';
+    WW.SpriteScene.renderStages(scv, +Q.get('stages') || 3);
+    cell(rsg, '', scv);
+    if (Q.get('stages')) return;
+  }
+  if (want('housevars') || Q.get('housevars')) (function () {
+    var r = section('housevars', 'Hausvarianten: Familie × Stufe × Variante (alle 2×2)', 'Zeilen: rustic, timber, town, block je Stufe 1–3; Spalten a..h. Daneben Zelte, Lager, Halle, Gerüste, Stadt-Deko.');
+    var fams = ['rustic', 'timber', 'town', 'block'], rows = [];
+    fams.forEach(function (f) { for (var lv = 1; lv <= 3; lv++) rows.push([f, lv]); });
+    var k = canvas(8 * 24 + 16, rows.length * 32 + 8, 3);
+    k.c.id = 'housevarcv';
+    groundRect(k.x, fill(WW.T.GRASS, 8 * 3 + 2, rows.length * 4 + 1), 0, 0);
+    rows.forEach(function (rw, j) {
+      'abcdefgh'.split('').forEach(function (v, i) { var key = 's_house_' + rw[0] + '_' + rw[1] + '_' + v; if (S.has(key)) S.draw(k.x, key, 8 + i * 24, j * 32 + 14, { team: (j + i) % 12 }); });
+    });
+    cell(r, '', k.c);
+    var k2 = canvas(30 * 8, 6 * 8, 3);
+    groundRect(k2.x, fill(WW.T.GRASS, 30, 6), 0, 0);
+    ['s_tent_a', 's_tent_b', 's_tent_c', 's_tent_d'].forEach(function (t, i) { S.draw(k2.x, t, 4 + i * 20, 24, { team: i + 2 }); });
+    S.draw(k2.x, 's_camp_a_1', 84, 16, { team: 5 }); S.draw(k2.x, 's_hall_a', 112, 16, { team: 5 }); S.draw(k2.x, 's_hall_b', 140, 16, { team: 5 });
+    S.draw(k2.x, 's_house_timber_2_a', 172, 24, { team: 5 }); S.draw(k2.x, 's_scaffold_2', 172, 24);
+    S.DECO_KEYS.forEach(function (d, i) { S.draw(k2.x, d, 196 + (i % 5) * 9, 8 + Math.floor(i / 5) * 18, { team: 0 }); });
+    cell(r, 'Zelte, Lager, Halle a/b, Gerüst über Haus, Stadt-Deko', k2.c);
+  })();
+
   // ---------------------------------------------------------------- Zerstörung
   if (want('destruction') || Q.get('destr')) {
     var rd = section('destruction', 'Zerstörung: Icons, Flugzeuge über einer Stadt, Pilzwolken-Abfolge, Laser, Schwarzes Loch, Krater, Explosionen');

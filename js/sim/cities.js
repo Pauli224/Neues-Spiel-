@@ -202,7 +202,7 @@
     const st = stock(sim, city);
     const want = { farmer: 0, lumberjack: 0, miner: 0, builder: 0, soldier: 0 };
     const atWar = k && WW.Diplo.atWar(sim, k.id);
-    let soldierShare = g.soldierShare;
+    let soldierShare = WW.SimUtil.mod(sim, k, city, 'soldiers', g.soldierShare);
     if (k && k.policy && k.policy.bonus === 'safety') soldierShare += 0.06;
     if (atWar) soldierShare = g.war === 'mass' ? Math.min(0.55, soldierShare * 2) : soldierShare * 1.6 + (g.soldierShare > 0 ? 0.06 : 0);
     if (city._rebels > 0 && g.soldierShare > 0) soldierShare += 0.1;
@@ -505,7 +505,7 @@
     const ctr0 = sim._structs.get(city.centerId);
     if (ctr0 && ctr0.built && !ctr0.upgrading && !ctr0.restyle && (ctr0.stage || 0) < 2) {
       const need = WW.STRUCT_INFO.center.stageTier[ctr0.stage || 0];
-      if (city.tier >= need) {
+      if (city.tier >= need && st.year - city.founded >= WW.STRUCT_INFO.center.stageMinYears[ctr0.stage || 0]) {
         ctr0.upgrading = true; ctr0.progress = 0; ctr0.paid = false;
         city.sites.push(ctr0.id);
         sim.event((ctr0.stage || 0) === 0 ? 'hallStart' : 'seatStart', { city: city.name }, atCity(city));
@@ -665,7 +665,7 @@
     const race = WW.RACES[city.race];
     const t = sim.state.terrain[city.cy * sim.state.W + city.cx];
     if (race && race.favTerrain.indexOf(WW.TERRAIN[t].key) >= 0) h += 4;
-    return WW.SimUtil.clamp(h, 0, 100);
+    return WW.SimUtil.clamp(WW.SimUtil.mod(sim, k, city, 'happiness', h), 0, 100);
   }
 
   // Wirtschaft je Sekunde
@@ -694,9 +694,10 @@
     // Gold
     if (g.goldMul > 0) {
       let gold = 0;
-      if (g.taxes > 0) gold += city.pop * g.taxes;
+      const tax = WW.SimUtil.mod(sim, k, city, 'taxes', g.taxes);
+      if (tax > 0) gold += city.pop * tax;
       if (city.markets) gold += city.markets * (0.05 + city.pop * 0.005);
-      gold *= g.goldMul;
+      gold = WW.SimUtil.mod(sim, k, city, 'gold', gold * g.goldMul);
       if (k && k.policy && k.policy.bonus === 'trade') gold *= 1.5;
       sk.gold += gold;
     }
@@ -708,7 +709,7 @@
     // Geburten
     if (city.pop < city.housing && st.units.length < WW.CONFIG.MAX_UNITS && city.centerOk) {
       const race = WW.RACES[city.race] || WW.RACES.human;
-      let p = WW.CONFIG.BIRTH_RATE * city.adults * g.growthMul * race.fertility;
+      let p = WW.CONFIG.BIRTH_RATE * city.adults * WW.SimUtil.mod(sim, k, city, 'growth', g.growthMul) * race.fertility;
       if (sk.food < city.pop * 0.6) p *= 0.15;
       if (city.happiness < 30) p *= 0.4;
       if (city.hungry) p = 0;

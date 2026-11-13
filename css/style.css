@@ -128,6 +128,7 @@ i[data-icon] { display: inline-block; font-style: normal; line-height: 0; }
   font: 600 14px/1.35 var(--font-text); max-width: 100%;
   animation: toastIn 180ms ease-out;
 }
+.fx-line { display: block; font: 600 12px/1.3 var(--font-pixel); color: var(--bernstein); margin-top: 2px; }
 .toast .yr { font: 600 12px/1.6 var(--font-pixel); color: var(--bernstein); white-space: nowrap; }
 .toast.warn { border-color: #5a1b14; background: rgba(110, 38, 30, 0.96); }
 .toast.out { opacity: 0; transition: opacity 300ms; }

@@ -175,7 +175,7 @@
   Renderer.prototype.cityDeco = function (i) {
     const S = this.S;
     let list = this._cityDecoList;
-    if (!list) list = this._cityDecoList = CITY_DECO.filter(k => S.has(k));
+    if (!list) list = this._cityDecoList = (Array.isArray(S.DECO_KEYS) && S.DECO_KEYS.length ? S.DECO_KEYS : CITY_DECO).filter(k => S.has(k));
     if (!list.length) return null;
     const st = this.st, W = st.W, H = st.H, x = i % W, y = (i / W) | 0;
     if (!WW.TERRAIN_LUT.build[st.terrain[i]]) return null;
@@ -922,7 +922,11 @@
     // Lagerfeuer: Feuer-Frames der Lager-Sprites, sonst fx_fire in der Mitte
     if (s.type === 'center' && s.stage === 0 && s.built !== false && key.indexOf('s_camp') === 0) {
       const fr = ((this.time * 6) | 0) % 3;
-      if (S.has(key + '_1')) S.drawFast(ctx, key + '_' + fr % 2, px, py, team, false);
+      let fk = null;
+      if (typeof S.campKey === 'function') { try { fk = S.campKey(varOf(s), fr); } catch (e) { fk = null; } }
+      if (fk && fk !== key && S.has(fk)) S.drawFast(ctx, fk, px, py, team, false);
+      else if (fk && fk === key) { /* Helfer liefert dasselbe Bild: Feuer steckt schon drin */ }
+      else if (S.has(key + '_1')) S.drawFast(ctx, key + '_' + fr % 2, px, py, team, false);
       else S.drawFast(ctx, 'fx_fire_' + fr, (s.x + s.w / 2) * 8 - 4, (s.y + s.h / 2) * 8 - 6, 0, false);
     }
     // laufender Ausbau: Gerüst über dem bestehenden Gebäude

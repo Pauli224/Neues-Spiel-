@@ -15,7 +15,11 @@ const OPTIONAL = [
   ['js/core/config-wild.js', 'js/core/config.js'],
   ['js/data/texts-wild.js', 'js/data/texts.js'],
   ['js/sim/growth.js', 'js/sim/diplo.js'],
-  ['js/sim/wild.js', 'js/sim/creatures.js']
+  ['js/sim/wild.js', 'js/sim/creatures.js'],
+  ['js/core/config-events.js', 'js/core/config.js'],
+  ['js/data/events.js', 'js/data/texts.js'],
+  ['js/sim/mods.js', 'js/sim/walls.js'],        // direkt vor cities.js
+  ['js/sim/events.js', 'js/sim/powers.js']       // direkt vor sim.js
 ];
 let html = read('index.html');
 for (const [file, after] of OPTIONAL) {

@@ -138,6 +138,32 @@
 //     exodus, exiles, refugees, newRealm, siegeEngines, siege.
 //   Neue Fx: claim { x, y, cityId } (Flur genommen), rock { x2, y2 } (Katapultstein), ram (Rammstoß am Tor).
 //   Neue Werte: WW.GOVERNMENTS[k].cityLimit, .landReach; WW.RACES[r].cityLimit, .landReach; CONFIG FLUR_*, RAM_*, CATAPULT_*.
+//
+// ERGÄNZUNG 1.2a „Vom Lager zur Stadt"
+//   center: stage 0 Lager (bei Gründung sofort fertig) | 1 Dorfhalle | 2 Regierungssitz; upgrading true während des Ausbaus
+//     (Gebäude bleibt built und nutzbar, progress 0..1, Baumeister arbeiten daran). Ausbau startet ab Stadtstufe
+//     STRUCT_INFO.center.stageTier[stage] und Mindestalter stageMinYears[stage]; Kosten stageCost, Arbeit stageWork.
+//     Fertig: stage++, Dirty-Kacheln, Fx centerStage { x, y, stage }, Ereignis hallDone bzw. seatDone (Beginn: hallStart,
+//     seatStart). style (Regierung) wirkt optisch erst bei stage 2; Regierungswechsel baut nur stage 2 um.
+//     Alte Spielstände ohne stage: stage = 2. Mauerplanung erst ab stage ≥ 1.
+//   house: level 0 = Zelt (STRUCT_INFO.house.tent: billig, 2 Plätze), gebaut solange das Zentrum auf stage 0 ist; ab Dorfhalle
+//     werden Zelte nach und nach zu level 1 aufgewertet (upgradeTo 1), neue Häuser gleich level 1.
+//     variant 0..255 (Zufall beim Bau; Formenvielfalt in der Darstellung; alte Spielstände: aus der ID abgeleitet).
+//
+// MODIFIKATOREN (für js/sim/mods.js eines anderen Agenten; fehlt die Datei, gilt der Basiswert)
+//   Aufruf über WW.SimUtil.mod(sim, kingdom, city, key, base) -> WW.Mods.value(...) bzw. base, und
+//   WW.SimUtil.modFlag(sim, kingdom, key) -> WW.Mods.flag(...) bzw. undefined. Schlüssel und Aufrufstellen:
+//     happiness  Cities.happinessTarget (Zielwert der Zufriedenheit, vor dem Begrenzen auf 0..100)
+//     work       Units.workMul (Arbeitstempo jeder Einheit)
+//     build      thinkBuilder (Bautempo, Basis gov.buildMul)       wallSpeed  thinkBuilder (Mauerstücke, Basis gov.wallSpeedMul)
+//     food       thinkFarmer (Ernte- und Fischertrag, Basis race.yields.food)
+//     wood/stone thinkGatherer (Ertrag je Gang, Basis race.yields.wood/stone)
+//     gold       Cities.economy (Goldeinkommen je Sekunde)       taxes      Cities.economy (Steuersatz, Basis gov.taxes)
+//     growth     Cities.economy (Geburtenfaktor, Basis gov.growthMul) und Growth.yearly (Zuzug)
+//     soldiers   Cities.assignJobs (Soldatenanteil, Basis gov.soldierShare)
+//     strength   Units.damageOf (Kampfkraft)                     aggression Diplo.yearly (Kriegslust des Reichs, vor Wahrscheinlichkeit)
+//     loyalty    Growth.loyaltyTarget (Zielwert der Loyalität)   immigration Growth.yearly (Anzahl Zuwanderer)
+//   Flag 'nature' ('care'|'use'|'exploit') überschreibt den Umgang mit der Natur (siehe NATUR, sobald vorhanden).
 // =============================================================================
 (function (WW) { 'use strict';
 

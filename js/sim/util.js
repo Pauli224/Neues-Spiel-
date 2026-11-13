@@ -83,7 +83,16 @@
     return n >= 0 && n < o.length ? o[n] : n + '.';
   }
 
+  // Modifikatoren aus js/sim/mods.js (Ereignisse, Reichsgesetze); ohne die Datei bleibt der Basiswert
+  function mod(sim, kingdom, city, key, base) {
+    return WW.Mods ? WW.Mods.value(sim, kingdom || null, city || null, key, base) : base;
+  }
+  function modFlag(sim, kingdom, key) {
+    return WW.Mods && kingdom ? WW.Mods.flag(sim, kingdom, key) : undefined;
+  }
+
   WW.SimUtil = {
+    mod: mod, modFlag: modFlag,
     bytesToB64: bytesToB64, b64ToBytes: b64ToBytes, encodeArray: encodeArray, decodeArray: decodeArray,
     hashString: hashString, roman: roman, clamp: clamp, isNum: isNum, numWord: numWord, ordinalWord: ordinalWord,
     // 8 Nachbarn: dx, dy (zuerst orthogonal)

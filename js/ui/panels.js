@@ -71,12 +71,12 @@
     if (kind === 'kingdom') {
       const st = this.game.sim.query.kingdomStats(o.id) || {};
       const rel = Object.keys(o.relations).map(k => k + ':' + o.relations[k].status + ':' + Math.round(o.relations[k].opinion / 5)).join(',');
-      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, Math.round(o.nature || 0), JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
+      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, Math.round(o.nature || 0), JSON.stringify(o.laws || null), modSig(o, this.game.sim), JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'city') {
       const w = o.wall || {};
       return [o.name, o.kingdomId, o.tier, o.pop, o.housing, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
-        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
+        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), modSig(o, this.game.sim), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name].join('|');
     return [o.kind, Math.round(o.hp)].join('|');
@@ -100,6 +100,10 @@
     body.appendChild(h('p.muted', s.kind === 'unit' ? 'Diese Figur weilt nicht mehr unter uns. Die Chronik weiß vielleicht mehr.' : 'Davon ist nur noch eine Erinnerung übrig.'));
   };
 
+  function modSig(o, sim) {
+    if (!WW.Mods || typeof WW.Mods.list !== 'function') return '';
+    try { const l = WW.Mods.list(o, sim); return Array.isArray(l) ? l.map(m => (m.key || m.name) + ':' + (m.until || m.yearsLeft || '')).join(',') : ''; } catch (e) { return ''; }
+  }
   function stageName(cs, k) {
     if (cs.stage === 0) return 'Lager';
     if (cs.stage === 1) return 'Dorfhalle';
@@ -217,6 +221,8 @@
     ]);
     body.appendChild(h('div.sec', [h('h3', 'Regierung'), card, grid, lock]));
     { const nb = natureBlock(k.nature); if (nb) body.appendChild(nb); }
+    { const lb = this.realmLaws(k); if (lb) body.appendChild(lb); }
+    { const mb = this.modsBlock(k); if (mb) body.appendChild(mb); }
     // Städte
     const cl = h('div.citylist');
     for (const cid of k.cityIds) {
@@ -245,6 +251,46 @@
     }
     if (!others.length) rel.appendChild(h('div.muted', 'Noch allein auf der Welt. Setze Siedler aus, um Nachbarn zu bekommen.'));
     body.appendChild(h('div.sec', [h('h3', 'Beziehungen'), rel]));
+  };
+
+  // Reichsgesetze: geltende als Liste, alle als Schalter (unzulässige ausgegraut)
+  Panels.prototype.realmLaws = function (k) {
+    const { h } = D();
+    const L = WW.REALM_LAWS, sim = this.game.sim;
+    if (!L || !k.laws) return null;
+    const list = Array.isArray(L) ? L : Object.keys(L).map(key => Object.assign({ key: key }, L[key]));
+    const isOn = (key) => Array.isArray(k.laws) ? k.laws.indexOf(key) >= 0 : !!k.laws[key];
+    const on = list.filter(l => isOn(l.key));
+    const sec = h('div.sec', [h('h3', 'Gesetze')]);
+    if (on.length) sec.appendChild(h('ul.pc', on.map(l => h('li.p', [h('b', l.name), l.desc ? ' – ' + l.desc : '']))));
+    else sec.appendChild(h('div.muted', 'Keine besonderen Gesetze.'));
+    if (!sim.actions.setRealmLaw) return sec;
+    const box = h('div', { style: { marginTop: '8px' } });
+    for (const l of list) {
+      const allowed = !l.allowed || l.allowed.indexOf(k.gov) >= 0;
+      const v = isOn(l.key);
+      box.appendChild(h('div.law', [h('div.lt', [h('b', l.name), h('span', allowed ? (l.desc || '') : 'Unter ' + WW.GOVERNMENTS[k.gov].name + ' nicht üblich' + (l.allowed ? ' (nur ' + l.allowed.map(g => WW.GOVERNMENTS[g] ? WW.GOVERNMENTS[g].name : g).join(', ') + ')' : ''))]),
+        h('button.btn.switch' + (v ? '.on' : ''), { type: 'button', role: 'switch', 'aria-checked': v ? 'true' : 'false', 'aria-label': l.name,
+          style: allowed ? null : { opacity: '0.55' },
+          on: { click: () => { try { sim.actions.setRealmLaw(k.id, l.key, !v); } catch (e) { /* egal */ } this.refreshInfo(true); } } }, v ? 'An' : 'Aus')]));
+    }
+    sec.appendChild(box);
+    return sec;
+  };
+
+  // aktive Modifikatoren (WW.Mods.list), falls vorhanden
+  Panels.prototype.modsBlock = function (obj) {
+    const { h } = D();
+    if (!WW.Mods || typeof WW.Mods.list !== 'function') return null;
+    let list = null;
+    try { list = WW.Mods.list(obj, this.game.sim); } catch (e) { list = null; }
+    if (!Array.isArray(list) || !list.length) return null;
+    const year = this.game.sim.state.year;
+    return h('div.sec', [h('h3', 'Wirkt gerade'), h('div', list.map(m => {
+      const left = m.yearsLeft != null ? m.yearsLeft : (m.until != null ? m.until - year : (m.years != null ? m.years : null));
+      return h('div', { style: { marginBottom: '6px' } }, [h('div', { style: { fontWeight: '700' } }, m.name || m.key || 'Wirkung'),
+        h('span.fx-line', [m.effectText || m.text || m.desc || '', left != null && left > 0 ? ' · noch ' + Math.ceil(left) + (Math.ceil(left) === 1 ? ' Jahr' : ' Jahre') : ''].join(''))]);
+    }))]);
   };
 
   Panels.prototype.renderCity = function (c) {
@@ -278,6 +324,7 @@
     if (cp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(sim, cp)]));
     body.appendChild(h('div.sec', [h('h3', 'Stimmung'), h('div.barline', [h('span', moodWord(c.happiness)), h('b', Math.round(c.happiness) + ' %')]), happyBar(c.happiness)]));
     { const nb = natureBlock(c.nature); if (nb) body.appendChild(nb); }
+    { const mb = this.modsBlock(c); if (mb) body.appendChild(mb); }
     // Mauer
     const w = c.wall || {};
     const wName = w.level > 0 || w.total > 0 ? (WW.WALL_STYLE_NAMES[w.style] || 'Mauer') : 'keine';
@@ -376,18 +423,48 @@
     this.openModal('Menü', [grid, window.matchMedia('(pointer: fine)').matches ? keys : null], { icon: 'i_menu' });
   };
 
+  // Chronik: neueste zuerst; Filter nach Gruppe (WW.EVENT_GROUPS) und Reich, Wirkung als zweite Zeile
   Panels.prototype.openChronicle = function () {
-    const { h } = D();
-    const game = this.game;
-    const ev = game.sim.state.events.slice().reverse();
-    const list = h('div.evlist');
-    for (const e of ev.slice(0, 300)) {
-      const can = e.x >= 0 && e.y >= 0;
-      list.appendChild(h('button.ev' + (can ? '' : '.nojump'), { type: 'button', on: { click: () => { if (!can) return; this.closeModal(); game.jumpToEvent(e); } } },
-        [h('span.yr', 'Jahr ' + e.year), h('span', e.text)]));
-    }
-    if (!ev.length) list.appendChild(h('p.muted', 'Noch ist nichts geschehen. Das ändert sich gleich.'));
-    this.openModal('Chronik', [h('p.muted', 'Antippen springt zur Stelle auf der Karte.'), list], { icon: 'i_chronicle', kind: 'chronicle' });
+    const { h, icon } = D();
+    const game = this.game, sim = game.sim;
+    const f = this.chronFilter || (this.chronFilter = { group: null, kingdom: null });
+    const all = sim.state.events.slice().reverse();
+    const box = h('div');
+    const render = () => {
+      D().clear(box);
+      // Gruppen-Chips (nur wenn Ereignisse Gruppen tragen)
+      const groups = [];
+      for (const e of all) if (e.group && groups.indexOf(e.group) < 0) groups.push(e.group);
+      if (groups.length) {
+        const names = WW.EVENT_GROUPS || {};
+        const nm = (g) => { const v = Array.isArray(names) ? (names.find(x => x.key === g) || {}).name : names[g]; return (v && (v.name || v)) || g; };
+        const chips = h('div.chips', { style: { marginBottom: '8px' } });
+        chips.appendChild(h('button.chip', { type: 'button', 'aria-pressed': !f.group ? 'true' : 'false', on: { click: () => { f.group = null; render(); } } }, h('span', 'Alle')));
+        for (const g of groups) chips.appendChild(h('button.chip', { type: 'button', 'aria-pressed': f.group === g ? 'true' : 'false', on: { click: () => { f.group = g; render(); } } }, h('span', nm(g))));
+        box.appendChild(chips);
+      }
+      if (f.kingdom != null) {
+        const k = sim.query.kingdom(f.kingdom);
+        box.appendChild(h('div.row', { style: { marginBottom: '8px' } }, [h('span.muted', 'Nur:'), h('span.badge', k ? k.name : 'vergangenes Reich'),
+          h('button.chip', { type: 'button', on: { click: () => { f.kingdom = null; render(); } } }, [icon('i_close', 18), h('span', 'Alle Reiche')])]));
+      }
+      const list = h('div.evlist');
+      let n = 0;
+      for (const e of all) {
+        if (f.group && e.group !== f.group) continue;
+        if (f.kingdom != null && e.kingdomId !== f.kingdom) continue;
+        if (n++ >= 300) break;
+        const can = e.x >= 0 && e.y >= 0;
+        const k = e.kingdomId >= 0 ? sim.query.kingdom(e.kingdomId) : null;
+        list.appendChild(h('div.ev' + (can ? '' : '.nojump'), { role: 'button', tabindex: '0', on: { keydown: (ev) => { if (ev.key === 'Enter') ev.currentTarget.click(); }, click: (ev) => { if (ev.target.closest('.kfil')) return; if (!can) return; this.closeModal(); game.jumpToEvent(e); } } },
+          [h('span.yr', 'Jahr ' + e.year), h('span', [e.text, e.effectText ? h('span.fx-line', e.effectText) : null,
+            k && f.kingdom == null ? h('button.link.kfil', { type: 'button', style: { fontSize: '12px', display: 'block', marginTop: '2px' }, on: { click: () => { f.kingdom = k.id; render(); } } }, k.name) : null])]));
+      }
+      if (!n) list.appendChild(h('p.muted', all.length ? 'Nichts in diesem Filter.' : 'Noch ist nichts geschehen. Das ändert sich gleich.'));
+      box.appendChild(list);
+    };
+    render();
+    this.openModal('Chronik', [h('p.muted', 'Antippen springt zur Stelle auf der Karte, ein Reichsname filtert.'), box], { icon: 'i_chronicle', kind: 'chronicle' });
   };
 
   Panels.prototype.openLaws = function () {
