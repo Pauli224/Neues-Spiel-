@@ -3,6 +3,9 @@
 
   const WORKERS = { farmer: 1, lumberjack: 1, miner: 1, builder: 1, soldier: 1 };
   const HOUSE_CAP = [3, 5, 8];
+  // 16 Richtungen als feste Tabelle (kein sin/cos in der Simulation)
+  const DIRS16 = [[1, 0], [0.924, 0.383], [0.707, 0.707], [0.383, 0.924], [0, 1], [-0.383, 0.924], [-0.707, 0.707], [-0.924, 0.383],
+    [-1, 0], [-0.924, -0.383], [-0.707, -0.707], [-0.383, -0.924], [0, -1], [0.383, -0.924], [0.707, -0.707], [0.924, -0.383]];
 
   function gov(sim, city) {
     const k = sim._kingdoms.get(city.kingdomId);
@@ -32,18 +35,22 @@
     return true;
   }
 
-  function centerPt(city) { return { x: city.cx + 1, y: city.cy + 1 }; }
+  // city.cx/cy = mittlere Kachel des Zentrums (Zentrum liegt bei cx - ox, cy - oy)
+  function centerOff() { const i = WW.STRUCT_INFO.center; return { ox: (i.w - 1) >> 1, oy: (i.h - 1) >> 1, w: i.w, h: i.h }; }
+  function centerPt(city) { return { x: city.cx + 0.5, y: city.cy + 0.5 }; }
+  // eine Kachel der Zentrumsfläche (salt verteilt die Leute)
   function centerTile(sim, city, salt) {
-    const W = sim.state.W;
-    return (city.cy + 1) * W + city.cx + ((salt | 0) & 1);
+    const W = sim.state.W, o = centerOff();
+    const n = Math.abs(salt | 0) % (o.w * o.h);
+    return (city.cy - o.oy + Math.floor(n / o.w)) * W + city.cx - o.ox + (n % o.w);
   }
 
-  function territoryRadius(city) { return WW.CONFIG.TERRITORY_BASE + city.tier * 2 + (city.wall && city.wall.expansions ? 1 : 0); }
+  function territoryRadius(city) { return WW.CONFIG.TERRITORY_BASE + city.tier * 2 + Math.min(3, (city.wall && city.wall.expansions) || 0); }
 
   function claimTerritory(sim, city) {
     const st = sim.state, W = st.W, H = st.H, T = WW.T;
     const r = territoryRadius(city);
-    const px = city.cx + 1, py = city.cy + 1;
+    const px = city.cx + 0.5, py = city.cy + 0.5;
     for (let y = Math.max(0, Math.floor(py - r)); y <= Math.min(H - 1, Math.ceil(py + r)); y++) {
       for (let x = Math.max(0, Math.floor(px - r)); x <= Math.min(W - 1, Math.ceil(px + r)); x++) {
         const dx = x + 0.5 - px, dy = y + 0.5 - py;
@@ -63,14 +70,16 @@
     for (let i = 0; i < st.owner.length; i++) if (st.owner[i] === city.id) { st.owner[i] = -1; sim.markDirty(i); }
   }
 
-  // Neue Stadt mit fertigem Zentrum an (x, y) = linke obere Kachel
+  // Neue Stadt mit fertigem Zentrum, (x, y) = mittlere Kachel des Zentrums
   function found(sim, x, y, kingdomId, race, name) {
     const st = sim.state, W = st.W;
     const k = sim._kingdoms.get(kingdomId);
     if (!k) return null;
-    // Platz räumen (Felder, Ruinen)
-    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-      const s = sim._structs.get(st.structAt[(y + dy) * W + x + dx]);
+    const o = centerOff();
+    if (x - o.ox < 1 || y - o.oy < 1 || x - o.ox + o.w >= st.W || y - o.oy + o.h >= st.H) return null;
+    // Platz räumen (Felder, Ruinen, Hütten) inklusive Gasse
+    for (let dy = -1; dy <= o.h; dy++) for (let dx = -1; dx <= o.w; dx++) {
+      const s = sim._structs.get(st.structAt[(y - o.oy + dy) * W + x - o.ox + dx]);
       if (s) { if (s.type === 'field' || s.type === 'ruin' || s.type === 'lumber' || s.type === 'quarry') WW.Structs.remove(sim, s); else return null; }
     }
     const city = {
@@ -87,7 +96,7 @@
     sim._usedNames.add(city.name);
     st.cities.push(city);
     sim._cities.set(city.id, city);
-    const c = WW.Structs.create(sim, 'center', x, y, city.id, { built: true, gov: k.gov });
+    const c = WW.Structs.create(sim, 'center', x - o.ox, y - o.oy, city.id, { built: true, gov: k.gov });
     city.centerId = c ? c.id : -1;
     k.cityIds.push(city.id);
     if (k.capitalId < 0) k.capitalId = city.id;
@@ -96,19 +105,24 @@
     return city;
   }
 
-  // Kann hier ein Zentrum stehen?
-  function canFoundAt(sim, x, y, race) {
+  // Kann hier ein Zentrum stehen? (x, y) = Mitte; minDist = Mindestabstand zu anderen Städten
+  function canFoundAt(sim, x, y, race, minDist) {
     const st = sim.state, W = st.W, H = st.H;
-    if (x < 1 || y < 1 || x + 2 >= W || y + 2 >= H) return false;
-    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-      const i = (y + dy) * W + x + dx;
-      if (st.owner[i] !== -1) return false;
+    const o = centerOff();
+    const x0 = x - o.ox, y0 = y - o.oy;
+    if (x0 < 2 || y0 < 2 || x0 + o.w + 2 > W || y0 + o.h + 2 > H) return false;
+    const md = minDist == null ? WW.CONFIG.CITY_MIN_DIST : minDist;
+    for (const c of st.cities) {
+      const dx = c.cx - x, dy = c.cy - y;
+      if (dx * dx + dy * dy < md * md) return false;
+    }
+    for (let dy = -1; dy <= o.h; dy++) for (let dx = -1; dx <= o.w; dx++) {
+      const i = (y0 + dy) * W + x0 + dx;
+      if (st.owner[i] !== -1 || st.inRing[i] !== -1) return false;
       const s = sim._structs.get(st.structAt[i]);
       if (s && s.type !== 'ruin' && s.type !== 'field') return false;
-      const t = st.terrain[i];
-      const r = WW.RACES[race];
-      const okT = (WW.TERRAIN_LUT.build[t] && WW.TERRAIN_LUT.walk[t] > 0) || (r && r.buildOn && r.buildOn.indexOf(WW.TERRAIN[t].key) >= 0);
-      if (!okT) return false;
+      if (dx < 0 || dy < 0 || dx >= o.w || dy >= o.h) continue;
+      if (!WW.Structs.terrainBuildable(sim, i, race)) return false;
     }
     return true;
   }
@@ -117,7 +131,7 @@
   function refreshAllLists(sim) {
     const st = sim.state;
     for (const c of st.cities) {
-      c.sites = []; c.fields = []; c.drops = []; c._houses = 0; c._cap = 0; c._barr = false; c._mark = false; c._mon = false; c._center = null;
+      c.sites = []; c.fields = []; c.drops = []; c._houses = 0; c._bh = 0; c._cap = 0; c._barr = false; c._mark = false; c._mon = false; c._center = null;
     }
     for (const s of st.structs) {
       if (s.dead || s.cityId < 0) continue;
@@ -133,6 +147,7 @@
     else if ((s.type === 'lumber' || s.type === 'quarry') && s.built) c.drops.push(s.id);
     else if (s.type === 'house') {
       c._houses++;
+      if (s.built) c._bh++;
       if (s.built) c._cap += HOUSE_CAP[Math.max(0, Math.min(2, s.level - 1))] + (WW.RACES[c.race] || WW.RACES.human).housingBonus;
     } else if (s.type === 'barracks') c._barr = true;
     else if (s.type === 'market') c._mark = true;
@@ -140,16 +155,16 @@
     else if (s.type === 'center') c._center = s;
   }
   function finishLists(sim, c) {
-    c.houses = c._houses;
+    c.houses = c._houses; c.builtHouses = c._bh;
     c.hasBarracks = c._barr; c.hasMarket = c._mark; c.hasMonument = c._mon;
     const ctr = c._center;
     c.centerId = ctr ? ctr.id : -1;
     c.centerOk = !!(ctr && ctr.built);
     c.housing = (c.centerOk ? 4 : 1) + c._cap;
-    delete c._houses; delete c._cap; delete c._barr; delete c._mark; delete c._mon; delete c._center;
+    delete c._houses; delete c._bh; delete c._cap; delete c._barr; delete c._mark; delete c._mon; delete c._center;
   }
   function refreshLists(sim, city) {
-    city.sites = []; city.fields = []; city.drops = []; city._houses = 0; city._cap = 0;
+    city.sites = []; city.fields = []; city.drops = []; city._houses = 0; city._bh = 0; city._cap = 0;
     city._barr = false; city._mark = false; city._mon = false; city._center = null;
     for (const s of sim.state.structs) if (!s.dead && s.cityId === city.id) tallyStruct(sim, city, s);
     finishLists(sim, city);
@@ -223,6 +238,9 @@
       while (rest < 0 && want.farmer > 1) { want.farmer--; rest++; }
     }
     want.lumberjack = Math.max(0, rest);
+    // Holz braucht jede Stadt: notfalls einen Bauern abziehen
+    if (city.hasWood && want.lumberjack < 1 && n >= 3 && st.wood < 40) { want.lumberjack = 1; if (want.farmer > 1) want.farmer--; else if (want.builder > 1) want.builder--; }
+    if (city.hasWood && want.lumberjack < 2 && n >= 8 && st.wood < 20 && want.farmer > 2) { want.lumberjack++; want.farmer--; }
     if (!city.hasWood) { want.farmer += want.lumberjack; want.lumberjack = 0; }
     if (st.wood > 150 && want.lumberjack > 1) { const m = want.lumberjack - 1; want.lumberjack = 1; want.farmer += Math.ceil(m / 2); want.miner += city.hasStone ? Math.floor(m / 2) : 0; if (!city.hasStone) want.farmer += Math.floor(m / 2); }
     // Umverteilen: höchstens drei Wechsel pro Runde
@@ -246,84 +264,137 @@
     }
   }
 
-  // Bauplatz für Kerngebäude (Häuser usw.)
-  function findCoreSpot(sim, city) {
+  // --------------------------------------------------------------------------
+  // Platzsuche. Jedes Gebäude (außer Feldern untereinander) hält eine Gasse von
+  // mindestens einer freien Kachel zu allen anderen Bauwerken und zur Mauer.
+  // --------------------------------------------------------------------------
+  function sAt(sim, i) { return sim._structs.get(sim.state.structAt[i]); }
+
+  // Grundfläche (x, y, w, h) prüfen. o = { area: fn(i) -> bool für Fläche+Gasse, fieldOk, race, cityId }
+  // Rückgabe: Anzahl Kerngebäude, die direkt an die Gasse grenzen (für dichtes Packen), oder -1
+  function footprintOk(sim, x, y, w, h, o) {
     const st = sim.state, W = st.W, H = st.H;
-    const ringed = !!city.wall.plan;
-    const r = Math.min(12, territoryRadius(city));
-    const px = city.cx + 1, py = city.cy + 1;
-    let best = -1, bs = -1e9;
-    const sAt = st.structAt;
-    const isCore = (i) => { const s = sim._structs.get(sAt[i]); return s && s.cityId === city.id && WW.Walls.CORE[s.type]; };
-    const isWallTile = (i) => { const s = sim._structs.get(sAt[i]); return s && WW.Structs.isWallish(s); };
-    for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
-      for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
-        const i = y * W + x;
-        if (ringed) { if (st.inRing[i] !== city.id) continue; }
-        else if (st.owner[i] !== city.id) continue;
-        let free = st.structAt[i] === -1;
-        if (!free) { const s = sim._structs.get(sAt[i]); if (s && s.type === 'field' && ringed && s.cityId === city.id) free = true; }
-        if (!free) continue;
-        const t = st.terrain[i];
-        const race = WW.RACES[city.race];
-        if (!((WW.TERRAIN_LUT.build[t] && WW.TERRAIN_LUT.walk[t] > 0) || (race.buildOn && race.buildOn.indexOf(WW.TERRAIN[t].key) >= 0))) continue;
-        // Abstand zur Mauer: eine Gasse frei lassen, nicht vor Toren
-        let nearWall = false, coreN = 0, coreOrth = 0;
-        for (let d = 0; d < 8; d++) {
-          const nx = x + WW.Path.DX[d], ny = y + WW.Path.DY[d];
-          const n = ny * W + nx;
-          if (isWallTile(n)) { nearWall = true; break; }
-          if (isCore(n)) { coreN++; if (d < 4) coreOrth++; }
-        }
-        if (nearWall) continue;
-        // ohne Mauer: dicht beim Bestand bleiben
-        if (!ringed && coreN === 0) {
-          let near = false;
-          for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (isCore((y + dy) * W + x + dx)) { near = true; break; }
-          if (!near) continue;
-        }
-        const d = Math.sqrt((x + 0.5 - px) * (x + 0.5 - px) + (y + 0.5 - py) * (y + 0.5 - py));
-        let score = -d + coreN * 0.35 - Math.max(0, coreOrth - 1) * 1.2 + (sim._hashNoise(i) * 0.8);
-        if (WW.TERRAIN_LUT.wood[t]) score -= 0.8;
-        if (score > bs) { bs = score; best = i; }
+    if (x < 1 || y < 1 || x + w + 1 > W || y + h + 1 > H) return -1;
+    for (let dy = -1; dy <= h; dy++) for (let dx = -1; dx <= w; dx++) {
+      const i = (y + dy) * W + x + dx;
+      const inner = dx >= 0 && dy >= 0 && dx < w && dy < h;
+      if (!o.area(i, inner)) return -1;
+      const sid = st.structAt[i];
+      if (sid !== -1) {
+        const s = sim._structs.get(sid);
+        if (!s) return -1;
+        // eigene Felder und Ruinen dürfen weichen
+        if (!((s.type === 'field' && o.fieldOk && s.cityId === o.cityId) || s.type === 'ruin')) return -1;
       }
+      if (inner && !WW.Structs.terrainBuildable(sim, i, o.race)) return -1;
+      if (!inner && WW.TERRAIN_LUT.walk[st.terrain[i]] <= 0 && o.needWalkBorder) return -1;
+    }
+    // Nachbarschaft im Abstand 2 zählen (Gasse genau eine Kachel breit = schönes Raster)
+    let n = 0;
+    for (let dy = -2; dy <= h + 1; dy++) for (let dx = -2; dx <= w + 1; dx++) {
+      if (dx > -2 && dy > -2 && dx < w + 1 && dy < h + 1) continue;
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const s = sAt(sim, yy * W + xx);
+      if (s && WW.STRUCT_INFO[s.type] && WW.STRUCT_INFO[s.type].core && s.cityId === o.cityId) n++;
+    }
+    return n;
+  }
+
+  // Bereich räumen (Felder/Ruinen auf Fläche und Gasse) und Bauwerk anlegen
+  function placeStruct(sim, city, type, x, y, opt) {
+    const st = sim.state, W = st.W;
+    const inf = WW.STRUCT_INFO[type];
+    for (let dy = -1; dy <= inf.h; dy++) for (let dx = -1; dx <= inf.w; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= st.H) continue;
+      const s = sAt(sim, yy * W + xx);
+      if (s && (s.type === 'ruin' || (s.type === 'field' && s.cityId === city.id))) WW.Structs.remove(sim, s);
+    }
+    const s = WW.Structs.create(sim, type, x, y, city.id, opt || {});
+    if (s) {
+      for (let dy = 0; dy < inf.h; dy++) for (let dx = 0; dx < inf.w; dx++) {
+        const i = (y + dy) * W + x + dx;
+        if (st.owner[i] === -1) { st.owner[i] = city.id; sim.markDirty(i); }
+      }
+    }
+    return s;
+  }
+
+  // Bauplatz für Kerngebäude (Häuser, Kaserne, Markt, Denkmal): innen bzw. dicht am Bestand
+  function findCoreSpot(sim, city, type) {
+    const st = sim.state, W = st.W;
+    const inf = WW.STRUCT_INFO[type || 'house'];
+    const w = inf.w, h = inf.h;
+    const ringed = !!(city.wall.plan && city.wall.state !== 'none');
+    const r = Math.min(16, territoryRadius(city));
+    const px = city.cx + 0.5, py = city.cy + 0.5;
+    const owner = st.owner, inRing = st.inRing, id = city.id;
+    const area = ringed
+      ? (i) => inRing[i] === id
+      : (i) => (owner[i] === id || owner[i] === -1) && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i)));
+    const o = { area: area, fieldOk: true, race: city.race, cityId: id, needWalkBorder: true };
+    let best = -1, bs = -1e9;
+    const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
+    const y0 = Math.max(1, Math.floor(py - r)), y1 = Math.min(st.H - 2 - h, Math.ceil(py + r));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const mx = x + w / 2, my = y + h / 2;
+      const d = Math.sqrt((mx - px) * (mx - px) + (my - py) * (my - py));
+      if (d > r - 1) continue;
+      const nb = footprintOk(sim, x, y, w, h, o);
+      if (nb < 0) continue;
+      // ohne Mauer: dicht am Bestand bleiben
+      if (!ringed && nb === 0) continue;
+      let score = -d + nb * 0.9 + sim._hashNoise(y * W + x) * 0.6;
+      if (WW.TERRAIN_LUT.wood[st.terrain[y * W + x]]) score -= 0.8;
+      if (score > bs) { bs = score; best = y * W + x; }
     }
     return best;
   }
 
-  // Feldplatz: fruchtbar, außerhalb der (künftigen) Mauer
+  // Feldplatz: fruchtbar, außerhalb der (künftigen) Mauer; Felder dürfen aneinander grenzen
   function findFieldSpot(sim, city) {
     const st = sim.state, W = st.W, H = st.H;
     const r = territoryRadius(city) + 1;
-    const px = city.cx + 1, py = city.cy + 1;
-    const race = WW.RACES[city.race];
-    const minD = city.wall.plan ? 0 : 3.6;
+    const px = city.cx + 0.5, py = city.cy + 0.5;
+    const ringed = !!city.wall.plan;
+    const minD = ringed ? 0 : WW.CONFIG.WALL_MARGIN + 2.5;
     let best = -1, bs = -1e9;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
         const i = y * W + x;
-        const o = st.owner[i];
-        if (o !== city.id && o !== -1) continue;
+        const ow = st.owner[i];
+        if (ow !== city.id && ow !== -1) continue;
         if (st.structAt[i] !== -1 || st.inRing[i] !== -1) continue;
         const t = st.terrain[i];
         const fert = WW.TERRAIN_LUT.fertile[t];
-        if (fert <= 0 || WW.TERRAIN_LUT.walk[t] <= 0) continue;
-        if (!WW.TERRAIN_LUT.build[t] && !(race.buildOn && race.buildOn.indexOf(WW.TERRAIN[t].key) >= 0)) continue;
+        if (fert <= 0 || !WW.Structs.terrainBuildable(sim, i, city.race)) continue;
         if (WW.TERRAIN_LUT.wood[t] && fert < 0.75) continue;
-        // Abstand zu Kerngebäuden (Mauerring-Puffer)
-        let tooClose = false, fieldN = 0, wallN = false;
-        for (let dy = -3; dy <= 3 && !tooClose; dy++) for (let dx = -3; dx <= 3; dx++) {
-          const nx = x + dx, ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-          const s = sim._structs.get(st.structAt[ny * W + nx]);
-          if (!s) continue;
-          if (WW.Walls.CORE[s.type] && s.cityId === city.id && dx * dx + dy * dy < minD * minD) { tooClose = true; break; }
-          if (s.type === 'field' && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) fieldN++;
-          if (WW.Structs.isWallish(s) && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) wallN = true;
-        }
-        if (tooClose || wallN) continue;
         const d = Math.sqrt((x + 0.5 - px) * (x + 0.5 - px) + (y + 0.5 - py) * (y + 0.5 - py));
-        const score = -d + fert * 2 + fieldN * 0.6 + sim._hashNoise(i) * 0.5;
+        if (d < minD) continue;
+        // Gasse zu allem, was kein Feld ist; nicht direkt an Mauer oder Innenfläche
+        let bad = false, fieldN = 0;
+        for (let dy = -1; dy <= 1 && !bad; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const j = (y + dy) * W + x + dx;
+          if (st.inRing[j] !== -1) { bad = true; break; }
+          const s = sAt(sim, j);
+          if (!s) continue;
+          if (s.type === 'field') fieldN++; else { bad = true; break; }
+        }
+        if (bad) continue;
+        // vor der Mauer: Abstand zu Kerngebäuden halten, damit der Ring Platz hat
+        if (!ringed) {
+          let near = false;
+          for (let dy = -3; dy <= 3 && !near; dy++) for (let dx = -3; dx <= 3; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+            const s = sAt(sim, yy * W + xx);
+            if (s && s.cityId === city.id && WW.STRUCT_INFO[s.type].core) { near = true; break; }
+          }
+          if (near) continue;
+        }
+        const score = -d + fert * 2 + fieldN * 0.7 + sim._hashNoise(i) * 0.5;
         if (score > bs) { bs = score; best = i; }
       }
     }
@@ -331,32 +402,44 @@
   }
 
   // Platz für Holzfällerhütte/Steinbruch nahe am Rohstoff, außerhalb der Mauer
-  function findDropSpot(sim, city, res) {
+  function findDropSpot(sim, city, res, type) {
     const st = sim.state, W = st.W, H = st.H;
+    const inf = WW.STRUCT_INFO[type];
     const r = territoryRadius(city) + 3;
-    const px = city.cx + 1, py = city.cy + 1;
+    const px = city.cx + 0.5, py = city.cy + 0.5;
     const LUT = WW.TERRAIN_LUT;
+    const owner = st.owner, inRing = st.inRing, id = city.id;
+    const o = {
+      area: (i, inner) => (owner[i] === id || owner[i] === -1) && inRing[i] === -1 && !(inner && LUT[res][st.terrain[i]]),
+      fieldOk: false, race: city.race, cityId: id, needWalkBorder: false
+    };
+    const minD = WW.CONFIG.WALL_MARGIN + 3.5;
     let best = -1, bs = -1e9;
-    for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
-      for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
-        const i = y * W + x;
-        const o = st.owner[i];
-        if (o !== city.id && o !== -1) continue;
-        if (st.structAt[i] !== -1 || st.inRing[i] !== -1) continue;
-        if (!WW.Structs.canBuildTile(sim, i, city.race)) continue;
-        if (LUT[res][st.terrain[i]]) continue;
-        let n = 0, bad = false;
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-          const j = (y + dy) * W + x + dx;
-          if (LUT[res][st.terrain[j]]) n++;
-          const s = sim._structs.get(st.structAt[j]);
-          if (s && (WW.Structs.isWallish(s) || (WW.Walls.CORE[s.type] && Math.abs(dx) <= 1 && Math.abs(dy) <= 1))) bad = true;
+    for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2 - inf.h, Math.ceil(py + r)); y++) {
+      for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2 - inf.w, Math.ceil(px + r)); x++) {
+        const mx = x + inf.w / 2, my = y + inf.h / 2;
+        const d = Math.sqrt((mx - px) * (mx - px) + (my - py) * (my - py));
+        if (d < minD || d > r) continue;
+        // Rohstoff im Umkreis zählen (billig, vor der genauen Prüfung)
+        let n = 0;
+        for (let dy = -2; dy <= inf.h + 1; dy++) for (let dx = -2; dx <= inf.w + 1; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          if (LUT[res][st.terrain[yy * W + xx]]) n++;
         }
-        if (bad || n < 4) continue;
-        const d = Math.sqrt((x + 0.5 - px) * (x + 0.5 - px) + (y + 0.5 - py) * (y + 0.5 - py));
-        if (d < 4) continue;
-        const score = n * 0.5 - d * 0.6;
-        if (score > bs) { bs = score; best = i; }
+        if (n < 4) continue;
+        // Abstand zu Kerngebäuden (Ring-Puffer)
+        let near = false;
+        for (let dy = -3; dy <= inf.h + 2 && !near; dy++) for (let dx = -3; dx <= inf.w + 2; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const s = sAt(sim, yy * W + xx);
+          if (s && (WW.Structs.isWallish(s) || (s.cityId === id && WW.STRUCT_INFO[s.type].core))) { near = true; break; }
+        }
+        if (near) continue;
+        if (footprintOk(sim, x, y, inf.w, inf.h, o) < 0) continue;
+        const score = Math.min(n, 14) * 0.5 - d * 0.6 + sim._hashNoise(y * W + x) * 0.3;
+        if (score > bs) { bs = score; best = y * W + x; }
       }
     }
     return best;
@@ -381,9 +464,9 @@
     const k = kingdomOf(sim, city);
     // Zentrum fehlt ganz -> neue Baustelle
     if (city.centerId < 0) {
-      const ok = canFoundAtOwn(sim, city, city.cx, city.cy);
-      if (ok) {
-        const s = WW.Structs.create(sim, 'center', city.cx, city.cy, city.id, { built: false, gov: k ? k.gov : 'tribe' });
+      const o = centerOff();
+      if (canFoundAtOwn(sim, city, city.cx - o.ox, city.cy - o.oy)) {
+        const s = WW.Structs.create(sim, 'center', city.cx - o.ox, city.cy - o.oy, city.id, { built: false, gov: k ? k.gov : 'tribe' });
         if (s) { city.centerId = s.id; city.sites.push(s.id); }
       }
       return;
@@ -395,15 +478,13 @@
     if (open < maxOpen && city.pop + 2 >= city.housing && st.units.length < WW.CONFIG.MAX_UNITS) {
       const cost = WW.Structs.costFor(sim, 'house', 1, city.id);
       if (sk.wood >= cost.wood || open === 0) {
-        const i = findCoreSpot(sim, city);
+        const i = findCoreSpot(sim, city, 'house');
         if (i >= 0) {
-          const old = sim._structs.get(st.structAt[i]);
-          if (old) WW.Structs.remove(sim, old);
-          const s = WW.Structs.create(sim, 'house', i % W, Math.floor(i / W), city.id, { built: false });
-          if (s) { city.sites.push(s.id); if (city.houses === 0) sim.event('firstHouse', { city: city.name }, atCity(city)); city.houses++; }
+          const s = placeStruct(sim, city, 'house', i % W, Math.floor(i / W), { built: false });
+          if (s) { city.sites.push(s.id); city.houses++; }
           city.noSpace = false;
-        } else if (city.wall.plan) {
-          city.noSpace = true;
+        } else {
+          if (city.wall.plan) city.noSpace = true;
           // Platz schaffen: Häuser aufstocken
           upgradeHouse(sim, city, sk);
         }
@@ -412,7 +493,8 @@
       upgradeHouse(sim, city, sk);
     }
     // Felder
-    const wantFields = Math.max(2, Math.ceil(city.pop / 2.3));
+    const plan = k && k.policy && k.policy.plan;
+    const wantFields = Math.max(2, Math.ceil(city.pop / 2.3)) + (plan && plan.focus === 'food' ? 2 : 0);
     if (city.fields.length < wantFields) {
       const i = findFieldSpot(sim, city);
       if (i >= 0) {
@@ -422,29 +504,28 @@
     }
     if (open >= maxOpen) return;
     // Holzfällerhütte / Steinbruch
-    const hasLumber = city.drops.some(id => { const s = sim._structs.get(id); return s && s.type === 'lumber'; });
-    const hasQuarry = city.drops.some(id => { const s = sim._structs.get(id); return s && s.type === 'quarry'; });
-    if (!hasLumber && (city.jobs.lumberjack || 0) >= 2 && sk.wood >= 4 && city.pop >= 7) {
-      const i = findDropSpot(sim, city, 'wood');
-      if (i >= 0) { const s = WW.Structs.create(sim, 'lumber', i % W, Math.floor(i / W), city.id, {}); if (s) { city.sites.push(s.id); return; } }
+    let hasLumber = false, hasQuarry = false;
+    for (const id of city.drops) { const s = sim._structs.get(id); if (s && s.type === 'lumber') hasLumber = true; if (s && s.type === 'quarry') hasQuarry = true; }
+    for (const id of city.sites) { const s = sim._structs.get(id); if (s && s.type === 'lumber') hasLumber = true; if (s && s.type === 'quarry') hasQuarry = true; }
+    if (!hasLumber && (city.jobs.lumberjack || 0) >= 2 && sk.wood >= 4 && city.pop >= 7 && sim.rng.chance(0.5)) {
+      const i = findDropSpot(sim, city, 'wood', 'lumber');
+      if (i >= 0) { const s = placeStruct(sim, city, 'lumber', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
     }
-    if (!hasQuarry && (city.jobs.miner || 0) >= 1 && sk.wood >= 4 && city.pop >= 10) {
-      const i = findDropSpot(sim, city, 'stone');
-      if (i >= 0) { const s = WW.Structs.create(sim, 'quarry', i % W, Math.floor(i / W), city.id, {}); if (s) { city.sites.push(s.id); return; } }
+    if (!hasQuarry && (city.jobs.miner || 0) >= 1 && sk.wood >= 4 && city.pop >= 10 && sim.rng.chance(0.5)) {
+      const i = findDropSpot(sim, city, 'stone', 'quarry');
+      if (i >= 0) { const s = placeStruct(sim, city, 'quarry', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
     }
     // Kaserne, Markt, Denkmal
     const extra = [];
-    if (!city.hasBarracks && g.soldierShare >= 0.1 && city.pop >= 14) extra.push('barracks');
-    if (!city.hasMarket && !g.noMarket && city.pop >= 16) extra.push('market');
-    if (!city.hasMonument && city.pop >= 22) extra.push('monument');
+    if (!city.hasBarracks && g.soldierShare >= 0.1 && city.pop >= (g.key === 'fascism' ? 10 : 16)) extra.push('barracks');
+    if (!city.hasMarket && !g.noMarket && city.pop >= (g.traders ? 12 : 18)) extra.push('market');
+    if (!city.hasMonument && city.pop >= (g.key === 'theocracy' || g.key === 'fascism' ? 14 : 22)) extra.push('monument');
     for (const type of extra) {
       const cost = WW.Structs.costFor(sim, type, 1, city.id);
       if (!canPay(sim, city, cost)) continue;
-      const i = findCoreSpot(sim, city);
+      const i = findCoreSpot(sim, city, type);
       if (i < 0) { if (city.wall.plan) city.noSpace = true; break; }
-      const old = sim._structs.get(st.structAt[i]);
-      if (old) WW.Structs.remove(sim, old);
-      const s = WW.Structs.create(sim, type, i % W, Math.floor(i / W), city.id, { gov: k ? k.gov : 'tribe' });
+      const s = placeStruct(sim, city, type, i % W, Math.floor(i / W), { gov: k ? k.gov : 'tribe' });
       if (s) {
         city.sites.push(s.id);
         if (type === 'monument') sim.event('monument', { city: city.name, monument: g.monumentName, deity: (k && k.deity) || '' }, atCity(city));
@@ -472,18 +553,25 @@
     return true;
   }
 
+  // Zentrums-Fläche (x, y = linke obere Ecke) für den Wiederaufbau räumen
   function canFoundAtOwn(sim, city, x, y) {
     const st = sim.state, W = st.W;
-    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+    const o = centerOff();
+    if (x < 0 || y < 0 || x + o.w > W || y + o.h > st.H) return false;
+    for (let dy = 0; dy < o.h; dy++) for (let dx = 0; dx < o.w; dx++) {
       const i = (y + dy) * W + x + dx;
       if (WW.TERRAIN_LUT.walk[st.terrain[i]] <= 0) return false;
-      const s = sim._structs.get(st.structAt[i]);
-      if (s) { if (s.type === 'ruin' || s.type === 'field') WW.Structs.remove(sim, s); else return false; }
+      const s = sAt(sim, i);
+      if (s && !(s.type === 'ruin' || s.type === 'field' || (s.cityId === city.id && !WW.Structs.isWallish(s) && s.type !== 'center'))) return false;
+    }
+    for (let dy = 0; dy < o.h; dy++) for (let dx = 0; dx < o.w; dx++) {
+      const s = sAt(sim, (y + dy) * W + x + dx);
+      if (s) WW.Structs.remove(sim, s);
     }
     return true;
   }
 
-  function atCity(city) { return { kingdomId: city.kingdomId, cityId: city.id, x: city.cx + 1, y: city.cy + 1 }; }
+  function atCity(city) { return { kingdomId: city.kingdomId, cityId: city.id, x: city.cx + 0.5, y: city.cy + 0.5 }; }
 
   // Happiness-Ziel
   function happinessTarget(sim, city) {
@@ -522,7 +610,7 @@
       else {
         sk.food = 0;
         if (city.pop > 0) {
-          if (!city.hungry) sim.event('famine', { city: city.name }, atCity(city));
+          if (!city.hungry && st.year - (city.famineYear == null ? -99 : city.famineYear) >= 3) { city.famineYear = st.year; sim.event('famine', { city: city.name }, atCity(city)); }
           city.hungry = true; city.starve++;
           if (city.starve >= 10 && city.starve % 6 === 0 && city._members.length) {
             const u = city._members[sim.rng.int(city._members.length)];
@@ -578,7 +666,7 @@
   function scanResources(sim, city) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
     const r = territoryRadius(city) + 5;
-    const px = city.cx + 1, py = city.cy + 1;
+    const px = city.cx, py = city.cy;
     let wood = 0, stone = 0, water = 0;
     for (let y = Math.max(0, py - r); y <= Math.min(H - 1, py + r); y++) for (let x = Math.max(0, px - r); x <= Math.min(W - 1, px + r); x++) {
       const t = st.terrain[y * W + x];
@@ -592,15 +680,15 @@
   // Ort für eine Tochterstadt
   function findSettleSite(sim, city) {
     const st = sim.state, W = st.W, H = st.H;
-    const px = city.cx + 1, py = city.cy + 1;
+    const px = city.cx + 0.5, py = city.cy + 0.5;
     const race = WW.RACES[city.race] || WW.RACES.human;
     if (sim._compDirty) WW.Path.updateComponents(sim);
-    const myComp = sim.comp[(city.cy + 1) * W + city.cx];
+    const myComp = sim.comp[city.cy * W + city.cx];
     let best = null, bs = -1e9;
     for (let n = 0; n < 50; n++) {
-      const ang = sim.rng.next() * Math.PI * 2;
+      const dir = DIRS16[sim.rng.int(16)];
       const dist = WW.CONFIG.SETTLER_DIST_MIN + sim.rng.next() * (WW.CONFIG.SETTLER_DIST_MAX - WW.CONFIG.SETTLER_DIST_MIN);
-      const x = Math.round(px + Math.cos(ang) * dist), y = Math.round(py + Math.sin(ang) * dist);
+      const x = Math.round(px + dir[0] * dist), y = Math.round(py + dir[1] * dist);
       if (x < 3 || y < 3 || x >= W - 4 || y >= H - 4) continue;
       if (!canFoundAt(sim, x, y, city.race)) continue;
       if (sim.comp[y * W + x] !== myComp) continue;
@@ -647,9 +735,9 @@
     WW.Walls.demolishAll(sim, city);
     for (const s of st.structs.slice()) {
       if (s.dead || s.cityId !== city.id) continue;
-      const x = s.x, y = s.y, type = s.type;
+      const type = s.type;
       WW.Structs.remove(sim, s);
-      if (type !== 'field') WW.Structs.create(sim, 'ruin', x, y, -1, { built: true, ruinOf: type });
+      if (type !== 'field' && type !== 'ruin') WW.Structs.ruinize(sim, s);
     }
     releaseTerritory(sim, city);
     for (const u of st.units) if (!u.dead && u.cityId === city.id) {
@@ -663,7 +751,7 @@
     }
     st.cities = st.cities.filter(c => c !== city);
     sim._cities.delete(city.id);
-    if (reason) sim.event(reason, { city: city.name, kingdom: k ? k.name : '' }, { kingdomId: k ? k.id : -1, cityId: -1, x: city.cx + 1, y: city.cy + 1 });
+    if (reason) sim.event(reason, { city: city.name, kingdom: k ? k.name : '' }, { kingdomId: k ? k.id : -1, cityId: -1, x: city.cx + 0.5, y: city.cy + 0.5 });
   }
 
   // Stadt wechselt das Reich (Eroberung, Abspaltung)
@@ -741,7 +829,8 @@
     centerPt: centerPt, centerTile: centerTile, territoryRadius: territoryRadius, claimTerritory: claimTerritory,
     releaseTerritory: releaseTerritory, refreshLists: refreshLists, refreshAllLists: refreshAllLists, stats: stats,
     updateAll: updateAll, yearly: yearly, destroyCity: destroyCity, transferCity: transferCity, atCity: atCity,
-    findCoreSpot: findCoreSpot, findFieldSpot: findFieldSpot, happinessTarget: happinessTarget, scanResources: scanResources,
+    findCoreSpot: findCoreSpot, findFieldSpot: findFieldSpot, findDropSpot: findDropSpot, placeStruct: placeStruct,
+    centerOff: centerOff, footprintOk: footprintOk, DIRS16: DIRS16, happinessTarget: happinessTarget, scanResources: scanResources,
     sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP
   };
 

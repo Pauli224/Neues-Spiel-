@@ -155,6 +155,10 @@
     if (blockValue(s)) pushUnitsOff(sim, s);
     if (WALLISH[s.type]) updateMasksAround(sim, s.x, s.y);
     sim.fx({ type: 'dust', x: s.x + s.w / 2, y: s.y + s.h / 2 });
+    if (s.type === 'house') {
+      const c = sim._cities.get(s.cityId);
+      if (c && !c.firstHouseDone) { c.firstHouseDone = true; sim.event('firstHouse', { city: c.name }, WW.Cities.atCity(c)); }
+    }
   }
 
   // Schaden; Rückgabe true, wenn das Bauwerk fällt
@@ -182,12 +186,27 @@
       }
       return;
     }
-    const x = s.x, y = s.y, type = s.type;
+    const type = s.type;
     remove(sim, s);
-    if (type !== 'field' && type !== 'ruin') {
-      const r = create(sim, 'ruin', x, y, -1, { built: true, ruinOf: type });
+    if (type !== 'field' && type !== 'ruin') ruinize(sim, s);
+  }
+
+  // Ruinen auf der ganzen Grundfläche (Ruine selbst ist 1×1 laut Tabelle)
+  function ruinize(sim, s) {
+    const st = sim.state, W = st.W;
+    for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) {
+      const x = s.x + dx, y = s.y + dy;
+      if (st.structAt[y * W + x] !== -1) continue;
+      if (WW.TERRAIN_LUT.walk[st.terrain[y * W + x]] <= 0) continue;
+      const r = create(sim, 'ruin', x, y, -1, { built: true, ruinOf: s.type });
       if (r) r.age = 0;
     }
+  }
+
+  // Ruft fn(i, x, y) für jede Kachel der Grundfläche auf
+  function forTiles(sim, s, fn) {
+    const W = sim.state.W;
+    for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) fn((s.y + dy) * W + s.x + dx, s.x + dx, s.y + dy);
   }
 
   function isWallish(s) { return !!(s && WALLISH[s.type]); }
@@ -202,21 +221,26 @@
     }
   }
 
-  // Freie Baufläche? (Volk bestimmt Sonderflächen wie Sumpf)
-  function canBuildTile(sim, i, race) {
-    const st = sim.state;
-    if (st.structAt[i] !== -1) return false;
-    const t = st.terrain[i];
-    if (WW.TERRAIN_LUT.build[t] && WW.TERRAIN_LUT.walk[t] > 0) return true;
+  // Gelände bebaubar? (Volk bestimmt Sonderflächen wie Sumpf)
+  function terrainBuildable(sim, i, race) {
+    const t = sim.state.terrain[i];
+    if (WW.TERRAIN_LUT.walk[t] <= 0) return false;
+    if (WW.TERRAIN_LUT.build[t]) return true;
     const r = WW.RACES[race];
     return !!(r && r.buildOn && r.buildOn.indexOf(WW.TERRAIN[t].key) >= 0);
+  }
+  // Freie Baufläche?
+  function canBuildTile(sim, i, race) {
+    if (sim.state.structAt[i] !== -1) return false;
+    return terrainBuildable(sim, i, race);
   }
 
   WW.Structs = {
     create: create, remove: remove, complete: complete, damage: damage, destroy: destroy,
     maxHpFor: maxHpFor, costFor: costFor, isWallish: isWallish, rebuildBlock: rebuildBlock,
     updateMasksAround: updateMasksAround, updateMaskAt: updateMaskAt, pushUnitsOff: pushUnitsOff,
-    canBuildTile: canBuildTile, blockValue: blockValue, info: info, setBlockAt: setBlockAt
+    canBuildTile: canBuildTile, blockValue: blockValue, info: info, setBlockAt: setBlockAt,
+    ruinize: ruinize, terrainBuildable: terrainBuildable, forTiles: forTiles, WALLISH: WALLISH
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

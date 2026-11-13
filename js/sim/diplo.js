@@ -22,7 +22,7 @@
 
   function capitalPt(sim, k) {
     const c = sim._cities.get(k.capitalId) || sim._cities.get(k.cityIds[0]);
-    return c ? { x: c.cx + 1, y: c.cy + 1, c: c } : null;
+    return c ? { x: c.cx + 0.5, y: c.cy + 0.5, c: c } : null;
   }
 
   function nearestCities(sim, a, b) {
@@ -41,7 +41,7 @@
   function sameLand(sim, ca, cb) {
     if (sim._compDirty) WW.Path.updateComponents(sim);
     const W = sim.state.W;
-    return sim.comp[(ca.cy + 1) * W + ca.cx] === sim.comp[(cb.cy + 1) * W + cb.cx];
+    return sim.comp[ca.cy * W + ca.cx] === sim.comp[cb.cy * W + cb.cx];
   }
 
   function setStatus(sim, a, b, status) {
@@ -127,7 +127,7 @@
           n++;
         }
         if (n >= 3 && marching === 0) sim.event('armyMarch', { kingdom: k.name, other: e.name, city: pair.a.name, otherCity: pair.b.name, n: n },
-          { kingdomId: k.id, cityId: pair.a.id, x: pair.a.cx + 1, y: pair.a.cy + 1 });
+          { kingdomId: k.id, cityId: pair.a.id, x: pair.a.cx + 0.5, y: pair.a.cy + 0.5 });
       }
     }
     // Aufstände beenden
@@ -151,7 +151,7 @@
     if (!att || !def || att === def) return false;
     const ctr = sim._structs.get(city.centerId);
     if (ctr && ctr.built) return false;
-    const px = city.cx + 1, py = city.cy + 1;
+    const px = city.cx + 0.5, py = city.cy + 0.5;
     let a = 0, d = 0;
     WW.Units.forNear(sim, px, py, 5, false, (u) => {
       if (u.kingdomId === attK && u.role === 'soldier') a++;
@@ -286,7 +286,7 @@
         continue;
       }
       if (ra.status === 'alliance') {
-        if (op < 5) { setStatus(sim, a, b, 'peace'); sim.event('allianceEnd', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: -1, x: pair ? pair.a.cx + 1 : 0, y: pair ? pair.a.cy + 1 : 0 }); }
+        if (op < 5) { setStatus(sim, a, b, 'peace'); sim.event('allianceEnd', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: -1, x: pair ? pair.a.cx + 0.5 : 0, y: pair ? pair.a.cy + 0.5 : 0 }); }
         continue;
       }
       // Frieden: Krieg oder Bündnis?

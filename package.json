@@ -1,0 +1,10 @@
+{
+  "name": "wuselwelt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wuselwelt – Gott-Sandkasten im Browser (Simulation und Tests ohne Abhängigkeiten)",
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "license": "UNLICENSED"
+}

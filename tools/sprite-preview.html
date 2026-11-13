@@ -30,6 +30,7 @@
 <script src="../js/render/sprites-build.js"></script>
 <script src="../js/render/sprites-units.js"></script>
 <script src="../js/render/sprites-icons.js"></script>
+<script src="sprite-scene.js"></script>
 <script>
 (function () { 'use strict';
   var S = WW.Sprites; S.init();
@@ -82,8 +83,17 @@
     cell(row, opts.label === undefined ? key : opts.label, k.c, opts.sel);
   }
 
-  // Lupe: ?keys=a,b,c&scale=8&bg=grass&team=0
   var Q = new URLSearchParams(location.search);
+  // Beispielszene: ?scene=2 oder ?scene=4 zeigt nur die Szene in dieser Vergrößerung
+  (function () {
+    var sc = +Q.get('scene') || 2;
+    var rs = section('scene', 'Beispielszene (60×40 Kacheln, 1 Logikpixel = ' + sc + ' Bildschirmpixel)');
+    var cv = document.createElement('canvas'); cv.id = 'scenecv';
+    WW.SpriteScene.render(cv, sc);
+    cell(rs, '', cv);
+  })();
+  if (Q.get('scene')) return;
+  // Lupe: ?keys=a,b,c&scale=8&bg=grass&team=0
   if (Q.get('keys')) {
     var rz = section('zoom', 'Lupe');
     var want = Q.get('keys').split(',');

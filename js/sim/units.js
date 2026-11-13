@@ -62,6 +62,8 @@
     if (!u || u.dead) return;
     u.dead = true; u.hp = 0; u.moving = false;
     sim._unitsDirty = true;
+    const dc = sim._deaths || (sim._deaths = {});
+    dc[cause] = (dc[cause] || 0) + 1;
     sim.fx({ type: cause === 'drown' ? 'splash' : 'poof', x: u.x, y: u.y });
     const k = sim._kingdoms.get(u.kingdomId);
     if (k && k.leaderId === u.id) WW.Gov.onLeaderDeath(sim, k, u, cause);
@@ -316,7 +318,7 @@
   // zufällige begehbare Kachel nahe dem Zentrum (innerhalb der Mauer, wenn vorhanden)
   function wanderTile(sim, u, city, r) {
     const st = sim.state, W = st.W, H = st.H;
-    const px = city ? city.cx + 1 : Math.floor(u.x), py = city ? city.cy + 1 : Math.floor(u.y);
+    const px = city ? city.cx + 0.5 : Math.floor(u.x), py = city ? city.cy + 0.5 : Math.floor(u.y);
     for (let n = 0; n < 8; n++) {
       const x = Math.floor(px + sim.rng.range(-r, r)), y = Math.floor(py + sim.rng.range(-r, r));
       if (x < 0 || y < 0 || x >= W || y >= H) continue;
@@ -356,7 +358,7 @@
     // Abladestelle: Hütte/Steinbruch der Stadt, sonst Zentrum
     const W = sim.state.W;
     let goal = WW.Cities.centerTile(sim, city, u.id);
-    let bd = distTo(u, city.cx + 1, city.cy + 1);
+    let bd = distTo(u, city.cx + 0.5, city.cy + 0.5);
     const want = u.carrying === 'wood' ? 'lumber' : (u.carrying === 'stone' ? 'quarry' : null);
     if (want) for (const id of city.drops) {
       const s = sim._structs.get(id);
@@ -381,7 +383,7 @@
   // Rohstoffkachel nahe der Stadt suchen (Holz, Stein, Wasser)
   function findResource(sim, u, city, res, maxR) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
-    const px = city.cx + 1, py = city.cy + 1;
+    const px = city.cx, py = city.cy;
     const cand = [];
     for (let r = 2; r <= maxR && cand.length < 6; r++) {
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
@@ -407,7 +409,7 @@
   // --------------------------------------------------------------------------
   function thinkFarmer(sim, u, city) {
     const st = sim.state, W = st.W;
-    if (u.carrying) { deliver(sim, u, city); return; }
+    if (u.carrying && u.phase !== 1 && u.phase !== 2) { deliver(sim, u, city); return; }
     const race = WW.RACES[u.race] || WW.RACES.human;
     if (u.phase === 0) {
       // reifes Feld mit wenigen Helfern, sonst pflegen
@@ -437,7 +439,7 @@
         if (!f || f.dead) { u.phase = 0; u.target = -1; return; }
         goal = f.y * W + f.x;
       }
-      if (arrived(sim, u, goal)) { u.phase = 2; u.tt = 32; return; }
+      if (arrived(sim, u, goal)) { u.phase = 2; u.tt = u.carrying ? 16 : 28; return; }
       const r = goTo(sim, u, goal, { limit: 1200 });
       if (r === null && u.fails > 2) { u.phase = 0; u.target = -1; u.fails = 0; u.wait = 20; }
       return;
@@ -457,9 +459,20 @@
       if (!f || f.dead) { u.phase = 0; return; }
       if (f.growth >= 3) {
         const fert = Math.max(0.2, WW.TERRAIN_LUT.fertile[st.terrain[f.y * W + f.x]]);
-        u.carrying = 'food'; u.carryAmt = C().HARVEST * fert * mul;
+        u.carrying = 'food'; u.carryAmt = (u.carryAmt || 0) + C().HARVEST * fert * mul;
         f.growth = 0; f.gprog = 0; sim.markDirty(f.y * W + f.x);
         u.phase = 3;
+        // Nachbarfeld gleich mit abernten (bis zu drei Felder pro Gang)
+        if (u.carryAmt < C().HARVEST * 2.5) {
+          let nf = null, nd = 7;
+          for (const id of city.fields) {
+            const g = sim._structs.get(id);
+            if (!g || g.dead || g === f || g.growth < 3 || g.workers > 0) continue;
+            const d = (g.x - f.x) * (g.x - f.x) + (g.y - f.y) * (g.y - f.y);
+            if (d < nd) { nd = d; nf = g; }
+          }
+          if (nf) { u.target = nf.id; u.phase = 1; nf.workers++; }
+        }
       } else {
         f.gprog += 0.5;
         u.phase = 0; u.target = -1;
@@ -551,8 +564,11 @@
     if (!nearRect(u, s, 1.0)) {
       if (!u.path) {
         const cur = Math.floor(u.y) * W + Math.floor(u.x);
-        let goal = WW.Path.approachTile(sim, s.y * W + s.x, u.kingdomId, cur);
-        if (goal < 0) goal = WW.Path.nearestFree(sim, s.y * W + s.x, u.kingdomId, 3);
+        // Arbeitspunkt: eine Kachel der Grundfläche, nach Einheit verteilt
+        const n = u.id % (s.w * s.h);
+        const wp = (s.y + Math.floor(n / s.w)) * W + s.x + (n % s.w);
+        let goal = WW.Path.approachTile(sim, wp, u.kingdomId, cur);
+        if (goal < 0) goal = WW.Path.nearestFree(sim, wp, u.kingdomId, 3);
         const drop = () => { u.target = -1; u.phase = 0; u.fails = 0; u.wait = 24; };
         if (goal < 0) { drop(); return; }
         const r = goTo(sim, u, goal, { limit: 1500 });
@@ -585,7 +601,7 @@
     let goal = -1;
     if (city.wall.plan && city.wall.plan.length && sim.rng.chance(0.6)) {
       const t = city.wall.plan[sim.rng.int(city.wall.plan.length)];
-      goal = WW.Path.approachTile(sim, t, u.kingdomId, (city.cy + 1) * W + city.cx);
+      goal = WW.Path.approachTile(sim, t, u.kingdomId, city.cy * W + city.cx);
       if (goal >= 0 && st.inRing[goal] !== city.id) goal = -1;
     }
     if (goal < 0) goal = wanderTile(sim, u, city, 5);
@@ -610,8 +626,8 @@
       u.breach = -1; u.path = null;
     }
     const ctr = sim._structs.get(city.centerId);
-    const d = distTo(u, city.cx + 1, city.cy + 1);
-    if (d <= 2.2) {
+    const d = distTo(u, city.cx + 0.5, city.cy + 0.5);
+    if (d <= 2.8) {
       if (ctr && ctr.built) {
         if (u.cd <= 0) { WW.Structs.damage(sim, ctr, damageOf(sim, u), 'hit'); u.cd = 6; }
         if (!ctr.built) WW.Diplo.tryCapture(sim, city, u.kingdomId);
@@ -628,12 +644,12 @@
     const st = sim.state, W = st.W;
     const ctr = sim._structs.get(city.centerId);
     if (!ctr) { WW.Diplo.revoltSuccess(sim, city); return; }
-    const d = distTo(u, city.cx + 1, city.cy + 1);
-    if (d <= 2.2) {
+    const d = distTo(u, city.cx + 0.5, city.cy + 0.5);
+    if (d <= 2.8) {
       if (ctr.built && u.cd <= 0) { WW.Structs.damage(sim, ctr, damageOf(sim, u) * 0.6, 'hit'); u.cd = 8; }
       if (sim.rng.chance(0.03)) {
         // zündeln
-        const x = city.cx + sim.rng.irange(-3, 4), y = city.cy + sim.rng.irange(-3, 4);
+        const x = city.cx + sim.rng.irange(-4, 4), y = city.cy + sim.rng.irange(-4, 4);
         WW.Env.ignite(sim, x, y);
       }
       if (!ctr.built) WW.Diplo.revoltSuccess(sim, city);
@@ -661,7 +677,7 @@
     const dest = u.phase === 0 ? sim._cities.get(u.target) : city;
     if (!dest) { u.target = -1; return; }
     const goal = WW.Cities.centerTile(sim, dest, u.id);
-    if (arrived(sim, u, goal) || distTo(u, dest.cx + 1, dest.cy + 1) < 1.5) {
+    if (arrived(sim, u, goal) || distTo(u, dest.cx + 0.5, dest.cy + 0.5) < 1.5) {
       const g = WW.GOVERNMENTS[k.gov];
       const amt = 2.5 * Math.max(0.5, g.goldMul);
       WW.Cities.addStock(sim, dest, 'gold', amt);
@@ -679,17 +695,19 @@
     const k = sim._kingdoms.get(u.kingdomId);
     const home = homeCity(sim, u);
     const giveUp = () => {
-      for (const v of st.units) if (!v.dead && v.group === u.group && v.role === 'settler') {
+      const grp = u.group;
+      for (const v of st.units) if (!v.dead && grp >= 0 && v.group === grp && v.role === 'settler') {
         v.group = -1; v.site = -1;
         if (sim._cities.get(v.cityId)) setRole(sim, v, 'farmer');
       }
     };
     if (u.site < 0 || !k) { if (home) setRole(sim, u, 'farmer'); return; }
     const sx = u.site % W, sy = Math.floor(u.site / W);
-    if (distTo(u, sx + 1, sy + 1) <= 2) {
-      let x = sx, y = sy, ok = WW.Cities.canFoundAt(sim, x, y, u.race);
+    if (distTo(u, sx + 0.5, sy + 0.5) <= 2) {
+      const md = WW.CONFIG.CITY_MIN_DIST - 4;
+      let x = sx, y = sy, ok = WW.Cities.canFoundAt(sim, x, y, u.race, md);
       for (let r = 1; r <= 3 && !ok; r++) for (let dy = -r; dy <= r && !ok; dy++) for (let dx = -r; dx <= r && !ok; dx++) {
-        if (WW.Cities.canFoundAt(sim, sx + dx, sy + dy, u.race)) { x = sx + dx; y = sy + dy; ok = true; }
+        if (WW.Cities.canFoundAt(sim, sx + dx, sy + dy, u.race, md)) { x = sx + dx; y = sy + dy; ok = true; }
       }
       if (!ok) { giveUp(); return; }
       const c = WW.Cities.found(sim, x, y, k.id, u.race);
@@ -700,7 +718,8 @@
         for (const r of ['food', 'wood']) { const v = Math.min(sk[r] * 0.25, 30); sk[r] -= v; c.stock[r] += v; }
       }
       let n = 0;
-      for (const v of st.units) if (!v.dead && v.group === u.group) {
+      const grp = u.group;
+      for (const v of st.units) if (!v.dead && grp >= 0 && v.group === grp && v.kingdomId === k.id) {
         v.cityId = c.id; v.group = -1; v.site = -1; setRole(sim, v, 'farmer'); n++;
       }
       sim.event('daughter', { city: c.name, mother: home ? home.name : '?', kingdom: k.name, n: n }, WW.Cities.atCity(c));

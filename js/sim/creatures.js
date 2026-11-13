@@ -9,7 +9,7 @@
     },
     wolf: {
       key: 'wolf', name: 'Wolf', plural: 'Wölfe', hp: 26, speed: 0.07, hostile: true, ai: 'predator',
-      dmg: 4, breed: 0.0004, max: 40, sight: 6, prey: ['sheep'], huntsUnits: true, habitat: ['forest', 'taiga', 'grass', 'tundra']
+      dmg: 2.5, breed: 0.0004, max: 30, sight: 6, prey: ['sheep'], huntsUnits: true, habitat: ['forest', 'taiga', 'grass', 'tundra']
     }
   };
 
@@ -128,8 +128,15 @@
           WW.Units.forNear(sim, a.x, a.y, cr.sight, true, (b, d2) => {
             if (cr.prey.indexOf(b.kind) >= 0 && d2 < bd) { bd = d2; prey = b; }
           });
-          if (cr.huntsUnits) WW.Units.forNear(sim, a.x, a.y, cr.sight * 0.7, false, (u, d2) => {
-            if (u.role !== 'settler' && d2 + 3 < bd) { bd = d2 + 3; prey = u; }
+          // Bewohner nur angreifen, wenn sie allein draußen sind (hinter Mauern ist man sicher)
+          if (cr.huntsUnits && !prey) WW.Units.forNear(sim, a.x, a.y, cr.sight * 0.6, false, (u, d2) => {
+            if (u.role === 'settler' || d2 + 3 >= bd) return;
+            const i = Math.floor(u.y) * st.W + Math.floor(u.x);
+            if (st.inRing[i] !== -1) return;
+            let company = 0;
+            WW.Units.forNear(sim, u.x, u.y, 2.5, false, (v) => { if (v !== u) company++; });
+            if (company >= 2) return;
+            bd = d2 + 3; prey = u;
           });
         }
         a.foe = prey ? prey.id : -1;

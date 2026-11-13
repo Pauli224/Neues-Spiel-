@@ -12,27 +12,29 @@
     MAX_UNITS: 1500,
     MAX_ANIMALS: 240,
     MAX_EVENTS: 400,
-    UNIT_SPEED: 0.075,        // Kacheln pro Tick bei walk = 1
+    UNIT_SPEED: 0.085,        // Kacheln pro Tick bei walk = 1
     ADULT_AGE: 6,             // Jahre
     LIFESPAN: 62,             // Jahre (± 14, mal Volksfaktor)
-    FOOD_PER_YEAR: 2.4,       // Nahrung je Kopf und Jahr
+    FOOD_PER_YEAR: 2.2,       // Nahrung je Kopf und Jahr
     BIRTH_RATE: 0.0075,       // Geburtschance je Erwachsenem und Sekunde (bei Platz + Essen)
     START_STOCK: { food: 36, wood: 26, stone: 4, gold: 0 },
-    HARVEST: 6,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
+    HARVEST: 11,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
     CHOP: 3, MINE: 2,         // Holz/Stein je Gang
     FISH: 3,
-    FIELD_STAGE_TICKS: 90,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
+    FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
     BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
     BASE_DMG: 4, SOLDIER_DMG: 9,
-    WALL_MARGIN: 2.6,         // Abstand Ring zu Kerngebäuden
-    WALL_EXPAND_MARGIN: 4.6,
-    WALL_EXPAND_YEARS: 4,     // frühestens alle n Jahre erweitern
+    WALL_MARGIN: 3.0,         // Abstand Ring zu Kerngebäuden
+    WALL_EXPAND_MARGIN: 6.6,
+    WALL_EXPAND_YEARS: 5,     // frühestens alle n Jahre erweitern
     TOWER_RANGE: 5.5, TOWER_DMG: 7, TOWER_COOLDOWN: 14,
-    PATH_BUDGET: 26000,       // A*-Knoten pro Tick weltweit
+    PATH_BUDGET: 9000,        // A*-Knoten pro Tick weltweit
     PATH_LIMIT: 2500,         // Knotenlimit je Suche (normal)
     PATH_LIMIT_LONG: 14000,   // Siedler, Heere, Händler
-    TERRITORY_BASE: 6,
-    SETTLER_DIST_MIN: 15, SETTLER_DIST_MAX: 34
+    TERRITORY_BASE: 9,
+    SETTLER_DIST_MIN: 24, SETTLER_DIST_MAX: 40,
+    CITY_MIN_DIST: 22,        // Mindestabstand Tochterstadt / Startstadt zu anderen Städten (Mitte zu Mitte)
+    PLAYER_CITY_MIN_DIST: 12  // Siedler vom Spieler dürfen näher heran
   };
 
   // ---------------------------------------------------------------------------

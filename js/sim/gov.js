@@ -8,7 +8,7 @@
   function capital(sim, k) { return sim._cities.get(k.capitalId) || sim._cities.get(k.cityIds[0]) || null; }
   function atK(sim, k) {
     const c = capital(sim, k);
-    return { kingdomId: k.id, cityId: c ? c.id : -1, x: c ? c.cx + 1 : 0, y: c ? c.cy + 1 : 0 };
+    return { kingdomId: k.id, cityId: c ? c.id : -1, x: c ? c.cx + 0.5 : 0, y: c ? c.cy + 0.5 : 0 };
   }
 
   function freeColor(sim) {
@@ -173,7 +173,7 @@
     for (const id of k.cityIds) {
       const c = sim._cities.get(id);
       if (!c) continue;
-      sim.fx({ type: 'govchange', x: c.cx + 1, y: c.cy + 1, gov: gov });
+      sim.fx({ type: 'govchange', x: c.cx + 0.5, y: c.cy + 0.5, gov: gov });
       if (c.wall && c.wall.plan) c.wall.style = WW.Walls.wallStyle(ng, Math.max(1, c.wall.level || 1));
     }
     if (o.reason !== 'silent') {
@@ -293,7 +293,7 @@
       for (const u of st.units) if (!u.dead && u.kingdomId === k.id) { u.hp = u.maxHp; u.sick = false; }
       sim.event('miracleHeal', { kingdom: k.name, city: cap.name, deity: k.deity }, atK(sim, k));
     }
-    sim.fx({ type: 'sparkle', x: cap.cx + 1, y: cap.cy + 1 });
+    sim.fx({ type: 'sparkle', x: cap.cx + 0.5, y: cap.cy + 0.5 });
   }
 
   function avgHappiness(sim, k) {

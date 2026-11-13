@@ -136,6 +136,25 @@
     }
   }
 
+  // Regen: Wald wächst im Umkreis (bevorzugt neben Wald)
+  function regrowAt(sim, x, y, r, p) {
+    const st = sim.state, W = st.W, H = st.H;
+    const map = regrowMap();
+    const ch = [];
+    WW.Powers.forDisc(sim, x, y, r, (i, xx, yy) => {
+      const to = map[st.terrain[i]];
+      if (to === undefined || st.structAt[i] !== -1 || st.inRing[i] !== -1) return;
+      let nb = 0;
+      for (let d = 0; d < 4; d++) {
+        const nx = xx + DX4[d], ny = yy + DY4[d];
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        if (st.terrain[ny * W + nx] === to) nb++;
+      }
+      if (sim.rng.next() < p * (nb ? 1 : 0.3)) ch.push(i, to);
+    });
+    for (let k = 0; k < ch.length; k += 2) { st.terrain[ch[k]] = ch[k + 1]; sim.markDirty(ch[k]); }
+  }
+
   function updateFields(sim) {
     const st = sim.state;
     const inc = 10 / WW.CONFIG.FIELD_STAGE_TICKS;
@@ -203,7 +222,7 @@
       }
     } else if (r < 0.07 && st.cities.length) {
       const c = st.cities[sim.rng.int(st.cities.length)];
-      WW.Powers.strike(sim, c.cx + 1, c.cy + 1, 'plague', true);
+      WW.Powers.strike(sim, c.cx + 0.5, c.cy + 0.5, 'plague', true);
       sim.event('randomPlague', { city: c.name }, WW.Cities.atCity(c));
     }
   }
@@ -221,6 +240,6 @@
     disasters(sim);
   }
 
-  WW.Env = { update: update, yearly: yearly, ignite: ignite, extinguish: extinguish, setMark: setMark, regrow: regrow, burnable: burnable };
+  WW.Env = { update: update, yearly: yearly, ignite: ignite, extinguish: extinguish, setMark: setMark, regrow: regrow, regrowAt: regrowAt, burnable: burnable };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

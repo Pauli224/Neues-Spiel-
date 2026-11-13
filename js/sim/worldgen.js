@@ -314,25 +314,25 @@
       const nc = pts.length;
       P.mask = (x, y) => {
         // Meerengen zwischen den Kontinenten
-        return Math.max(maxBlobs(x, y, list), -0.5) - 0.9 * straitAt(x, y, list, nc, 0.07);
+        return Math.max(maxBlobs(x, y, list), -0.5) - 1.5 * straitAt(x, y, list, nc, 0.075);
       };
       P.lo = 0.22; P.hi = 0.52; P.nw = 0.6;
     } else if (key === 'pangaea') {
       const main = mkBlob(r, A * r.range(0.45, 0.55), r.range(0.46, 0.54), A * 0.37, 0.36);
       const bays = [];
-      const nb = 2 + r.int(3);
+      const nb = 3 + r.int(3);
       for (let k = 0; k < nb; k++) {
-        const d = randDir(r), rr = r.range(0.07, 0.14);
+        const d = randDir(r), rr = r.range(0.09, 0.16);
         bays.push(mkBlob(r, main.x + d[0] * A * 0.3, main.y + d[1] * 0.3, rr * r.range(1, 1.8), rr));
       }
-      const inner = r.next() < 0.6 ? mkBlob(r, main.x + r.range(-0.15, 0.15), main.y + r.range(-0.1, 0.1), r.range(0.06, 0.1), r.range(0.04, 0.07)) : null;
+      const inner = r.next() < 0.8 ? mkBlob(r, main.x + r.range(-0.15, 0.15), main.y + r.range(-0.1, 0.1), r.range(0.08, 0.13), r.range(0.05, 0.08)) : null;
       P.mask = (x, y) => {
         let m = blob(x, y, main) * 1.3;
         for (let k = 0; k < bays.length; k++) { const b = blob(x, y, bays[k]); if (b > 0) m -= b * 2.2; }
         if (inner) { const b = blob(x, y, inner); if (b > 0) m -= b * 3; }
         return Math.max(m, -0.6);
       };
-      P.lo = 0.3; P.hi = 0.6; P.nw = 0.45;
+      P.lo = 0.28; P.hi = 0.55; P.nw = 0.5;
     } else if (key === 'archipelago') {
       const list = [];
       const chains = 4 + r.int(4);
@@ -358,7 +358,7 @@
       const R = { x: A * 0.73, y: 0.5 - yo, rx, ry, c: d[0], s: -d[1] };
       P.mask = (x, y) => {
         let m = Math.max(blob(x, y, L), blob(x, y, R));
-        const g = 1 - Math.abs(x - A * 0.5) / 0.09; if (g > 0) m -= g * 0.6;
+        const g = 1 - Math.abs(x - A * 0.5) / 0.1; if (g > 0) m -= g * 1.4;
         return Math.max(m, -0.5);
       };
       P.mirror = true; P.lo = 0.24; P.hi = 0.54; P.nw = 0.5;
@@ -385,25 +385,25 @@
       };
       P.lo = 0.22; P.hi = 0.48; P.mw = 1.2; P.nw = 0.42;
     } else if (key === 'lakeland') {
-      const main = mkBlob(r, A * r.range(0.47, 0.53), r.range(0.47, 0.53), A * 0.42, 0.4);
+      const main = mkBlob(r, A * r.range(0.47, 0.53), r.range(0.47, 0.53), A * 0.39, 0.37);
       const holes = [];
       const nh = 9 + r.int(7);
       for (let t = 0; holes.length < nh && t < 300; t++) {
         const x = r.range(A * 0.15, A * 0.85), y = r.range(0.18, 0.82);
         if (blob(x, y, main) < 0.3) continue;
         if (holes.some(h => (h.x - x) * (h.x - x) + (h.y - y) * (h.y - y) < 0.022)) continue;
-        const rr = r.range(0.025, 0.06);
+        const rr = r.range(0.03, 0.065);
         holes.push(mkBlob(r, x, y, rr * r.range(1, 2.2), rr));
       }
       P.mask = (x, y) => {
         let m = blob(x, y, main) * 1.3;
-        for (let k = 0; k < holes.length; k++) { const b = blob(x, y, holes[k]); if (b > 0) m -= 0.5 + b * 3; }
-        return Math.max(m, -0.8);
+        for (let k = 0; k < holes.length; k++) { const b = blob(x, y, holes[k]); if (b > 0) m -= 1.6 + b * 4; }
+        return Math.max(m, -1.8);
       };
-      P.lo = 0.4; P.hi = 0.64; P.mw = 1.1; P.nw = 0.38;
+      P.lo = 0.36; P.hi = 0.6; P.mw = 1.2; P.nw = 0.38;
     } else if (key === 'coast') {
-      const side = r.pick(['W', 'E', 'W', 'E', 'N', 'S']);
-      const pos = r.range(0.52, 0.6);
+      const side = r.pick(['W', 'E']);
+      const pos = r.range(0.42, 0.5);
       const isl = [];
       const ni = 4 + r.int(5);
       for (let k = 0; k < ni; k++) {
@@ -423,11 +423,11 @@
         m = Math.max(m, maxBlobs(x, y, isl));
         return Math.max(Math.min(m, 1.1), -0.7);
       };
-      P.lo = 0.27; P.hi = 0.56; P.nw = 0.55;
+      P.lo = 0.27; P.hi = 0.52; P.nw = 0.5; P.mw = 1.7; P.open = side;
     } else if (key === 'shards') {
       const main = mkBlob(r, A * r.range(0.47, 0.53), r.range(0.47, 0.53), A * 0.4, 0.38);
       P.mask = (x, y) => Math.max(blob(x, y, main) * 1.3, -0.6);
-      P.cracks = { f: r.range(1.9, 2.4), w: r.range(0.12, 0.15), d: 2.0 };
+      P.cracks = { f: r.range(1.9, 2.4), w: r.range(0.15, 0.19), d: 2.6 };
       P.lo = 0.32; P.hi = 0.58; P.nw = 0.4; P.mw = 1.1;
     } else if (key === 'highlands') {
       const main = mkBlob(r, A * r.range(0.46, 0.54), r.range(0.46, 0.54), A * 0.36, 0.36);
@@ -445,11 +445,11 @@
   // ---------------------------------------------------------------- Biomwahl
   // Klima → Biom (ohne Wald); t, m etwa 0..1.
   function classifyBiome(t, m) {
-    if (t < 0.13) return TT.SNOWFIELD;
-    if (t < 0.3) return TT.TUNDRA;
-    if (t < 0.64) return (m < 0.17 && t > 0.46) ? TT.DESERT : TT.GRASS;
-    if (m < 0.3) return TT.DESERT;
-    if (m < 0.48) return TT.SAVANNA;
+    if (t < 0.1) return TT.SNOWFIELD;
+    if (t < 0.27) return TT.TUNDRA;
+    if (t < 0.66) return (m < 0.15 && t > 0.56) ? TT.DESERT : TT.GRASS;
+    if (m < 0.26) return TT.DESERT;
+    if (m < 0.46) return TT.SAVANNA;
     return TT.GRASS;
   }
 
@@ -505,7 +505,7 @@
 
     // 1) Grundform: verzerrtes Rauschen + Vorlagenmaske − Randabfall
     const h0 = new Float32Array(N), QX = new Float32Array(N), QY = new Float32Array(N);
-    const edgeW = 0.2;
+    const edgeW = 0.22;
     const MW = 0.6, NW = 1.45, DW = 0.2;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, ax = (x + 0.5) / H, ay = (y + 0.5) / H;
@@ -519,8 +519,14 @@
         const k = 1 - Math.abs(c) / P.cracks.w;
         if (k > 0) m -= k * P.cracks.d;
       }
-      const e = Math.min(x + 0.5, W - x - 0.5, y + 0.5, H - y - 0.5) / H + 0.04 * nWarp.n2(ax * 6 + 9, ay * 6);
-      let pen = 0; if (e < edgeW) { const t = (edgeW - e) / edgeW; pen = t * t * 2.0; }
+      const ux = (x + 0.5) / W * 2 - 1, uy = (y + 0.5) / H * 2 - 1, u4 = ux * ux * ux * ux + uy * uy * uy * uy;
+      // abgerundetes Rechteck statt harter Kante, dazu Rauschen → kein eckiger Kartenrand
+      let dx0 = x + 0.5, dx1 = W - x - 0.5;
+      if (P.open === 'W') dx0 += 0.1 * H; else if (P.open === 'E') dx1 += 0.1 * H; // offene Seite: Land läuft bis nah an den Rand
+      let e = Math.min(dx0, dx1, y + 0.5, H - y - 0.5) / H;
+      if (!P.open) e = Math.min(e, (1 - Math.sqrt(Math.sqrt(u4))) * 0.5);
+      e += 0.07 * nWarp.fbm(ax * 3.5 + 9, ay * 3.5, 2, 0.5);
+      let pen = 0; if (e < edgeW) { const t = (edgeW - e) / edgeW; pen = t * t * 2.8; }
       const det = nMisc.fbm(qx * F * 3.1 + 77, qy * F * 3.1, 3, 0.55);
       h0[i] = m * P.mw * MW + n * P.nw * NW + det * DW - pen;
       QX[i] = qx; QY[i] = qy;
@@ -563,7 +569,7 @@
     // 4) Ozean vs. Seen, Abstandsfelder
     const notLand = new Uint8Array(N); for (let i = 0; i < N; i++) notLand[i] = land[i] ? 0 : 1;
     const ocean = floodOcean(land, W, H);
-    const lake = new Uint8Array(N); for (let i = 0; i < N; i++) lake[i] = (!land[i] && !ocean[i]) ? 1 : 0;
+    const lake = new Uint8Array(N); for (let i = 0; i < N; i++) lake[i] = (!land[i] && !ocean[i]) ? 1 : 0; if (globalThis.WG_LK) { let c = 0; for (let i = 0; i < N; i++) c += lake[i]; globalThis.WG_LK.push(c); }
     let dWater = distField(notLand, W, H);
     const dLand = distField(land, W, H);
 
@@ -619,14 +625,15 @@
       if (!land[i]) continue;
       if (R[i] >= thM) relief[i] = 2;
       else if (R[i] >= thH) relief[i] = 1;
-      else if (dWater[i] >= 2 && nMisc.fbm(QX[i] * 7 + 500, QY[i] * 7, 3, 0.5) > 0.46) relief[i] = 1; // Hügelinseln (Stein überall)
+      else if (dWater[i] >= 2 && nMisc.fbm(QX[i] * 4.5 + 500, QY[i] * 4.5, 2, 0.5) > 0.4) relief[i] = 1; // Hügelinseln (Stein überall)
     }
+    shapeRelief(relief, land, W, H, nMisc, sM, areaScale);
     const E = new Float32Array(N);
     for (let i = 0; i < N; i++) if (land[i]) E[i] = 0.3 * base[i] + R[i] + 0.09 * (nMisc.fbm(QX[i] * 4 + 800, QY[i] * 4, 3, 0.5) + 0.5);
 
     // 6) Entwässerung: Priority-Flood vom Ozean aus (4er-Nachbarschaft → Flüsse 4-zusammenhängend)
     const Ed = new Float32Array(N);
-    for (let i = 0; i < N; i++) Ed[i] = land[i] ? E[i] + 0.012 * nMisc.n2(QX[i] * 14, QY[i] * 14) : (lake[i] ? -0.01 : 0);
+    for (let i = 0; i < N; i++) Ed[i] = land[i] ? E[i] + 0.012 * nMisc.n2(QX[i] * 14, QY[i] * 14) + 0.06 * nMisc.fbm(QX[i] * 3.2 + 2000, QY[i] * 3.2, 3, 0.5) : (lake[i] ? -0.01 : 0);
     const flatCost = new Float32Array(N);
     for (let i = 0; i < N; i++) { if (ocean[i]) continue; const v = 0.5 + 0.5 * nMisc.n2(QX[i] * 9 + 1200, QY[i] * 9); flatCost[i] = 2e-5 + 4e-4 * v * v; }
     const Fill = new Float32Array(N), parent = new Int32Array(N).fill(-1), dl = new Int32Array(N);
@@ -683,69 +690,210 @@
       const cand = new Uint8Array(N);
       const lakeTh = 0.012 - 0.006 * o.rivers;
       for (let i = 0; i < N; i++) if (land[i] && relief[i] < 2 && Fill[i] - Ed[i] > lakeTh) cand[i] = 1;
-      const cc = components(cand, W, H);
+      let cc = components(cand, W, H);
+      // zu große Senken nur im tiefsten Teil fluten
+      const maxLake = Math.round(40 * areaScale);
+      const per = cc.sizes.map(() => []);
+      for (let i = 0; i < N; i++) if (cand[i] && cc.sizes[cc.lab[i]] > maxLake) per[cc.lab[i]].push(Fill[i] - Ed[i]);
+      const cut = per.map(a => { if (!a.length) return -1; a.sort((p, q) => q - p); return a[maxLake - 1]; });
+      for (let i = 0; i < N; i++) if (cand[i] && cut[cc.lab[i]] >= 0 && Fill[i] - Ed[i] < cut[cc.lab[i]]) cand[i] = 0;
+      cc = components(cand, W, H);
       const minLake = Math.max(5, Math.round(6 * Math.sqrt(areaScale)));
       for (let i = 0; i < N; i++) if (cand[i] && cc.sizes[cc.lab[i]] >= minLake) { land[i] = 0; lake[i] = 1; relief[i] = 0; }
     }
 
-    // 7) Flüsse
+    // 7) Flüsse: ein Wanderer folgt dem geglätteten Gefälle (mit Schwung und Mäandern) und
+    //    wird auf Kacheln 4-zusammenhängend gerastert. Rückfall: Abflusskette der Flutung.
     const river = new Uint8Array(N);
+    const riverH = new Float32Array(N);
     {
       const rr = stream(seed, 'rivers');
       const sR = o.rivers;
+      const dOcean = distField(ocean, W, H);
+      const Pot = new Float32Array(N);
+      for (let i = 0; i < N; i++) Pot[i] = ocean[i] ? -0.06 : Fill[i] + 0.004 * dOcean[i];
+      const Ps = boxBlur(boxBlur(Pot, W, H, 2), W, H, 2);
+      const samp = (x, y) => {
+        x -= 0.5; y -= 0.5;
+        if (x < 0) x = 0; if (y < 0) y = 0; if (x > W - 1.001) x = W - 1.001; if (y > H - 1.001) y = H - 1.001;
+        const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, i = y0 * W + x0;
+        const a = Ps[i] + (Ps[i + 1] - Ps[i]) * fx, b = Ps[i + W] + (Ps[i + W + 1] - Ps[i + W]) * fx;
+        return a + (b - a) * fy;
+      };
+      const rid = new Int32Array(N).fill(-1);        // welcher Fluss liegt hier
+      const own = new Int32Array(N).fill(-1);        // Index im aktuellen Lauf (mit Stempel)
+      const stamp = new Int32Array(N).fill(-1);
       let landCount = 0; for (let i = 0; i < N; i++) if (land[i]) landCount++;
-      const target = Math.round((0.7 * sR + 1.0 * sR * sR) * landCount / 250);
-      const thE = quantile(E, land, 0.55);
+      const target = Math.round((0.9 * sR + 2.2 * sR * sR) * landCount / 600);
+      const minLen = Math.round(6 + 5 * Math.sqrt(areaScale));
+      const thE = quantile(E, land, 0.7);
+      const dM = distField(relief.map(v => v === 2 ? 1 : 0), W, H);
+      let dMax = 1; for (let i = 0; i < N; i++) if (land[i] && dOcean[i] > dMax) dMax = dOcean[i];
       const cand = [], keys = [];
       for (let i = 0; i < N; i++) {
-        if (!land[i] || relief[i] === 2 || dl[i] < 10) continue;
-        const x = i % W, y = (i - x) / W;
-        let nearM = false;
-        if (x > 0 && relief[i - 1] === 2) nearM = true; else if (x < W - 1 && relief[i + 1] === 2) nearM = true;
-        else if (y > 0 && relief[i - W] === 2) nearM = true; else if (y < H - 1 && relief[i + W] === 2) nearM = true;
+        if (!land[i] || relief[i] === 2 || dOcean[i] < 5) continue;
+        const nearM = dM[i] <= 2;
         if (!(nearM || relief[i] === 1 || E[i] > thE)) continue;
         cand.push(i);
+        keys.push(dOcean[i] / dMax + 0.5 * rr.next() + (nearM ? 0.2 : 0));
       }
-      // feste Reihenfolge je Seed, unabhängig vom Regler
-      for (let k = 0; k < cand.length; k++) keys.push(R[cand[k]] + 0.45 * rr.next() + (dl[cand[k]] > 25 ? 0.1 : 0));
       const idx = cand.map((_, k) => k).sort((a, b) => keys[b] - keys[a] || a - b);
+
+      let path = [], status = 0, runDir = 0, runLen = 0, jogSide = 0; // status: 1 = Mündung (Meer/See), 2 = Zusammenfluss
+      let curId = 0;
+      const nb4 = (c, k) => {
+        const x = c % W;
+        if (k === 0) return x > 0 ? c - 1 : -1; if (k === 1) return x < W - 1 ? c + 1 : -1;
+        if (k === 2) return c >= W ? c - W : -1; return c < N - W ? c + W : -1;
+      };
+      const isOwn = t => stamp[t] === curId && own[t] >= 0;
+      const truncate = j => { for (let k = j + 1; k < path.length; k++) own[path[k]] = -1; path.length = j + 1; };
+      // Kachel betreten; liefert true, wenn der Lauf endet.
+      function enter(t, ignoreLake) {
+        if (ocean[t] || lake[t]) { status = 1; return true; }
+        if (river[t]) { status = 2; return true; }
+        if (isOwn(t)) { truncate(own[t]); return false; }
+        // Schleife abkürzen: berührt die neue Kachel eine ältere eigene Kachel?
+        let jmin = -1;
+        for (let k = 0; k < 4; k++) { const n = nb4(t, k); if (n >= 0 && isOwn(n) && own[n] < path.length - 1 && (jmin < 0 || own[n] < jmin)) jmin = own[n]; }
+        if (jmin >= 0) truncate(jmin);
+        stamp[t] = curId; own[t] = path.length; path.push(t);
+        if (path.length >= 2) { const d = t - path[path.length - 2]; if (d === runDir) runLen++; else { runDir = d; runLen = 1; jogSide = 0; } }
+        for (let k = 0; k < 4; k++) {
+          const n = nb4(t, k); if (n < 0) continue;
+          if (ocean[n] || (lake[n] && !ignoreLake)) { status = 1; return true; }
+          if (river[n]) { status = 2; return true; }
+        }
+        return false;
+      }
+      // Von der letzten Laufkachel bis t in 4er-Schritten gehen (Diagonalen über eine Zwischenkachel).
+      function walkTo(t, ignoreLake, px, py, nx, ny) {
+        const tx = t % W, ty = (t - tx) / W;
+        for (let g = 0; g < 12; g++) {
+          const c = path[path.length - 1]; if (c === t) return false;
+          const cx = c % W, cy = (c - cx) / W, sx = tx > cx ? 1 : tx < cx ? -1 : 0, sy = ty > cy ? 1 : ty < cy ? -1 : 0;
+          let nxt;
+          if (sx && sy) {
+            const m1 = c + sx, m2 = c + sy * W;
+            if (px !== undefined && g === 0) {
+              const bx = sx > 0 ? cx + 1 : cx, by = sy > 0 ? cy + 1 : cy;
+              const ax = nx !== px ? (bx - px) / (nx - px) : 9, ay = ny !== py ? (by - py) / (ny - py) : 9;
+              nxt = ax < ay ? m1 : m2;
+            } else nxt = (ocean[m1] || river[m1] || Pot[m1] < Pot[m2]) ? m1 : m2;
+          } else nxt = sx ? c + sx : c + sy * W;
+          if (enter(nxt, ignoreLake)) return true;
+        }
+        return false;
+      }
+      function trace(src, phase, lakeStart) {
+        path = []; status = 0; runDir = 0; runLen = 0;
+        let cur = src;
+        stamp[src] = curId; own[src] = 0; path.push(src);
+        let px = src % W + 0.5, py = (src - src % W) / W + 0.5;
+        let vx = -(samp(px + 0.5, py) - samp(px - 0.5, py)), vy = -(samp(px, py + 0.5) - samp(px, py - 0.5));
+        let vl = Math.sqrt(vx * vx + vy * vy) || 1; vx /= vl; vy /= vl;
+        let best = Pot[src], since = 0, mode = lakeStart ? 1 : 0, sLen = 0, lakeSteps = lakeStart ? 3 : 0, m1 = 0;
+        for (let guard = 0; guard < 8 * (W + H) && !status; guard++) {
+          if (mode === 0) {
+            let gx = -(samp(px + 0.5, py) - samp(px - 0.5, py)), gy = -(samp(px, py + 0.5) - samp(px, py - 0.5));
+            const gl = Math.sqrt(gx * gx + gy * gy);
+            if (gl < 1e-9) { gx = vx; gy = vy; } else { gx /= gl; gy /= gl; }
+            let m = 2.2 * nMisc.fbm(sLen * 0.085 + phase, phase * 0.37 + 0.5, 2, 0.45);
+            let dx = gx - m * gy, dy = gy + m * gx;
+            if (runLen >= 4) { // lange Geraden aufbrechen: quer zur Laufachse schieben, bergab bevorzugt
+              const k = 0.5 * (runLen - 3);
+              const horiz = runDir === 1 || runDir === -1, gp = horiz ? gy : gx;
+              if (!jogSide) jogSide = gp > 0.15 ? 1 : gp < -0.15 ? -1 : (m >= 0 ? 1 : -1); // Seite bleibt fest
+              const push = jogSide * k * Math.sqrt(dx * dx + dy * dy);
+              if (horiz) dy += push; else dx += push;
+            }
+            const dl2 = Math.sqrt(dx * dx + dy * dy); dx /= dl2; dy /= dl2;
+            vx = vx * 0.66 + dx * 0.34; vy = vy * 0.66 + dy * 0.34;
+            vl = Math.sqrt(vx * vx + vy * vy) || 1; vx /= vl; vy /= vl;
+            const nx = px + vx * 0.4, ny = py + vy * 0.4; sLen += 0.4;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) break;
+            const t = Math.floor(ny) * W + Math.floor(nx);
+            const last = path[path.length - 1];
+            if (t !== last) {
+              if (walkTo(t, false, px, py, nx, ny)) break;
+              const now = path[path.length - 1];
+              if (Pot[now] < best - 1e-7) { best = Pot[now]; since = 0; } else if (++since > 30) mode = 1;
+            }
+            px = nx; py = ny;
+          } else {
+            // Rückfall: ein paar Kacheln der Abflusskette folgen (aus Mulden heraus), dann wieder frei
+            const last = path[path.length - 1];
+            const t = parent[last];
+            if (t < 0) break;
+            if (walkTo(t, lakeSteps > 0)) break;
+            const now = path[path.length - 1];
+            if (lakeSteps > 0) lakeSteps--;
+            if (++m1 >= 6 && lakeSteps === 0) {
+              mode = 0; m1 = 0; best = Pot[now]; since = 0;
+              const pv = path.length >= 2 ? now - path[path.length - 2] : 0;
+              vx = pv === 1 ? 1 : pv === -1 ? -1 : 0; vy = pv === W ? 1 : pv === -W ? -1 : 0;
+              if (!vx && !vy) vx = 1;
+            }
+            px = now % W + 0.5; py = (now - now % W) / W + 0.5;
+          }
+        }
+        return status;
+      }
+      function commit(id) {
+        let h = 1e9;
+        for (let k = 0; k < path.length; k++) {
+          const t = path[k]; river[t] = 1; rid[t] = id;
+          if (E[t] < h) h = E[t];
+          riverH[t] = h; // Höhe fällt entlang des Laufs
+        }
+      }
       const srcs = [];
-      const path = [];
       let made = 0;
       for (let q = 0; q < idx.length && made < target; q++) {
         const s = cand[idx[q]], sx0 = s % W, sy0 = (s - sx0) / W;
+        if (river[s]) continue;
         let ok = true;
-        for (let k = 0; k < srcs.length; k++) { const dx = srcs[k][0] - sx0, dy = srcs[k][1] - sy0; if (dx * dx + dy * dy < 49) { ok = false; break; } }
-        if (!ok) continue;
-        if (nearRiver(river, W, H, sx0, sy0, 3)) continue;
-        path.length = 0;
-        let c = s, prev = -1, merged = false, queued = -1;
-        for (let guard = 0; guard < 4 * N; guard++) {
-          if (c < 0 || ocean[c]) break;
-          if (!lake[c]) {
-            if (river[c]) { merged = true; break; }
-            path.push(c);
-            const x = c % W, y = (c - x) / W;
-            let stop = false;
-            const nbs = [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1];
-            for (let k = 0; k < 4; k++) { const nb = nbs[k]; if (nb < 0 || nb === prev) continue; if (river[nb]) { merged = true; stop = true; } else if (ocean[nb]) stop = true; }
-            if (stop) break;
-          }
-          prev = c;
-          let nx;
-          if (queued >= 0) { nx = queued; queued = -1; }
-          else {
-            nx = parent[c];
-            if (nx >= 0) {
-              const ddx = nx % W - c % W, ddy = ((nx - nx % W) - (c - c % W)) / W;
-              if (ddx && ddy) { const a1 = c + ddx, b1 = c + ddy * W; queued = nx; nx = Fill[a1] <= Fill[b1] ? a1 : b1; }
-            }
-          }
-          c = nx;
+        for (let k = 0; k < srcs.length; k++) { const dx = srcs[k][0] - sx0, dy = srcs[k][1] - sy0; if (dx * dx + dy * dy < 144) { ok = false; break; } }
+        if (!ok || nearRiver(river, W, H, sx0, sy0, 4)) continue;
+        curId++;
+        const st = trace(s, rr.range(0, 200), false);
+        if (globalThis.WG_RIV) globalThis.WG_RIV.push(["try", st, path.length, target]);
+        if (!st) continue;
+        if (path.length < (st === 2 ? Math.round(minLen * 0.6) : minLen)) continue;
+        commit(curId); srcs.push([sx0, sy0]); made++;
+        if (globalThis.WG_RIV) globalThis.WG_RIV.push([sx0, sy0, st, path.length]);
+      }
+      // Seen mit Zufluss (oder große Seen) bekommen einen Abfluss
+      if (made > 0) {
+        const lc = components(lake, W, H);
+        const fed = new Uint8Array(lc.sizes.length);
+        for (let i = 0; i < N; i++) if (river[i]) for (let k = 0; k < 4; k++) { const n = nb4(i, k); if (n >= 0 && lake[n]) fed[lc.lab[n]] = 1; }
+        const done = new Uint8Array(lc.sizes.length);
+        for (let i = 0; i < N; i++) {
+          if (!lake[i]) continue;
+          const L = lc.lab[i]; if (done[L]) continue; done[L] = 1;
+          if (!fed[L] && lc.sizes[L] < 40) continue;
+          let c = i, g = 0;
+          while (c >= 0 && lake[c] && g++ < N) c = parent[c];
+          if (c < 0 || ocean[c] || river[c]) continue;
+          curId++;
+          const st = trace(c, rr.range(0, 200), true);
+          if (st && path.length >= 3) commit(curId);
         }
-        if (path.length < (merged ? 4 : 8)) continue;
-        for (let k = 0; k < path.length; k++) river[path[k]] = 1;
-        srcs.push([sx0, sy0]); made++;
+      }
+    }
+
+    // 2×2-Flussblöcke (an Zusammenflüssen möglich) auflösen: eine Ecke ohne Außenanschluss weg
+    for (let y = 0; y < H - 1; y++) for (let x = 0; x < W - 1; x++) {
+      const q = [y * W + x, y * W + x + 1, (y + 1) * W + x, (y + 1) * W + x + 1];
+      if (!river[q[0]] || !river[q[1]] || !river[q[2]] || !river[q[3]]) continue;
+      for (let k = 0; k < 4; k++) {
+        const c = q[k], cx = c % W; let out = 0;
+        for (const n of [cx > 0 ? c - 1 : -1, cx < W - 1 ? c + 1 : -1, c - W, c + W]) {
+          if (n < 0 || n >= N || q.includes(n)) continue;
+          if (river[n] || ocean[n] || lake[n]) out++;
+        }
+        if (out === 0) { river[c] = 0; break; }
       }
     }
 
@@ -781,23 +929,32 @@
       for (let x = 0; x < W; x++) { const i = y * W + x; rain[i] = wWest * rainW[i] + (1 - wWest) * rainE[i]; }
     }
     const rainB = boxBlur(boxBlur(rain, W, H, 2), W, H, 2);
-    const tShift = (o.temperature - 0.5) * 0.8, mShift = (o.moisture - 0.5) * 0.9;
+    const tShift = (o.temperature - 0.5) * 0.9, mShift = (o.moisture - 0.5) * 0.95;
+    const absT = new Float32Array(N);
     for (let i = 0; i < N; i++) {
       if (!land[i]) continue;
       const qx = QX[i], qy = QY[i];
-      let lat = Math.abs(qy - 0.5 - eqOff) * 2 + 0.1 * nClim.fbm(qx * 1.8, qy * 1.8, 3, 0.5);
+      let lat = Math.abs(qy - 0.5 - eqOff) * 2 + 0.12 * nClim.fbm(qx * 1.8, qy * 1.8, 3, 0.5);
       if (lat < 0) lat = -lat;
-      Tm[i] = 1 - lat + tShift + 0.06 * nClim.fbm(qx * 4 + 50, qy * 4, 2, 0.5) - 0.45 * (E[i] > 0.12 ? E[i] - 0.12 : 0);
+      const alt = 0.45 * (E[i] > 0.12 ? E[i] - 0.12 : 0);
+      Tm[i] = 1 - lat + 0.07 * nClim.fbm(qx * 4 + 50, qy * 4, 2, 0.5) - alt;
+      absT[i] = 1.05 - 1.2 * lat - alt;
       const wp = 3 / (3 + dWet[i]);
       const mn = 0.5 + 0.8 * nClim.fbm(qx * 2.6 + 200, qy * 2.6, 4, 0.5);
       const la = Math.abs(qy - 0.5 - eqOff) * 2;
       let latAdj = 0;
-      if (la < 0.2) latAdj += 0.16 * (1 - la / 0.2);
-      const sd = 1 - Math.abs(la - 0.4) / 0.16; if (sd > 0) latAdj -= 0.16 * sd;
-      Mo[i] = 0.36 * rainB[i] + 0.16 * wp + 0.48 * mn + 0.1 + latAdj + mShift;
+      if (la < 0.12) latAdj += 0.06 * (1 - la / 0.12);
+      const sd = 1 - Math.abs(la - 0.3) / 0.16; if (sd > 0) latAdj -= 0.07 * sd;
+      Mo[i] = 0.34 * rainB[i] + 0.14 * wp + 0.52 * mn + latAdj;
     }
-
-    if (globalThis.WG_DEBUG) { let st=0,sm=0,c=0; const hm=new Float64Array(10), ht=new Float64Array(10); for (let i=0;i<N;i++) if (land[i]) { st+=Tm[i]; sm+=Mo[i]; c++; hm[Math.max(0,Math.min(9,Math.floor(Mo[i]*10)))]++; ht[Math.max(0,Math.min(9,Math.floor(Tm[i]*10)))]++; } globalThis.WG_DEBUG.push({T:st/c,M:sm/c,hm:Array.from(hm).map(v=>Math.round(100*v/c)),ht:Array.from(ht).map(v=>Math.round(100*v/c))}); }
+    // Rang-Normierung: jede Welt hat bei Standardwerten die volle Klimaspanne (kalt bis heiß,
+    // trocken bis nass); die absolute Breite fließt anteilig ein, die Regler verschieben alles.
+    rankNorm(Tm, land); rankNorm(Mo, land);
+    for (let i = 0; i < N; i++) {
+      if (!land[i]) continue;
+      Tm[i] = 0.7 * Tm[i] + 0.3 * absT[i] + tShift;
+      Mo[i] = Mo[i] + mShift;
+    }
     // 9) Biome
     const ter = new Uint8Array(N);
     const forestable = new Uint8Array(N), fscore = new Float32Array(N);
@@ -808,21 +965,21 @@
       const qx = QX[i], qy = QY[i];
       const dith = 0.035 * nVeg.n2(qx * 11, qy * 11);
       const t = Tm[i] + dith, m = Mo[i] - dith * 0.8;
-      if (relief[i] === 1) { ter[i] = t < 0.08 ? TT.SNOWFIELD : TT.HILL; continue; }
+      if (relief[i] === 1) { ter[i] = TT.HILL; continue; }
       let b = classifyBiome(t, m);
       if (b !== TT.SNOWFIELD && b !== TT.DESERT && b !== TT.SAVANNA && !(b === TT.TUNDRA && m < 0.2)) forestable[i] = 1;
       // Sumpf: nass, tief, nahe Wasser
-      if (t >= 0.3 && m > 0.64 && E[i] < 0.24 && dWet[i] <= 4 && nVeg.fbm(qx * 6 + 400, qy * 6, 2, 0.5) > 0.12 - (m - 0.64) * 1.2) { b = TT.SWAMP; forestable[i] = 0; }
+      if (t >= 0.3 && m > 0.74 && E[i] < 0.22 && dWet[i] <= 4 && nVeg.fbm(qx * 6 + 400, qy * 6, 2, 0.5) > 0.16 - (m - 0.74) * 1.2) { b = TT.SWAMP; forestable[i] = 0; }
       ter[i] = b;
-      fscore[i] = 0.5 * m + 0.5 * (0.5 + 0.5 * nVeg.fbm(qx * 3.5 + 700, qy * 3.5, 4, 0.5)) + 0.06 * (3 / (3 + dWet[i]));
+      fscore[i] = 0.25 * m + 0.75 * (0.5 + 0.5 * nVeg.fbm(qx * 3.5 + 700, qy * 3.5, 4, 0.5)) + 0.06 * (3 / (3 + dWet[i]));
     }
     {
-      const fFrac = 0.025 + 0.74 * o.forests;
+      const fFrac = 0.02 + 0.84 * o.forests;
       const thF = quantile(fscore, forestable, 1 - fFrac);
       for (let i = 0; i < N; i++) {
         if (!forestable[i] || fscore[i] < thF) continue;
         const t = Tm[i];
-        ter[i] = t < 0.36 ? TT.TAIGA : (t >= 0.64 && Mo[i] >= 0.45) ? TT.JUNGLE : TT.FOREST;
+        ter[i] = t < 0.33 ? TT.TAIGA : (t >= 0.66 && Mo[i] >= 0.48) ? TT.JUNGLE : TT.FOREST;
       }
     }
     // Blumenwiesen als Flecken
@@ -832,11 +989,20 @@
       if (t < 0.33 || t > 0.78) continue;
       if (nVeg.fbm(QX[i] * 6 + 900, QY[i] * 6, 3, 0.5) > 0.2) ter[i] = TT.FLOWERS;
     }
-    // Schneegipfel
-    for (let i = 0; i < N; i++) {
-      if (ter[i] !== TT.MOUNTAIN) continue;
-      const rn = (R[i] - thM) / (rMax - thM + 1e-6);
-      if (Tm[i] < 0.14 || (rn > 0.6 && Tm[i] < 0.45) || rn > 0.88) ter[i] = TT.SNOW;
+    // Schneegipfel: nur im Inneren des Gebirges (ringsum Gebirge), kompakt
+    {
+      const sc = new Uint8Array(N), mr = new Float32Array(N), mm = new Uint8Array(N);
+      for (let i = 0; i < N; i++) if (ter[i] === TT.MOUNTAIN) { mm[i] = 1; mr[i] = R[i]; }
+      rankNorm(mr, mm);
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x; if (ter[i] !== TT.MOUNTAIN) continue;
+        let inner = true;
+        for (let yy = -1; yy <= 1 && inner; yy++) for (let xx = -1; xx <= 1; xx++) if (ter[i + yy * W + xx] !== TT.MOUNTAIN) { inner = false; break; }
+        if (!inner) continue;
+        if (mr[i] + (0.5 - Tm[i]) * 1.3 > 0.72) sc[i] = 1;
+      }
+      const cc = components(sc, W, H);
+      for (let i = 0; i < N; i++) if (sc[i] && cc.sizes[cc.lab[i]] >= 3) ter[i] = TT.SNOW;
     }
 
     // 10) Aufräumen: Krümel weg
@@ -1035,6 +1201,57 @@
     }
   }
 
+  // Maske glätten: Mehrheitsfilter, kleine Teile weg, kleine Löcher füllen. allow = darf gesetzt werden.
+  function smoothMask(mask, allow, W, H, passes, minPart, maxHole) {
+    for (let p = 0; p < passes; p++) {
+      const src = mask.slice();
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        const c = src[i - W - 1] + src[i - W] + src[i - W + 1] + src[i - 1] + src[i + 1] + src[i + W - 1] + src[i + W] + src[i + W + 1];
+        const c4 = src[i - W] + src[i - 1] + src[i + 1] + src[i + W];
+        if (src[i]) { if (c <= 2 || c4 <= 1) mask[i] = 0; }
+        else if (allow[i] && (c >= 6 || c4 >= 3)) mask[i] = 1;
+      }
+    }
+    let cc = components(mask, W, H);
+    for (let i = 0; i < mask.length; i++) if (mask[i] && cc.sizes[cc.lab[i]] < minPart) mask[i] = 0;
+    const inv = new Uint8Array(mask.length); for (let i = 0; i < mask.length; i++) inv[i] = mask[i] ? 0 : 1;
+    cc = components(inv, W, H);
+    for (let i = 0; i < mask.length; i++) if (inv[i] && allow[i] && !cc.touchBorder[cc.lab[i]] && cc.sizes[cc.lab[i]] <= maxHole) mask[i] = 1;
+  }
+
+  // Relief zu ruhigen Flächen formen: kompakte Gebirge, Hügelvorland ringsum, keine Sprenkel.
+  function shapeRelief(relief, land, W, H, nz, sM, areaScale) {
+    const N = W * H, M = new Uint8Array(N), U = new Uint8Array(N);
+    for (let i = 0; i < N; i++) M[i] = relief[i] === 2 ? 1 : 0;
+    const sa = Math.sqrt(areaScale);
+    smoothMask(M, land, W, H, 2, Math.max(6, Math.round(9 * sa)), 10);
+    // Gebirge nie direkt an der Küste kleben lassen: Küstenkachel → Hügel
+    const dM = distField(M, W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x; if (!land[i]) continue;
+      if (M[i]) { U[i] = 1; continue; }
+      const ring = 1.2 + (0.9 + 0.9 * sM) * (0.5 + 0.5 * nz.n2(x * 0.13 + 41, y * 0.13 + 7));
+      if (relief[i] === 1 || dM[i] <= ring) U[i] = 1;
+    }
+    smoothMask(U, land, W, H, 2, Math.max(8, Math.round(12 * sa)), 14);
+    for (let i = 0; i < N; i++) { if (M[i]) U[i] = 1; relief[i] = !land[i] ? 0 : M[i] ? 2 : U[i] ? 1 : 0; }
+    // Gebirgskacheln, die direkt an Wasser grenzen, werden Hügel (Steilküste als Vorland)
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x; if (relief[i] !== 2) continue;
+      if (!land[i - 1] || !land[i + 1] || !land[i - W] || !land[i + W]) relief[i] = 1;
+    }
+  }
+
+  // Werte unter mask durch ihren Rang (0..1) ersetzen.
+  function rankNorm(vals, mask) {
+    const idx = [];
+    for (let i = 0; i < vals.length; i++) if (mask[i]) idx.push(i);
+    idx.sort((a, b) => vals[a] - vals[b] || a - b);
+    const n = idx.length - 1 || 1;
+    for (let k = 0; k < idx.length; k++) vals[idx[k]] = k / n;
+  }
+
   // Einzelne Biom-Kacheln an die Mehrheit der Nachbarn angleichen.
   function modeFilter(ter, land, W, H, passes) {
     const cnt = new Int16Array(NT);
@@ -1042,13 +1259,13 @@
       const src = ter.slice();
       for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
         const i = y * W + x; if (!land[i]) continue;
-        const t = src[i]; if (t === TT.RIVER) continue;
+        const t = src[i]; if (LUT.rank[t] !== 4) continue; // nur flache Biome; Relief bleibt
         let same = 0;
         for (let yy = -1; yy <= 1; yy++) for (let xx = -1; xx <= 1; xx++) {
           if (!xx && !yy) continue;
           const j = i + yy * W + xx; const u = src[j];
           if (u === t) same++;
-          if (land[j] && u !== TT.RIVER) cnt[u]++;
+          if (land[j] && LUT.rank[u] === 4) cnt[u]++;
         }
         if (same < 2) {
           let best = -1, bc = 0;

@@ -13,7 +13,7 @@
     stoneL: '#d6cfc4', stone: '#a49d95', stoneD: '#716b6c',
     metalL: '#e2e8ef', metal: '#97a3b3', metalD: '#58637a',
     goldL: '#ffe68c', gold: '#f2b632', goldD: '#b2731d',
-    red: '#d9483b', redD: '#962a30',
+    red: '#d9483b', redD: '#962a30', redL: '#ee7a62',
     leafL: '#93d15c', leaf: '#4c9c3f', leafD: '#2c6a38', leafDD: '#1d4630',
     grassL: '#8fcd5f', grass: '#6fb54a', grassD: '#589a3e',
     hillL: '#b7c46a', hill: '#94a450', hillD: '#6f7e3d',
@@ -42,7 +42,7 @@
   var C = {};
   NAMES.forEach(function (n, i) { C[n] = i + 1; });
   // Sonderindizes: Teamfarben (beim Backen ersetzt) und halbdurchsichtiger Schatten.
-  C.T = 250; C.Td = 251; C.Tl = 252; C.shade = 253;
+  C.T = 1000; C.Td = 1001; C.Tl = 1002; C.shade = 1003; C.shadeL = 1004;
 
   // 12 gut unterscheidbare Reichsfarben (bewusst kein reines Grün: das ist die Wiese).
   var TEAM_COLORS = [
@@ -69,15 +69,15 @@
     f: 'leafL', e: 'leaf', E: 'leafD', x: 'leafDD', i: 'grassL', I: 'grass',
     a: 'sand', A: 'sandD', h: 'soil', b: 'glass', B: 'waterD', F: 'fireY', Q: 'fireO',
     p: 'pink', P: 'purple', X: 'plague', N: 'snowD', H: 'hillD',
-    U: 'orc', V: 'orcD', Z: 'orcL'
+    U: 'orc', V: 'orcD', Z: 'orcL', D: 'water', J: 'waterL', C: 'deep', L: 'snowDD'
   };
   var CHAR = {};
   Object.keys(LEGEND).forEach(function (ch) { CHAR[ch] = C[LEGEND[ch]]; });
-  CHAR.T = C.T; CHAR.t = C.Td; CHAR.u = C.Tl; CHAR['#'] = C.shade;
+  CHAR.T = C.T; CHAR.t = C.Td; CHAR.u = C.Tl; CHAR['#'] = C.shade; CHAR['%'] = C.shadeL;
 
   // ---------------------------------------------------------------------------
-  // Raster: Uint8-Indexbild, 0 = durchsichtig.
-  function Grid(w, h) { this.w = w; this.h = h; this.d = new Uint8Array(w * h); }
+  // Raster: Indexbild (Palettenindex), 0 = durchsichtig.
+  function Grid(w, h) { this.w = w; this.h = h; this.d = new Uint16Array(w * h); }
   Grid.prototype.get = function (x, y) {
     return (x < 0 || y < 0 || x >= this.w || y >= this.h) ? 0 : this.d[y * this.w + x];
   };
@@ -150,7 +150,7 @@
   // skip(x, y): optional, dort keine Kontur setzen.
   Grid.prototype.outline = function (c, diag, skip) {
     c = c == null ? C.ink : (typeof c === 'string' ? C[c] : c);
-    var src = this.d, w = this.w, h = this.h, out = new Uint8Array(src);
+    var src = this.d, w = this.w, h = this.h, out = new Uint16Array(src);
     for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
       if (src[y * w + x]) continue;
       var hit = false;
@@ -158,7 +158,7 @@
         var nx = x + NB[k][0], ny = y + NB[k][1];
         if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
           var v = src[ny * w + nx];
-          if (v && v !== C.shade) hit = true;
+          if (v && v !== C.shade && v !== C.shadeL) hit = true;
         }
       }
       if (hit && !(skip && skip(x, y))) out[y * w + x] = c;
@@ -174,7 +174,7 @@
     return g;
   };
   Grid.prototype.hasTeam = function () {
-    for (var i = 0; i < this.d.length; i++) if (this.d[i] >= 250 && this.d[i] <= 252) return true;
+    for (var i = 0; i < this.d.length; i++) if (this.d[i] >= 1000 && this.d[i] <= 1002) return true;
     return false;
   };
 
@@ -213,13 +213,34 @@
 
   // ---------------------------------------------------------------------------
   // Backen
-  var RGBA = new Uint32Array(256);  // Kleinendian ABGR
+  var RGBA = new Uint32Array(1024);  // Kleinendian ABGR
   function rgbaOf(hex, a) {
     var n = parseInt(hex.slice(1), 16);
     return (((a == null ? 255 : a) << 24) | ((n & 255) << 16) | (((n >> 8) & 255) << 8) | ((n >> 16) & 255)) >>> 0;
   }
   NAMES.forEach(function (n, i) { RGBA[i + 1] = rgbaOf(PALETTE[n]); });
   RGBA[C.shade] = (((84) << 24) | (0x2a << 16) | (0x14 << 8) | 0x18) >>> 0; // rgba(24,20,42,.33)
+  RGBA[C.shadeL] = (((46) << 24) | (0x2a << 16) | (0x14 << 8) | 0x18) >>> 0; // leichter Schatten
+
+  // Weitere Farben (z. B. Bodentöne) beim Laden der Motiv-Dateien anmelden; liefert den Index.
+  // Gleiche Farbe = gleicher Index. Muss vor init() geschehen.
+  var HEX = [null];
+  NAMES.forEach(function (n) { HEX.push(PALETTE[n]); });
+  var BY_HEX = {};
+  NAMES.forEach(function (n, i) { if (!BY_HEX[PALETTE[n]]) BY_HEX[PALETTE[n]] = i + 1; });
+  function addColor(name, hex) {
+    hex = hex.toLowerCase();
+    if (name && C[name]) return C[name];
+    var idx = BY_HEX[hex];
+    if (!idx) {
+      idx = HEX.length;
+      if (idx >= 990) throw new Error('Palette voll');
+      HEX.push(hex); BY_HEX[hex] = idx; RGBA[idx] = rgbaOf(hex);
+    }
+    if (name) { C[name] = idx; if (!PALETTE[name]) PALETTE[name] = hex; }
+    return idx;
+  }
+  function hexOf(idx) { return HEX[idx]; }
 
   function teamTable(t) {
     var tab = new Uint32Array(RGBA);
@@ -227,7 +248,7 @@
     tab[C.T] = rgbaOf(tc.main); tab[C.Td] = rgbaOf(tc.dark); tab[C.Tl] = rgbaOf(tc.light);
     return tab;
   }
-  var NEUTRAL = teamTable(10);
+  var NEUTRAL = null; // erst in init(), wenn alle Farben angemeldet sind
 
   // Einfache Regal-Packung; jedes Sprite liegt normal und gespiegelt im Atlas.
   function layout(keys) {
@@ -289,6 +310,7 @@
     var baseKeys = [], teamKeys = [];
     ORDER.forEach(function (k) { (DEFS[k].grid.hasTeam() ? teamKeys : baseKeys).push(k); });
     baseLay = layout(baseKeys); teamLay = layout(teamKeys);
+    NEUTRAL = teamTable(10);
     baseCanvas = bakeAtlas(baseLay, NEUTRAL);
     ORDER.forEach(function (k) {
       var d = DEFS[k], isTeam = teamLay.rects[k] !== undefined, r = (isTeam ? teamLay : baseLay).rects[k];
@@ -377,7 +399,7 @@
     TEAM_COLORS: TEAM_COLORS,
     PALETTE: PALETTE,
     // Werkzeuge für die Motiv-Dateien
-    lib: { Grid: Grid, C: C, CHAR: CHAR, PALETTE: PALETTE, def: def, hash: hash, DEFS: DEFS },
+    lib: { Grid: Grid, C: C, CHAR: CHAR, PALETTE: PALETTE, def: def, hash: hash, DEFS: DEFS, addColor: addColor, hexOf: hexOf, RGBA: RGBA },
     // Hilfe für Werkzeuge/Vorschau
     _atlas: function () { return { base: baseCanvas, team: teamAtlas(0) }; }
   };

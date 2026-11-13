@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wuselwelt – Weltgenerator-Vorschau</title>
+<style>
+  :root { --bg: #1d2230; --panel: #272e40; --ink: #e9ecf3; --mute: #9aa3b8; --acc: #f2c14e; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }
+  header { padding: 10px 16px; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .hint { color: var(--mute); font-size: 12px; }
+  main { display: flex; gap: 16px; padding: 0 16px 16px; align-items: flex-start; flex-wrap: wrap; }
+  #panel { background: var(--panel); border-radius: 8px; padding: 12px; width: 260px; flex: none; }
+  #panel label { display: block; margin: 8px 0 2px; color: var(--mute); font-size: 12px; }
+  #panel .row { display: flex; gap: 6px; align-items: center; }
+  #panel input[type=range] { width: 100%; }
+  #panel select, #panel input[type=text] { width: 100%; box-sizing: border-box; background: #1b2131; color: var(--ink); border: 1px solid #3b445c; border-radius: 4px; padding: 4px 6px; }
+  #panel button { background: #3b445c; color: var(--ink); border: 0; border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+  #panel button:hover { background: #4b5574; }
+  .val { color: var(--acc); font-variant-numeric: tabular-nums; float: right; }
+  .tdesc { color: var(--mute); font-size: 12px; margin-top: 4px; min-height: 32px; }
+  #mapWrap { flex: 1 1 600px; min-width: 300px; }
+  #mapTitle { font-size: 16px; margin: 0 0 6px; }
+  #mapTitle small { color: var(--mute); font-weight: normal; margin-left: 8px; }
+  canvas { image-rendering: pixelated; display: block; }
+  #big { width: 100%; height: auto; border-radius: 6px; background: #000; }
+  #stats { color: var(--mute); font-size: 12px; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  #stats span i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  #gridHead { padding: 4px 16px; display: flex; gap: 12px; align-items: center; }
+  #gridHead h2 { font-size: 15px; margin: 0; }
+  #grid { padding: 0 16px 24px; }
+  .gsec h3 { font-size: 13px; color: var(--mute); margin: 12px 0 6px; font-weight: 600; }
+  .gtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); gap: 8px; }
+  .gtile { background: var(--panel); border-radius: 6px; padding: 4px; cursor: pointer; }
+  .gtile canvas { width: 100%; height: auto; border-radius: 4px; }
+  .gtile div { font-size: 11px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 2px 0; }
+  .gtile:hover { outline: 2px solid var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Wuselwelt · Weltgenerator</h1>
+  <span class="hint">Klick auf eine Welt im Raster lädt sie oben. Einstellungen auch per URL-Hash, z. B. #template=pangaea&amp;seed=42&amp;grid=all</span>
+</header>
+<main>
+  <div id="panel">
+    <label>Seed</label>
+    <div class="row"><input type="text" id="seed"><button id="dice" title="Würfeln">🎲</button></div>
+    <label>Größe</label>
+    <select id="size"></select>
+    <label>Landform</label>
+    <select id="template"></select>
+    <div class="tdesc" id="tdesc"></div>
+    <div id="sliders"></div>
+    <label><input type="checkbox" id="shade" checked> Schattierung</label>
+    <label><input type="checkbox" id="spots" checked> Startplätze zeigen</label>
+    <div class="row" style="margin-top:10px"><button id="reset">Standardwerte</button></div>
+  </div>
+  <div id="mapWrap">
+    <h2 id="mapTitle"></h2>
+    <canvas id="big"></canvas>
+    <div id="stats"></div>
+  </div>
+</main>
+<div id="gridHead">
+  <h2>Zufallswelten</h2>
+  <select id="gridMode">
+    <option value="one">12 Welten der gewählten Vorlage</option>
+    <option value="all">alle Vorlagen, je 12 Welten</option>
+  </select>
+  <button id="regrid">Neu würfeln</button>
+  <span class="hint" id="gridInfo"></span>
+</div>
+<div id="grid"></div>
+
+<script src="../js/core/terrain.js"></script>
+<script src="../js/sim/worldgen.js"></script>
+<script>
+(function () { 'use strict';
+  const G = WW.WorldGen;
+  const $ = id => document.getElementById(id);
+  const SLIDER_NAMES = { land: 'Landanteil', mountains: 'Gebirge', forests: 'Wald', rivers: 'Flüsse',
+    temperature: 'Temperatur', moisture: 'Feuchtigkeit', magic: 'Magie' };
+  const SLIDER_ENDS = { land: ['wenig', 'viel'], mountains: ['flach', 'zerklüftet'], forests: ['kahl', 'dicht'],
+    rivers: ['trocken', 'viele'], temperature: ['eisig', 'heiß'], moisture: ['dürr', 'nass'], magic: ['keine', 'viel'] };
+  const opts = Object.assign({}, G.DEFAULTS, { seed: 'Wuselwelt' });
+  let gridSalt = 1;
+
+  // URL-Hash → Einstellungen
+  const hp = new URLSearchParams(location.hash.slice(1));
+  for (const [k, v] of hp) {
+    if (k in G.DEFAULTS && typeof G.DEFAULTS[k] === 'number' && k !== 'seed') opts[k] = +v;
+    else if (k === 'seed' || k === 'size' || k === 'template') opts[k] = v;
+  }
+  if (hp.get('grid') === 'all') $('gridMode').value = 'all';
+  if (hp.get('salt')) gridSalt = +hp.get('salt');
+
+  for (const s of G.SIZES) $('size').add(new Option(s.name + ' (' + s.w + '×' + s.h + ')', s.key));
+  for (const t of G.TEMPLATES) $('template').add(new Option(t.name, t.key));
+  const sl = $('sliders');
+  for (const k of G.SLIDERS) {
+    const lab = document.createElement('label');
+    lab.innerHTML = SLIDER_NAMES[k] + ' <span class="val" id="v_' + k + '"></span>';
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = '<small>' + SLIDER_ENDS[k][0] + '</small><input type="range" min="0" max="1" step="0.05" id="s_' + k + '"><small>' + SLIDER_ENDS[k][1] + '</small>';
+    sl.appendChild(lab); sl.appendChild(row);
+  }
+  function syncUI() {
+    $('seed').value = opts.seed; $('size').value = opts.size; $('template').value = opts.template;
+    $('tdesc').textContent = (G.TEMPLATES.find(t => t.key === opts.template) || {}).desc || '';
+    for (const k of G.SLIDERS) { $('s_' + k).value = opts[k]; $('v_' + k).textContent = Math.round(opts[k] * 100) + ' %'; }
+  }
+
+  function drawWorld(canvas, world, maxW, maxH, spots) {
+    const img = G.render(world, maxW, maxH, { shade: $('shade').checked, spots });
+    canvas.width = img.w; canvas.height = img.h;
+    canvas.getContext('2d').putImageData(new ImageData(img.rgba, img.w, img.h), 0, 0);
+  }
+
+  let pending = 0;
+  function updateBig() {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => {
+      const t0 = performance.now();
+      const w = G.generate(opts);
+      const t1 = performance.now();
+      drawWorld($('big'), w, w.W * 6, w.H * 6, $('spots').checked);
+      const tpl = G.TEMPLATES.find(t => t.key === w.template);
+      $('mapTitle').innerHTML = '';
+      $('mapTitle').append(w.name);
+      const sm = document.createElement('small');
+      sm.textContent = (tpl ? tpl.name : w.template) + ' · ' + w.W + '×' + w.H + ' · ' + w.startSpots.length + ' Startplätze · ' + (t1 - t0).toFixed(0) + ' ms';
+      $('mapTitle').append(sm);
+      showStats(w);
+    });
+  }
+  function showStats(w) {
+    const cnt = new Array(WW.TERRAIN.length).fill(0); let land = 0;
+    for (const t of w.terrain) { cnt[t]++; if (!WW.TERRAIN_LUT.water[t] || t === WW.T.RIVER) land++; }
+    const st = $('stats'); st.innerHTML = '';
+    const total = document.createElement('span'); total.textContent = 'Land ' + Math.round(100 * land / w.terrain.length) + ' %'; st.append(total);
+    WW.TERRAIN.map(d => [d, cnt[d.id]]).filter(a => a[1] > 0).sort((a, b) => b[1] - a[1]).forEach(([d, c]) => {
+      const s = document.createElement('span');
+      const pct = WW.TERRAIN_LUT.water[d.id] && d.id !== WW.T.RIVER ? (100 * c / w.terrain.length).toFixed(1) + ' % der Karte' : (100 * c / land).toFixed(1) + ' %';
+      s.innerHTML = '<i style="background:' + d.color + '"></i>';
+      s.append(d.name + ' ' + pct);
+      st.append(s);
+    });
+  }
+
+  let gridJob = 0;
+  function buildGrid() {
+    const job = ++gridJob;
+    const grid = $('grid'); grid.innerHTML = '';
+    const mode = $('gridMode').value;
+    const tpls = mode === 'all' ? G.TEMPLATES.filter(t => t.key !== 'random') : [G.TEMPLATES.find(t => t.key === opts.template)];
+    const jobs = [];
+    for (const t of tpls) {
+      const sec = document.createElement('div'); sec.className = 'gsec';
+      const h = document.createElement('h3'); h.textContent = t.name + ' – ' + t.desc; sec.append(h);
+      const tiles = document.createElement('div'); tiles.className = 'gtiles'; sec.append(tiles);
+      grid.append(sec);
+      for (let k = 0; k < 12; k++) {
+        const seed = (gridSalt * 7919 + k * 104729 + G.TEMPLATES.indexOf(t) * 1000003) >>> 0;
+        const o = Object.assign({}, opts, { template: t.key, seed });
+        const tile = document.createElement('div'); tile.className = 'gtile';
+        const c = document.createElement('canvas'); const cap = document.createElement('div');
+        tile.append(c, cap); tiles.append(tile);
+        tile.onclick = () => { Object.assign(opts, { template: t.key, seed: String(seed) }); syncUI(); updateBig(); scrollTo(0, 0); };
+        jobs.push({ o, c, cap });
+      }
+    }
+    let i = 0, ms = 0;
+    const step = () => {
+      if (job !== gridJob) return;
+      const end = performance.now() + 30;
+      while (i < jobs.length && performance.now() < end) {
+        const j = jobs[i++];
+        const t0 = performance.now();
+        const w = G.generate(j.o);
+        ms += performance.now() - t0;
+        drawWorld(j.c, w, w.W * 2, w.H * 2, true);
+        j.cap.textContent = w.name + ' · ' + w.startSpots.length + ' Plätze';
+        j.c.title = 'Seed ' + j.o.seed;
+      }
+      $('gridInfo').textContent = i + ' / ' + jobs.length + ' Welten · Ø ' + (ms / Math.max(1, i)).toFixed(0) + ' ms';
+      if (i < jobs.length) setTimeout(step, 0); else document.body.dataset.gridDone = '1';
+    };
+    document.body.dataset.gridDone = '0';
+    step();
+  }
+
+  // Ereignisse
+  $('seed').addEventListener('input', () => { opts.seed = $('seed').value; updateBig(); });
+  $('dice').onclick = () => { opts.seed = String(Math.floor(Math.random() * 1e9)); syncUI(); updateBig(); };
+  $('size').onchange = () => { opts.size = $('size').value; updateBig(); buildGrid(); };
+  $('template').onchange = () => { opts.template = $('template').value; syncUI(); updateBig(); if ($('gridMode').value === 'one') buildGrid(); };
+  for (const k of G.SLIDERS) {
+    $('s_' + k).addEventListener('input', () => { opts[k] = +$('s_' + k).value; $('v_' + k).textContent = Math.round(opts[k] * 100) + ' %'; updateBig(); });
+    $('s_' + k).addEventListener('change', buildGrid);
+  }
+  $('shade').onchange = () => { updateBig(); buildGrid(); };
+  $('spots').onchange = updateBig;
+  $('reset').onclick = () => { Object.assign(opts, G.DEFAULTS, { seed: opts.seed, size: opts.size, template: opts.template }); syncUI(); updateBig(); buildGrid(); };
+  $('gridMode').onchange = buildGrid;
+  $('regrid').onclick = () => { gridSalt++; buildGrid(); };
+
+  syncUI(); updateBig(); buildGrid();
+})();
+</script>
+</body>
+</html>

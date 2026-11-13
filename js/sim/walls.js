@@ -2,7 +2,9 @@
 // Tore, Türme, Bau-Fortschritt, Ausbau auf Stein/Festung, Stadterweiterung.
 (function (WW) { 'use strict';
 
-  const CORE = { center: 1, house: 1, barracks: 1, market: 1, monument: 1 };
+  // Kerngebäude kommen aus der Tabelle (STRUCT_INFO[type].core)
+  const CORE = {};
+  for (const k in WW.STRUCT_INFO) if (WW.STRUCT_INFO[k].core) CORE[k] = 1;
   const DX4 = [0, 1, 0, -1], DY4 = [-1, 0, 1, 0];
 
   function deforested(t) {
@@ -126,7 +128,7 @@
       return R[y * bw + x] === 1;
     };
     const boundary = new Uint8Array(BN);
-    const tiles = [], inside = [];
+    const tiles = [], inside = [], all = [];
     const walk = WW.TERRAIN_LUT.walk;
     for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
       if (!R[y * bw + x]) continue;
@@ -138,11 +140,12 @@
       const wi = wy * W + wx;
       if (edge) {
         boundary[y * bw + x] = 1;
+        all.push(wi);
         // begehbarer Rand braucht Mauer; Unbegehbares ist natürliche Barriere
         if (walk[st.terrain[wi]] > 0) tiles.push(wi);
       } else inside.push(wi);
     }
-    if (!tiles.length) return { tiles: [], gates: [], towers: [], inside: inside, box: null };
+    if (!tiles.length) return { tiles: [], all: all, gates: [], gateDir: {}, towers: [], inside: inside };
 
     const isB = (wx, wy) => {
       const x = wx - bx0, y = wy - by0;
@@ -191,19 +194,14 @@
       return cnt >= 14;
     }
     const ccx = city.cx, ccy = city.cy;
+    const offs = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5];
     for (let dir = 0; dir < 4; dir++) {
       let done = false;
-      const offs = [0, 1, -1, 2, -2, 3, -3, 4, -4];
       for (const off of offs) {
         if (done) break;
-        // Startspalte/-zeile am 2×2-Zentrum
-        let sx, sy;
-        if (dir === 0) { sx = ccx + (off >= 0 ? off : off + 1) ; sy = ccy; }
-        else if (dir === 2) { sx = ccx + (off >= 0 ? off : off + 1); sy = ccy + 1; }
-        else if (dir === 1) { sx = ccx + 1; sy = ccy + (off >= 0 ? off : off + 1); }
-        else { sx = ccx; sy = ccy + (off >= 0 ? off : off + 1); }
-        let x = sx, y = sy;
-        for (let step = 0; step < 40; step++) {
+        // Strahl vom Zentrum nach außen, seitlich versetzt
+        let x = ccx + (DY4[dir] !== 0 ? off : 0), y = ccy + (DX4[dir] !== 0 ? off : 0);
+        for (let step = 0; step < 60; step++) {
           x += DX4[dir]; y += DY4[dir];
           if (!isR(x, y)) break;
           if (isB(x, y)) {
@@ -258,7 +256,7 @@
     for (const c of cand) {
       if (farFrom(c.x, c.y, towers, 6) && farFrom(c.x, c.y, gates, 2)) towers.push(c.t);
     }
-    return { tiles: tiles, gates: gates, gateDir: gateDir, towers: towers, inside: inside };
+    return { tiles: tiles, all: all, gates: gates, gateDir: gateDir, towers: towers, inside: inside };
   }
 
   function wallStyle(gov, level) {
@@ -276,21 +274,25 @@
     const w = city.wall;
     const style = wallStyle(gov, level);
     const gateSet = new Set(ring.gates), towerSet = new Set(ring.towers);
-    const newSet = new Set(ring.tiles);
+    const newSet = new Set(ring.all);
     // Innenfläche markieren
     for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;
     for (const i of ring.inside) if (st.inRing[i] === -1) st.inRing[i] = city.id;
+    // Felder gehören vor die Mauer
+    for (const i of ring.inside) {
+      const s = sim._structs.get(st.structAt[i]);
+      if (s && s.type === 'field' && s.cityId === city.id) WW.Structs.remove(sim, s);
+    }
     // alte Stücke, die nicht im neuen Ring liegen, werden später abgetragen
     const old = [];
     if (expanding && w.plan) for (const t of w.plan) if (!newSet.has(t)) old.push(t);
-    const planTiles = [];
+    const gaps = [];
     let idx = 0;
     for (const t of ring.tiles) {
       idx++;
       const isGate = gateSet.has(t);
       // Barrikaden haben Lücken
-      if (gov.barricades && !isGate && idx % 6 === 0) continue;
-      planTiles.push(t);
+      if (gov.barricades && !isGate && idx % 7 === 0) { gaps.push(t); continue; }
       const x = t % W, y = (t - x) / W;
       let s = sim._structs.get(st.structAt[t]);
       const wantType = isGate ? 'gate' : ((level >= 2 && towerSet.has(t) && !gov.barricades) ? 'tower' : 'wall');
@@ -312,11 +314,12 @@
       if (ns && level < 2 && towerSet.has(t)) ns.towerSpot = true;
     }
     // Turmplätze merken (für den späteren Ausbau)
-    for (const t of planTiles) {
+    for (const t of ring.tiles) {
       const s = sim._structs.get(st.structAt[t]);
       if (s && towerSet.has(t)) s.towerSpot = true;
     }
-    w.plan = planTiles;
+    w.plan = ring.all.slice();
+    w.gaps = gaps;
     w.gates = ring.gates.slice();
     w.towers = ring.towers.filter(t => newSet.has(t));
     w.old = old;
@@ -340,7 +343,9 @@
     const st = sim.state, w = city.wall;
     if (!w.plan) { w.total = 0; w.built = 0; return; }
     let total = 0, built = 0;
+    const gaps = w.gaps && w.gaps.length ? new Set(w.gaps) : null;
     for (const t of w.plan) {
+      if (gaps && gaps.has(t)) continue;
       const s = sim._structs.get(st.structAt[t]);
       if (!s || s.cityId !== city.id || !WW.Structs.isWallish(s)) {
         if (WW.TERRAIN_LUT.walk[st.terrain[t]] > 0) total++;
@@ -359,7 +364,9 @@
     const k = sim._kingdoms.get(city.kingdomId);
     const gov = WW.GOVERNMENTS[k ? k.gov : 'tribe'];
     const gateSet = new Set(w.gates || []);
+    const gaps = w.gaps && w.gaps.length ? new Set(w.gaps) : null;
     for (const t of w.plan) {
+      if (gaps && gaps.has(t)) continue;
       if (WW.TERRAIN_LUT.walk[st.terrain[t]] <= 0) continue;
       const s = sim._structs.get(st.structAt[t]);
       if (s && s.cityId === city.id && WW.Structs.isWallish(s)) continue;
@@ -370,6 +377,8 @@
       }
       const x = t % W, y = (t - x) / W;
       const lv = w.state === 'upgrading' ? w.target : Math.max(1, w.level || w.target || 1);
+      const tt = st.terrain[t], nt = deforested(tt);
+      if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
       WW.Structs.create(sim, gateSet.has(t) ? 'gate' : 'wall', x, y, city.id, { level: lv, built: false, style: wallStyle(gov, lv) });
     }
   }
@@ -418,9 +427,9 @@
     if (!k) return;
     const gov = WW.GOVERNMENTS[k.gov];
     const vars = { city: city.name, kingdom: k.name };
-    const at = { kingdomId: k.id, cityId: city.id, x: city.cx + 1, y: city.cy + 1 };
+    const at = { kingdomId: k.id, cityId: city.id, x: city.cx + 0.5, y: city.cy + 0.5 };
     if (!w.state || w.state === 'none') {
-      if (city.pop >= gov.wallThreshold && city.centerOk) {
+      if (city.pop >= gov.wallThreshold && city.centerOk && (city.builtHouses || 0) >= 2) {
         if (plan(sim, city, WW.CONFIG.WALL_MARGIN, 1, false)) {
           sim.event(gov.barricades ? 'barricadePlan' : 'wallPlan', vars, at);
         }
@@ -488,7 +497,7 @@
   }
 
   function emptyWall() {
-    return { level: 0, target: 0, total: 0, built: 0, style: 'none', state: 'none', plan: null, gates: [], towers: [], old: [], expansions: 0, plannedYear: 0, inside: 0 };
+    return { level: 0, target: 0, total: 0, built: 0, style: 'none', state: 'none', plan: null, gates: [], towers: [], gaps: [], old: [], expansions: 0, plannedYear: 0, inside: 0 };
   }
 
   WW.Walls = {
