@@ -29,7 +29,7 @@
     WALL_RESERVE_STEP: 4,     // je Stadterweiterung so viel größer
     WALL_EXPAND_YEARS: 5,     // frühestens alle n Jahre erweitern
     TOWER_RANGE: 5.5, TOWER_DMG: 7, TOWER_COOLDOWN: 14,
-    PATH_BUDGET: 14000,       // A*-Knoten pro Tick weltweit
+    PATH_BUDGET: 6000,        // A*-Knoten pro Tick weltweit
     PATH_LIMIT: 2500,         // Knotenlimit je Suche (normal)
     PATH_LIMIT_LONG: 14000,   // Siedler, Heere, Händler
     TERRITORY_BASE: 9,
@@ -104,7 +104,7 @@
       centerName: 'Kommandantur', monumentName: 'Propagandaturm',
       desc: 'Alles ist geregelt, sogar die Freude, und die ist leider gestrichen.',
       pros: ['Sehr viele Soldaten', 'Mauern ab 6 Einw. und +50 % schneller', 'Arbeit +15 % (Zwang)'],
-      cons: ['Zufriedenheit −25', 'Widerstand und Aufstände', 'Keiner mag das Regime'],
+      cons: ['Zufriedenheit −25', 'Widerstand und Aufstände', 'Keiner mag das Regime', 'Keine Märkte, besetzte Städte murren'],
       wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9,
       war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3 },
       looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' }

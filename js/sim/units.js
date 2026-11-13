@@ -428,10 +428,11 @@
       for (const id of city.fields) {
         const f = sim._structs.get(id);
         if (!f || f.dead) continue;
+        if (f.skipUntil && f.skipUntil > st.tick) continue;
         const d = distTo(u, f.x + 0.5, f.y + 0.5) + (f.growth >= 3 ? 0 : 12 + f.growth * 2) + f.workers * 6;
         if (d < bs) { bs = d; best = f; }
       }
-      if (race.fishing && city.hasWater && (!best || best.growth < 3) && sim.rng.chance(0.6)) {
+      if (race.fishing && city.hasWater && (!best || best.growth < 3) && !(u.noFishUntil > st.tick) && sim.rng.chance(0.6)) {
         const i = findResource(sim, u, city, 'water', 9);
         if (i >= 0) {
           const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
@@ -451,8 +452,14 @@
         goal = f.y * W + f.x;
       }
       if (arrived(sim, u, goal)) { u.phase = 2; u.tt = u.carrying ? 16 : 28; return; }
-      const r = goTo(sim, u, goal, { limit: 1200 });
-      if (r === null && u.fails > 2) { u.phase = 0; u.target = -1; u.fails = 0; u.wait = 20; }
+      const r = goTo(sim, u, goal, { limit: 1500 });
+      if (r === null) {
+        // unerreichbares Feld eine Weile meiden (spart Wegsuche)
+        const f = u.task === 'fish' ? null : sim._structs.get(u.target);
+        if (f) f.skipUntil = st.tick + 600 + (f.id % 200);
+        u.phase = 0; u.target = -1; u.fails = 0; u.wait = 20;
+        if (u.task === 'fish') u.noFishUntil = st.tick + 900;
+      }
       return;
     }
     if (u.phase === 2) {

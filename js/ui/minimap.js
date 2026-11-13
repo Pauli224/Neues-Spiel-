@@ -27,7 +27,6 @@
     return window.innerWidth >= 900 && window.innerHeight >= 560;
   };
   Minimap.prototype.toggle = function () {
-    this.user = !(!this.box.hidden);
     this.user = this.box.hidden;
     this.box.hidden = !this.user;
     this.t = 0;
@@ -49,9 +48,11 @@
     const g = this.game, st = g.sim && g.sim.state, R = g.renderer;
     if (!st || !R.mini) return;
     this.t -= dt;
-    const c = this.ctx;
     if (this.t <= 0) {
       this.t = 0.5;
+      if (!this.baseCv) this.baseCv = document.createElement('canvas');
+      this.baseCv.width = this.cv.width; this.baseCv.height = this.cv.height;
+      const c = this.baseCv.getContext('2d');
       c.imageSmoothingEnabled = false;
       c.drawImage(R.mini, 0, 0, st.W * 2, st.H * 2);
       // Gebiete
@@ -70,10 +71,10 @@
         c.fillStyle = '#0a1a21'; c.fillRect(city.cx * 2 - 2, city.cy * 2 - 2, 6, 6);
         c.fillStyle = '#f3ead2'; c.fillRect(city.cx * 2 - 1, city.cy * 2 - 1, 4, 4);
       }
-      this.base = c.getImageData(0, 0, this.cv.width, this.cv.height);
-    } else if (this.base) c.putImageData(this.base, 0, 0);
+    }
+    const c = this.ctx, cam = g.cam;
+    if (this.baseCv) c.drawImage(this.baseCv, 0, 0);
     // Sichtrahmen
-    const cam = g.cam;
     const hw = cam.viewW / 2 / cam.zoom, hh = cam.viewH / 2 / cam.zoom;
     const x0 = (cam.x - hw) / 4, y0 = (cam.y - hh) / 4;
     c.strokeStyle = '#f2b541'; c.lineWidth = 2;

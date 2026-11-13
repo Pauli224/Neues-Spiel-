@@ -1,4 +1,115 @@
-// SCHNITTSTELLEN-DOKU: siehe Block „DOKU“ weiter unten (wird am Ende der Arbeit vervollständigt).
+// =============================================================================
+// Wuselwelt – Simulation (Teil A). DOM-frei, deterministisch (nur WW.RNG, kein Math.random/Date).
+// Schnittstelle ist EINGEFROREN: ab hier nur noch Ergänzungen, keine Umbenennungen.
+// =============================================================================
+//
+// LADEREIHENFOLGE (klassische Skripte, alle mit dem WW-Wrapper):
+//   js/core/terrain.js, js/core/rng.js, js/core/config.js, js/data/names.js, js/data/texts.js,
+//   js/sim/util.js, js/sim/world.js, js/sim/worldgen.js (Agent D, optional), js/sim/path.js,
+//   js/sim/structs.js, js/sim/walls.js, js/sim/cities.js, js/sim/units.js, js/sim/gov.js,
+//   js/sim/diplo.js, js/sim/creatures.js, js/sim/env.js, js/sim/powers.js, js/sim/sim.js
+//
+// ERZEUGEN
+//   const sim = WW.Sim.create(opts)          opts (alle optional):
+//     seed        Zahl oder Text (Standard 1)
+//     world       fertige Welt { W, H, terrain, variant?, height?, startSpots?, name? } (z. B. WW.WorldGen.generate)
+//     size        'small'|'medium'|'large'|'huge'  (nur ohne world; an WW.WorldGen weitergereicht)
+//     width,height  feste Größe (nur ohne world)
+//     worldOpts   weitere Optionen für WW.WorldGen.generate (template, land, …)
+//     populate    Anzahl Startreiche 0..8 (true = 3, false = 0, Standard 3)
+//     races       Liste von Volks-Schlüsseln (zyklisch) – sonst passend zum Gelände gewürfelt
+//     govs        Liste von Regierungs-Schlüsseln (zyklisch) | 'mixed' (verschiedene, nach Volk gewichtet)
+//                 | weglassen = alle starten als 'tribe' und wählen ab Dorfgröße selbst   [ABWEICHUNG Plan 2.1]
+//     animals     false = keine Schafe/Wölfe
+//     laws        { key: bool } Startwerte der Weltgesetze
+//   Ohne world: WW.WorldGen.generate({ seed, size | w,h, ...worldOpts }) falls geladen, sonst WW.SimWorld.generate.
+//   WW.Sim.load(string) -> sim | null (null bei kaputtem/fremdem Spielstand)
+//
+// LAUFEN
+//   sim.tick()            ein fester Schritt; 10 Ticks = 1 s bei 1×; WW.CONFIG.TPY = 240 Ticks = 1 Jahr
+//   sim.serialize()       -> JSON-Text (Felder version, game:'wuselwelt'; Raster Base64)
+//   sim.hash()            -> Hash des Spielstands (Determinismus-Prüfung)            [Ergänzung]
+//   sim.drainDirtyTiles() -> Int32Array Kachel-Indizes (Gelände, Bauwerk, Feuer, Marke, Stil geändert)
+//   sim.drainFx()         -> Array von Effekten (siehe FX), danach leer (max. 600 gepuffert)
+//
+// GOTTESHANDLUNGEN (sim.actions.*; prüfen Eingaben selbst, werfen nie, Rückgabe false/null bei Unsinn)
+//   paintTerrain(x, y, radius, terrainId) -> bool   radius 1 = 1 Kachel, 2 = 3×3, 3 = Ø5 (UI-Pinsel 1/3/5 -> 1/2/3)
+//        Bauwerke auf unpassendem Gelände werden zerstört (Mauer nur, wenn unbegehbar); Leute auf Wasser retten sich/ertrinken
+//   spawnSettlers(x, y, count, govKeyOrNull, raceKey?) -> { kingdomId, cityId } | null
+//        im Gebiet einer Stadt: schließen sich ihr an; sonst neues Reich (Abstand ≥ 12 zu Städten, Suche r ≤ 5),
+//        zu nah: nächste Stadt (≤ 18). govKeyOrNull = null -> 'tribe', wählt selbst; Schlüssel ≠ 'tribe' -> govLocked.
+//        raceKey fehlt -> 'human'.
+//   spawnAnimal(x, y, kind) -> animalId | null      kind aus WW.CREATURES ('sheep', 'wolf')
+//   setGovernment(kingdomId, govKey, { lock: true }) -> bool   (lock Standard true; startet Umbau, siehe unten)
+//   setGovLocked(kingdomId, bool) -> bool
+//   setRelation(kingdomA, kingdomB, 'war'|'peace'|'alliance') -> bool   (Chronik: godWar/godPeace/godAlliance)
+//   strike(x, y, kind) -> bool    kind aus WW.POWERS: lightning, fire, rain, meteor, plague, bless
+//   setLaw(key, bool) -> bool     Schlüssel aus WW.LAW_INFO: govChanges, wars, hunger, aging, disasters (alle Standard an)
+//
+// ABFRAGEN (sim.query.*; null bei nichts)
+//   cityAt(x,y) (Mauerinneres, Gebiet oder Bauwerk), kingdomAt(x,y), unitNear(x,y,r=1.5), animalNear(x,y,r=1.5),
+//   structAt(x,y), city(id), kingdom(id), unit(id), animal(id), struct(id),
+//   kingdomStats(id) -> { pop, cities, soldiers, happiness, atWar }, worldStats() -> { pop, kingdoms, cities, animals, year }
+//
+// ZUSTAND sim.state (reine Daten; Felder mit '_' sind Laufzeit und werden nicht gespeichert)
+//   seed, W, H, tick, year, nextId (gemeinsamer ID-Zähler), worldName, laws{}, pathVersion (zählt bei Sperr-/Geländeänderung),
+//   eventSeq, fireCount, markCount
+//   Raster (Länge W*H, Index y*W+x): terrain Uint8 (WW.TERRAIN-ID), variant Uint8, height Uint8 (0..255),
+//     owner Int32 (Stadt-ID | -1, Gebiet), structAt Int32 (Bauwerk-ID | -1), fire Uint8 (0 = kein Feuer, sonst Restdauer),
+//     inRing Int32 (Stadt-ID, deren Mauer-Innenfläche die Kachel ist | -1), mark Uint8 (1..99 verkohlt, 100..199 Krater; zählt herunter)
+//   structs[]: { id, type, x, y, w, h (aus WW.STRUCT_INFO), cityId (-1 = niemand), level, hp, maxHp, built, progress 0..1,
+//     style (Regierungsschlüssel des Aussehens), restyle (Ziel-Regierung eines laufenden Umbaus | null),
+//     mask (Mauer/Tor/Turm: Nachbarn Bit0 N, Bit1 O, Bit2 S, Bit3 W), mat (Mauer/Tor/Turm: 'palisade'|'stone'|'fortress'|'barricade'),
+//     orient (Tor: 'h' Mauer waagerecht | 'v'), growth 0..3 + gprog (Feld), upgradeTo (Ausbau auf Stufe | 0), paid, workers,
+//     ruinOf (Ruine: Typ des Vorgängers), age (Ruine), towerSpot, skipUntil, siegeT/siegeN, siteYear }
+//     Baustelle = !built; Ausbau = built && upgradeTo; Umbau = built && restyle (Gerüst zeigen). Gebäude sind begehbar,
+//     nur fertige wall/tower sperren, fertige gate sperren Feinde. Ruinen sind 1×1 (große Gebäude hinterlassen mehrere).
+//     [ABWEICHUNG] center hat kein Feld gov mehr: Aussehen über style (gilt für alle Bauwerke).
+//   units[]: { id, x, y (Kachelkoord., Fließkomma; Kachel = floor), dir (-1 links | 1 rechts), role, race, kingdomId, cityId,
+//     age (Jahre), life, hp, maxHp, moving, carrying ('food'|'wood'|'stone'|null), carryAmt, female, name,
+//     bubble { icon, ttl } | null, sick, merc (Söldner), order ({ kind:'march', city, k } | { kind:'home' } | null),
+//     foe, breach, group, site, Pfad-/KI-Felder path, pi, goal, task, phase, tt, target, fails, cd, wait, wtry }
+//   animals[]: { id, kind, x, y, dir, hp, maxHp, moving, tx, wait, foe, cd, age }
+//   cities[]: { id, name, kingdomId, race, cx, cy (MITTLERE Kachel des 3×3-Zentrums; Zentrum liegt bei cx-1, cy-1),
+//     centerId, centerOk, tier (Index in WW.CITY_TIERS), pop, adults, children, housing, stock { food, wood, stone, gold }
+//     (Kommunismus: Kopie des Reichslagers), happiness 0..100, jobs { role: n }, houses, builtHouses, markets,
+//     hasBarracks, hasMarket, hasMonument, hungry, revolt, sick, noSpace, founded, occupiedUntil, prevKingdomId, agitated,
+//     wall { level 0..3 (fertige Stufe), target, total, built, style ('none'|'palisade'|'stone'|'fortress'|'barricade'),
+//            state 'none'|'building'|'done'|'upgrading'|'expanding', plan [Kachel-Indizes des Rings inkl. natürlicher Barrieren],
+//            gates [Indizes], towers [Indizes], gaps [Barrikaden-Lücken], old [abzutragender alter Ring], expansions,
+//            plannedYear, inside (Anzahl Innenkacheln), maxed }, sites[], fields[], drops[] (IDs), … }
+//   kingdoms[]: { id, name, baseName, race, colorIndex 0..11, bannerPattern 0..7, gov, govLocked, leaderId, leaderName,
+//     leaderTitle, leaderTrait ('pious'|'greedy'|'bossy'|'gentle'|'dreamy'|'stern'), cityIds[], capitalId,
+//     relations { [id]: { opinion -100..100, status 'peace'|'war'|'alliance', since, weariness, losses, wars } },
+//     policy { bonus ('bread'|'walls'|'nap'|'trade'|'safety'|null), party, until, plan { focus, goal, until } | null, unrest },
+//     deity (Theokratie), stock (nur Kommunismus: gemeinsames Lager), nextElection, nextPlan, govSince, founded }
+//   events[] (letzte 400): { id (= eventSeq), year, tick, type, text (deutsch), kingdomId, cityId, x, y (-1 = ohne Ort) }
+//
+// EREIGNISTYPEN (WW.Texts.EVENTS hat je Typ mehrere Varianten)
+//   Städte: found, joinCity, firstHouse, tier, famine, settlersLeave, daughter, cityAbandoned, monument, shrine, barracks,
+//     market, repurpose
+//   Mauern: wallPlan, barricadePlan, wallDone, barricadeDone, wallStone, wallStoneDone, wallFortress, wallFortressDone,
+//     wallExpand, wallExpandDone, wallBreach
+//   Regierung: gov, govSet (Spieler), govChoice (selbst gewählt, mit Begründung), evolve, revolution, regimeFall, coup,
+//     strongman, reform, collapse, plenumVote, succession, leaderDeath, throneFeud, election, shamElection, fiveYearPlan,
+//     planResult, miracleHarvest, miracleHeal, sermon, plenum, royalDecree, council, tribeCouncil, propaganda, paranoia
+//   Diplomatie/Krieg: war, holyWar, godWar, peace, godPeace, buyPeace, alliance, godAlliance, allianceEnd, allyJoins,
+//     royalWedding, mobilize, armyMarch, raid, conquest, occupation, conversion, liberation, uprisingLiberation, fallen,
+//     kingdomGone, mercs, revolt, resistance, revoltCrushed, revoltCalm, revoltFizzle, secede, agitation
+//   Kräfte: randomLightning, randomPlague, godLightning, godFire, godRain, godMeteor, godPlague, godBless
+//
+// FX (sim.drainFx): { type, x, y, … }  – Koordinaten in Kacheln (Fließkomma)
+//   arrow {x2,y2}, bolt, meteor, rain {r}, plague {r}, sparkle {r?}, smoke, dust (Bau fertig), hit (Treffer an Bauwerk),
+//   spark (Blitz trifft Bauwerk), poof (Tod), splash (ertrunken), govchange {gov}, restyle {gov} (Umbau eines Bauwerks fertig)
+//
+// REGIERUNGEN (Daten in WW.GOVERNMENTS[key]): Werte wie wallThreshold, wallMax, soldierShare …, dazu
+//   war ('raid'|'knights'|'defend'|'mass'|'agitate'|'holy'|'mercs'|'militia'), build { barracks|market|monument:
+//   { first, per, max }, towerSpacing }, looks { center, wall, house, monument } (Text für UI). WW.govBuildCount(gov, type, pop).
+//   Regierungswechsel = Umbau: Zentrum sofort restyle (Baumeister-Vorrang), danach Mauern/Häuser/Denkmal; unbekannte
+//   Gebäude werden zu Häusern umgewidmet (Markt/Kaserne), Türme ohne Turmrecht zu Mauern. Mauern bleiben dabei dicht.
+// VÖLKER: WW.RACES[key] (speed, hp, strength, lifespan, fertility, yields, wallMul, housingBonus, favTerrain, govPrefs, …)
+// KREATUREN: WW.CREATURES[kind] + Verhalten WW.CreatureAI[ai]; KRÄFTE: WW.POWERS[kind].apply(sim, x, y)
+// =============================================================================
 (function (WW) { 'use strict';
 
   const VERSION = 2;

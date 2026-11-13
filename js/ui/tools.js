@@ -7,7 +7,7 @@
     { id: 'look', name: 'Schauen', icon: 'i_inspect', direct: 'inspect', key: 'Escape' },
     { id: 'land', name: 'Land', icon: 'i_cat_land' },
     { id: 'life', name: 'Leben', icon: 'i_cat_life' },
-    { id: 'rule', name: 'Herrschaft', icon: 'i_cat_rule' },
+    { id: 'rule', name: 'Herrschaft', short: 'Macht', icon: 'i_cat_rule' },
     { id: 'power', name: 'Kräfte', icon: 'i_cat_power' },
     { id: 'world', name: 'Welt', icon: 'i_cat_world' }
   ];

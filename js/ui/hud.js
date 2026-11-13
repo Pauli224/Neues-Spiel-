@@ -38,7 +38,7 @@
     this.catBtns = {};
     for (const c of WW.UI.Tools.CATEGORIES) {
       const b = h('button.cat', { type: 'button', role: 'tab', 'aria-selected': 'false', title: c.name,
-        on: { click: () => this.pickCat(c.id, true) } }, [icon(c.icon, 32), h('span', c.name)]);
+        on: { click: () => this.pickCat(c.id, true) } }, [icon(c.icon, 32), h('span.long', c.name), h('span.short', c.short || c.name)]);
       cr.appendChild(b);
       this.catBtns[c.id] = b;
     }
@@ -115,28 +115,26 @@
     const box = this.$('toolOpts');
     const tool = this.game.tool, o = this.game.opts;
     clear(box);
+    box.classList.remove('lines');
     const chip = (label, ic, on, fn, title, team) => h('button.chip', { type: 'button', 'aria-pressed': on ? 'true' : 'false', title: title || label, on: { click: fn } },
-      [ic ? icon(ic, 24, team) : null, label ? h('span', label) : null]);
+      [ic ? icon(ic, /^u_/.test(ic) ? 30 : 24, team) : null, label ? h('span', label) : null]);
     if (tool.options === 'brush') {
       box.appendChild(h('span.opt-label', 'Pinsel'));
       const g = h('div.opt-group');
       for (const b of WW.UI.Tools.BRUSHES) g.appendChild(chip(b.label, b.icon, o.brush === b.id, () => { o.brush = b.id; this.renderOpts(); }, b.label + ' (' + b.name + ' Kacheln)'));
       box.appendChild(g);
     } else if (tool.options === 'settler') {
-      box.appendChild(h('span.opt-label', 'Volk'));
-      const g = h('div.opt-group');
-      g.appendChild(chip('Passend', 'i_settlers', o.race === 'random', () => { o.race = 'random'; this.renderOpts(); }, 'Volk passend zum Gelände würfeln'));
+      const l1 = h('div.opt-line', [h('span.opt-label', 'Volk')]);
+      l1.appendChild(chip('Passend', 'i_settlers', o.race === 'random', () => { o.race = 'random'; this.renderOpts(); }, 'Volk passend zum Gelände'));
       for (const rk of WW.RACE_KEYS) {
         const r = WW.RACES[rk];
-        g.appendChild(chip(r.name, 'u_' + rk + '_settler_0', o.race === rk, () => { o.race = rk; this.renderOpts(); }, r.name + ': ' + r.desc, 0));
+        l1.appendChild(chip(r.name, 'u_' + rk + '_settler_0', o.race === rk, () => { o.race = rk; this.renderOpts(); }, r.name + ': ' + r.desc, 0));
       }
-      box.appendChild(g);
-      box.appendChild(h('span.opt-break'));
-      box.appendChild(h('span.opt-label', 'Regierung'));
-      const g2 = h('div.opt-group');
-      g2.appendChild(chip('Selbst wählen', 'b_question', !o.gov, () => { o.gov = null; this.renderOpts(); }, 'Startet als Stamm und wählt später selbst'));
-      for (const gk of WW.GOV_KEYS) g2.appendChild(chip(WW.GOVERNMENTS[gk].name, 'i_gov_' + gk, o.gov === gk, () => { o.gov = gk; this.renderOpts(); }, WW.GOVERNMENTS[gk].desc));
-      box.appendChild(g2);
+      const l2 = h('div.opt-line', [h('span.opt-label', 'Regierung')]);
+      l2.appendChild(chip('Selbst wählen', 'b_question', !o.gov, () => { o.gov = null; this.renderOpts(); }, 'Startet als Stamm und wählt später selbst'));
+      for (const gk of WW.GOV_KEYS) l2.appendChild(chip(WW.UI.Tools.get('gov_' + gk).name, 'i_gov_' + gk, o.gov === gk, () => { o.gov = gk; this.renderOpts(); }, WW.GOVERNMENTS[gk].name + ': ' + WW.GOVERNMENTS[gk].desc));
+      box.appendChild(l1); box.appendChild(l2);
+      box.classList.add('lines');
     } else if (tool.kind === 'pair') {
       const first = this.game.pairFirst != null ? this.game.sim.query.kingdom(this.game.pairFirst) : null;
       box.appendChild(h('span.opt-label', first ? 'Erstes Reich:' : 'Schritt 1: erstes Reich antippen'));

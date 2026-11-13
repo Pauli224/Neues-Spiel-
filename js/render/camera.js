@@ -48,7 +48,7 @@
     this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom));
     // Mitte darf bis an den Kartenrand, aber nicht darüber hinaus (kleine Welten: zentriert)
     const hw = this.viewW / 2 / this.zoom, hh = this.viewH / 2 / this.zoom;
-    const mx = Math.min(hw * 0.6, this.worldW / 2), my = Math.min(hh * 0.6, this.worldH / 2);
+    const mx = Math.min(hw * 0.5, 72 / this.zoom + 24), my = Math.min(hh * 0.5, 72 / this.zoom + 24);
     const lx = this.worldW - 2 * hw;
     if (lx < 0) this.x = Math.max(this.worldW / 2 - mx * 0.2, Math.min(this.worldW / 2 + mx * 0.2, this.x));
     else this.x = Math.max(hw - mx, Math.min(this.worldW - hw + mx, this.x));

@@ -420,10 +420,11 @@ function siege(save, withWall) {
   for (let i = 1; i <= 30000; i++) {
     sim.tick();
     if (i % 50 === 0) {
-      if (cb.dead || cb.kingdomId !== b.id) { fell = sim.state.tick - t0; break; }
+      if (cb.dead || cb.kingdomId !== b.id || b.dead) { fell = sim.state.tick - t0; break; }
+      if (a.dead) break;
       const r = a.relations[b.id];
       if (r && r.status !== 'war') sim.actions.setRelation(a.id, b.id, 'war');
-      if (r) { r.weariness = 0; b.relations[a.id].weariness = 0; }   // Belagerung ohne Friedensschluss
+      if (r && b.relations[a.id]) { r.weariness = 0; b.relations[a.id].weariness = 0; }   // Belagerung ohne Friedensschluss
       if (i % 1000 === 0) checkInvariants(sim, 'Belagerung');
     }
   }

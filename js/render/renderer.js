@@ -44,6 +44,8 @@
     this.path = new Uint8Array(W * H);
     this.traffic = new Uint16Array(W * H);
     this.kingTile = new Int16Array(W * H).fill(-1);
+    this.decorSig = new Int16Array(W * H);
+    for (let i = 0; i < W * H; i++) this.decorSig[i] = st.structAt && st.structAt[i] >= 0 ? -2 : st.terrain[i];
     this.groundDirty.clear();
     this.fx.length = 0;
     this.labelCache.clear();
@@ -232,8 +234,12 @@
       g.setTransform(1, 0, 0, 1, -c.cx * CPX, -c.cy * CPX);
       this.drawGroundTile(g, x, y);
       touched.add(c);
+      // Deko-Block nur neu, wenn sich die Deko dieser Kachel ändern kann
+      const sig = st.structAt && st.structAt[i] >= 0 ? -2 : (this.path[i] ? -3 : st.terrain[i]);
+      if (this.decorSig[i] !== sig) { this.decorSig[i] = sig; c._decorTouched = true; }
     }
-    for (const c of touched) c.decorDirty = true;
+    for (const c of touched) c.decorDirty = c.decorDirty || c._decorTouched;
+    for (const c of touched) c._decorTouched = false;
     this.groundDirty.clear();
   };
 
@@ -438,7 +444,7 @@
     if (this.shake > 0) { this.shake -= dt; const a = this.shake * 10 * cam.dpr; ox += Math.round((Math.random() - 0.5) * a); oy += Math.round((Math.random() - 0.5) * a); }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = '#1d4473';
+    ctx.fillStyle = this.bg || (this.bg = S.groundColor(0));
     ctx.fillRect(0, 0, cv.width, cv.height);
 
     const vt = cam.visibleTiles(st.W, st.H, 1);
@@ -711,8 +717,10 @@
     for (const c of st.cities) {
       const k = kings.get(c.kingdomId);
       if (!k) continue;
-      const cs = c._centerStruct;
-      const tx = (c.cx + 0.5) * 8, ty = (c.cy - 1.2) * 8 - 14;
+      const cs = this.structById ? this.structById(c.centerId) : null;
+      let top = cs ? cs.y * 8 - 16 : (c.cy - 1.2) * 8 - 14;
+      if (cs) { const inf = S.info(this.structKey(cs, k.gov)); if (inf) top = (cs.y + cs.h - inf.fh) * 8 + inf.oy - 3; }
+      const tx = cs ? (cs.x + cs.w / 2) * 8 - 4 : (c.cx + 0.5) * 8, ty = top;
       const p = cam.worldToScreen(tx + 4, ty);
       if (p.x < -120 || p.x > cam.viewW + 120 || p.y < -40 || p.y > cam.viewH + 60) continue;
       labels.push({ c: c, k: k, x: p.x, y: p.y });
