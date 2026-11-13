@@ -146,6 +146,23 @@
           { kingdomId: k.id, cityId: pair.a.id, x: pair.a.cx + 0.5, y: pair.a.cy + 0.5 });
       }
     }
+    // Bedrohung: Feinde in der Nähe der Stadt -> Wachen halten Ausschau (sonst sparen sie sich die Feindsuche)
+    for (const c of st.cities) {
+      const kk = sim._kingdoms.get(c.kingdomId);
+      if (!kk || !(c.revolt || sim._hostileWorld)) continue;
+      if (!c.revolt && !atWar(sim, kk.id)) {
+        // ohne Krieg nur Räuber/Wahnsinnige als Bedrohung
+        let any = false;
+        WW.Units.forNear(sim, c.cx + 0.5, c.cy + 0.5, 18, false, (u) => { if (u.role === 'bandit' || (u.wMad && u.wMad > st.tick)) { any = true; return false; } });
+        if (any) c.threat = st.tick + 60;
+        continue;
+      }
+      if (c.revolt) { c.threat = st.tick + 60; continue; }
+      let foes = 0;
+      const r = Math.sqrt((c.wall.inside || 80) / 3.14) + 10;
+      WW.Units.forNear(sim, c.cx + 0.5, c.cy + 0.5, r, false, (u) => { if (u.kingdomId !== c.kingdomId && WW.Path.hostileKingdoms(sim, u.kingdomId, c.kingdomId)) { foes++; return false; } });
+      if (foes) c.threat = st.tick + 60;
+    }
     // Belagerung: viele Feinde vor der Stadt -> niemand geht hinaus (Aushungern)
     for (const c of st.cities) {
       if (!c.wall.plan || c.wall.level < 1) continue;
