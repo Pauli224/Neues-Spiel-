@@ -4,7 +4,7 @@
 (function (WW) { 'use strict';
 
   (WW._spriteBuilders = WW._spriteBuilders || []).push(function (L) {
-    var Grid = L.Grid, C = L.C, def = L.def, hash = L.hash;
+    var Grid = L.Grid, C = L.C, def = L.def, hash = L.hash, S = WW.Sprites;
     var GOVS = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
 
     // ======================================================================
@@ -310,6 +310,376 @@
     for (mk = 0; mk < 16; mk++) def('s_barricade_' + mk, barricade(mk), { group: 'wall' });
 
     // ======================================================================
+    // Mauerstile je Regierung (ab Stufe 2): dieselbe Geometrie, anderes Material und andere Kappe.
+    // Stufe 1 ist für alle die Palisade, Anarchie baut Barrikaden, der Stamm nur Palisaden.
+    var AC = L.addColor;
+    var MAT = {
+      monarchy:  { top: 'stone', topL: 'stoneL', face: 'stone', faceL: 'stoneL', joint: 'stoneD', base: 'stoneD', pat: 'brick', merlon: 1 },
+      democracy: { top: AC(null, '#ecdcae'), topL: AC(null, '#f8ecc8'), face: AC(null, '#e4cf98'), faceL: AC(null, '#f3e3b6'), joint: AC(null, '#c7aa70'), base: AC(null, '#b8975c'), pat: 'ashlar', merlon: 0, dh: -1, coping: AC(null, '#fbf3dc') },
+      fascism:   { top: AC(null, '#8f8f91'), topL: AC(null, '#a7a7a8'), face: AC(null, '#86868a'), faceL: AC(null, '#9e9ea2'), joint: AC(null, '#6c6c72'), base: AC(null, '#58585f'), pat: 'smooth', merlon: 0, dh: 1, wire: 1 },
+      communism: { top: AC(null, '#cbc6b6'), topL: AC(null, '#dcd8ca'), face: AC(null, '#c2bdac'), faceL: AC(null, '#d6d2c4'), joint: AC(null, '#99947f'), base: AC(null, '#86816e'), pat: 'panel', merlon: 0 },
+      theocracy: { top: AC(null, '#f2eee2'), topL: 'white', face: AC(null, '#ebe5d4'), faceL: 'white', joint: AC(null, '#d2c9b2'), base: AC(null, '#bdb39a'), pat: 'ashlar', merlon: 1, cap: 'gold' },
+      republic:  { top: 'red', topL: 'redL', face: 'red', faceL: 'redL', joint: AC(null, '#a5383a'), base: 'redD', pat: 'brick', merlon: 1, cap: 'stoneL' }
+    };
+    var STYLED = ['monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic'];
+    function matFace(m, x, row, hh, merlon) {
+      if (row >= hh - 1) return m.base;
+      var r = row + (merlon ? 0 : 1);
+      if (m.pat === 'brick') {
+        if (r % 3 === 0) return m.joint;
+        if (((x + ((Math.floor(r / 3) & 1) ? 2 : 0)) & 3) === 0) return m.joint;
+      } else if (m.pat === 'ashlar') {
+        if (r % 4 === 0) return m.joint;
+        if (((x + ((Math.floor(r / 4) & 1) ? 3 : 0)) % 6) === 0) return m.joint;
+      } else if (m.pat === 'panel') {
+        if (r % 4 === 0 || x % 4 === 0) return m.joint;
+      } else if (m.pat === 'smooth') {
+        if (row === 1) return m.joint;
+        if (x % 5 === 0) return m.joint;
+      }
+      return x === 0 ? m.faceL : m.face;
+    }
+    function wallCellsS(m, level, mask) {
+      var P = WALL[level], a = P.a, b = P.b;
+      return function (gx, gy) {
+        if (!occ(mask, a, b, gx, gy)) return null;
+        var gxm = ((gx % 8) + 8) % 8, gym = ((gy % 8) + 8) % 8;
+        var edge = rim(mask, a, b, gx, gy);
+        var h = P.h + (m.dh || 0) + (level === 3 ? 1 : 0);
+        var merlon = m.merlon && edge && (((gxm >> 1) + (gym >> 1)) & 1) === 0;
+        if (merlon) h += level === 3 ? 2 : 1;
+        return {
+          h: h,
+          top: function () { return merlon && m.cap ? m.cap : (edge ? (m.coping || m.topL) : m.top); },
+          face: function (x, row, y, hh) { if (row === 0 && m.coping) return m.coping; return matFace(m, x, row, hh, merlon); }
+        };
+      };
+    }
+    function wallHtot(m, level) { return WALL[level].h + (m.dh || 0) + (level === 3 ? 3 : 1) + 2; }
+    // Stacheldraht (Faschismus): Pfosten und Drahtpixel über der Mauerkrone, ohne Kontur
+    function addWire(g, m, level, mask, Htot) {
+      var P = WALL[level], sp = Math.floor((P.a + P.b) / 2), h = P.h + (m.dh || 0) + (level === 3 ? 1 : 0);
+      for (var x = 0; x < 8; x++) if (occ(mask, P.a, P.b, x, sp) && !(x >= P.a && x <= P.b && !(mask & 10))) {
+        var y = sp - h - 2 + Htot;
+        g.set(x, y, (x & 1) ? 'metal' : 'metalD'); if (x % 3 === 0) g.set(x, y + 1, 'metalD');
+      }
+      for (var gy = 0; gy < 8; gy++) if (occ(mask, P.a, P.b, sp, gy) && (mask & 5 || !(mask & 10))) {
+        var yy = gy - h - 2 + Htot;
+        if (!g.get(sp, yy) || g.get(sp, yy) === C.ink) g.set(sp, yy, (gy & 1) ? 'metal' : 'metalD');
+      }
+    }
+    function styledWall(st, level, mask) {
+      var m = MAT[st], Htot = wallHtot(m, level);
+      var g = extrude(wallCellsS(m, level, mask), Htot);
+      if (m.wire) addWire(g, m, level, mask, Htot);
+      return g;
+    }
+    STYLED.forEach(function (st) {
+      for (var lv = 2; lv <= 3; lv++) for (var mk = 0; mk < 16; mk++) def('s_wall_' + st + '_' + lv + '_' + mk, styledWall(st, lv, mk), { group: 'wall' });
+    });
+
+    // Wassertor im Stil: Bogen über dem Fluss
+    function styledWater(st, level, vert) {
+      var m = MAT[st], P = WALL[level], mask = vert ? 5 : 10, base = wallCellsS(m, level, mask), Htot = wallHtot(m, level);
+      var g = extrude(function (gx, gy) {
+        var c = base(gx, gy);
+        if (!c) return null;
+        if (!(gx >= 0 && gx < 8 && gy >= 0 && gy < 8)) return c;
+        if (!vert) {
+          var face0 = c.face;
+          return { h: c.h, top: c.top, face: function (x, row, y, hh) {
+            var fb = hh - row;
+            var arch = x >= 2 && x <= 5 && fb <= (x === 2 || x === 5 ? 2 : 3);
+            if (y === P.b && arch) return fb === 1 ? 'river' : ((x === 3 || x === 4) && fb === 3 ? 'ink' : (x & 1 ? 'metalD' : 'ink'));
+            return face0(x, row, y, hh);
+          } };
+        }
+        if (gy >= 2 && gy <= 5) return { h: c.h, base: 2, top: c.top, face: c.face };
+        return c;
+      }, Htot);
+      if (vert) { var bot = g.h - 1; for (var x = P.a; x <= P.b; x++) if ((x & 1) === 0) { g.set(x, bot - 4, 'metalD'); g.set(x, bot - 3, 'metalD'); } }
+      if (m.wire) addWire(g, m, level, mask, Htot);
+      return g;
+    }
+    STYLED.forEach(function (st) {
+      for (var lv = 2; lv <= 3; lv++) {
+        def('s_wall_' + st + '_' + lv + '_water_h', styledWater(st, lv, false), { group: 'wall' });
+        def('s_wall_' + st + '_' + lv + '_water_v', styledWater(st, lv, true), { group: 'wall' });
+      }
+    });
+
+    // ---------------------------------------------------------------- Tore mit deutlichem Torbogen
+    // _h: Mauer verläuft waagrecht, Durchgang Nord–Süd (Bogen in der Front, offene Torflügel).
+    // _v: Mauer verläuft senkrecht, Durchgang West–Ost (Torhaus als Brücke, unten frei).
+    var PALI = { top: 'woodL', topL: 'woodL', face: 'wood', faceL: 'woodL', joint: 'woodD', base: 'woodD', pat: 'planks', merlon: 0 };
+    function gateFace(m, x, row, hh) {
+      if (m.pat === 'planks') return row >= hh - 1 ? 'woodD' : ((x & 1) ? 'wood' : 'woodL');
+      return matFace(m, x, row, hh, false);
+    }
+    var PATHC = AC(null, '#c9a26b'), PATHD = AC(null, '#a9834f');
+    function gateGeneric(m, st, level, vert) {
+      var P = WALL[level], gh = P.h + (m.dh || 0) + 4 + (level === 3 ? 1 : 0), Htot = gh + 6;
+      var baseCells = m === PALI ? wallCells(1, vert ? 5 : 10) : wallCellsS(m, level, vert ? 5 : 10);
+      var g;
+      if (!vert) {
+        var front = Math.min(7, P.b + 1), back = Math.max(0, P.a - 1);
+        g = extrude(function (gx, gy) {
+          if (gx >= 0 && gx < 8 && gy >= back && gy <= front) {
+            var pier = gx <= 1 || gx >= 6;
+            var hh = gh + (pier ? 1 : 0);
+            return {
+              h: hh,
+              top: function () { return pier ? m.topL : m.top; },
+              face: function (x, row, y, h2) {
+                var fb = h2 - row; // 1 = unterste Zeile
+                if (y === front && x >= 2 && x <= 5) {
+                  var archTop = (x === 2 || x === 5) ? 5 : 6;
+                  if (fb <= archTop) {
+                    if (fb === archTop) return 'ink';
+                    if (fb === 1) return PATHC;
+                    if (x === 2 || x === 5) return fb <= 4 ? 'woodL' : 'plum';   // offene Torflügel
+                    return fb === 2 ? PATHD : (fb >= 5 ? 'ink' : 'plum');
+                  }
+                  if (fb === archTop + 1 && (x === 3 || x === 4)) return m.faceL;
+                }
+                if (y === front && x >= 3 && x <= 4 && fb === h2 - 1) return 'T';
+                return gateFace(m, x, row, h2);
+              }
+            };
+          }
+          return baseCells(gx, gy);
+        }, Htot);
+      } else {
+        var a2 = Math.max(1, P.a - 1), b2 = Math.min(6, P.b + 1);
+        g = extrude(function (gx, gy) {
+          if (gy >= 0 && gy <= 7 && gx >= a2 && gx <= b2) {
+            var open = gy >= 2 && gy <= 5;
+            return {
+              h: gh, base: open ? 5 : 0,
+              top: function (x) { return x === a2 ? m.topL : m.top; },
+              face: function (x, row, y, h2) {
+                if (open && row === h2 - 5 - 1) return 'ink';
+                if (y === 7 && row === 1 && x > a2 && x < b2) return 'T';
+                return gateFace(m, x, row, h2);
+              }
+            };
+          }
+          return baseCells(gx, gy);
+        }, Htot);
+        // Schatten und Weg unter der Brücke
+        var floor = g.h - 1 - 1;
+        for (var yy = 2; yy <= 5; yy++) for (var xx = a2; xx <= b2; xx++) {
+          var Y = g.h - 8 + yy;
+          if (!g.get(xx, Y)) g.set(xx, Y, yy === 2 ? 'shade' : 'shadeL');
+        }
+      }
+      return g;
+    }
+    // Faschismus: Kontrollpunkt mit Schlagbaum und Wachhäuschen statt Torbogen
+    var BOOM = AC(null, '#e8e4dc');
+    function gateCheckpoint(level, vert) {
+      var m = MAT.fascism, P = WALL[level], Htot = wallHtot(m, level) + 4;
+      var base = wallCellsS(m, level, vert ? 5 : 10);
+      var g = extrude(function (gx, gy) {
+        var inT = gx >= 0 && gx < 8 && gy >= 0 && gy < 8;
+        if (!inT) return base(gx, gy);
+        var post = vert ? (gy <= 1 || gy >= 6) : (gx <= 1 || gx >= 6);
+        if (post) { var c = base(gx, gy); if (c) c.h += 2; return c; }
+        return null;
+      }, Htot);
+      var groundY = g.h - 8;
+      if (!vert) {
+        // Schlagbaum quer über den Durchgang, rot-weiß gestreift, 4 px über dem Boden
+        var by = groundY + P.b - 4;
+        for (var x = 1; x <= 6; x++) { g.set(x, by, (x & 1) ? 'red' : BOOM); g.set(x, by + 1, 'ink'); }
+        g.set(1, by - 1, 'ink'); g.set(1, by + 2, 'metalD'); g.set(1, by + 3, 'metalD');
+        // Wachhäuschen links hinten mit Lampe
+        g.set(1, groundY + P.a - 9, 'fireY');
+      } else {
+        var bx = Math.floor((P.a + P.b) / 2);
+        for (var y = 2; y <= 5; y++) { g.set(bx, groundY + y - 4, (y & 1) ? 'red' : BOOM); g.set(bx + 1, groundY + y - 4, 'ink'); }
+        g.set(bx, groundY - 4 + 1, 'ink');
+      }
+      return g;
+    }
+    // Torhäuser von Hand komponiert (12 px breit, ragen 2 px über die Mauerarme):
+    // _h: großer Rundbogen mit offenen Flügeln und Banner; _v: hoher Block im Norden, offener Weg, niedriger Pfosten im Süden.
+    function gateTop(g, m, x0, w, y) {
+      if (m === PALI) { for (var x = x0; x < x0 + w; x++) { g.set(x, y - 1, (x & 1) ? 'woodL' : 'wood'); if (!(x & 1)) g.set(x, y - 2, 'woodL'); } return; }
+      if (m.merlon) { for (x = x0; x < x0 + w; x += 3) g.rect(x, y - 2, 2, 2, m.cap || m.topL); }
+      else if (m.coping) g.hline(x0, y, w, m.coping);
+    }
+    function gateArt(m, level, vert) {
+      var F = level === 1 ? 9 : WALL[level].h + (m.dh || 0) + 4 + (level === 3 ? 1 : 0);
+      var g, x, y, fb;
+      if (!vert) {
+        var D = 6, ts = 3, fs = ts + D, H = fs + F + 1;
+        g = new Grid(12, H);
+        for (y = ts; y < fs; y++) for (x = 0; x < 12; x++) g.set(x, y, x === 0 ? m.topL : (x === 11 ? m.joint : m.top));
+        gateTop(g, m, 0, 12, ts);
+        for (y = 0; y < F; y++) for (x = 0; x < 12; x++) g.set(x, fs + y, gateFace(m, x, y, F));
+        g.vline(0, fs, F, m.faceL); g.vline(2, fs, F, m.joint); g.vline(9, fs, F, m.joint); g.vline(11, fs, F, m.base);
+        var bot = fs + F - 1, AH = { 3: 5, 4: 6, 5: 7, 6: 7, 7: 6, 8: 5 };
+        for (x = 3; x <= 8; x++) for (fb = 1; fb <= AH[x]; fb++) {
+          var c = fb === AH[x] ? 'ink' : (fb === 1 ? PATHC : (fb === 2 ? PATHD : (fb >= AH[x] - 1 ? 'ink' : 'plum')));
+          if ((x === 3 || x === 8) && fb >= 2 && fb < AH[x]) c = x === 3 ? 'woodL' : 'wood';
+          g.set(x, bot - fb + 1, c);
+        }
+        g.set(5, bot - 7, m.faceL); g.set(6, bot - 7, m.faceL);
+        if (F >= 10) { g.rect(5, fs + 1, 2, Math.max(1, F - 9), 'T'); g.vline(6, fs + 1, Math.max(1, F - 9), 'Td'); }
+        else { g.set(5, fs, 'T'); g.set(6, fs, 'Td'); }
+      } else {
+        var HV = F + 9;
+        g = new Grid(12, HV);
+        var G0 = HV - 8; // Bodenzeile von gy = 0
+        // hoher Nordblock gy 0..1
+        for (var gy = 0; gy <= 1; gy++) for (x = 2; x <= 9; x++) g.set(x, G0 + gy - F, x === 2 ? m.topL : m.top);
+        gateTop(g, m, 2, 8, G0 - F);
+        for (y = 0; y < F; y++) for (x = 2; x <= 9; x++) g.set(x, G0 + 1 - F + 1 + y, gateFace(m, x - 2, y, F));
+        g.vline(2, G0 + 2 - F, F, m.faceL); g.vline(9, G0 + 2 - F, F, m.base);
+        g.rect(5, G0 + 3 - F, 2, 3, 'T'); g.vline(6, G0 + 3 - F, 3, 'Td');
+        // offener Durchgang gy 2..5: Schatten des Blocks, Weg, aufgeschlagene Flügel
+        for (x = 2; x <= 9; x++) { g.set(x, G0 + 2, 'shade'); g.set(x, G0 + 3, PATHC); g.set(x, G0 + 4, PATHD); }
+        g.rect(0, G0 + 2, 2, 3, 'woodL'); g.vline(1, G0 + 2, 3, 'woodD');
+        g.rect(10, G0 + 4, 2, 3, 'wood'); g.vline(11, G0 + 4, 3, 'woodD');
+        // niedriger Südpfosten gy 7
+        for (x = 2; x <= 9; x++) { g.set(x, G0 + 5, x === 2 ? m.topL : m.top); g.set(x, G0 + 6, gateFace(m, x - 2, 0, 2)); g.set(x, G0 + 7, m.base); }
+      }
+      return g.pad(1, 1, 1, 1).outline();
+    }
+    // Faschismus: Kontrollpunkt mit Wachhäuschen und Schlagbaum
+    var BOOM = AC(null, '#f0ece4');
+    function gateCheckpoint(level, vert) {
+      var m = MAT.fascism, g, x, y;
+      function block(x0, x1, gy0, gy1, h, G0, win) {
+        for (var gy = gy0; gy <= gy1; gy++) for (var xx = x0; xx <= x1; xx++) g.set(xx, G0 + gy - h, xx === x0 ? m.topL : m.top);
+        for (y = 0; y < h; y++) for (xx = x0; xx <= x1; xx++) g.set(xx, G0 + gy1 - h + 1 + y, y === h - 1 ? m.base : (xx === x0 ? m.faceL : (xx === x1 ? m.joint : m.face)));
+        if (win) { g.hline(x0 + 1, G0 + gy1 - h + 3, x1 - x0 - 1, 'ink'); g.set(x1 - 1, G0 + gy1 - h + 3, 'fireY'); }
+      }
+      g = new Grid(12, 22);
+      var G0 = 22 - 8;
+      if (!vert) {
+        block(0, 3, 1, 6, 9, G0, true);       // Wachhäuschen links
+        block(9, 11, 2, 5, 6, G0, false);     // Pfeiler rechts
+        for (x = 4; x <= 8; x++) { var c = (x >> 1) & 1 ? 'red' : BOOM; g.set(x, G0 + 5 - 4, c); g.set(x, G0 + 5 - 3, c); }
+        g.hline(4, G0 + 5 - 2, 5, 'ink');
+        g.set(2, G0 + 1 - 11, 'fireY'); g.set(1, G0 + 1 - 10, 'metalD'); g.set(2, G0 + 1 - 10, 'metalD');
+      } else {
+        block(2, 9, 0, 2, 9, G0, true);
+        block(3, 8, 6, 7, 4, G0, false);
+        for (y = 3; y <= 5; y++) { var c2 = y & 1 ? 'red' : BOOM; g.set(5, G0 + y - 4, c2); g.set(6, G0 + y - 4, c2); g.set(7, G0 + y - 4, 'ink'); }
+        g.set(5, G0 + 3 - 5, 'red'); g.set(6, G0 + 3 - 5, 'red');
+      }
+      return g.pad(1, 1, 1, 1).outline();
+    }
+    def('s_gate_1_h', gateArt(PALI, 1, false), { group: 'wall' });
+    def('s_gate_1_v', gateArt(PALI, 1, true), { group: 'wall' });
+    STYLED.forEach(function (st) {
+      for (var lv = 2; lv <= 3; lv++) ['h', 'v'].forEach(function (d) {
+        var gg = st === 'fascism' ? gateCheckpoint(lv, d === 'v') : gateArt(MAT[st], lv, d === 'v');
+        def('s_gate_' + st + '_' + lv + '_' + d, gg, { group: 'wall' });
+      });
+    });
+    for (var glv = 2; glv <= 3; glv++) ['h', 'v'].forEach(function (d) { def('s_gate_' + glv + '_' + d, gateArt(MAT.monarchy, glv, d === 'v'), { group: 'wall' }); });
+
+    // ---------------------------------------------------------------- Türme je Stil
+    function towerShaft(m, H, w0, w1) {
+      return extrude(function (gx, gy) {
+        if (gx < w0 || gx > w1 || gy < w0 || gy > w1) return null;
+        return { h: H, top: function () { return m.top; }, face: function (x, row, y, h2) {
+          if (y === w1 && (x === 3 || x === 4) && row === 3) return 'ink';
+          return matFace(m, x - w0, row, h2, false);
+        } };
+      }, H + 14);
+    }
+    function towerS(st, level) {
+      var m = MAT[st], H = (level === 2 ? 10 : 13) + (st === 'democracy' ? -2 : 0) + (st === 'fascism' ? 3 : 0);
+      var w0 = 1, w1 = 6;
+      if (st === 'fascism') { w0 = 2; w1 = 5; }
+      var g = towerShaft(m, H, w0, w1);
+      var out = new Grid(12, g.h); out.blit(g, 2, 0);
+      var top = g.h - 8 - H + w0; // Oberkante vorn (Zeile)
+      var cx = 6; // Mitte in out
+      function merlons(y, x0, x1, col, cap) { for (var x = x0; x <= x1; x++) { out.set(x, y, col); if (((x - x0) & 1) === 0) out.set(x, y - 1, cap || col); } }
+      if (st === 'monarchy') {
+        // Kegeldach in Teamfarbe mit Wimpel
+        var r = new Grid(12, 12);
+        for (var y = 0; y < 9; y++) { var half = 0.5 + y * 0.62; for (var x = 0; x < 12; x++) { var dx = x + 0.5 - 6; if (Math.abs(dx) <= half) r.set(x, y + 1, dx < -1 ? 'Tl' : (dx < 1 ? 'T' : 'Td')); } }
+        r.hline(0, 10, 12, 'Td'); for (x = 1; x < 11; x += 2) r.set(x, 10, 'T');
+        r = r.pad(0, 1, 0, 1).outline();
+        var res = new Grid(12, out.h + 10); res.blit(out, 0, 10); res.blit(r.clone(), 0, top + 10 - 9);
+        res.vline(6, top - 1, 3, 'woodD'); res.paint(7, top - 1, ['TT', 'Tt']);
+        return res;
+      }
+      var res2 = new Grid(12, out.h + 8); res2.blit(out, 0, 8);
+      var T0 = top + 8;
+      if (st === 'democracy') {
+        res2.hline(2, T0, 8, m.coping); res2.hline(1, T0 + 1, 10, m.coping); res2.set(1, T0 + 1, 'ink');
+        res2.vline(6, T0 - 7, 7, 'woodD'); res2.set(6, T0 - 8, 'gold'); res2.paint(7, T0 - 7, ['TTTu', 'TTTT', 'tttt']);
+      } else if (st === 'fascism') {
+        // eckige Wachkanzel, breiter als der Schaft, mit Scheinwerfer
+        var cab = new Grid(10, 6);
+        cab.rect(0, 2, 10, 4, m.face); cab.hline(0, 2, 10, m.topL); cab.hline(1, 4, 8, 'ink'); cab.hline(0, 5, 10, m.base);
+        cab.rect(0, 0, 10, 2, m.top); cab.hline(0, 0, 10, m.topL);
+        cab.set(8, 3, 'fireY'); cab.set(9, 3, 'goldL');
+        cab = cab.pad(1, 1, 1, 1).outline();
+        res2.blit(cab, 0, T0 - 4);
+        res2.set(11, T0 - 1, 'goldL');
+      } else if (st === 'communism') {
+        res2.hline(2, T0, 8, m.topL);
+        res2.rect(3, T0 + 3, 6, 1, 'T');
+        res2.rect(4, T0 - 2, 4, 2, m.face); res2.hline(4, T0 - 2, 4, m.topL);
+        res2.set(3, T0 - 2, 'ink'); res2.set(8, T0 - 2, 'ink'); res2.hline(4, T0 - 3, 4, 'ink');
+      } else if (st === 'theocracy') {
+        var dome = new Grid(10, 7);
+        dome.ellipse(5, 5, 4.6, 4.6, function (x, y, nx, ny) { return y > 5 ? null : (nx + ny < -0.4 ? 'goldL' : (nx > 0.3 ? 'goldD' : 'gold')); });
+        dome.set(5, 0, 'goldL');
+        dome = dome.pad(1, 1, 1, 0).outline();
+        res2.blit(dome, 0, T0 - 6);
+      } else if (st === 'republic') {
+        merlons(T0, 2, 9, m.top, m.cap);
+        res2.vline(6, T0 - 8, 8, 'woodD');
+        res2.paint(7, T0 - 8, ['Tl', 'lT', 'Tl', 'lT']); res2.paint(9, T0 - 8, ['T', 'l', 'T']);
+      }
+      return res2;
+    }
+    STYLED.forEach(function (st) { for (var lv = 2; lv <= 3; lv++) def('s_tower_' + st + '_' + lv, towerS(st, lv), { group: 'wall', ox: -2 }); });
+    // Holz-Ausguck des Stammes (zur Palisade)
+    (function () {
+      var g = new Grid(10, 22);
+      g.vline(2, 8, 13, 'woodD'); g.vline(7, 8, 13, 'woodD'); g.line(2, 18, 7, 12, 'wood'); g.line(2, 12, 7, 18, 'wood');
+      g.rect(0, 7, 10, 2, 'woodL'); g.hline(0, 8, 10, 'woodD');
+      g.rect(1, 4, 8, 3, 'wood'); g.vline(1, 4, 3, 'woodL');
+      for (var j = 0; j < 4; j++) g.hline(4 - j, j + 1, 2 + j * 2, j === 0 ? 'strawL' : 'straw');
+      g.hline(0, 4, 10, 'strawD');
+      g.vline(5, 0, 1, 'woodD'); g.paint(6, 0, ['T']);
+      def('s_tower_tribe', g.pad(1, 1, 1, 0).outline(), { group: 'wall', ox: -2 });
+    })();
+
+    // Schlüssel-Helfer für den Renderer
+    S.wallKey = function (gov, level, mask) {
+      level = level | 0; mask = mask & 15;
+      if (gov === 'anarchy') return 's_barricade_' + mask;
+      if (level <= 1 || gov === 'tribe' || !MAT[gov]) return 's_wall_1_' + mask;
+      return 's_wall_' + gov + '_' + Math.min(3, level) + '_' + mask;
+    };
+    S.waterWallKey = function (gov, level, dir) {
+      dir = dir === 'v' ? 'v' : 'h';
+      if (level <= 1 || !MAT[gov]) return 's_wall_1_water_' + dir;
+      return 's_wall_' + gov + '_' + Math.min(3, level) + '_water_' + dir;
+    };
+    S.gateKey = function (gov, level, dir) {
+      dir = dir === 'v' ? 'v' : 'h';
+      if (level <= 1 || !MAT[gov]) return 's_gate_1_' + dir;
+      return 's_gate_' + gov + '_' + Math.min(3, level) + '_' + dir;
+    };
+    S.towerKey = function (gov, level) {
+      if (gov === 'anarchy') return null;
+      if (gov === 'tribe' || !MAT[gov] || level <= 1) return 's_tower_tribe';
+      return 's_tower_' + gov + '_' + Math.min(3, Math.max(2, level | 0));
+    };
+
+    // ======================================================================
     // Gebäude. Maße nach Grundfläche: Haus/Kaserne/Markt/Holzfäller/Steinbruch 2×2 (16×16 px),
     // Zentrum 3×3 (24×24 px). Jedes Gebäude wird innen (Grundfläche − 2 px) gezeichnet und bekommt
     // danach 1 px dunkle Kontur, steht also bündig auf der Grundfläche und ragt nach oben hinaus.
@@ -519,6 +889,221 @@
     win(g, 2, 22);
     g.set(3, 0, 'gold');
     defB('s_house_3_b', finishB(g), 2);
+
+    // ---------------------------------------------------------------- Hausfamilien je Regierung
+    // rustic (Stamm a/b, Anarchie c/d), timber (Monarchie, Theokratie), town (Demokratie,
+    // Handelsrepublik), block (Faschismus, Kommunismus); je Stufe 1..3. Alles 2×2.
+    // Die alten Schlüssel s_house_<1..3>_<a|b> bleiben als Fachwerk-Häuser erhalten.
+    function paint(gr, x, y, w, h, c, cd, cl) {
+      gr.rect(x, y, w, h, c); if (cl) gr.vline(x, y, h, cl); if (cd) { gr.vline(x + w - 1, y, h, cd); gr.hline(x, y + h - 1, w, cd); }
+    }
+    function roofFlat(gr, x, y, w, h, top, edge, light) {
+      gr.rect(x, y, w, h, top); gr.hline(x, y, w, light); gr.hline(x, y + h - 1, w, edge); gr.vline(x + w - 1, y, h, edge);
+    }
+    var PASTEL = [
+      [AC(null, '#f6cfae'), AC(null, '#d9a984'), AC(null, '#fde4cc')],
+      [AC(null, '#c4e4c9'), AC(null, '#97c29f'), AC(null, '#e0f4e2')],
+      [AC(null, '#cad8f4'), AC(null, '#9eb0d8'), AC(null, '#e4ecfc')],
+      [AC(null, '#f6e6a4'), AC(null, '#d6c27a'), AC(null, '#fff4c8')],
+      [AC(null, '#efc6dc'), AC(null, '#cc9ab6'), AC(null, '#fadfee')]
+    ];
+    var CONC = [AC(null, '#9b9b9e'), AC(null, '#77777c'), AC(null, '#b2b2b4')];   // Faschismus-Block
+    var PANEL = [AC(null, '#d4cfbf'), AC(null, '#a9a491'), AC(null, '#e4e0d4')];  // Plattenbau
+    var RF = [AC(null, '#8c8c90'), AC(null, '#6a6a70'), AC(null, '#a6a6a8')];      // Flachdach
+    function hname(fam, lv, v) { return 's_house_' + fam + '_' + lv + '_' + v; }
+
+    // ---- rustic a/b: Stroh (Stamm)
+    function strawHut(w, wallH, roofH, round) {
+      var gr = new Grid(14, roofH + wallH + 3), x0 = Math.floor((14 - w) / 2);
+      if (round) {
+        for (var j = 0; j < roofH; j++) { var hw = 0.8 + j * (w / 2 + 1) / roofH; for (var i = 0; i < 14; i++) { var dx = i + 0.5 - 7; if (Math.abs(dx) <= hw) gr.set(i, j + 1, dx < -hw * 0.45 ? 'strawL' : (dx > hw * 0.5 ? 'strawD' : ((i * 5 + j * 2) % 7 === 0 ? 'strawD' : 'straw'))); } }
+        gr.set(6, 0, 'woodD'); gr.set(7, 0, 'woodD');
+      } else roofThatch(gr, x0 - 1, 2, w + 2, roofH);
+      var wy = roofH + 2;
+      wallPlanks(gr, x0, wy, w, wallH);
+      eaveShadow(gr, x0, wy, w, 'woodD');
+      return { g: gr, wy: wy, x0: x0 };
+    }
+    var r;
+    r = strawHut(10, 6, 8, false); door(r.g, 6, r.wy + 2, 4, 'T'); win(r.g, 3, r.wy + 2); r.g.paint(11, r.wy + 3, ['.vw', 'vwW']);
+    defB(hname('rustic', 1, 'a'), finishB(r.g), 2);
+    r = strawHut(10, 6, 10, true); r.g.rect(6, r.wy + 2, 2, 4, 'plum'); r.g.rect(6, r.wy + 2, 2, 2, 'T'); r.g.paint(11, r.wy + 3, ['cY', 'YY']);
+    defB(hname('rustic', 1, 'b'), finishB(r.g), 2);
+    r = strawHut(12, 7, 10, false); door(r.g, 6, r.wy + 3, 4, 'T'); win(r.g, 2, r.wy + 2); win(r.g, 10, r.wy + 2);
+    r.g.line(1, 0, 4, 3, 'woodD'); r.g.line(4, 0, 1, 3, 'woodD'); r.g.line(9, 0, 12, 3, 'woodD'); r.g.line(12, 0, 9, 3, 'woodD');
+    defB(hname('rustic', 2, 'a'), finishB(r.g), 2);
+    r = strawHut(12, 7, 12, true); r.g.rect(6, r.wy + 3, 2, 4, 'plum'); r.g.rect(6, r.wy + 3, 2, 2, 'T'); win(r.g, 3, r.wy + 2); win(r.g, 10, r.wy + 2);
+    r.g.hline(1, r.wy + 6, 12, 'stone'); r.g.vline(1, r.wy, 7, 'stone');
+    defB(hname('rustic', 2, 'b'), finishB(r.g), 2);
+    // Stufe 3: Langhaus mit Steinsockel bzw. zwei Rundhütten
+    g = new Grid(14, 22);
+    roofThatch(g, 0, 3, 14, 11);
+    g.line(0, 0, 4, 4, 'woodD'); g.line(4, 0, 0, 4, 'woodD'); g.line(9, 0, 13, 4, 'woodD'); g.line(13, 0, 9, 4, 'woodD');
+    wallPlanks(g, 1, 14, 12, 8); eaveShadow(g, 1, 14, 12, 'woodD');
+    g.hline(1, 20, 12, 'stone'); g.hline(1, 21, 12, 'stoneD');
+    door(g, 6, 16, 5, 'T'); win(g, 2, 16); win(g, 10, 16); g.set(6, 13, 'cream'); g.set(7, 13, 'cream');
+    defB(hname('rustic', 3, 'a'), finishB(g), 2);
+    g = new Grid(14, 21);
+    [[0, 4, 8, 9], [6, 0, 8, 12]].forEach(function (h) {
+      var x0 = h[0], y0 = h[1], w = h[2], rh = h[3];
+      for (var j = 0; j < rh; j++) { var hw = 0.6 + j * (w / 2 + 0.6) / rh; for (var i = 0; i < w + 2; i++) { var dx = i + 0.5 - (w + 2) / 2; if (Math.abs(dx) <= hw) g.set(x0 + i - 1, y0 + j, dx < -hw * 0.4 ? 'strawL' : (dx > hw * 0.5 ? 'strawD' : 'straw')); } }
+      wallPlanks(g, x0, y0 + rh, w, 21 - y0 - rh); eaveShadow(g, x0, y0 + rh, w, 'woodD');
+    });
+    g.rect(2, 17, 2, 4, 'plum'); g.rect(9, 16, 2, 5, 'plum'); g.rect(9, 16, 2, 2, 'T'); win(g, 11, 14);
+    defB(hname('rustic', 3, 'b'), finishB(g), 2);
+
+    // ---- rustic c/d: Flickenhütten und Bauwagen (Anarchie)
+    var PATCH = ['red', 'purple', 'straw', 'glass', 'pink', 'leafL', 'fireO', 'Tl', 'T'];
+    function patchWall(gr, x, y, w, h, seed) {
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var pi = (Math.floor((i + seed) / 3) * 3 + Math.floor((j + (i > w / 2 ? 1 : 0)) / 3) + seed) % 5;
+        gr.set(x + i, y + j, ['woodL', 'cream', 'sandL', 'wood', 'woodL'][pi]);
+      }
+      gr.vline(x + w - 1, y, h, 'woodD'); gr.hline(x, y + h - 1, w, 'woodD');
+      gr.set(x + 1 + seed % 3, y + 1, PATCH[seed % PATCH.length]); gr.set(x + w - 3, y + h - 3, PATCH[(seed + 3) % PATCH.length]);
+    }
+    function patchRoof(gr, x, y, w, h, seed) {
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var c = PATCH[(Math.floor(i / 3) + Math.floor(j / 2) * 2 + seed) % PATCH.length];
+        if (j === h - 1) c = 'woodD';
+        gr.set(x + i, y + j + Math.floor(i / 6), c);
+      }
+    }
+    function caravan(gr, x, y, w, col, colD, seed) {
+      // runder Bauwagen auf Rädern
+      gr.rect(x, y + 2, w, 7, col); gr.hline(x + 1, y + 1, w - 2, col); gr.hline(x + 2, y, w - 4, 'woodL');
+      gr.hline(x + 1, y + 1, w - 2, 'woodL'); gr.vline(x + w - 1, y + 2, 7, colD); gr.hline(x, y + 8, w, colD);
+      gr.rect(x + 2, y + 3, 2, 2, 'glass'); gr.set(x + 2, y + 3, 'white'); gr.rect(x + w - 4, y + 3, 2, 4, 'woodD');
+      gr.set(x + 5, y + 6, 'fireY'); gr.set(x + 6, y + 5, 'pink');
+      gr.paint(x + 1, y + 9, ['oWo']); gr.paint(x + w - 4, y + 9, ['oWo']);
+      gr.vline(x + 3, y - 3, 3, 'metalD'); gr.set(x + 3, y - 4, 'stone');
+    }
+    g = new Grid(14, 17); patchRoof(g, 1, 4, 12, 5, 1); patchWall(g, 2, 9, 10, 7, 1); g.rect(6, 11, 2, 5, 'woodD'); g.set(3, 3, 'woodD'); g.vline(12, 1, 4, 'stoneD');
+    defB(hname('rustic', 1, 'c'), finishB(g), 2);
+    g = new Grid(14, 15); caravan(g, 1, 4, 12, 'leafL', 'leaf', 0);
+    defB(hname('rustic', 1, 'd'), finishB(g), 2);
+    g = new Grid(14, 20); patchRoof(g, 0, 4, 14, 7, 2); patchWall(g, 1, 11, 12, 9, 2); g.rect(6, 14, 2, 6, 'woodD'); win(g, 2, 13); win(g, 10, 13);
+    g.paint(0, 1, ['..r.k.p.b.f.']); g.vline(11, 0, 5, 'stoneD');
+    defB(hname('rustic', 2, 'c'), finishB(g), 2);
+    g = new Grid(14, 17); caravan(g, 0, 6, 13, 'pink', 'redD', 1); g.paint(9, 2, ['.ff', 'fef', '.W.']);
+    defB(hname('rustic', 2, 'd'), finishB(g), 2);
+    g = new Grid(14, 25); patchRoof(g, 1, 2, 12, 5, 3); patchWall(g, 2, 7, 10, 7, 4); patchRoof(g, 0, 12, 14, 3, 5); patchWall(g, 1, 15, 12, 10, 3);
+    win(g, 4, 9); g.rect(6, 19, 2, 6, 'woodD'); win(g, 2, 17); win(g, 10, 17); g.line(12, 15, 13, 24, 'woodD');
+    defB(hname('rustic', 3, 'c'), finishB(g), 2);
+    g = new Grid(14, 24); caravan(g, 0, 13, 13, 'glass', 'waterD', 2); caravan(g, 1, 2, 11, 'fireY', 'gold', 3); g.vline(12, 10, 3, 'woodD');
+    defB(hname('rustic', 3, 'd'), finishB(g), 2);
+
+    // ---- timber: Fachwerk mit Teamdach (Monarchie, Theokratie)
+    g = new Grid(14, 19); roofSide(g, 1, 3, 12, 9, TR, 3); chimney(g, 9, 0, 4); roofSide(g, 1, 3, 12, 9, TR, 3);
+    wallPlaster(g, 2, 12, 10, 7); eaveShadow(g, 2, 12, 10, 'woodD'); door(g, 6, 14, 5); win(g, 3, 14);
+    defB(hname('timber', 1, 'a'), finishB(g), 2);
+    g = new Grid(14, 19); roofFront(g, 2, 2, 10, 11, TR, 5, function (x, y) { return (x === 7 || y === 12) ? 'woodD' : 'cream'; });
+    g.set(6, 10, 'glass'); g.set(7, 10, 'glass');
+    wallPlaster(g, 2, 13, 10, 6); eaveShadow(g, 2, 13, 10, 'woodD'); door(g, 6, 14, 5); win(g, 3, 14); win(g, 9, 14);
+    defB(hname('timber', 1, 'b'), finishB(g), 2);
+    // Stufe 2 und 3 = die bisherigen Häuser
+    ['2_a', '2_b', '3_a', '3_b'].forEach(function (k) { var d = L.DEFS['s_house_' + k]; def('s_house_timber_' + k, d.grid, { group: 'build', fw: 2, fh: 2, ox: 0 }); });
+    ['1_a', '1_b'].forEach(function (k) { var d = L.DEFS['s_house_timber_' + k]; def('s_house_' + k, d.grid, { group: 'build', fw: 2, fh: 2, ox: 0 }); });
+
+    // ---- town: bunte Bürgerhäuser (a) und Giebelhäuser (b) (Demokratie, Handelsrepublik)
+    function townA(lv) {
+      var P = PASTEL[[0, 1, 2][lv - 1]], stories = lv, wallH = 2 + stories * 5, gr = new Grid(14, 12 + wallH);
+      roofSide(gr, 0, 2, 14, 10, TR, 3);
+      if (lv >= 2) chimney(gr, 2, 0, 5);
+      if (lv === 3) { gr.set(9, 4, 'glass'); gr.set(10, 4, 'glass'); gr.hline(8, 3, 4, 'Td'); }
+      paint(gr, 1, 12, 12, wallH, P[0], P[1], P[2]);
+      eaveShadow(gr, 1, 12, 12, P[1]);
+      for (var s = 0; s < stories; s++) {
+        var wy = 13 + s * 5;
+        if (s === stories - 1) { door(gr, 6, wy + 1, 5, 'woodD'); win(gr, 2, wy + 1); win(gr, 10, wy + 1); gr.hline(5, wy, 4, 'T'); }
+        else { win(gr, 2, wy + 1); win(gr, 6, wy + 1); win(gr, 10, wy + 1); gr.hline(1, wy + 4, 12, P[2]); }
+      }
+      return gr;
+    }
+    function townB(lv) {
+      // schmales hohes Giebelhaus aus Backstein mit Treppengiebel
+      var stories = lv + 1, bodyH = stories * 5, gr = new Grid(14, bodyH + 10);
+      var cols = lv === 2 ? ['redL', 'red', 'redD', 'redD'] : [PASTEL[3][2], PASTEL[3][0], PASTEL[3][1], PASTEL[3][1]];
+      if (lv === 3) cols = ['redL', 'red', 'redD', 'redD'];
+      for (var j = 0; j < 10; j++) {
+        var inset = Math.max(0, Math.floor((9 - j) / 2) * 1);
+        for (var i = 1 + inset; i < 13 - inset; i++) gr.set(i, j, i === 1 + inset ? cols[0] : (i === 12 - inset ? cols[2] : cols[1]));
+        if ((j & 1) === 0 && inset > 0) { gr.set(1 + inset, j, 'stoneL'); gr.set(12 - inset, j, 'stoneL'); }
+      }
+      gr.rect(6, 3, 2, 2, 'glass'); gr.set(6, 3, 'white'); gr.hline(5, 2, 4, 'T');
+      wallBrick(gr, 1, 10, 12, bodyH, cols, 0);
+      for (var s = 0; s < stories; s++) {
+        var wy = 11 + s * 5;
+        if (s === stories - 1) { door(gr, 6, wy, 5, 'T'); win(gr, 2, wy); win(gr, 10, wy); }
+        else { win(gr, 2, wy, 2, 3); win(gr, 6, wy, 2, 3); win(gr, 10, wy, 2, 3); }
+      }
+      return gr;
+    }
+    // Stufe 1: kleine Varianten
+    g = new Grid(14, 18); roofSide(g, 1, 2, 12, 9, TR, 3); paint(g, 2, 11, 10, 7, PASTEL[4][0], PASTEL[4][1], PASTEL[4][2]); eaveShadow(g, 2, 11, 10, PASTEL[4][1]);
+    door(g, 6, 13, 5, 'woodD'); win(g, 3, 13); win(g, 9, 13); g.paint(12, 15, ['e', 'E']);
+    defB(hname('town', 1, 'a'), finishB(g), 2);
+    g = new Grid(14, 20);
+    roofFront(g, 3, 1, 8, 11, TR, 6, function (x, y) { return PASTEL[3][0]; });
+    g.set(6, 8, 'glass'); g.set(7, 8, 'glass');
+    paint(g, 3, 12, 8, 8, PASTEL[3][0], PASTEL[3][1], PASTEL[3][2]); eaveShadow(g, 3, 12, 8, PASTEL[3][1]);
+    door(g, 6, 15, 5, 'T'); win(g, 4, 13);
+    defB(hname('town', 1, 'b'), finishB(g), 2);
+    defB(hname('town', 2, 'a'), finishB(townA(2)), 2);
+    defB(hname('town', 2, 'b'), finishB(townB(2)), 2);
+    defB(hname('town', 3, 'a'), finishB(townA(3)), 2);
+    defB(hname('town', 3, 'b'), finishB(townB(3)), 2);
+
+    // ---- block: einheitliche Blöcke (a, Faschismus) und Plattenbauten (b, Kommunismus)
+    function blockA(lv) {
+      var stories = lv, wallH = 2 + stories * 5, gr = new Grid(14, 9 + wallH);
+      roofFlat(gr, 0, 2, 14, 7, RF[0], RF[1], RF[2]);
+      gr.rect(3, 4, 2, 2, RF[1]); gr.set(10, 5, RF[1]);
+      paint(gr, 0, 9, 14, wallH, CONC[0], CONC[1], CONC[2]);
+      gr.hline(0, 9, 14, CONC[1]);
+      for (var s = 0; s < stories; s++) {
+        var wy = 10 + s * 5;
+        for (var x = 2; x < 12; x += 3) { gr.vline(x, wy + 1, 3, 'ink'); }
+        if (s === stories - 1) { gr.rect(6, wy + 1, 2, 5, 'ink'); gr.vline(6, wy + 1, 5, 'metalD'); }
+      }
+      gr.rect(12, 10, 1, 4, 'T'); gr.set(12, 14, 'Td');
+      return gr;
+    }
+    function blockB(lv) {
+      var stories = lv + 1, wallH = 1 + stories * 4, gr = new Grid(14, 8 + wallH);
+      roofFlat(gr, 0, 2, 14, 6, RF[2], RF[1], 'white');
+      gr.rect(2, 3, 3, 2, RF[0]);
+      paint(gr, 0, 8, 14, wallH, PANEL[0], PANEL[1], PANEL[2]);
+      for (var s = 0; s < stories; s++) {
+        var wy = 8 + s * 4;
+        gr.hline(0, wy, 14, PANEL[1]);
+        for (var x = 1; x < 13; x += 3) { gr.rect(x + 1, wy + 1, 2, 2, 'glass'); gr.set(x + 1, wy + 2, 'waterD'); }
+        gr.vline(0, wy, 4, PANEL[2]);
+      }
+      gr.rect(6, 8 + wallH - 4, 2, 3, 'woodD');
+      gr.rect(3, 8 + wallH - 4, 1, 3, 'T');
+      return gr;
+    }
+    g = new Grid(14, 15); roofFlat(g, 1, 2, 12, 5, RF[0], RF[1], RF[2]); paint(g, 1, 7, 12, 8, CONC[0], CONC[1], CONC[2]); g.hline(1, 7, 12, CONC[1]);
+    g.vline(3, 9, 3, 'ink'); g.vline(10, 9, 3, 'ink'); g.rect(6, 10, 2, 4, 'ink'); g.rect(1, 2, 12, 1, RF[2]); g.set(11, 8, 'T'); g.set(11, 9, 'T');
+    defB(hname('block', 1, 'a'), finishB(g), 2);
+    g = new Grid(14, 15); roofFlat(g, 1, 2, 12, 5, RF[2], RF[1], 'white'); paint(g, 1, 7, 12, 8, PANEL[0], PANEL[1], PANEL[2]); g.hline(1, 7, 12, PANEL[1]); g.hline(1, 11, 12, PANEL[1]);
+    g.rect(3, 8, 2, 2, 'glass'); g.rect(9, 8, 2, 2, 'glass'); g.rect(6, 11, 2, 3, 'woodD'); g.rect(3, 12, 2, 1, 'T');
+    defB(hname('block', 1, 'b'), finishB(g), 2);
+    defB(hname('block', 2, 'a'), finishB(blockA(2)), 2);
+    defB(hname('block', 2, 'b'), finishB(blockB(2)), 2);
+    defB(hname('block', 3, 'a'), finishB(blockA(3)), 2);
+    defB(hname('block', 3, 'b'), finishB(blockB(3)), 2);
+
+    var HOUSE_FAM = { tribe: ['rustic', 'a', 'b'], anarchy: ['rustic', 'c', 'd'], monarchy: ['timber', 'a', 'b'], theocracy: ['timber', 'b', 'a'],
+      democracy: ['town', 'a', 'b'], republic: ['town', 'b', 'a'], fascism: ['block', 'a', 'a'], communism: ['block', 'b', 'b'] };
+    // gov + Stufe (1..3) + beliebige Ganzzahl -> Sprite-Schlüssel
+    S.houseKey = function (gov, level, variant) {
+      var f = HOUSE_FAM[gov] || HOUSE_FAM.monarchy, lv = Math.max(1, Math.min(3, level | 0));
+      var v = ((variant | 0) & 3) === 3 ? f[2] : f[1];
+      return 's_house_' + f[0] + '_' + lv + '_' + v;
+    };
+
 
     // ---------------------------------------------------------------- Regierungszentren (3×3)
     // Innen 22 px breit; jede Regierung hat eine eigene Silhouette.

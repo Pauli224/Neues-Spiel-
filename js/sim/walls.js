@@ -264,12 +264,17 @@
       for (const o of list) { const ox = o % W, oy = (o - ox) / W; if (Math.max(Math.abs(ox - x), Math.abs(oy - y)) < dmin) return false; }
       return true;
     };
-    for (const c of cand) {
-      if (!c.corner) continue;
-      if (farFrom(c.x, c.y, towers, 4) && farFrom(c.x, c.y, gates, 2)) towers.push(c.t);
-    }
-    for (const c of cand) {
-      if (farFrom(c.x, c.y, towers, 6) && farFrom(c.x, c.y, gates, 2)) towers.push(c.t);
+    // Turmabstand je Regierung (Faschismus: viele Wachtürme, Anarchie: keine)
+    const kk = sim._kingdoms.get(city.kingdomId);
+    const spacing = WW.GOVERNMENTS[(kk && kk.gov) || 'tribe'].build.towerSpacing;
+    if (spacing > 0) {
+      for (const c of cand) {
+        if (!c.corner) continue;
+        if (farFrom(c.x, c.y, towers, Math.min(4, spacing)) && farFrom(c.x, c.y, gates, 2)) towers.push(c.t);
+      }
+      for (const c of cand) {
+        if (farFrom(c.x, c.y, towers, spacing) && farFrom(c.x, c.y, gates, 2)) towers.push(c.t);
+      }
     }
     return { tiles: tiles, all: all, gates: gates, gateDir: gateDir, towers: towers, inside: inside };
   }
@@ -326,7 +331,7 @@
       const nt = deforested(tt);
       if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
       const ns = WW.Structs.create(sim, wantType, x, y, city.id, {
-        level: level, built: false, style: style, orient: ring.gateDir[t] || 'h'
+        level: level, built: false, mat: style, orient: ring.gateDir[t] || 'h'
       });
       if (ns && level < 2 && towerSet.has(t)) ns.towerSpot = true;
     }
@@ -396,7 +401,7 @@
       const lv = w.state === 'upgrading' ? w.target : Math.max(1, w.level || w.target || 1);
       const tt = st.terrain[t], nt = deforested(tt);
       if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
-      WW.Structs.create(sim, gateSet.has(t) ? 'gate' : 'wall', x, y, city.id, { level: lv, built: false, style: wallStyle(gov, lv) });
+      WW.Structs.create(sim, gateSet.has(t) ? 'gate' : 'wall', x, y, city.id, { level: lv, built: false, mat: wallStyle(gov, lv) });
     }
   }
 
@@ -412,7 +417,7 @@
         s.upgradeTo = level; s.progress = 0; s.paid = false;
         if (towerSet.has(t) && s.type === 'wall') s.towerOnUpgrade = true;
       } else {
-        s.level = level; s.style = wallStyle(gov, level);
+        s.level = level; s.mat = wallStyle(gov, level);
         if (towerSet.has(t) && s.type === 'wall') s.type = 'tower';
         s.maxHp = WW.Structs.maxHpFor(sim, s);
         s.paid = false;

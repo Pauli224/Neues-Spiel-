@@ -31,7 +31,7 @@
       hp: hp, maxHp: hp, moving: false, carrying: null, carryAmt: 0, female: female, bubble: null, sick: false,
       name: o.name || WW.Names.person(sim.rng, race.key, female),
       path: null, pi: 0, goal: -1, task: null, phase: 0, tt: 0, target: -1, fails: 0, cd: 0,
-      foe: -1, order: null, breach: -1, merc: false, group: -1, site: -1, wait: 0
+      foe: -1, order: null, breach: -1, merc: false, group: -1, site: -1, wait: 0, wtry: 0
     };
     st.units.push(u);
     sim._units.set(u.id, u);
@@ -366,6 +366,13 @@
       const d = distTo(u, s.x + 0.5, s.y + 0.5);
       if (d < bd) { bd = d; goal = s.y * W + s.x; }
     }
+    // Ernte wird am Stadttor angenommen (Karren bringen sie hinein)
+    if (u.carrying === 'food' && city.wall.level >= 1 && city.wall.gates) for (const t of city.wall.gates) {
+      const s = sim._structs.get(sim.state.structAt[t]);
+      if (!s || s.type !== 'gate' || !s.built || s.cityId !== city.id) continue;
+      const d = distTo(u, s.x + 0.5, s.y + 0.5) + 1.5;
+      if (d < bd) { bd = d; goal = t; }
+    }
     if (arrived(sim, u, goal) || (bd < 1.2 && !u.path)) {
       WW.Cities.addStock(sim, city, u.carrying, u.carryAmt);
       if (u.carrying === 'food' && sim.rng.chance(0.25)) bubble(u, 'bread', 25);
@@ -523,6 +530,7 @@
   function siteScore(sim, u, s) {
     let pr = 0;
     if (s.type === 'center') pr = -40;
+    else if (s.built && s.restyle && !s.upgradeTo) pr = 6;
     else if (s.type === 'house') pr = -6;
     else if (WW.Structs.isWallish(s)) pr = s.built ? 4 : 0;
     else pr = -2;
@@ -533,13 +541,14 @@
     const st = sim.state, W = st.W;
     if (u.carrying) { deliver(sim, u, city); return; }
     let s = u.target >= 0 ? sim._structs.get(u.target) : null;
-    if (s && (s.dead || s.cityId !== city.id || (s.built && !s.upgradeTo))) { s = null; u.target = -1; u.phase = 0; }
+    if (s && (s.dead || s.cityId !== city.id || !WW.Structs.needsWork(s))) { s = null; u.target = -1; u.phase = 0; }
     if (!s) {
       let best = null, bs = 1e9;
       const sk = WW.Cities.stock(sim, city);
       for (const id of city.sites) {
         const c = sim._structs.get(id);
-        if (!c || c.dead || (c.built && !c.upgradeTo)) continue;
+        if (!c || c.dead || !WW.Structs.needsWork(c)) continue;
+        if (c.skipUntil && c.skipUntil > st.tick) continue;
         if (!c.paid) {
           const cost = WW.Structs.costFor(sim, c.type, c.upgradeTo || c.level, city.id);
           if (sk.wood < cost.wood || sk.stone < cost.stone || sk.gold < cost.gold) continue;
@@ -559,21 +568,31 @@
         best.paid = true;
       }
       if (u.task === 'helpwood') { u.phase = 0; }
-      s = best; u.target = s.id; u.task = 'build'; u.phase = 1; s.workers++;
+      s = best; u.target = s.id; u.task = 'build'; u.phase = 1; u.wtry = 0; s.workers++;
     }
     if (!nearRect(u, s, 1.0)) {
       if (!u.path) {
         const cur = Math.floor(u.y) * W + Math.floor(u.x);
-        // Arbeitspunkt: eine Kachel der Grundfläche, nach Einheit verteilt
-        const n = u.id % (s.w * s.h);
-        const wp = (s.y + Math.floor(n / s.w)) * W + s.x + (n % s.w);
-        let goal = WW.Path.approachTile(sim, wp, u.kingdomId, cur);
-        if (goal < 0) goal = WW.Path.nearestFree(sim, wp, u.kingdomId, 3);
-        const drop = () => { u.target = -1; u.phase = 0; u.fails = 0; u.wait = 24; };
-        if (goal < 0) { drop(); return; }
+        // Arbeitspunkte: Grundfläche und alle Nachbarkacheln (auch diagonal), nach Entfernung
+        const cand = [];
+        for (let dy = -1; dy <= s.h; dy++) for (let dx = -1; dx <= s.w; dx++) {
+          const x = s.x + dx, y = s.y + dy;
+          if (x < 0 || y < 0 || x >= W || y >= st.H) continue;
+          const i = y * W + x;
+          if (!WW.Path.passable(sim, i, u.kingdomId)) continue;
+          const inner = dx >= 0 && dy >= 0 && dx < s.w && dy < s.h;
+          const dd = (x + 0.5 - u.x) * (x + 0.5 - u.x) + (y + 0.5 - u.y) * (y + 0.5 - u.y) + (inner ? 0 : 2) + ((i + u.id) % 3) * 0.3;
+          cand.push([dd, i]);
+        }
+        cand.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        const drop = (skip) => { if (skip) s.skipUntil = st.tick + 400; u.target = -1; u.phase = 0; u.fails = 0; u.wtry = 0; u.wait = 24; };
+        if (!cand.length) { drop(true); return; }
+        const tries = u.wtry || 0;
+        if (tries >= Math.min(cand.length, 5)) { drop(true); return; }
+        const goal = cand[tries][1];
         const r = goTo(sim, u, goal, { limit: 1500 });
-        if (r === null) { if (u.fails > 2) drop(); }
-        else if (r === true && !u.path) drop();
+        if (r === null) u.wtry = tries + 1;
+        else if (r === true && !u.path) u.wtry = tries + 1;
       }
       return;
     }
@@ -583,9 +602,9 @@
     let rate = workMul(sim, u) * g.buildMul;
     if (WW.Structs.isWallish(s)) { rate *= g.wallSpeedMul; if (k && k.policy && k.policy.bonus === 'walls') rate *= 1.3; }
     if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'build') rate *= 1.5;
-    const work = WW.Structs.info(s.type).work * (s.upgradeTo ? 1.2 : 1);
+    const work = WW.Structs.info(s.type).work * (s.upgradeTo ? 1.2 : (s.built && s.restyle ? 0.5 : 1));
     s.progress = Math.min(1, s.progress + THINK * rate / work);
-    if (!s.upgradeTo) s.hp = Math.max(s.hp, Math.round(s.maxHp * s.progress));
+    if (!s.built) s.hp = Math.max(s.hp, Math.round(s.maxHp * s.progress));
     if (sim.rng.chance(0.08)) bubble(u, 'hammer', 18);
     if (s.progress >= 1) {
       WW.Structs.complete(sim, s);

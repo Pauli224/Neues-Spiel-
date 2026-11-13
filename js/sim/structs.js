@@ -29,7 +29,7 @@
     if (WALLISH[s.type]) {
       const g = cityGov(sim, s.cityId);
       hp *= g.wallHpMul * cityRace(sim, s.cityId).wallMul;
-      if (s.style === 'barricade') hp *= 0.7;
+      if (s.mat === 'barricade') hp *= 0.7;
     }
     return Math.max(1, Math.round(hp));
   }
@@ -89,7 +89,13 @@
     updateMaskAt(sim, x, y + 1); updateMaskAt(sim, x, y - 1);
   }
 
-  // Neues Bauwerk. o = { level, built, gov, style, orient }
+  function cityGovKey(sim, cityId) {
+    const c = sim._cities.get(cityId);
+    const k = c && sim._kingdoms.get(c.kingdomId);
+    return (k && k.gov) || 'tribe';
+  }
+
+  // Neues Bauwerk. o = { level, built, style (Regierungsschlüssel), mat (Mauermaterial), orient }
   function create(sim, type, x, y, cityId, o) {
     o = o || {};
     const st = sim.state, W = st.W, H = st.H;
@@ -105,8 +111,9 @@
       mask: 0, paid: !!o.built, workers: 0, upgradeTo: 0
     };
     if (type === 'field') { s.growth = 0; s.gprog = 0; }
-    if (type === 'center' || type === 'monument') s.gov = o.gov || 'tribe';
-    if (WALLISH[type]) s.style = o.style || 'palisade';
+    s.style = WW.GOVERNMENTS[o.style] ? o.style : cityGovKey(sim, s.cityId);
+    s.restyle = null;
+    if (WALLISH[type]) s.mat = o.mat || 'palisade';
     if (type === 'gate') s.orient = o.orient || 'h';
     if (o.ruinOf) s.ruinOf = o.ruinOf;
     s.maxHp = maxHpFor(sim, s);
@@ -144,7 +151,11 @@
       s.level = s.upgradeTo;
       s.upgradeTo = 0;
       if (s.towerOnUpgrade) { s.type = 'tower'; s.towerOnUpgrade = false; }
-      if (WALLISH[s.type]) s.style = s.level >= 3 ? 'fortress' : (s.level === 2 ? 'stone' : s.style);
+      if (WALLISH[s.type]) s.mat = s.level >= 3 ? 'fortress' : (s.level === 2 ? 'stone' : s.mat);
+    }
+    if (s.restyle) {
+      s.style = s.restyle; s.restyle = null;
+      sim.fx({ type: 'restyle', x: s.x + s.w / 2, y: s.y + s.h / 2, gov: s.style });
     }
     s.built = true; s.progress = 1; s.paid = true;
     s.maxHp = maxHpFor(sim, s);
@@ -210,6 +221,8 @@
   }
 
   function isWallish(s) { return !!(s && WALLISH[s.type]); }
+  // Braucht das Bauwerk Baumeister? (Neubau, Ausbau oder Umbau im neuen Stil)
+  function needsWork(s) { return !s.built || !!s.upgradeTo || !!s.restyle; }
 
   // Sperr-Raster nach dem Laden neu aufbauen
   function rebuildBlock(sim) {
@@ -240,7 +253,7 @@
     maxHpFor: maxHpFor, costFor: costFor, isWallish: isWallish, rebuildBlock: rebuildBlock,
     updateMasksAround: updateMasksAround, updateMaskAt: updateMaskAt, pushUnitsOff: pushUnitsOff,
     canBuildTile: canBuildTile, blockValue: blockValue, info: info, setBlockAt: setBlockAt,
-    ruinize: ruinize, terrainBuildable: terrainBuildable, forTiles: forTiles, WALLISH: WALLISH
+    ruinize: ruinize, needsWork: needsWork, cityGovKey: cityGovKey, terrainBuildable: terrainBuildable, forTiles: forTiles, WALLISH: WALLISH
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

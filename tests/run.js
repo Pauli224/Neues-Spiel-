@@ -249,7 +249,18 @@ test('3 Regierungen (Werte, Zentrum, Titel, Wahl, Erbfolge, Sperre, Anarchie)', 
     const g = WW.GOVERNMENTS[gk];
     const ctr = sim._structs.get(city.centerId);
     assert(k.gov === gk && k.govLocked, gk + ': Regierung/Sperre nicht gesetzt');
-    assert(ctr && ctr.gov === gk, gk + ': Zentrum zeigt ' + (ctr && ctr.gov));
+    assert(ctr && (ctr.restyle || ctr.style) === gk, gk + ': Zentrum wird nicht im Stil ' + gk + ' gebaut (' + (ctr && ctr.style) + ')');
+    // Umbau: Zentrum ist sofort Baustelle und wird von Baumeistern fertig gestellt
+    run(sim, 600, 20, () => !ctr.restyle);
+    assert(ctr.style === gk && !ctr.restyle, gk + ': Zentrum nach 600 Ticks nicht umgebaut');
+    const g2 = WW.GOVERNMENTS[gk];
+    for (const s of sim.state.structs) {
+      if (s.dead || s.cityId !== city.id) continue;
+      if (s.type === 'market') assert(g2.build.market.max > 0, gk + ': Markt nicht umgewidmet');
+      if (s.type === 'barracks') assert(g2.build.barracks.max > 0, gk + ': Kaserne nicht umgewidmet');
+      if (s.type === 'tower') assert(g2.build.towerSpacing > 0, gk + ': Turm in Regierung ohne Türme');
+      assert(s.style === gk || s.restyle === gk, gk + ': ' + s.type + ' ohne neuen Stil');
+    }
     if (g.noLeader) assert(k.leaderId === -1 && k.leaderTitle === '', gk + ': Anarchie hat Anführer');
     else {
       const l = sim._units.get(k.leaderId);
@@ -260,7 +271,7 @@ test('3 Regierungen (Werte, Zentrum, Titel, Wahl, Erbfolge, Sperre, Anarchie)', 
     assert(!!WW.Cities.stock(sim, city) === true, 'Lager');
     if (g.sharedStock) assert(k.stock && WW.Cities.stock(sim, city) === k.stock, 'Kommunismus ohne gemeinsames Lager');
     else assert(!k.stock, gk + ': gemeinsames Lager übrig');
-    log(gk.padEnd(10), 'Zentrum', ctr.gov, '· Anführer', (k.leaderTitle + ' ' + k.leaderName).trim(), '· Mauer ab', g.wallThreshold, '· Soldatenanteil', g.soldierShare);
+    log(gk.padEnd(10), 'Zentrum', ctr.style, '(' + g.centerName + ')', '· Anführer', (k.leaderTitle + ' ' + k.leaderName).trim(), '· Mauer ab', g.wallThreshold, '· Soldatenanteil', g.soldierShare);
   }
 
   // Demokratie: Wahl innerhalb von 7 Jahren

@@ -160,7 +160,7 @@
     if (a === 0 || d > a) return false;
     const oldName = def.name;
     WW.Cities.transferCity(sim, city, att.id);
-    if (ctr) { WW.Structs.complete(sim, ctr); ctr.hp = Math.round(ctr.maxHp * 0.4); ctr.gov = att.gov; }
+    if (ctr && !ctr.built) { const rs = ctr.restyle; WW.Structs.complete(sim, ctr); ctr.restyle = rs; ctr.progress = rs ? 0 : 1; ctr.hp = Math.round(ctr.maxHp * 0.4); }
     for (const u of st.units) if (!u.dead && u.order && u.order.city === city.id) { u.order = null; u.path = null; u.breach = -1; }
     const r = att.relations[def.id];
     if (r) r.weariness += 15;

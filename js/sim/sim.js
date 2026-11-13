@@ -53,6 +53,7 @@
     for (const c of state.cities) this._cities.set(c.id, c);
     for (const k of state.kingdoms) this._kingdoms.set(k.id, k);
     this._usedNames = new Set(state.usedNames || []);
+    delete state.usedNames;
     this.block = new Uint8Array(N);
     this._dirtyFlag = new Uint8Array(N);
     this._dirty = [];
@@ -164,7 +165,7 @@
     const st = this.state;
     const o = {};
     for (const k in st) {
-      if (k.charCodeAt(0) === 95) continue;
+      if (k.charCodeAt(0) === 95 || k === 'version' || k === 'game' || k === 'rng' || k === 'usedNames') continue;
       let isR = false;
       for (const r of RASTERS) if (r[0] === k) isR = true;
       if (isR) continue;
@@ -196,7 +197,6 @@
     if (!o.rasters.structAt) st.structAt.fill(-1);
     if (!o.rasters.inRing) st.inRing.fill(-1);
     defaults(st);
-    st.version = VERSION;
     const sim = new Sim(st, o.rng);
     return sim;
   }

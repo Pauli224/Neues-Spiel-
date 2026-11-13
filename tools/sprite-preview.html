@@ -101,6 +101,17 @@
     if (Q.get('scene')) return;
   }
 
+  // Acht Musterstädte, eine je Regierung: ?towns=2
+  if (want('towns') || Q.get('towns')) {
+    var ts = +Q.get('towns') || 2;
+    var rt = section('towns', 'Acht Musterstädte (oben: Stammesrat, Monarchie, Demokratie, Faschismus; unten: Kommunismus, Theokratie, Handelsrepublik, Anarchie)',
+      'Zentrum, Mauer, Türme, Tore, Häuser und Denkmal im Stil der Regierung; Teamfarbe je Stadt verschieden.');
+    var tcv = document.createElement('canvas'); tcv.id = 'towncv';
+    WW.SpriteScene.renderTowns(tcv, ts);
+    cell(rt, '', tcv);
+    if (Q.get('towns')) return;
+  }
+
   // Lupe: ?keys=a,b,c&scale=8&bg=grass&team=0
   if (Q.get('keys')) {
     var rz = section('zoom', 'Lupe');

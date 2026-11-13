@@ -168,5 +168,93 @@
     return { ter: ter, vari: vari };
   }
 
-  WW.SpriteScene = { render: render, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Musterstädte je Regierung
+  // Eine kleine ummauerte Stadt (18×16 Kacheln) im Stil der Regierung.
+  var TOWN_EXTRA = {
+    tribe:     { lvl: 1, towers: 'corners', special: ['s_house_rustic_2_a', 's_lumber'], fields: 2 },
+    monarchy:  { lvl: 2, towers: 'corners+mid', special: ['s_barracks', 's_market'], fields: 1 },
+    democracy: { lvl: 2, towers: 'corners', special: ['s_market', null], fields: 1 },
+    fascism:   { lvl: 3, towers: 'many', special: ['s_barracks', 's_barracks'], fields: 1 },
+    communism: { lvl: 2, towers: 'corners', special: [null, null], fields: 3 },
+    theocracy: { lvl: 2, towers: 'corners+mid', special: ['s_monument_theocracy', 's_monument_theocracy'], fields: 1 },
+    republic:  { lvl: 2, towers: 'corners+mid', special: ['s_market', 's_market'], fields: 1 },
+    anarchy:   { lvl: 1, towers: 'none', special: [null, null], fields: 2 }
+  };
+  function townItems(gov, ox, oy, team) {
+    var E = TOWN_EXTRA[gov], items = [], wall = {}, lvl = E.lvl;
+    var X0 = 1, X1 = 16, Y0 = 2, Y1 = 12;
+    function setW(x, y, c) { wall[x + ',' + y] = c; }
+    for (var x = X0; x <= X1; x++) { setW(x, Y0, '#'); setW(x, Y1, '#'); }
+    for (var y = Y0; y <= Y1; y++) { setW(X0, y, '#'); setW(X1, y, '#'); }
+    var tw = [];
+    if (E.towers !== 'none') tw = [[X0, Y0], [X1, Y0], [X0, Y1], [X1, Y1]];
+    if (E.towers === 'corners+mid' || E.towers === 'many') tw = tw.concat([[X0, 7], [X1, 7], [5, Y0], [12, Y0], [5, Y1], [12, Y1]]);
+    if (E.towers === 'many') tw = tw.concat([[X0, 4], [X1, 4], [X0, 10], [X1, 10], [3, Y0], [14, Y0], [3, Y1], [14, Y1]]);
+    tw.forEach(function (p) { setW(p[0], p[1], 'T'); });
+    var gates = [[8, Y0], [8, Y1], [X0, 7], [X1, 7]];
+    gates.forEach(function (p) { setW(p[0], p[1], 'G'); });
+    function isW(x, y) { return !!wall[x + ',' + y]; }
+    Object.keys(wall).forEach(function (k) {
+      var p = k.split(','), x = +p[0], y = +p[1], c = wall[k];
+      var m = (isW(x, y - 1) ? 1 : 0) | (isW(x + 1, y) ? 2 : 0) | (isW(x, y + 1) ? 4 : 0) | (isW(x - 1, y) ? 8 : 0);
+      var horiz = isW(x - 1, y) || isW(x + 1, y);
+      var key;
+      if (c === 'G') key = gov === 'anarchy' ? null : S.gateKey(gov, lvl, horiz ? 'h' : 'v');
+      else if (c === 'T') key = S.towerKey(gov, lvl);
+      else key = S.wallKey(gov, lvl, m);
+      if (gov === 'tribe' && c === 'T') key = 's_tower_tribe';
+      if (key) items.push({ key: key, x: ox + x, y: oy + y, team: team });
+    });
+    function b(key, x, y) { if (key) items.push({ key: key, x: ox + x, y: oy + y, team: team }); }
+    b('s_center_' + gov, 7, 4);
+    var hv = 0;
+    [[2, 3, 2], [11, 3, 2], [14, 3, 3], [2, 9, 3], [5, 9, 2], [11, 9, 1], [14, 9, 2], [2, 6, 1]].forEach(function (h) { b(S.houseKey(gov, h[2], hv++), h[0], h[1]); });
+    b(E.special[0], 11, 6);
+    b(E.special[1] === 's_monument_theocracy' ? 's_monument_theocracy' : E.special[1], E.special[1] && /monument/.test(E.special[1]) ? 5 : 14, 6);
+    b('s_monument_' + gov, 6, 8);
+    // Felder vor dem Südtor
+    for (var fx = 3; fx <= 6; fx++) for (var fy = 13; fy < 13 + E.fields && fy < 16; fy++) b('s_field_' + (fy === 13 ? 3 : 2), fx, fy);
+    for (fx = 10; fx <= 14; fx++) for (fy = 13; fy < 13 + E.fields && fy < 16; fy++) b('s_field_' + (fx & 1 ? 1 : 3), fx, fy);
+    // Anführer und ein paar Leute
+    var lead = gov === 'anarchy' ? 'u_human_punk_0' : 'u_human_leader_' + gov + '_0';
+    items.push({ key: lead, x: ox + 10.2, y: oy + 7.2, team: team, unit: true });
+    items.push({ key: gov === 'fascism' || gov === 'monarchy' ? 'u_human_soldier_0' : 'u_human_farmer_0', x: ox + 8.1, y: oy + 13.4, team: team, unit: true });
+    items.push({ key: 'u_human_child_1', x: ox + 4.4, y: oy + 7.6, team: team, unit: true });
+    if (gov === 'fascism') for (var k = 0; k < 4; k++) items.push({ key: 'u_human_soldier_' + (k & 1), x: ox + 4 + k * 1.1, y: oy + 7.4, team: team, unit: true });
+    if (gov === 'republic') items.push({ key: 'u_human_trader_0', x: ox + 12.5, y: oy + 13.5, team: team, unit: true });
+    if (gov === 'democracy') items.push({ key: 'u_human_trader_1', x: ox + 9.5, y: oy + 2.6, team: team, unit: true });
+    return items;
+  }
+  var GOVS8 = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
+  function renderTowns(canvas, scale) {
+    S.init();
+    var TW = 18, TH = 16, W2 = TW * 4, H2 = TH * 2;
+    var ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2);
+    for (var i = 0; i < ter.length; i++) { ter[i] = T.GRASS; vari[i] = Math.floor(h2(i % W2, Math.floor(i / W2), 77) * 256); }
+    var ground = document.createElement('canvas'); ground.width = W2 * 8; ground.height = H2 * 8;
+    var gx = ground.getContext('2d');
+    S.drawGroundMap(gx, ter, vari, W2, H2);
+    var items = [];
+    GOVS8.forEach(function (gov, n) { items = items.concat(townItems(gov, (n % 4) * TW, Math.floor(n / 4) * TH, [0, 5, 4, 11, 1, 2, 3, 7][n])); });
+    if (S.drawPath) GOVS8.forEach(function (gov, n) {
+      var ox = (n % 4) * TW, oy = Math.floor(n / 4) * TH;
+      for (var y = 0; y <= 1; y++) S.drawPath(gx, (ox + 8) * 8, (oy + y) * 8, 5);
+      for (y = 13; y <= 15; y++) S.drawPath(gx, (ox + 8) * 8, (oy + y) * 8, 5);
+      S.drawPath(gx, (ox + 0) * 8, (oy + 7) * 8, 10); S.drawPath(gx, (ox + 17) * 8, (oy + 7) * 8, 10);
+    });
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d'); tx.drawImage(ground, 0, 0);
+    items.forEach(function (it) { it._s = sortY(it); });
+    items.sort(function (a, b) { return a._s - b._s || a.x - b.x; });
+    items.forEach(function (it) {
+      if (!S.has(it.key)) { console.warn('fehlt', it.key); return; }
+      S.draw(tx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team || 0, flip: it.flip });
+    });
+    canvas.width = W2 * 8 * scale; canvas.height = H2 * 8 * scale;
+    var ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(top, 0, 0, canvas.width, canvas.height);
+  }
+
+  WW.SpriteScene = { render: render, renderTowns: renderTowns, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -102,6 +102,7 @@
     if (preferName) best.name = preferName;
     k.leaderId = best.id;
     k.leaderName = leaderNameFor(sim, k, best);
+    k.leaderTrait = TRAIT_KEYS[sim.rng.int(TRAIT_KEYS.length)];
     k.leaderTitle = titleFor(k, best.female);
     best.bubble = { icon: 'crown', ttl: 60 };
     return best;
@@ -144,19 +145,13 @@
     if (gov === 'democracy') k.nextElection = st.year + 1 + sim.rng.int(2);
     if (gov === 'communism') k.nextPlan = st.year;
     if (gov === 'fascism') k.lastSham = st.year;
-    // Bauwerke umgestalten
+    // Umbau: jede Stadt im neuen Stil (Zentrum sofort Baustelle, Rest nach und nach)
+    for (const id of k.cityIds) { const c = sim._cities.get(id); if (c) restyleCity(sim, c, gov); }
     for (const s of st.structs) {
-      if (s.dead) continue;
+      if (s.dead || !WW.Structs.isWallish(s)) continue;
       const c = sim._cities.get(s.cityId);
       if (!c || c.kingdomId !== k.id) continue;
-      if (s.type === 'center' || s.type === 'monument') { s.gov = gov; sim.markDirty(s.y * st.W + s.x); }
-      if (WW.Structs.isWallish(s)) { const f = s.hp / Math.max(1, s.maxHp); s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.max(1, Math.round(s.maxHp * f)); }
-    }
-    // Märkte verschwinden im Kommunismus
-    if (ng.noMarket) for (const s of st.structs.slice()) {
-      if (s.dead || s.type !== 'market') continue;
-      const c = sim._cities.get(s.cityId);
-      if (c && c.kingdomId === k.id) WW.Structs.remove(sim, s);
+      const f = s.hp / Math.max(1, s.maxHp); s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.max(1, Math.round(s.maxHp * f));
     }
     // Anführer neu
     const oldLeader = sim._units.get(k.leaderId);
@@ -177,10 +172,60 @@
       if (c.wall && c.wall.plan) c.wall.style = WW.Walls.wallStyle(ng, Math.max(1, c.wall.level || 1));
     }
     if (o.reason !== 'silent') {
-      sim.event(o.reason || 'gov', { kingdom: k.name, gov: ng.name, oldGov: og.name, leader: leaderFull(k), deity: k.deity || '' }, atK(sim, k));
+      sim.event(o.reason || 'gov', { kingdom: k.name, gov: ng.name, oldGov: og.name, leader: leaderFull(k), deity: k.deity || '', why: o.why || '' }, atK(sim, k));
     }
     st.pathVersion++;
     return true;
+  }
+
+  // Stadt im Stil einer Regierung umbauen. Unbekannte Gebäude werden umgewidmet oder abgerissen.
+  const RESTYLE = { center: 1, house: 1, monument: 1, barracks: 1, market: 1, wall: 1, gate: 1, tower: 1 };
+  function restyleCity(sim, city, gov) {
+    const st = sim.state;
+    const g = WW.GOVERNMENTS[gov];
+    let monuments = 0;
+    const allowedMon = Math.max(1, WW.govBuildCount(gov, 'monument', Math.max(city.pop, 200)));
+    let changed = 0, converted = 0;
+    for (const s of st.structs) {
+      if (s.dead || s.cityId !== city.id) continue;
+      // Gebäude, die die neue Regierung nicht kennt
+      if ((s.type === 'market' && !g.build.market.max) || (s.type === 'barracks' && !g.build.barracks.max)) {
+        s.type = 'house'; s.level = 1; s.upgradeTo = 0;
+        s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp);
+        converted++;
+      }
+      if (s.type === 'tower' && !g.build.towerSpacing) { s.type = 'wall'; s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp); WW.Structs.updateMasksAround(sim, s.x, s.y); }
+      if (s.type === 'monument' && ++monuments > allowedMon) { WW.Structs.remove(sim, s); continue; }
+      if (s.style === gov && !s.restyle) continue;
+      if (!RESTYLE[s.type] || !s.built) { s.style = gov; s.restyle = null; }
+      else { s.restyle = gov; if (!s.upgradeTo) { s.progress = 0; s.paid = true; } }
+      changed++;
+      WW.Structs.forTiles(sim, s, (i) => sim.markDirty(i));
+    }
+    // Turmdichte der neuen Regierung (ab Steinmauer)
+    const w = city.wall;
+    if (w && w.plan && w.level >= 2 && g.build.towerSpacing > 0) {
+      const W = st.W, sp = g.build.towerSpacing;
+      const towers = [], gates = (w.gates || []).map(t => [t % W, Math.floor(t / W)]);
+      const pieces = [];
+      for (const t of w.plan) { const p = sim._structs.get(st.structAt[t]); if (p && p.cityId === city.id && WW.Structs.isWallish(p)) pieces.push(p); }
+      for (const p of pieces) if (p.type === 'tower') towers.push([p.x, p.y]);
+      const far = (x, y, list, d) => { for (const o of list) if (Math.max(Math.abs(o[0] - x), Math.abs(o[1] - y)) < d) return false; return true; };
+      for (const p of pieces) {
+        if (p.type !== 'wall' || !p.built || !far(p.x, p.y, towers, sp) || !far(p.x, p.y, gates, 2)) continue;
+        p.type = 'tower'; p.maxHp = WW.Structs.maxHpFor(sim, p); p.restyle = gov; p.progress = 0; p.paid = true;
+        towers.push([p.x, p.y]);
+        WW.Structs.updateMasksAround(sim, p.x, p.y); sim.markDirty(p.y * W + p.x);
+      }
+      w.towers = pieces.filter(p => p.type === 'tower').map(p => p.y * W + p.x);
+    }
+    if (g.barricades) { /* bestehende Mauern bleiben, neue Stücke werden Barrikaden */ }
+    else if (city.wall && city.wall.gaps && city.wall.gaps.length) city.wall.gaps = [];   // Lücken werden geschlossen
+    if (city.wall && city.wall.plan) city.wall.style = WW.Walls.wallStyle(g, Math.max(1, city.wall.level || 1));
+    city.restyleGov = gov;
+    WW.Cities.refreshLists(sim, city);
+    if (converted) sim.event('repurpose', { city: city.name, gov: g.name, n: converted }, WW.Cities.atCity(city));
+    return changed;
   }
 
   // ----------------------------------------------------------------------------
@@ -392,35 +437,106 @@
       if (!st.laws.govChanges || k.govLocked) { k.lowYears = 0; continue; }
       const hap = avgHappiness(sim, k);
       if (hap < 24) k.lowYears++; else k.lowYears = Math.max(0, k.lowYears - 1);
-      if (k.gov === 'tribe' && cap && cap.pop >= 24 && st.year - k.govSince >= 6) {
-        let ng = pickGovForRace(sim, k.race);
-        if (ng === 'tribe') ng = 'monarchy';
-        applyGov(sim, k, ng, { lock: false, reason: 'evolve' });
+      const years = st.year - k.govSince;
+      const crisis = WW.Diplo.atWar(sim, k.id) || anyHungry(sim, k) || hap < 40;
+      // Stamm wählt ab Dorfgröße selbst
+      if (k.gov === 'tribe' && cap && cap.tier >= 1 && years >= 2 && sim.rng.chance(0.35)) {
+        const ch = chooseGov(sim, k);
+        applyGov(sim, k, ch.gov, { lock: false, reason: 'govChoice', why: ch.why });
         continue;
       }
-      if (k.lowYears >= 4 && st.year - k.govSince >= 5) {
-        const opts = k.gov === 'fascism' || k.gov === 'monarchy'
-          ? { democracy: 3, communism: 2, anarchy: 2, republic: 1 }
-          : { democracy: 1, communism: 1, anarchy: 1, monarchy: 1, republic: 1, theocracy: 1, fascism: 0.6 };
-        delete opts[k.gov];
-        applyGov(sim, k, sim.rng.weighted(opts), { lock: false, reason: k.gov === 'fascism' ? 'regimeFall' : 'revolution' });
+      // Revolution / Sturz des Regimes
+      if (k.lowYears >= 3 && years >= 4) {
+        const ch = chooseGov(sim, k, { unhappy: true });
+        applyGov(sim, k, ch.gov, { lock: false, reason: k.gov === 'fascism' ? 'regimeFall' : 'revolution', why: ch.why });
         continue;
       }
-      if (WW.Diplo.atWar(sim, k.id) && hap < 35 && (k.gov === 'democracy' || k.gov === 'republic' || k.gov === 'monarchy') && sim.rng.chance(0.04)) {
+      // Zusammenbruch in Anarchie
+      if (k.gov !== 'anarchy' && hap < 18 && k.lowYears >= 2 && years >= 3 && sim.rng.chance(0.2)) {
+        applyGov(sim, k, 'anarchy', { lock: false, reason: 'collapse' });
+        continue;
+      }
+      // Putsch im Krieg
+      if (WW.Diplo.atWar(sim, k.id) && hap < 35 && (k.gov === 'republic' || k.gov === 'monarchy') && years >= 3 && sim.rng.chance(0.05)) {
         applyGov(sim, k, 'fascism', { lock: false, reason: 'coup' });
         continue;
       }
-      if (k.gov === 'anarchy' && st.year - k.govSince >= 10 && sim.rng.chance(0.03)) {
+      // Starker Mann: Demokratie wählt in der Krise einen Diktator
+      if (k.gov === 'democracy' && crisis && years >= 4 && sim.rng.chance(0.05)) {
+        applyGov(sim, k, 'fascism', { lock: false, reason: 'strongman' });
+        continue;
+      }
+      // Reform: zufriedene, große Monarchie wird Demokratie
+      if (k.gov === 'monarchy' && hap > 60 && kingdomPop(sim, k) >= 40 && years >= 12 && sim.rng.chance(0.04)) {
+        applyGov(sim, k, 'democracy', { lock: false, reason: 'reform' });
+        continue;
+      }
+      // Reiche Republik oder fromme Stadt: leiser Wandel
+      if (k.gov !== 'theocracy' && k.gov !== 'fascism' && years >= 10 && countType(sim, k, 'monument') >= 3 && sim.rng.chance(0.03)) {
+        applyGov(sim, k, 'theocracy', { lock: false, reason: 'govChoice', why: 'zu viele Schreine, um sie zu ignorieren' });
+        continue;
+      }
+      if (k.gov === 'anarchy' && years >= 10 && sim.rng.chance(0.03)) {
         applyGov(sim, k, 'democracy', { lock: false, reason: 'plenumVote' });
       }
     }
+  }
+
+  function anyHungry(sim, k) {
+    for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && c.hungry) return true; }
+    return false;
+  }
+  function countType(sim, k, type) {
+    let n = 0;
+    for (const s of sim.state.structs) if (!s.dead && s.type === type) { const c = sim._cities.get(s.cityId); if (c && c.kingdomId === k.id) n++; }
+    return n;
+  }
+
+  // Charakter des Anführers -> Vorliebe
+  const TRAITS = {
+    pious: { theocracy: 2.5 }, greedy: { republic: 2.5, monarchy: 1.2 }, bossy: { monarchy: 1.8, fascism: 1.6 },
+    gentle: { democracy: 2.2, anarchy: 1.3 }, dreamy: { anarchy: 2.2, communism: 1.5 }, stern: { communism: 1.6, fascism: 1.3, monarchy: 1.3 }
+  };
+  const TRAIT_KEYS = Object.keys(TRAITS);
+
+  // Regierung selbst wählen: Volk, Lage, Charakter des Anführers. Rückgabe { gov, why }
+  function chooseGov(sim, k, o) {
+    o = o || {};
+    const st = sim.state;
+    const race = WW.RACES[k.race] || WW.RACES.human;
+    const w = {};
+    for (const g of WW.GOV_KEYS) w[g] = race.govPrefs[g] || 1;
+    delete w.tribe;
+    const why = {};
+    const bump = (g, f, reason) => { if (w[g] == null) return; w[g] *= f; if (f > 1) why[g] = why[g] || []; if (f > 1) why[g].push(reason); };
+    const hap = avgHappiness(sim, k), pop = kingdomPop(sim, k);
+    let gold = 0;
+    for (const id of k.cityIds) { const c = sim._cities.get(id); if (c) gold += WW.Cities.stock(sim, c).gold; }
+    // Bedrohung: Krieg oder feindselige Nachbarn
+    let threat = WW.Diplo.atWar(sim, k.id);
+    for (const oid in k.relations) if (k.relations[oid].opinion < -40) threat = true;
+    if (threat) { bump('monarchy', 2, 'man fühlt sich von den Nachbarn bedroht'); bump('fascism', 2.4, 'die Angst vor den Nachbarn ist groß'); bump('anarchy', 0.4); bump('democracy', 0.7); }
+    if (gold > 30) bump('republic', 2.6, 'in den Truhen klimpert erstaunlich viel Gold');
+    const mons = countType(sim, k, 'monument');
+    if (mons >= 1) bump('theocracy', 1 + mons, 'der Hinkelstein wird inzwischen angebetet');
+    if (hap < 40 || anyHungry(sim, k) || o.unhappy) { bump('communism', 2.6, 'die Leute sind arm, hungrig und haben die Nase voll'); bump('fascism', 1.4, 'jemand verspricht, endlich aufzuräumen'); bump('democracy', 0.8); }
+    if (pop < 18 && hap > 62) { bump('democracy', 2, 'alle sind zufrieden und wollen mitreden'); bump('anarchy', 1.8, 'man kennt sich und braucht keinen Chef'); }
+    const tr = TRAITS[k.leaderTrait];
+    if (tr) for (const g in tr) bump(g, tr[g], 'es der Charakter des Anführers so will');
+    if (o.unhappy && w[k.gov] != null) w[k.gov] *= 0.05;
+    if (k.gov !== 'tribe' && w[k.gov] != null) w[k.gov] *= 0.3;
+    const gov = sim.rng.weighted(w);
+    const reasons = why[gov] || [];
+    const text = reasons.length ? reasons[sim.rng.int(reasons.length)] : sim.rng.pick(['es sich so ergeben hat', 'die Mehrheit beim Abendessen dafür war', 'das Los so entschieden hat', 'es auf dem Schild gut aussieht']);
+    return { gov: gov, why: text };
   }
 
   WW.Gov = {
     createKingdom: createKingdom, removeKingdom: removeKingdom, applyGov: applyGov, appointLeader: appointLeader,
     onLeaderDeath: onLeaderDeath, update: update, yearly: yearly, election: election, fiveYearPlan: fiveYearPlan,
     shamElection: shamElection, miracle: miracle, pickGovForRace: pickGovForRace, leaderFull: leaderFull,
-    avgHappiness: avgHappiness, kingdomPop: kingdomPop, capital: capital, titleFor: titleFor
+    avgHappiness: avgHappiness, kingdomPop: kingdomPop, capital: capital, titleFor: titleFor, restyleCity: restyleCity,
+    chooseGov: chooseGov, TRAITS: TRAITS
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -96,7 +96,7 @@
     sim._usedNames.add(city.name);
     st.cities.push(city);
     sim._cities.set(city.id, city);
-    const c = WW.Structs.create(sim, 'center', x - o.ox, y - o.oy, city.id, { built: true, gov: k.gov });
+    const c = WW.Structs.create(sim, 'center', x - o.ox, y - o.oy, city.id, { built: true, style: k.gov });
     city.centerId = c ? c.id : -1;
     k.cityIds.push(city.id);
     if (k.capitalId < 0) k.capitalId = city.id;
@@ -142,7 +142,7 @@
     for (const c of st.cities) finishLists(sim, c);
   }
   function tallyStruct(sim, c, s) {
-    if (!s.built || s.upgradeTo) c.sites.push(s.id);
+    if (WW.Structs.needsWork(s)) c.sites.push(s.id);
     if (s.type === 'field') c.fields.push(s.id);
     else if ((s.type === 'lumber' || s.type === 'quarry') && s.built) c.drops.push(s.id);
     else if (s.type === 'house') {
@@ -150,13 +150,13 @@
       if (s.built) c._bh++;
       if (s.built) c._cap += HOUSE_CAP[Math.max(0, Math.min(2, s.level - 1))] + (WW.RACES[c.race] || WW.RACES.human).housingBonus;
     } else if (s.type === 'barracks') c._barr = true;
-    else if (s.type === 'market') c._mark = true;
+    else if (s.type === 'market') { c._mark = true; if (s.built) c._markets = (c._markets || 0) + 1; }
     else if (s.type === 'monument') c._mon = true;
     else if (s.type === 'center') c._center = s;
   }
   function finishLists(sim, c) {
     c.houses = c._houses; c.builtHouses = c._bh;
-    c.hasBarracks = c._barr; c.hasMarket = c._mark; c.hasMonument = c._mon;
+    c.hasBarracks = c._barr; c.hasMarket = c._mark; c.hasMonument = c._mon; c.markets = c._markets || 0; delete c._markets;
     const ctr = c._center;
     c.centerId = ctr ? ctr.id : -1;
     c.centerOk = !!(ctr && ctr.built);
@@ -227,7 +227,7 @@
     if (sites > 0) want.builder = Math.max(1, Math.min(Math.ceil(sites / 5) + 1, Math.floor(n * 0.3)));
     // Nahrung
     const need = city.pop * WW.CONFIG.FOOD_PER_YEAR;
-    const perFarmer = 14 * race.yields.food * g.workMul;
+    const perFarmer = 11 * race.yields.food * g.workMul;
     let farmers = Math.ceil(need / perFarmer * 1.1);
     if (st.food < city.pop * 1.5) farmers += 1;
     if (st.food < city.pop * 0.5) farmers += 1;
@@ -235,6 +235,10 @@
     if (st.food > city.pop * 8 + 60) farmers -= 1;
     const plan = k && k.policy && k.policy.plan;
     if (plan && plan.focus === 'food') farmers += 1;
+    // reife Felder, die niemand erntet, brauchen mehr Hände
+    let ripe = 0;
+    for (const id of city.fields) { const f = sim._structs.get(id); if (f && f.growth >= 3) ripe++; }
+    if (st.food < city.pop * 3 && ripe > 2) farmers = Math.max(farmers, Math.ceil(ripe / 2));
     want.farmer = Math.max(1, farmers);
     // Stein: nach Bedarf (Baustellen, Mauerausbau, Hausausbau)
     if (city.hasStone && n >= 5) {
@@ -376,6 +380,10 @@
 
   // Feldplatz: fruchtbar, außerhalb der (künftigen) Mauer; Felder dürfen aneinander grenzen
   function findFieldSpot(sim, city) {
+    const i = findFieldSpotMin(sim, city, 0.55);
+    return i >= 0 ? i : findFieldSpotMin(sim, city, 0.15);
+  }
+  function findFieldSpotMin(sim, city, minFert) {
     const st = sim.state, W = st.W, H = st.H;
     const r = territoryRadius(city) + 1;
     const px = city.cx + 0.5, py = city.cy + 0.5;
@@ -390,7 +398,7 @@
         if (st.structAt[i] !== -1 || st.inRing[i] !== -1) continue;
         const t = st.terrain[i];
         const fert = WW.TERRAIN_LUT.fertile[t];
-        if (fert <= 0 || !WW.Structs.terrainBuildable(sim, i, city.race)) continue;
+        if (fert < minFert || !WW.Structs.terrainBuildable(sim, i, city.race)) continue;
         if (WW.TERRAIN_LUT.wood[t] && fert < 0.75) continue;
         const d = Math.sqrt((x + 0.5 - px) * (x + 0.5 - px) + (y + 0.5 - py) * (y + 0.5 - py));
         if (d < minD) continue;
@@ -416,7 +424,7 @@
           }
           if (near) continue;
         }
-        const score = -d + fert * 2 + fieldN * 0.7 + sim._hashNoise(i) * 0.5;
+        const score = -d + fert * 5 + fieldN * 0.7 + sim._hashNoise(i) * 0.5;
         if (score > bs) { bs = score; best = i; }
       }
     }
@@ -473,6 +481,7 @@
       const s = sim._structs.get(id);
       if (!s) continue;
       if (filterWall && WW.Structs.isWallish(s)) continue;
+      if (filterWall && s.built && s.restyle && !s.upgradeTo) continue;
       n++;
     }
     return n;
@@ -488,7 +497,7 @@
     if (city.centerId < 0) {
       const o = centerOff();
       if (canFoundAtOwn(sim, city, city.cx - o.ox, city.cy - o.oy)) {
-        const s = WW.Structs.create(sim, 'center', city.cx - o.ox, city.cy - o.oy, city.id, { built: false, gov: k ? k.gov : 'tribe' });
+        const s = WW.Structs.create(sim, 'center', city.cx - o.ox, city.cy - o.oy, city.id, { built: false, style: k ? k.gov : 'tribe' });
         if (s) { city.centerId = s.id; city.sites.push(s.id); }
       }
       return;
@@ -516,7 +525,10 @@
     }
     // Felder
     const plan = k && k.policy && k.policy.plan;
-    const wantFields = Math.max(2, Math.ceil(city.pop / 2.3)) + (plan && plan.focus === 'food' ? 2 : 0);
+    let fsum = 0;
+    for (const id of city.fields) { const f = sim._structs.get(id); if (f) fsum += Math.max(0.2, WW.TERRAIN_LUT.fertile[st.terrain[f.y * W + f.x]]); }
+    const avgF = city.fields.length ? fsum / city.fields.length : 1;
+    const wantFields = Math.max(2, Math.ceil(city.pop / 2.3 / Math.max(0.4, avgF))) + (plan && plan.focus === 'food' ? 2 : 0);
     if (city.fields.length < wantFields) {
       const i = findFieldSpot(sim, city);
       if (i >= 0) {
@@ -537,22 +549,25 @@
       const i = findDropSpot(sim, city, 'stone', 'quarry');
       if (i >= 0) { const s = placeStruct(sim, city, 'quarry', i % W, Math.floor(i / W), {}); if (s) { city.sites.push(s.id); return; } }
     }
-    // Kaserne, Markt, Denkmal
-    const extra = [];
-    if (!city.hasBarracks && g.soldierShare >= 0.1 && city.pop >= (g.key === 'fascism' ? 10 : 16)) extra.push('barracks');
-    if (!city.hasMarket && !g.noMarket && city.pop >= (g.traders ? 12 : 18)) extra.push('market');
-    if (!city.hasMonument && city.pop >= (g.key === 'theocracy' || g.key === 'fascism' ? 14 : 22)) extra.push('monument');
-    for (const type of extra) {
+    // Kaserne, Markt, Denkmal: Bauprogramm der Regierung (WW.GOVERNMENTS[gov].build)
+    const have = { barracks: 0, market: 0, monument: 0 };
+    for (const s of st.structs) if (!s.dead && s.cityId === city.id && s.type in have) have[s.type]++;
+    const gk = g.key;
+    const order = gk === 'fascism' ? ['barracks', 'monument', 'market'] : gk === 'theocracy' ? ['monument', 'market', 'barracks']
+      : gk === 'republic' || gk === 'democracy' ? ['market', 'monument', 'barracks'] : ['barracks', 'market', 'monument'];
+    for (const type of order) {
+      if (type === 'market' && g.noMarket) continue;
+      if (have[type] >= WW.govBuildCount(gk, type, city.pop)) continue;
       const cost = WW.Structs.costFor(sim, type, 1, city.id);
       if (!canPay(sim, city, cost)) continue;
       const i = findCoreSpot(sim, city, type);
       if (i < 0) { if (city.wall.plan) city.noSpace = true; break; }
-      const s = placeStruct(sim, city, type, i % W, Math.floor(i / W), { gov: k ? k.gov : 'tribe' });
+      const s = placeStruct(sim, city, type, i % W, Math.floor(i / W), { style: gk });
       if (s) {
         city.sites.push(s.id);
-        if (type === 'monument') sim.event('monument', { city: city.name, monument: g.monumentName, deity: (k && k.deity) || '' }, atCity(city));
-        if (type === 'barracks') city.hasBarracks = true;
-        if (type === 'market') city.hasMarket = true;
+        if (type === 'monument') sim.event(gk === 'theocracy' && have.monument > 0 ? 'shrine' : 'monument', { city: city.name, monument: g.monumentName, deity: (k && k.deity) || '' }, atCity(city));
+        if (type === 'barracks') { city.hasBarracks = true; if (have.barracks > 0) sim.event('barracks', { city: city.name, n: have.barracks + 1 }, atCity(city)); }
+        if (type === 'market') { city.hasMarket = true; if (have.market > 0) sim.event('market', { city: city.name, n: have.market + 1 }, atCity(city)); }
         if (type === 'monument') city.hasMonument = true;
       }
       break;
@@ -645,7 +660,7 @@
     if (g.goldMul > 0) {
       let gold = 0;
       if (g.taxes > 0) gold += city.pop * g.taxes;
-      if (city.hasMarket) gold += 0.05 + city.pop * 0.006;
+      if (city.markets) gold += city.markets * (0.05 + city.pop * 0.005);
       gold *= g.goldMul;
       if (k && k.policy && k.policy.bonus === 'trade') gold *= 1.5;
       sk.gold += gold;
@@ -739,7 +754,7 @@
     const group = st.nextId++;
     let n = 0;
     for (const u of city._members) {
-      if (n >= 5) break;
+      if (n >= 7) break;
       if (u.role === 'leader' || u.role === 'child' || u.role === 'rebel' || u.role === 'soldier' || u.merc) continue;
       WW.Units.setRole(sim, u, 'settler');
       u.group = group; u.site = site.y * st.W + site.x; u.fails = 0;
@@ -801,10 +816,8 @@
       u.kingdomId = nk.id; u.path = null; u.order = null; u.task = null;
       if (u.role === 'rebel') u.role = 'farmer';
     }
-    const ctr = sim._structs.get(city.centerId);
-    if (ctr) { ctr.gov = nk.gov; sim.markDirty(ctr.y * sim.state.W + ctr.x); }
+    WW.Gov.restyleCity(sim, city, nk.gov);
     for (const s of sim.state.structs) if (!s.dead && s.cityId === city.id) {
-      if (s.type === 'monument') s.gov = nk.gov;
       if (WW.Structs.isWallish(s)) { s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp); }
       sim.markDirty(s.y * sim.state.W + s.x);
     }

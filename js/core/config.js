@@ -18,7 +18,7 @@
     FOOD_PER_YEAR: 2.2,       // Nahrung je Kopf und Jahr
     BIRTH_RATE: 0.0075,       // Geburtschance je Erwachsenem und Sekunde (bei Platz + Essen)
     START_STOCK: { food: 36, wood: 26, stone: 4, gold: 0 },
-    HARVEST: 11,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
+    HARVEST: 14,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
     CHOP: 7, MINE: 5,         // Holz/Stein je Gang
     FISH: 3,
     FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
@@ -29,7 +29,7 @@
     WALL_RESERVE_STEP: 4,     // je Stadterweiterung so viel größer
     WALL_EXPAND_YEARS: 5,     // frühestens alle n Jahre erweitern
     TOWER_RANGE: 5.5, TOWER_DMG: 7, TOWER_COOLDOWN: 14,
-    PATH_BUDGET: 9000,        // A*-Knoten pro Tick weltweit
+    PATH_BUDGET: 14000,       // A*-Knoten pro Tick weltweit
     PATH_LIMIT: 2500,         // Knotenlimit je Suche (normal)
     PATH_LIMIT_LONG: 14000,   // Siedler, Heere, Händler
     TERRITORY_BASE: 9,
@@ -58,33 +58,46 @@
     wallThreshold: 10, wallMax: 3, wallHpMul: 1, wallSpeedMul: 1, buildMul: 1, workMul: 1,
     happiness: 0, growthMul: 1, soldierShare: 0.1, goldMul: 1, taxes: 0, aggression: 0.35,
     militia: false, noLeader: false, sharedStock: false, noMarket: false, barricades: false,
-    neverWar: false, traders: false, mercenaries: false, buysPeace: false
+    neverWar: false, traders: false, mercenaries: false, buysPeace: false,
+    // Kriegsführung: raid | knights | defend | mass | agitate | holy | mercs | militia
+    war: 'raid', soldierMul: 1, unitHpMul: 1, unitDmgMul: 1,
+    // Bauprogramm: je Typ { first: ab Einwohnern, per: je weitere n Einwohner, max }; towerSpacing 0 = keine Türme
+    build: {
+      barracks: { first: 16, per: 30, max: 1 }, market: { first: 18, per: 30, max: 1 },
+      monument: { first: 22, per: 40, max: 1 }, towerSpacing: 6
+    }
   };
 
   const G = {
     tribe: {
       name: 'Stammesrat', titleM: 'Häuptling', titleF: 'Häuptlingin', realm: 'Stamm',
-      centerName: 'Langhaus mit Lagerfeuer', monumentName: 'Totempfahl',
+      centerName: 'Langhaus mit Lagerfeuer', monumentName: 'Hinkelstein',
       desc: 'Man sitzt ums Feuer, bis jemand eine Entscheidung trifft oder das Holz ausgeht.',
       pros: ['Zufriedenheit +5', 'Entwickelt sich ab Stadtgröße weiter'],
       cons: ['Nur Palisaden (Stufe 1)', 'Mauer erst ab 14 Einwohnern'],
-      wallThreshold: 14, wallMax: 1, happiness: 5, soldierShare: 0.08, aggression: 0.35
+      wallThreshold: 14, wallMax: 1, happiness: 5, soldierShare: 0.08, aggression: 0.35,
+      war: 'raid', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 99, max: 1 }, towerSpacing: 0 },
+      looks: { center: 'Langhaus mit Lagerfeuer', wall: 'Palisade, hölzerner Ausguck', house: 'Strohhütte', monument: 'Hinkelstein' }
     },
     monarchy: {
       name: 'Monarchie', titleM: 'König', titleF: 'Königin', realm: 'Königreich',
-      centerName: 'Burg', monumentName: 'Reiterstandbild',
+      centerName: 'Burg', monumentName: 'Königsstatue',
       desc: 'Einer trägt die Krone, alle anderen tragen die Steuern.',
       pros: ['Mauern früh (ab 8 Einw.)', 'Mauern +30 % stabiler', 'Steuern bringen Gold'],
       cons: ['Erbfolge mit Thronstreit-Gefahr', 'Steuern drücken die Laune'],
-      wallThreshold: 8, wallHpMul: 1.3, taxes: 0.02, happiness: -3, soldierShare: 0.13, aggression: 0.5
+      wallThreshold: 8, wallHpMul: 1.3, taxes: 0.02, happiness: -3, soldierShare: 0.13, aggression: 0.5,
+      war: 'knights', unitHpMul: 1.3, unitDmgMul: 1.2, build: { barracks: { first: 14, per: 25, max: 2 }, market: { first: 18, per: 40, max: 1 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 5 },
+      looks: { center: 'Burg', wall: 'grauer Stein, runde Türme mit Kegeldach und Wimpel', house: 'Fachwerkhaus', monument: 'Königsstatue' }
     },
     democracy: {
       name: 'Demokratie', titleM: 'Kanzler', titleF: 'Kanzlerin', realm: 'Freistaat',
-      centerName: 'Rathaus', monumentName: 'Wahlurnen-Brunnen',
+      centerName: 'Rathaus', monumentName: 'Rednerpult mit Wahlurne',
       desc: 'Alle sechs Jahre darf jeder mitreden, dazwischen redet jeder trotzdem mit.',
       pros: ['Zufriedenheit +15', 'Wachstum +15 %', 'Wahlen mit Bonus der Siegerpartei'],
       cons: ['Wenige Soldaten', 'Erklärt selten Krieg'],
-      happiness: 15, growthMul: 1.15, soldierShare: 0.05, aggression: 0.12
+      happiness: 15, growthMul: 1.15, soldierShare: 0.05, aggression: 0.12,
+      war: 'defend', build: { barracks: { first: 35, per: 60, max: 1 }, market: { first: 14, per: 25, max: 2 }, monument: { first: 20, per: 60, max: 1 }, towerSpacing: 8 },
+      looks: { center: 'Rathaus mit Uhrturm und Säulen', wall: 'heller Sandstein, Türme mit Fahne', house: 'buntes Bürgerhaus', monument: 'Rednerpult mit Wahlurne' }
     },
     fascism: {
       name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Strammstaat',
@@ -92,15 +105,19 @@
       desc: 'Alles ist geregelt, sogar die Freude, und die ist leider gestrichen.',
       pros: ['Sehr viele Soldaten', 'Mauern ab 6 Einw. und +50 % schneller', 'Arbeit +15 % (Zwang)'],
       cons: ['Zufriedenheit −25', 'Widerstand und Aufstände', 'Keiner mag das Regime'],
-      wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9
+      wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9,
+      war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3 },
+      looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' }
     },
     communism: {
       name: 'Kommunismus', titleM: 'Generalsekretär', titleF: 'Generalsekretärin', realm: 'Volksrepublik',
-      centerName: 'Volkshaus', monumentName: 'Planerfüllungsdenkmal',
+      centerName: 'Volkshaus', monumentName: 'Denkmal der Planübererfüllung',
       desc: 'Alles gehört allen, nur der Schlüssel zum Lager gehört dem Ausschuss.',
       pros: ['Gemeinsames Lager aller Städte', 'Bauen +25 %', 'Fünfjahresplan +50 % auf Schwerpunkt'],
       cons: ['Arbeitstempo −10 % (Schlendrian)', 'Kein Markt, kein Gold'],
-      buildMul: 1.25, workMul: 0.9, sharedStock: true, noMarket: true, goldMul: 0, soldierShare: 0.12, aggression: 0.45
+      buildMul: 1.25, workMul: 0.9, sharedStock: true, noMarket: true, goldMul: 0, soldierShare: 0.12, aggression: 0.45,
+      war: 'agitate', build: { barracks: { first: 22, per: 50, max: 1 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 18, per: 60, max: 1 }, towerSpacing: 7 },
+      looks: { center: 'Volkshaus mit Fahne und Schornstein', wall: 'Betonplatten, schlichte Blocktürme', house: 'Plattenbau', monument: 'Denkmal der Planübererfüllung (Riesenrübe)' }
     },
     theocracy: {
       name: 'Theokratie', titleM: 'Hohepriester', titleF: 'Hohepriesterin', realm: 'Gottesstaat',
@@ -108,7 +125,9 @@
       desc: 'Die Gottheit hat zu allem eine Meinung, ausgerichtet von der Priesterschaft.',
       pros: ['Schrein hebt die Laune', 'Gelegentliche Wunder', 'Zufriedenheit +5'],
       cons: ['Arbeit −10 % (Beten)', 'Heilige Kriege gegen Andersgläubige'],
-      happiness: 5, workMul: 0.9, soldierShare: 0.1, aggression: 0.55
+      happiness: 5, workMul: 0.9, soldierShare: 0.1, aggression: 0.55,
+      war: 'holy', build: { barracks: { first: 24, per: 60, max: 1 }, market: { first: 22, per: 60, max: 1 }, monument: { first: 10, per: 12, max: 3 }, towerSpacing: 6 },
+      looks: { center: 'Tempel mit Kuppel und goldener Spitze', wall: 'weißer Stein mit goldenen Kappen, Kuppeltürme', house: 'Fachwerk mit Türmchen', monument: 'Schrein der Gottheit' }
     },
     republic: {
       name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsrepublik',
@@ -116,20 +135,34 @@
       desc: 'Jedes Problem hat einen Preis, und der Rat kennt ihn auswendig.',
       pros: ['Gold ×2', 'Händler zwischen den Städten', 'Söldner und Freikauf aus Kriegen'],
       cons: ['Kaum eigene Soldaten', 'Abhängig vom Geldbeutel'],
-      goldMul: 2, taxes: 0.01, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true
+      goldMul: 2, taxes: 0.01, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true,
+      war: 'mercs', build: { barracks: { first: 30, per: 60, max: 1 }, market: { first: 10, per: 14, max: 3 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 7 },
+      looks: { center: 'Kontor mit Treppengiebel und Kran', wall: 'roter Backstein, Türme mit Handelsflaggen', house: 'Giebelhaus', monument: 'Goldene Waage' }
     },
     anarchy: {
       name: 'Anarchie', titleM: '', titleF: '', realm: 'Freie Kommune',
-      centerName: 'Kommune', monumentName: 'Plenumslinde',
+      centerName: 'Kommune', monumentName: 'Bemalte Wand',
       desc: 'Niemand hat das Sagen, dafür sagen alle sehr viel.',
       pros: ['Zufriedenheit +10', 'Alle verteidigen als Miliz', 'Erklärt nie Krieg'],
       cons: ['Kein Anführer, keine Armee', 'Nur Barrikaden mit Lücken'],
       wallThreshold: 12, wallMax: 1, wallHpMul: 0.55, happiness: 10, soldierShare: 0, aggression: 0,
-      militia: true, noLeader: true, barricades: true, neverWar: true
+      militia: true, noLeader: true, barricades: true, neverWar: true,
+      war: 'militia', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 16, per: 99, max: 1 }, towerSpacing: 0 },
+      looks: { center: 'Kommune (bunter Flickenbau)', wall: 'Barrikaden aus Gerümpel', house: 'Bauwagen und Flickenhütten', monument: 'bemalte Wand' }
     }
   };
   WW.GOVERNMENTS = {};
-  for (const k of WW.GOV_KEYS) WW.GOVERNMENTS[k] = Object.freeze(Object.assign({ key: k }, GOV_BASE, G[k]));
+  for (const k of WW.GOV_KEYS) {
+    const g = Object.assign({ key: k }, GOV_BASE, G[k]);
+    g.build = Object.assign({}, GOV_BASE.build, G[k].build || {});
+    WW.GOVERNMENTS[k] = Object.freeze(g);
+  }
+  // Wie viele Gebäude eines Typs erlaubt diese Regierung bei pop Einwohnern?
+  WW.govBuildCount = function (govKey, type, pop) {
+    const b = (WW.GOVERNMENTS[govKey] || WW.GOVERNMENTS.tribe).build[type];
+    if (!b || !b.max || pop < b.first) return 0;
+    return Math.min(b.max, 1 + Math.floor((pop - b.first) / b.per));
+  };
 
   // Meinungsdrift pro Jahr zwischen zwei Regierungsformen
   const COMPAT = {

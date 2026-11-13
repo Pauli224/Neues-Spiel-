@@ -448,7 +448,7 @@
     if (t < 0.1) return TT.SNOWFIELD;
     if (t < 0.27) return TT.TUNDRA;
     if (t < 0.66) return (m < 0.15 && t > 0.56) ? TT.DESERT : TT.GRASS;
-    if (m < 0.26) return TT.DESERT;
+    if (m < 0.22) return TT.DESERT;
     if (m < 0.46) return TT.SAVANNA;
     return TT.GRASS;
   }
@@ -547,12 +547,12 @@
     {
       const rv = stream(seed, 'volcano');
       const dLand0 = distField(land, W, H);
-      const want = o.magic * 2.2 * areaScale;
+      const want = o.magic * 1.5 * areaScale;
       const n = Math.floor(want + rv.next() * (o.magic > 0 ? 1 : 0) * 0.999);
       for (let k = 0; k < n; k++) {
         for (let t = 0; t < 80; t++) {
-          const x = 8 + rv.int(W - 16), y = 7 + rv.int(H - 14), i = y * W + x;
-          if (land[i] || dLand0[i] < 7) continue;
+          const x = Math.round(W * 0.12) + rv.int(Math.round(W * 0.76)), y = Math.round(H * 0.14) + rv.int(Math.round(H * 0.72)), i = y * W + x;
+          if (land[i] || dLand0[i] < 6 || dLand0[i] > 22) continue; // vor der Küste, nicht mitten im Nichts
           if (volcanoes.some(v => (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y) < 400)) continue;
           const rad = rv.range(2.3, 3.4) * Math.sqrt(Math.sqrt(areaScale));
           volcanoes.push({ x, y, r: rad });
@@ -739,6 +739,8 @@
       }
       const idx = cand.map((_, k) => k).sort((a, b) => keys[b] - keys[a] || a - b);
 
+      const lakeLab = components(lake, W, H).lab;
+      let skipLake = -2; // Abfluss: der eigene See zählt nicht als Mündung
       let path = [], status = 0, runDir = 0, runLen = 0, jogSide = 0; // status: 1 = Mündung (Meer/See), 2 = Zusammenfluss
       let curId = 0;
       const nb4 = (c, k) => {
@@ -750,7 +752,8 @@
       const truncate = j => { for (let k = j + 1; k < path.length; k++) own[path[k]] = -1; path.length = j + 1; };
       // Kachel betreten; liefert true, wenn der Lauf endet.
       function enter(t, ignoreLake) {
-        if (ocean[t] || lake[t]) { status = 1; return true; }
+        if (ocean[t] || (lake[t] && lakeLab[t] !== skipLake)) { status = 1; return true; }
+        if (lake[t]) return true; // eigener See (Abfluss): abbrechen
         if (river[t]) { status = 2; return true; }
         if (isOwn(t)) { truncate(own[t]); return false; }
         // Schleife abkürzen: berührt die neue Kachel eine ältere eigene Kachel?
@@ -761,7 +764,7 @@
         if (path.length >= 2) { const d = t - path[path.length - 2]; if (d === runDir) runLen++; else { runDir = d; runLen = 1; jogSide = 0; } }
         for (let k = 0; k < 4; k++) {
           const n = nb4(t, k); if (n < 0) continue;
-          if (ocean[n] || (lake[n] && !ignoreLake)) { status = 1; return true; }
+          if (ocean[n] || (lake[n] && lakeLab[n] !== skipLake)) { status = 1; return true; }
           if (river[n]) { status = 2; return true; }
         }
         return false;
@@ -878,11 +881,18 @@
           if (!lake[i]) continue;
           const L = lc.lab[i]; if (done[L]) continue; done[L] = 1;
           if (!fed[L] && lc.sizes[L] < 40) continue;
-          let c = i, g = 0;
-          while (c >= 0 && lake[c] && g++ < N) c = parent[c];
-          if (c < 0 || ocean[c] || river[c]) continue;
-          curId++;
+          // Auslass: Uferkachel (4er-Nachbar des Sees) mit kleinstem Füllstand
+          let c = -1;
+          for (let j = 0; j < N; j++) {
+            if (!land[j] || river[j] || ocean[j]) continue;
+            let adj = false;
+            for (let k = 0; k < 4; k++) { const n = nb4(j, k); if (n >= 0 && lake[n] && lc.lab[n] === L) adj = true; }
+            if (adj && parent[j] >= 0 && !lake[parent[j]] && (c < 0 || Fill[j] < Fill[c])) c = j;
+          }
+          if (c < 0) continue;
+          curId++; skipLake = L;
           const st = trace(c, rr.range(0, 200), true);
+          skipLake = -2;
           if (st && path.length >= 3) commit(curId);
         }
       }
@@ -899,7 +909,19 @@
           if (river[n] || ocean[n] || lake[n]) out++;
         }
         if (out === 0) { river[c] = 0; break; }
+        if (k === 3) river[q[3]] = 0; // Notlösung; ein abgehängter Rest fällt unten weg
       }
+    }
+    // Flussläufe ohne Mündung (Meer/See) entfernen
+    {
+      const rc = components(river, W, H), ok = new Uint8Array(rc.sizes.length);
+      for (let i = 0; i < N; i++) {
+        if (!river[i]) continue;
+        const x = i % W;
+        if ((x > 0 && (ocean[i - 1] || lake[i - 1])) || (x < W - 1 && (ocean[i + 1] || lake[i + 1])) ||
+          (i >= W && (ocean[i - W] || lake[i - W])) || (i < N - W && (ocean[i + W] || lake[i + W]))) ok[rc.lab[i]] = 1;
+      }
+      for (let i = 0; i < N; i++) if (river[i] && !ok[rc.lab[i]]) river[i] = 0;
     }
 
     // 8) Klima
@@ -1062,10 +1084,11 @@
       const R2 = Math.ceil(v.r + 2);
       for (let yy = v.y - R2; yy <= v.y + R2; yy++) for (let xx = v.x - R2; xx <= v.x + R2; xx++) {
         if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
-        const i = yy * W + xx; if (!land[i]) continue;
+        const i = yy * W + xx; if (!land[i] || river[i]) continue;
         const dx = xx - v.x, dy = yy - v.y, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > v.r + 1.3) continue; // nur die eigene Insel
         ter[i] = d <= 1.0 ? TT.MOUNTAIN : TT.ASH;
-        E[i] = Math.max(E[i], 0.9 - d * 0.18); river[i] = 0;
+        E[i] = Math.max(E[i], 0.9 - d * 0.18);
       }
       magicSpots.push([v.x, v.y, TT.ASH]);
     }

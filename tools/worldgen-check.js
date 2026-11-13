@@ -71,7 +71,7 @@ function inspect(w, label) {
   let straight = 0;
   for (let y = 0; y < H; y++) { let run = 0; for (let x = 0; x < W; x++) { run = ter[y * W + x] === T.RIVER ? run + 1 : 0; if (run > straight) straight = run; } }
   for (let x = 0; x < W; x++) { let run = 0; for (let y = 0; y < H; y++) { run = ter[y * W + x] === T.RIVER ? run + 1 : 0; if (run > straight) straight = run; } }
-  stat.straight = Math.max(stat.straight, straight);
+  stat.straight = Math.max(stat.straight, straight); if (straight > 10) stat.straightWorlds++;
   // Schneegipfel ringsum von Gebirge/Schnee umgeben
   let snowOpen = 0;
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
@@ -113,7 +113,7 @@ function comps(ter, W, H, pred) {
   }
   return out;
 }
-const stat = { straight: 0, reliefSpecks: 0, tinyLakes: 0 };
+const stat = { straight: 0, straightWorlds: 0, reliefSpecks: 0, tinyLakes: 0 };
 
 // ---------------------------------------------------------------- Determinismus
 console.log('Determinismus');
@@ -148,8 +148,8 @@ for (const tk of tplKeys) {
   check(few === 0, tk + ': ' + few + ' Welten mit weniger als 6 Startplätzen');
 }
 for (const k in perTpl) console.log('  ' + k.padEnd(12) + ' Startplätze Ø ' + perTpl[k].avg + ', min ' + perTpl[k].min);
-console.log('  längste schnurgerade Flussstrecke: ' + stat.straight + ' Kacheln; Relief-Sprenkel (<4): ' + stat.reliefSpecks + '; Mini-Seen (<4): ' + stat.tinyLakes);
-check(stat.straight <= 12, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
+console.log('  längste schnurgerade Flussstrecke: ' + stat.straight + ' Kacheln (Welten mit Gerade > 10: ' + stat.straightWorlds + ' von ' + worlds + '); Relief-Sprenkel (<4): ' + stat.reliefSpecks + '; Mini-Seen (<4): ' + stat.tinyLakes);
+check(stat.straight <= 14 && stat.straightWorlds <= worlds * 0.02, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
 
 // ---------------------------------------------------------------- Regler
 console.log('Regler (Landanteil folgt dem Regler, jeder Regler wirkt)');
