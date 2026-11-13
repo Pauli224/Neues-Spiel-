@@ -302,7 +302,7 @@
       }
       city.indGov = gk;
       // Neubau
-      if (spec && law && !(city.indNext > st.tick)) tryBuild(sim, city, false);
+      if (spec && law && !(city.indNext > st.tick)) WW.Industry.tryBuild(sim, city, false);
       // Filter (Demokratie)
       if (k.gov === 'democracy') filters(sim, k, city, fs);
     }

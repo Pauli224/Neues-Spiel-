@@ -39,7 +39,8 @@
       cityIds: [], capitalId: -1, relations: {},
       policy: { bonus: null, party: null, until: 0, plan: null, unrest: 0 },
       deity: null, stock: null, dynasty: {}, founded: st.year,
-      nextElection: st.year + 2, nextPlan: st.year + 1, lastSham: st.year, govSince: st.year, lowYears: 0
+      nextElection: st.year + 2, nextPlan: st.year + 1, lastSham: st.year, govSince: st.year, lowYears: 0,
+      laws: {}, mods: []   // Reichsgesetze und Modifikatoren (Ereignis-Teil)
     };
     k.name = WW.Names.realm(k.baseName, gov);
     if (gov === 'theocracy') k.deity = WW.Names.deity(sim.rng);

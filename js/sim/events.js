@@ -6,7 +6,8 @@
 //   Zustand
 //     state.evt = { queue: [{ key, at (Tick), k, c, o, vars }], cd: { key: Jahr }, year, count }   Folgeereignisse, Welt-Abklingzeit,
 //                 Zähler der Ereignisse im laufenden Jahr (Deckel)
-//     kingdom.laws     { [Gesetz]: Jahr des Beschlusses }       geltende Reichsgesetze (WW.REALM_LAWS)
+//     kingdom.laws     { [Gesetz]: Jahr des Beschlusses }       geltende Reichsgesetze (WW.REALM_LAWS); FEHLT, solange nie ein Gesetz galt
+//                      (ebenso lawLocks, mods, evcd, city.mods) -> immer über WW.Events.hasLaw bzw. mit Schutz lesen
 //     kingdom.lawLocks { [Gesetz]: true|false }                 vom Spieler gesetzt (fixiert; true = an, false = aus)
 //     kingdom.lawGov   Regierung, unter der die Gesetze zuletzt geprüft wurden (Wechsel -> Unzulässiges fällt weg)
 //     kingdom.mods / city.mods   Modifikatoren (js/sim/mods.js)
@@ -18,7 +19,7 @@
 //   Weltgesetz 'events' (WW.LAW_INFO, Standard an): aus = keine Ereignisse, keine Gesetzesbeschlüsse der Reiche.
 //   WW.Events.fire(sim, key, { kingdomId, cityId, otherId, vars }) -> Chronik-Eintrag | null   (erzwingen, ohne Bedingung)
 //   WW.Events.situation(sim, kingdom) -> Lage L { pop, happy, foodPer, wood, gold, atWar, threat, bare, crowded, hungry, revolt, … }
-//   WW.Events.lawsOf(kingdom) -> [Gesetz], WW.Events.def(key), WW.Events.DEFS, WW.EVENT_GROUPS
+//   WW.Events.hasLaw(kingdom, key) -> bool (sicher, auch ohne kingdom.laws), WW.Events.lawsOf(kingdom) -> [Gesetz], WW.Events.def(key), WW.Events.DEFS, WW.EVENT_GROUPS
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -680,6 +681,7 @@
 
   index();
   WW.Events = {
+    hasLaw: function (k, key) { return !!(k && k.laws && k.laws[key] != null); },
     tick: tick, fire: fire, def: def, defaults: defaults, ensureKingdom: ensureK, situation: situation,
     setRealmLaw: setRealmLaw, setRealmLawLocked: setRealmLawLocked, lawAllowed: lawAllowed, lawsOf: lawsOf, pruneLaws: pruneLaws,
     wantedLaw: wantedLaw, format: fmt, chronicle: chronicle,

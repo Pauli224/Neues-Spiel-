@@ -300,7 +300,7 @@
   // NATUR UND UMWELT
   // ===========================================================================
   ev('waldsterben_klage', 'nature', 'kingdom', 'Kahle Hügel', { weight: 1, prio: 1.5, cooldown: 8, when: c => c.L.bare > 0.6 ? 2 : 0,
-    effects: [{ mod: 'happiness', add: -5, years: 3 }, { law: 'naturschutz', if: c => !c.law('naturschutz') && c.gov !== 'fascism' && !c.k.lawLocks.naturschutz }],
+    effects: [{ mod: 'happiness', add: -5, years: 3 }, { law: 'naturschutz', if: c => !c.law('naturschutz') && c.gov !== 'fascism' && !(c.k.lawLocks && c.k.lawLocks.naturschutz) }],
     texts: ['Um {capital} steht kein Baum mehr. Die Leute vermissen den Schatten, die Vögel vermissen alles. Bald gilt der Naturschutz.',
       'In {capital} wird ein Baum gefunden. Ein einziger. Er bekommt eine Wache und ein Gesetz.',
       'Kinder in {capital} malen Bäume aus der Erinnerung. Die Erwachsenen schämen sich und beschließen Naturschutz.'] });

@@ -942,7 +942,7 @@
     // Kampf
     const g = gov(sim, u);
     let searchR = 0;
-    const alert = !city || city.threat > sim.state.tick || Math.abs(u.x - city.cx) + Math.abs(u.y - city.cy) > 16;   // Feindsuche nur bei Bedrohung der Heimatstadt (spart Rechenzeit)
+    const alert = true;   // (Feindsuche nur bei Bedrohung war zu fragil für Belagerungen; city.threat bleibt als Kennzahl)
     if (u.role === 'soldier') searchR = (u.order && u.order.kind === 'march') ? 2.5 : (alert ? 7 : 0);   // Heere auf dem Marsch lassen sich nicht ablenken
     else if (u.role === 'rebel') searchR = 4;
     else if (g.militia && u.role !== 'child' && u.role !== 'settler') searchR = alert ? 5 : 0;
