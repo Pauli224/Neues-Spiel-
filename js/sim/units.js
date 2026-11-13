@@ -445,13 +445,22 @@
           if (g >= 0) { u.task = 'fish'; u.target = -1; u.goal = -1; u.tt = g; u.phase = 1; return; }
         }
       }
+      // knappe Vorräte: Beeren und Pilze im Wald sammeln, statt auf reife Felder zu warten
+      const sk = WW.Cities.stock(sim, city);
+      if ((!best || best.growth < 3) && sk.food < city.pop * 1.5 + 4 && !(city.besieged > st.tick) && !(u.noFishUntil > st.tick)) {
+        const i = findResource(sim, u, city, 'wood', 10);
+        if (i >= 0) {
+          const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
+          if (g >= 0) { u.task = 'forage'; u.target = -1; u.goal = -1; u.tt = g; u.phase = 1; return; }
+        }
+      }
       if (!best) { wander(sim, u, city, 4); return; }
       u.task = 'farm'; u.target = best.id; u.phase = 1; best.workers++;
       return;
     }
     if (u.phase === 1) {
       let goal;
-      if (u.task === 'fish') goal = u.tt;
+      if (u.task === 'fish' || u.task === 'forage') goal = u.tt;
       else {
         const f = sim._structs.get(u.target);
         if (!f || f.dead) { u.phase = 0; u.target = -1; return; }
@@ -461,10 +470,10 @@
       const r = goTo(sim, u, goal, { limit: 1500 });
       if (r === null) {
         // unerreichbares Feld eine Weile meiden (spart Wegsuche)
-        const f = u.task === 'fish' ? null : sim._structs.get(u.target);
+        const f = (u.task === 'fish' || u.task === 'forage') ? null : sim._structs.get(u.target);
         if (f) f.skipUntil = st.tick + 600 + (f.id % 200);
         u.phase = 0; u.target = -1; u.fails = 0; u.wait = 20;
-        if (u.task === 'fish') u.noFishUntil = st.tick + 900;
+        if (u.task === 'fish' || u.task === 'forage') u.noFishUntil = st.tick + 900;
       }
       return;
     }
@@ -475,8 +484,8 @@
       let mul = WW.SimUtil.mod(sim, k, city, 'food', race.yields.food);
       if (k && k.policy && k.policy.bonus === 'bread') mul *= 1.25;
       if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'food') mul *= 1.5;
-      if (u.task === 'fish') {
-        u.carrying = 'food'; u.carryAmt = C().FISH * mul; u.phase = 3;
+      if (u.task === 'fish' || u.task === 'forage') {
+        u.carrying = 'food'; u.carryAmt = (u.task === 'fish' ? C().FISH : C().FORAGE) * mul; u.phase = 3;
         return;
       }
       const f = sim._structs.get(u.target);

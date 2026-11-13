@@ -21,6 +21,7 @@
     HARVEST: 14,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
     CHOP: 7, MINE: 5,         // Holz/Stein je Gang
     FISH: 3,
+    FORAGE: 4,                // Beeren/Pilze sammeln, wenn die Vorräte knapp sind
     FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
     BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
     BASE_DMG: 4, SOLDIER_DMG: 9,
