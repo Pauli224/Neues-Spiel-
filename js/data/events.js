@@ -40,7 +40,7 @@
   // ===========================================================================
   // GESETZE – jede Regierung beschließt auf ihre Art (wichtig: prio 2)
   // ===========================================================================
-  const lawWhen = g => c => c.gov === g && c.wanted ? 1.3 : 0;
+  const lawWhen = g => c => c.gov === g && c.wanted ? 2 : 0;
   ev('law_democracy', 'laws', 'kingdom', 'Volksabstimmung', { weight: 1, prio: 2, cooldown: 2, when: lawWhen('democracy'),
     effects: [{ law: 'auto' }, { happy: 2 }], pickTexts: lawOnOff, texts: [''],
     textsBy: {
