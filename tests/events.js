@@ -190,7 +190,7 @@ test('Speichern, Laden, Determinismus', function () {
   run(a, 2500); run(c, 2500); run(b, 2500);
   assert(a.hash() === c.hash(), 'nach Laden gleich weiter');
   assert(a.hash() === b.hash(), 'deterministisch mit Ereignissen');
-  assert(a.state.evt && Array.isArray(a.state.kingdoms[0].mods), 'Zustand vorhanden');
+  assert(a.state.evt, 'Zustand vorhanden');
 });
 
 test('Alte Spielstände ohne mods/laws', function () {
@@ -205,7 +205,7 @@ test('Alte Spielstände ohne mods/laws', function () {
   b._throwErrors = true;
   assert(b.state.evt && b.state.laws.events === true, 'Ereignis-Zustand ergänzt');
   run(b, 2000);
-  assert(b.state.kingdoms.every(k => k.laws && Array.isArray(k.mods)), 'Felder ergänzt');
+  assert(b.state.kingdoms.every(k => (!k.laws || typeof k.laws === 'object') && (!k.mods || Array.isArray(k.mods))), 'Felder heil');
   for (const k of b.state.kingdoms) if (k.cityIds.length) { assert(WW.Events.fire(b, 'goldader', { kingdomId: k.id }), 'Ereignis feuert'); break; }
 });
 
@@ -343,6 +343,21 @@ test('Jedes Reichsgesetz wirkt in der laufenden Simulation', function () {
   const c1 = count(sc, kc), x1 = count(sx, kx);
   log('Rodungsmarken im Reich: vorher ' + c0 + ', Naturschutz nach 10 Jahren ' + c1 + ', Kahlschlagplan ' + x1);
   if (sc.state.cleared) { assert(c1 <= c0, 'Naturschutz: Rodungen nehmen zu'); assert(x1 >= c1, 'Kahlschlag rodet nicht mehr als Naturschutz'); }
+});
+
+test('Spielstand formstabil mit neuen Städten und Reichen', function () {
+  const sim = makeSim({ seed: 2024, size: 'medium', populate: 4 });
+  const c0 = sim.state.cities.length, k0 = sim.state.kingdoms.length;
+  let ok = false;
+  for (let i = 0; i < 40 && !ok; i++) {
+    run(sim, 600);
+    const s = sim.serialize();
+    const s2 = WW.Sim.load(s).serialize();
+    assert(s2 === s, 'serialize(load(s)) !== s nach ' + sim.state.tick + ' Ticks');
+    ok = sim.state.nextId > 0 && sim.state.cities.some(c => c.id > 0 && c.founded > 0) && sim.state.cities.length > c0;
+  }
+  log('Städte ' + c0 + ' -> ' + sim.state.cities.length + ', Reiche ' + k0 + ' -> ' + sim.state.kingdoms.length + ', Ticks ' + sim.state.tick);
+  assert(ok, 'keine neuen Städte entstanden');
 });
 
 const bad = results.filter(r => !r.ok);

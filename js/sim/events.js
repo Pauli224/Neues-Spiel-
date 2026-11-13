@@ -43,8 +43,7 @@
     e.queue = Array.isArray(e.queue) ? e.queue : [];
     e.cd = e.cd || {};
     e.year = e.year | 0; e.count = e.count | 0;
-    for (const k of st.kingdoms || []) ensureK(k);
-    for (const c of st.cities || []) if (!Array.isArray(c.mods)) c.mods = [];
+    // Reichs-/Stadtfelder (laws, lawLocks, mods, evcd) entstehen erst beim ersten Schreiben -> Spielstand formstabil
     if (st.laws && !('events' in st.laws) && WW.LAW_DEFAULTS && 'events' in WW.LAW_DEFAULTS) st.laws.events = WW.LAW_DEFAULTS.events;
   }
   function ensureK(k) {
@@ -54,6 +53,7 @@
     if (!k.evcd || typeof k.evcd !== 'object') k.evcd = {};
     if (k.lawGov == null) k.lawGov = k.gov;
   }
+  const EMPTY = Object.freeze({});
 
   // ---------------------------------------------------------------------------
   // Lage eines Reichs (für Bedingungen und Gesetzeswünsche)
@@ -167,7 +167,7 @@
   }
   // Nach Regierungswechsel fallen unzulässige Gesetze weg
   function pruneLaws(sim, k) {
-    if (k.lawGov === k.gov) return;
+    if (!k.laws || k.lawGov === k.gov) return;
     const old = k.lawGov;
     k.lawGov = k.gov;
     const gone = [];
@@ -180,12 +180,13 @@
   function wantedLaw(sim, k, L, rng) {
     const w = {};
     let any = false;
+    const laws = k.laws || EMPTY, locks = k.lawLocks || EMPTY;
     for (const l of WW.REALM_LAWS) {
-      if (k.lawLocks[l.key] != null) continue;
+      if (locks[l.key] != null) continue;
       if (!lawAllowed(k, l.key)) continue;
       const v = Math.max(0, +l.want(L) || 0);
-      if (k.laws[l.key] == null) { if (v > 1.2) { w['+' + l.key] = v; any = true; } }
-      else if (v < 0.6 && L.year - k.laws[l.key] >= 6) { w['-' + l.key] = (0.9 - v) * 1.5; any = true; }
+      if (laws[l.key] == null) { if (v > 1.2) { w['+' + l.key] = v; any = true; } }
+      else if (v < 0.6 && L.year - laws[l.key] >= 6) { w['-' + l.key] = (0.9 - v) * 1.5; any = true; }
     }
     if (!any) return null;
     const p = rng.weighted(w);
@@ -373,6 +374,7 @@
     },
     law: function (sim, ctx, e) {
       const k = ctx.k; if (!k) return '';
+      ensureK(k);
       let key = e.law, on = e.lawOn !== false;
       if (key === 'auto') {
         const w = ctx.wanted || wantedLaw(sim, k, situation(sim, k), sim.rng) || anyLawChange(sim, k);
@@ -521,7 +523,6 @@
     if (c && !k) k = sim._kingdoms.get(c.kingdomId);
     if (!k && d.scope !== 'world') k = st.kingdoms.length ? st.kingdoms[sim.rng.int(st.kingdoms.length)] : null;
     if (!k && st.kingdoms.length) k = st.kingdoms[sim.rng.int(st.kingdoms.length)];
-    if (k) ensureK(k);
     if (k && (!c || c.kingdomId !== k.id)) {
       if (d.scope === 'city' && k.cityIds.length) c = sim._cities.get(k.cityIds[sim.rng.int(k.cityIds.length)]);
       else c = capitalOf(sim, k);
@@ -583,7 +584,7 @@
     // Abklingzeit
     const cd = d.cooldown == null ? 8 : d.cooldown;
     if (d.scope === 'world') st.evt.cd[d.key] = st.year + cd;
-    else if (ctx.k) ctx.k.evcd[d.key] = st.year + cd;
+    else if (ctx.k) { if (!ctx.k.evcd) ctx.k.evcd = {}; ctx.k.evcd[d.key] = st.year + cd; }
     if (ctx.k) ctx.k._sit = null;
     return ev;
   }
@@ -614,7 +615,7 @@
     for (const d of DEFS) {
       if (d.scope === 'world' || d.followOnly) continue;
       if (importantOnly && !(d.prio >= 2)) continue;
-      if (k.evcd[d.key] != null && k.evcd[d.key] > st.year) continue;
+      if (k.evcd && k.evcd[d.key] != null && k.evcd[d.key] > st.year) continue;
       if (d.scope === 'pair' && !oth) continue;
       const ctx = decorate({ def: d, scope: d.scope, k: k, c: d.scope === 'city' ? cityC : cap, o: d.scope === 'pair' ? oth : null, sim: sim, rng: rng, wanted: wanted });
       if (d.scope === 'pair' && d.rel && d.rel.indexOf(ctx.rel ? ctx.rel.status : '') < 0) continue;
@@ -634,8 +635,7 @@
     if (DEFS !== WW.EVENT_DEFS) index();
     const ev = st.evt;
     if (ev.year !== st.year) { ev.year = st.year; ev.count = 0; }
-    for (const k of st.kingdoms) { if (!k.laws) ensureK(k); if (k.lawGov !== k.gov) pruneLaws(sim, k); }
-    for (const c of st.cities) if (!c.mods) c.mods = [];
+    for (const k of st.kingdoms) if (k.laws && k.lawGov !== k.gov) pruneLaws(sim, k);
     if (!st.laws.events) return;
     // Folgeereignisse (Ketten) – unabhängig vom Deckel
     if (ev.queue.length) {

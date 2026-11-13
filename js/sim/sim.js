@@ -10,6 +10,8 @@
 //   js/sim/diplo.js, js/sim/growth.js, js/sim/creatures.js, js/sim/env.js, js/sim/powers.js, js/sim/sim.js
 //   (Wildnis-Teil, eigener Agent: js/core/config-wild.js nach config.js, js/data/texts-wild.js nach texts.js,
 //    js/sim/wild.js vor env.js – siehe tests/load.js)
+//   (Industrie: js/core/config-industry.js nach config.js, js/data/texts-industry.js nach texts.js, js/sim/industry.js vor sim.js;
+//    Doku im Kopf von js/sim/industry.js)   // [industry]
 //
 // ERZEUGEN
 //   const sim = WW.Sim.create(opts)          opts (alle optional):
@@ -326,6 +328,7 @@
     WW.Env.update(this);
     if (WW.Mods && st.tick % 10 === 3) WW.Mods.tick(this);   // [events]
     if (WW.Events) WW.Events.tick(this);   // [events]
+    if (WW.Industry) WW.Industry.tick(this);   // [industry]
     if (st.tick % 10 === 0) WW.Cities.updateAll(this);
     if (st.tick % 20 === 5) WW.Gov.update(this);
     if (st.tick % 40 === 15) { WW.Cities.stats(this); WW.Diplo.update(this); }
@@ -351,6 +354,7 @@
   const RASTERS = [['terrain', Uint8Array], ['variant', Uint8Array], ['height', Uint8Array], ['owner', Int32Array],
     ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array],
     ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array]];   // [wild] Raster der Wildnis
+  if (WW.Industry) RASTERS.push(['murk', Uint8Array]);   // [industry] Flusstrübung (pollution hat eigene Größe: WW.Industry.save/load)
 
   function replacer(key, value) {
     if (key && key.charCodeAt(0) === 95) return undefined;   // '_' = Laufzeit
@@ -376,6 +380,7 @@
     o.rasters = {};
     for (const r of RASTERS) o.rasters[r[0]] = U().encodeArray(st[r[0]]);
     if (st.flur) o.rasters.flur = U().encodeArray(st.flur);
+    if (WW.Industry) WW.Industry.save(st, o);   // [industry]
     return JSON.stringify(o, replacer);
   };
   Sim.prototype.hash = function () { return U().hashString(this.serialize()); };
@@ -390,6 +395,7 @@
     for (const k in o) if (k !== 'rasters' && k !== 'rng' && k !== 'game' && k !== 'version') st[k] = o[k];
     for (const r of RASTERS) st[r[0]] = U().decodeArray(o.rasters[r[0]] || '', r[1], N);
     if (o.rasters.flur) st.flur = U().decodeArray(o.rasters.flur, Int32Array, Math.ceil(o.W / 6) * Math.ceil(o.H / 6));
+    if (WW.Industry) WW.Industry.load(st, o);   // [industry]
     if (!o.rasters.owner) st.owner.fill(-1);
     if (!o.rasters.structAt) st.structAt.fill(-1);
     if (!o.rasters.inRing) st.inRing.fill(-1);
@@ -415,6 +421,7 @@
     }
     st.worldName = st.worldName || 'Wuselwelt';
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
+    if (WW.Industry) WW.Industry.defaults(st);   // [industry]
     if (WW.Events) WW.Events.defaults(st);   // [events] mods, laws, Ereignis-Zustand
   }
 
@@ -455,6 +462,7 @@
     }
     for (const k in st.laws) if (!(k in WW.LAW_DEFAULTS)) delete st.laws[k];
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
+    if (WW.Industry) WW.Industry.defaults(st);   // [industry]
     const sim = new Sim(st, null);
     WW.Growth.ensure(sim);
     sim._startSpots = (world.startSpots || []).slice();
