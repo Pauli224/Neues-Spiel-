@@ -37,6 +37,33 @@ for (const [file, after] of OPTIONAL) {
 }
 const between = (s, a, b) => { const i = s.indexOf(a), j = s.indexOf(b, i + a.length); if (i < 0 || j < 0) throw new Error('Marke fehlt: ' + a); return s.slice(i + a.length, j); };
 
+// 3D und Ton: Block <!--R3--> … <!--/R3--> in index.html aus den vorhandenen Dateien neu aufbauen
+// (three.js zuerst, dann render3d in fester Reihenfolge, dann audio). Fehlende Dateien: Block bleibt leer.
+function listDir(dir) { try { return fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).sort(); } catch (e) { return []; } }
+function r3Files() {
+  const out = [];
+  if (fs.existsSync(path.join(ROOT, 'js/vendor/three.min.js')) && fs.existsSync(path.join(ROOT, 'js/render3d/core.js'))) {
+    out.push('js/vendor/three.min.js');
+    const r3 = listDir('js/render3d');
+    const ORDER = ['core.js', 'terrain.js', 'flora.js'];
+    for (const f of ORDER) if (r3.includes(f)) out.push('js/render3d/' + f);
+    for (const f of r3) if (/^structs(-.*)?\.js$/.test(f) && f === 'structs.js') out.push('js/render3d/' + f);
+    for (const f of r3) if (/^structs-.*\.js$/.test(f)) out.push('js/render3d/' + f);
+    for (const f of ['units.js', 'fx.js']) if (r3.includes(f)) out.push('js/render3d/' + f);
+    for (const f of r3) if (!out.includes('js/render3d/' + f)) out.push('js/render3d/' + f);
+  }
+  const au = listDir('js/audio');
+  const FIRST = ['core.js', 'audio.js', 'engine.js', 'synth.js'];
+  for (const f of FIRST) if (au.includes(f)) out.push('js/audio/' + f);
+  for (const f of au) if (!out.includes('js/audio/' + f)) out.push('js/audio/' + f);
+  return out;
+}
+{
+  const blk = '<!--R3-->\n' + r3Files().map(f => '<script src="' + f + '"></script>\n').join('') + '<!--/R3-->';
+  const nh = html.replace(/<!--R3-->[\s\S]*?<!--\/R3-->/, blk);
+  if (nh !== html) { html = nh; fs.writeFileSync(path.join(ROOT, 'index.html'), html); console.log('index.html: 3D/Ton-Block aktualisiert'); }
+}
+
 const fonts = between(html, '<!--FONTS-->', '<!--/FONTS-->').trim();
 const scriptBlock = between(html, '<!--SCRIPTS-->', '<!--/SCRIPTS-->');
 const srcs = Array.from(scriptBlock.matchAll(/<script src="([^"]+)"><\/script>/g)).map(m => m[1]);
@@ -47,8 +74,13 @@ const markup = bodyInner.slice(0, bodyInner.indexOf('<!--SCRIPTS-->')).trim();
 const title = (/<title>([^<]*)<\/title>/.exec(html) || [])[1] || 'Wuselwelt';
 
 // Skripte inline; '</script' darf im Text nicht vorkommen
-const js = srcs.map(f => '/* ' + f + ' */\n' + read(f).replace(/<\/script/gi, '<\\/script')).join('\n');
+const inline = (list) => list.map(f => '/* ' + f + ' */\n' + read(f).replace(/<\/script/gi, '<\\/script')).join('\n');
+const js = inline(srcs);
 const scripts = '<script>\n' + js + '\n</script>';
+// Artifact: three.js vom CDN (Artifact-Regel), Rest inline
+const THREE_LOCAL = 'js/vendor/three.min.js';
+const THREE_CDN = '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>';
+const artScripts = srcs.includes(THREE_LOCAL) ? THREE_CDN + '\n<script>\n' + inline(srcs.filter(f => f !== THREE_LOCAL)) + '\n</script>' : scripts;
 const style = '<style>\n' + css + '\n</style>';
 
 // Kopf-Metas des Originals ohne Verweise auf Dateien (Manifest, Icons, Stylesheet)
@@ -62,7 +94,7 @@ const single = '<!doctype html>\n<html lang="de">\n<head>\n' + head + '\n' + fon
 
 const artifact = '<title>' + title + '</title>\n' +
   '<meta name="claude:viewport-fit-sides" content="cover">\n' +
-  fonts + '\n' + style + '\n' + markup + '\n' + scripts + '\n';
+  fonts + '\n' + style + '\n' + markup + '\n' + artScripts + '\n';
 
 // sw.js: Dateiliste und Version aus index.html nachführen (offline spielbar)
 const swFiles = ['./', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'].concat(srcs);

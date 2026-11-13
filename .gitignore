@@ -1,3 +1,7 @@
 dist/
 node_modules/
 .DS_Store
+app/node_modules/
+app/game/
+app/dist/
+app/build/

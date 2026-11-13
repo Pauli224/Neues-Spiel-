@@ -45,6 +45,10 @@
     seg.appendChild(this.spPop);
     document.addEventListener('pointerdown', (e) => { if (!this.spPop.hidden && !seg.contains(e.target)) this.toggleSpeedPop(false); });
     this.$('btnChron').addEventListener('click', () => game.ui.openChronicle());
+    // Lautsprecher: an/aus
+    this.soundBtn = this.$('btnSound');
+    this.soundBtn.addEventListener('click', () => { game.audioSet.on = !game.audioSet.on; game.audioApply(); });
+    this.soundChanged();
     this.$('btnMenu').addEventListener('click', () => game.ui.openMenu());
     this.$('btnMap').addEventListener('click', () => game.ui.toggleMinimap());
     this.buildCats();
@@ -64,7 +68,7 @@
     this.catBtns = {};
     for (const c of WW.UI.Tools.CATEGORIES) {
       const b = h('button.cat', { type: 'button', role: 'tab', 'aria-selected': 'false', title: c.name,
-        on: { click: () => this.pickCat(c.id, true) } }, [icon(c.icon, 32), h('span.long', c.name), h('span.short', c.short || c.name)]);
+        on: { click: () => { this.game.uiSound('click'); this.pickCat(c.id, true); } } }, [icon(c.icon, 32), h('span.long', c.name), h('span.short', c.short || c.name)]);
       cr.appendChild(b);
       this.catBtns[c.id] = b;
     }
@@ -104,7 +108,7 @@
       if (t.kind === 'sep') { if (t.label) row.appendChild(h('span.tool-group', t.label)); else if (!prevSep) row.appendChild(h('span.tool-sep')); prevSep = true; continue; }
       prevSep = false;
       const b = h('button.tool', { type: 'button', title: t.name, 'aria-pressed': this.game.toolId === t.id ? 'true' : 'false',
-        on: { click: () => { if (t.kind === 'action') t.run(this.game); else this.game.setTool(t.id); } } },
+        on: { click: () => { this.game.uiSound('select'); if (t.kind === 'action') t.run(this.game); else this.game.setTool(t.id); } } },
       [icon(t.icon, 32, null, t.name), h('span', t.name)]);
       row.appendChild(b);
       this.toolBtns[t.id] = b;
@@ -178,6 +182,19 @@
     el.classList.remove('fade');
     clearTimeout(this.hintTimer);
     if (text && !keep) this.hintTimer = setTimeout(() => el.classList.add('fade'), 4200);
+  };
+
+  Hud.prototype.soundChanged = function () {
+    const b = this.soundBtn;
+    if (!b) return;
+    const on = this.game.audioSet && this.game.audioSet.on;
+    b.hidden = !WW.Audio;
+    const key = on ? (WW.Sprites.has('i_sound') ? 'i_sound' : null) : (WW.Sprites.has('i_mute') ? 'i_mute' : null);
+    D().clear(b);
+    if (key) b.appendChild(D().icon(key, 28));
+    else b.appendChild(D().h('span.snd', { style: { font: '700 18px/1 var(--font-pixel)' } }, on ? '♪' : '–'));
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.title = on ? 'Ton aus' : 'Ton an';
   };
 
   Hud.prototype.toggleSpeedPop = function (show) {

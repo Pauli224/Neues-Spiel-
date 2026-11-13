@@ -12,6 +12,7 @@
       const r = this.cv.getBoundingClientRect(), st = this.game.sim && this.game.sim.state;
       if (!st) return;
       const x = (e.clientX - r.left) / r.width * st.W * 8, y = (e.clientY - r.top) / r.height * st.H * 8;
+      if (this.game.mode === '3d' && this.game.v3 && this.game.v3.r3) this.game.v3.focus(x / 8, y / 8, true);
       this.game.cam.x = x; this.game.cam.y = y; this.game.cam.vx = this.game.cam.vy = 0; this.game.cam.anim = null; this.game.cam.clamp();
       this.game.followId = null;
     };
@@ -80,7 +81,16 @@
     if (this.air) { const has = !!st.pollution; if (this.air.hidden === has) this.air.hidden = !has; this.air.setAttribute('aria-pressed', g.view === 'air' ? 'true' : 'false'); }
     const c = this.ctx, cam = g.cam;
     if (this.baseCv) c.drawImage(this.baseCv, 0, 0);
-    // Sichtrahmen
+    // Sichtrahmen (3D: Sichtfeld-Viereck auf dem Boden)
+    if (g.mode === '3d' && g.v3 && g.v3.r3) {
+      const q = g.v3.viewQuad();
+      if (q && q.length === 4) {
+        c.strokeStyle = '#f2b541'; c.lineWidth = 2; c.beginPath();
+        q.forEach((p, i) => { const x = Math.max(0, Math.min(st.W, p.x)) * 2, y = Math.max(0, Math.min(st.H, p.y)) * 2; if (i) c.lineTo(x, y); else c.moveTo(x, y); });
+        c.closePath(); c.stroke();
+      }
+      return;
+    }
     const hw = cam.viewW / 2 / cam.zoom, hh = cam.viewH / 2 / cam.zoom;
     const x0 = (cam.x - hw) / 4, y0 = (cam.y - hh) / 4;
     c.strokeStyle = '#f2b541'; c.lineWidth = 2;

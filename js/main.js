@@ -30,7 +30,29 @@
     D().store.set(SPEED_KEY, String(v));
   };
 
-  function tileOf(sx, sy) { const w = game.cam.screenToWorld(sx, sy); return { x: w.x / 8, y: w.y / 8 }; }
+  // Kachel unter einem Bildschirmpunkt – je nach aktiver Ansicht (3D: Strahl auf das Gelände)
+  function tileOf(sx, sy) {
+    if (game.mode === '3d' && game.v3 && game.v3.r3) { const t = game.v3.tileAt(sx, sy); return t || { x: -1, y: -1 }; }
+    const w = game.cam.screenToWorld(sx, sy); return { x: w.x / 8, y: w.y / 8 };
+  }
+  game.tileOf = tileOf;
+
+  // Schnittstelle der aktiven Ansicht für die Eingabe
+  const api2d = {
+    is3d: false,
+    pan(dx, dy) { game.cam.panBy(dx, dy); },
+    zoomAt(f, sx, sy) { game.cam.zoomAt(f, sx, sy); },
+    orbit() { /* nur 3D */ },
+    tile(sx, sy) { return tileOf(sx, sy); },
+    stop() { game.cam.vx = game.cam.vy = 0; game.cam.anim = null; },
+    fling(vx, vy) {
+      const cam = game.cam;
+      cam.vx = -vx / cam.zoom; cam.vy = -vy / cam.zoom;
+      if (Math.hypot(vx, vy) < 120) cam.vx = cam.vy = 0;
+    },
+    snap(sx, sy) { const cam = game.cam, z = cam.crispZoom(cam.zoom); if (Math.abs(z - cam.zoom) > 1e-3) cam.animateZoom(z, sx, sy, 140); }
+  };
+  game.viewApi = function () { return game.mode === '3d' && game.v3 && game.v3.r3 ? game.v3.api : api2d; };
   function inMap(x, y) { const st = game.sim.state; return x >= 0 && y >= 0 && x < st.W && y < st.H; }
 
   // Malen (Kacheln, Fließkomma); first = Strichbeginn
@@ -144,6 +166,7 @@
 
   // Kamera zu Kachel; auf dem Handy etwas über die Mitte (Blatt verdeckt unten)
   game.flyTo = function (tx, ty, zoom) {
+    if (game.mode === '3d' && game.v3 && game.v3.r3) { game.v3.focus(tx, ty); game.followId = null; return; }
     const cam = game.cam;
     let wy = ty * 8;
     const z = zoom || Math.max(cam.zoom, cam.crispZoom(2.5));
@@ -249,6 +272,8 @@
     if (k === 'p' || k === 'P' || k === 'Pause') { game.togglePause(); return; }
     if (k === 'c' || k === 'C') { game.ui.openChronicle(); return; }
     if (k === 'm' || k === 'M') { game.ui.toggleMinimap(); return; }
+    if (k === 'v' || k === 'V') { game.toggleMode(); return; }
+    if (k === 'n' || k === 'N') { if (game.v3 && game.mode === '3d') game.v3.north(); return; }
     if (k === '+' || k === '=') { game.cam.animateZoom(game.cam.crispZoom(game.cam.zoom * 1.6)); return; }
     if (k === '-' || k === '_') { game.cam.animateZoom(game.cam.crispZoom(game.cam.zoom / 1.6)); return; }
     void e;
@@ -270,7 +295,9 @@
     // Nur Wichtiges wird als Meldung eingeblendet (Krieg, Frieden, Bündnis, Eroberung, Untergang,
     // neue Reiche, Abspaltung, Regierungswechsel, Umsturz, Thronfolge, Seuche). Alles andere
     // steht still in der Chronik.
-    const fresh = ev.filter(e => e.id > game.lastEventId && TOAST_TYPES.test(e.type));
+    const all = ev.filter(e => e.id > game.lastEventId);
+    if (WW.Audio && game.audioOn) for (const e of all) { try { WW.Audio.onEvent(e); } catch (er) { /* egal */ } }
+    const fresh = all.filter(e => TOAST_TYPES.test(e.type));
     game.lastEventId = last.id;
     if (!fresh.length) return;
     // höchstens eine Meldung alle paar Sekunden, auch bei hohem Tempo
@@ -311,6 +338,7 @@
     }
     game.cam.clamp();
     game.renderer.queueAll(game.cam);
+    if (game.v3) game.v3.attach(sim, best ? { x: best.cx + 0.5, y: best.cy + 1 } : (sim._startSpots && sim._startSpots[0] ? { x: sim._startSpots[0].x + 0.5, y: sim._startSpots[0].y + 0.5 } : null));
   }
 
   // einige hundert Schritte vorspulen, in Häppchen (Seite bleibt bedienbar)
@@ -393,7 +421,8 @@
     // Kamera folgt einer Figur
     if (game.followId != null) {
       const u = sim.query.unit(game.followId);
-      if (u) { game.cam.x += (u.x * 8 - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (u.y * 8 - game.cam.y) * Math.min(1, dt * 6); game.cam.clamp(); }
+      if (u && game.mode === '3d' && game.v3 && game.v3.r3) { if (((game._fl = (game._fl || 0) + 1) % 8) === 0) game.v3.focus(u.x, u.y, false); }
+      else if (u) { game.cam.x += (u.x * 8 - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (u.y * 8 - game.cam.y) * Math.min(1, dt * 6); game.cam.clamp(); }
       else game.followId = null;
     }
     game.cam.update(dt, reducedMotion);
@@ -420,9 +449,16 @@
         game.pollEvents();
       }
     }
-    game.renderer.markTiles(sim.drainDirtyTiles());
+    // schmutzige Kacheln und Effekte genau einmal abholen und an alle verteilen
+    const dirty = sim.drainDirtyTiles();
+    game.renderer.markTiles(dirty);
+    if (game.v3 && dirty.length) game.v3.markDirty(dirty);
     const fx = sim.drainFx();
-    if (fx.length) game.renderer.addFx(fx);
+    if (fx.length) {
+      if (game.mode !== '3d') game.renderer.addFx(fx);
+      if (game.v3 && game.mode === '3d') game.v3.pushFx(fx);
+      if (WW.Audio && game.audioOn) for (const f of fx) { try { WW.Audio.onFx(f); } catch (e) { /* Ton darf nie stören */ } }
+    }
     decayT += dt * (running ? game.speed : 0);
     if (decayT > 40) { decayT = 0; game.renderer.decayPaths(); }
 
@@ -438,7 +474,14 @@
       else brush = { x: p.x, y: p.y, kind: 'tile' };
     }
     const sel = game.select && game.select.obj && !game.select.obj.dead ? game.select : null;
-    game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, view: game.view, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
+    const alpha = running ? Math.min(1, game.acc) : 1;
+    let cami = null;
+    if (game.mode === '3d' && game.v3 && game.v3.r3) {
+      if (!game.v3.frame(alpha, dt, { brush: brush, select: sel, air: game.view === 'air' })) setMode('2d', true);
+      cami = game.v3.cameraInfo();
+    } else game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, view: game.view, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
+    if (!cami) cami = { x: game.cam.x / 8, y: game.cam.y / 8, dist: 60 / game.cam.zoom, yaw: 0, tilt: 1 };
+    if (WW.Audio && game.audioOn) { try { WW.Audio.update(sim.state, cami, dt); } catch (e) { /* egal */ } }
 
     statT -= dt; infoT -= dt;
     if (statT <= 0) { statT = 0.25; game.hud.updateStats(); }
@@ -470,13 +513,60 @@
   // Leinwand an Größe und Gerätepixel anpassen
   let lastW = 0, lastH = 0, lastDpr = 0;
   function resize() {
-    const cv = game.canvas;
-    const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(3, window.devicePixelRatio || 1);
+    const cv = game.canvas, app = document.getElementById('app');
+    const w = app.clientWidth, h = app.clientHeight, dpr = Math.min(3, window.devicePixelRatio || 1);
     if (w === lastW && h === lastH && dpr === lastDpr) return;
     lastW = w; lastH = h; lastDpr = dpr;
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     game.cam.setView(w, h, dpr);
+    if (game.v3) game.v3.resize();
   }
+
+  // ------------------------------------------------------------------ Ansicht 3D / Pixel
+  const VIEW_KEY = 'wuselwelt.view';
+  function setMode(m, failed) {
+    if (m === '3d' && !(game.v3 && game.v3.start())) {
+      if (!failed && game.hud) game.hud.toast('Die 3D-Ansicht läuft auf diesem Gerät nicht. Es geht in Pixel weiter.', { warn: true, ms: 5000 });
+      m = '2d';
+    }
+    if (failed) { game.v3 && game.v3.stop(); if (!game._v3FailShown) { game._v3FailShown = true; game.hud.toast('Die 3D-Ansicht hatte ein Problem. Es geht in Pixel weiter.', { warn: true, ms: 6000 }); } }
+    const prev = game.mode;
+    game.mode = m;
+    game.canvas.hidden = m === '3d';
+    if (game.v3) game.v3.show(m === '3d');
+    // Blickpunkt mitnehmen
+    if (prev && prev !== m && game.sim) {
+      if (m === '3d' && game.v3 && game.v3.r3) game.v3.focus(game.cam.x / 8, game.cam.y / 8, true);
+      else if (m === '2d' && game.v3 && game.v3.r3) { const ci = game.v3.cameraInfo(); if (ci) { game.cam.x = ci.x * 8; game.cam.y = ci.y * 8; game.cam.clamp(); } }
+    }
+    if (!failed) D().store.set(VIEW_KEY, m);
+    document.body.classList.toggle('mode3d', m === '3d');
+  }
+  game.setMode = setMode;
+  game.toggleMode = function () { setMode(game.mode === '3d' ? '2d' : '3d'); game.hud.hint(game.mode === '3d' ? 'Ansicht: 3D. Rechts ziehen verschiebt, Mitte oder Alt+Ziehen dreht, Q/E drehen.' : 'Ansicht: Pixel.'); };
+
+  // ------------------------------------------------------------------ Ton
+  const AUDIO_KEY = 'wuselwelt.audio';
+  game.audioOn = false;
+  game.audioSet = (function () { try { return Object.assign({ on: true, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }, JSON.parse(D().store.get(AUDIO_KEY) || '{}')); } catch (e) { return { on: true, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }; } })();
+  game.audioStart = function () {
+    if (game.audioOn || !WW.Audio || !game.audioSet.on) return;
+    try { WW.Audio.init(); WW.Audio.setVolume(game.audioSet); WW.Audio.mute(false); game.audioOn = true; } catch (e) { game.audioOn = false; }
+    game.hud && game.hud.soundChanged && game.hud.soundChanged();
+  };
+  game.audioApply = function () {
+    D().store.set(AUDIO_KEY, JSON.stringify(game.audioSet));
+    if (!WW.Audio) return;
+    if (game.audioSet.on && !game.audioOn) game.audioStart();
+    try { if (game.audioOn) { WW.Audio.setVolume(game.audioSet); WW.Audio.mute(!game.audioSet.on); } } catch (e) { /* egal */ }
+    game.hud && game.hud.soundChanged && game.hud.soundChanged();
+  };
+  game.uiSound = function (name) { if (game.audioOn && game.audioSet.on && WW.Audio && WW.Audio.ui) { try { WW.Audio.ui(name); } catch (e) { /* egal */ } } };
+  game.quality = (function () { const q = D().store.get('wuselwelt.quality'); return q || (window.innerWidth < 760 ? 'low' : 'mid'); })();
+  game.setQuality = function (q) {
+    game.quality = q; D().store.set('wuselwelt.quality', q);
+    if (game.v3) game.v3.rebuild(q);
+  };
 
   let reducedMotion = false;
 
@@ -492,7 +582,13 @@
     game.hud = new WW.UI.Hud(game);
     game.minimap = new WW.UI.Minimap(game);
     game.newWorldScreen = new WW.UI.NewWorld(game);
-    game.input = new WW.UI.Input(game.canvas, game.cam, game);
+    game.v3 = WW.UI.View3D ? new WW.UI.View3D(game) : null;
+    game.input = new WW.UI.Input(game.v3 ? [game.canvas, game.v3.canvas] : [game.canvas], game);
+    // Ton erst nach der ersten Nutzeraktion; bei verdecktem Fenster pausieren
+    const unlock = () => { game.audioStart(); };
+    window.addEventListener('pointerdown', unlock, { capture: true });
+    window.addEventListener('keydown', unlock, { capture: true });
+    document.addEventListener('visibilitychange', () => { if (!WW.Audio || !game.audioOn) return; try { if (document.hidden) WW.Audio.suspend(); else WW.Audio.resume(); } catch (e) { /* egal */ } });
     try { reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* egal */ }
     game.renderer.reduced = reducedMotion;
     game.tool = WW.UI.Tools.get('inspect');
@@ -509,6 +605,10 @@
     if (save) sim = WW.Sim.load(save);
     if (!sim) { const a = D().store.get(AUTO_KEY); if (a) sim = WW.Sim.load(a); }
     const firstVisit = !D().store.get(WELCOME_KEY);
+    // Ansicht: gespeicherte Wahl, sonst 3D, wenn das Gerät es kann
+    const vw = D().store.get(VIEW_KEY);
+    const want3d = vw ? vw === '3d' : !!(WW.R3 && WW.R3.supported && WW.R3.supported());
+    setMode(want3d && game.v3 && game.v3.available() ? '3d' : '2d', false);
     const go = (s) => {
       attachSim(s);
       hideBoot();

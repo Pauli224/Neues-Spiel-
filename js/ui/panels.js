@@ -29,6 +29,7 @@
 
   // ------------------------------------------------------------------ Info-Fenster
   Panels.prototype.showInfo = function (sel) {
+    if (!this.sel || this.sel.kind !== sel.kind || this.sel.id !== sel.id) this.game.uiSound('select');
     this.sel = sel;
     this.lastSig = '';
     this.$('info').hidden = false;
@@ -266,7 +267,9 @@
       const row = h('div.relrow', [
         h('div.rt', [icon('banner_' + (o.bannerPattern % 8), 22, o.colorIndex),
           h('button.link.nm', { type: 'button', on: { click: () => game.selectKingdom(o.id, true) } }, o.name),
+          r.forced ? h('span', { title: 'Von dir erzwungen: endet nicht von selbst', style: { display: 'inline-flex' } }, icon('i_lock', 18)) : null,
           h('span.badge.' + r.status, STATUS[r.status] || r.status)]),
+        r.forced ? h('div.op', 'Von dir erzwungen – endet nicht von selbst.') : null,
         h('div.op', 'Meinung ' + (r.opinion > 0 ? '+' : '') + Math.round(r.opinion) + ' (' + opinionWord(r.opinion) + ') · ' + WW.GOVERNMENTS[o.gov].name),
         h('div.rbtns', [['war', 'Krieg', 'i_war', '.danger'], ['peace', 'Frieden', 'i_peace', ''], ['alliance', 'Bündnis', 'i_alliance', '.good']].map(b =>
           h('button.btn' + (r.status === b[0] ? '' : b[3]), { type: 'button', 'aria-pressed': r.status === b[0] ? 'true' : 'false', disabled: r.status === b[0],
@@ -431,6 +434,7 @@
     D().add(b, content);
     b.scrollTop = 0;
     this.$('modal').hidden = false;
+    this.game.uiSound('open');
     this.modalKind = opt && opt.kind;
     this.$('modalClose').hidden = !!(opt && opt.noClose);
     const f = b.querySelector('.btn.primary') || this.$('modalClose');
@@ -455,6 +459,9 @@
       item('i_chronicle', 'Chronik', 'Alles, was geschah', () => this.openChronicle()),
       item('i_map', 'Minikarte', 'Ein- oder ausblenden', () => { this.toggleMinimap(); this.closeModal(); }),
       game.sim && game.sim.state.pollution ? item(WW.Sprites.has('i_view_air') ? 'i_view_air' : 'i_map', 'Luftkarte', 'Verschmutzung und Wind zeigen', () => { game.toggleAirView(); this.closeModal(); }) : null,
+      game.v3 && game.v3.available() ? item('i_map', 'Ansicht: ' + (game.mode === '3d' ? '3D' : 'Pixel'), 'Umschalten auf ' + (game.mode === '3d' ? 'Pixel' : '3D') + ' (Taste V)', () => { game.toggleMode(); this.closeModal(); }) : null,
+      game.v3 && game.v3.available() ? item('i_newworld', 'Grafik', 'Qualität ' + ({ low: 'niedrig', mid: 'mittel', high: 'hoch' })[game.quality], () => this.openGraphics()) : null,
+      WW.Audio ? item(WW.Sprites.has('i_sound') ? 'i_sound' : 'i_chronicle', 'Ton', game.audioSet.on ? 'An · Lautstärken einstellen' : 'Aus', () => this.openSound()) : null,
       item('i_inspect', 'Kurzanleitung', 'Die drei wichtigsten Tipps', () => this.showWelcome())
     ]);
     const keys = h('p.muted', { style: { marginTop: '12px', marginBottom: '0' } },
@@ -463,6 +470,44 @@
   };
 
   // Chronik: neueste zuerst; Filter nach Gruppe (WW.EVENT_GROUPS) und Reich, Wirkung als zweite Zeile
+  // Ton: an/aus, Regler (gespeichert)
+  Panels.prototype.openSound = function () {
+    const { h } = D();
+    const game = this.game, a = game.audioSet;
+    const box = h('div');
+    const render = () => {
+      D().clear(box);
+      box.appendChild(h('div.law', [h('div.lt', [h('b', 'Ton'), h('span', 'Musik, Umgebung und Effekte, alles im Spiel erzeugt.')]),
+        h('button.btn.switch' + (a.on ? '.on' : ''), { type: 'button', role: 'switch', 'aria-checked': a.on ? 'true' : 'false', on: { click: () => { a.on = !a.on; game.audioApply(); render(); } } }, a.on ? 'An' : 'Aus')]));
+      for (const r of [['master', 'Gesamt'], ['music', 'Musik'], ['ambient', 'Umgebung'], ['effects', 'Effekte']]) {
+        const val = h('em', Math.round(a[r[0]] * 100) + ' %');
+        const inp = h('input', { type: 'range', min: '0', max: '100', value: String(Math.round(a[r[0]] * 100)), 'aria-label': r[1],
+          on: { input: () => { a[r[0]] = inp.value / 100; val.textContent = inp.value + ' %'; game.audioApply(); } } });
+        box.appendChild(h('div.snd-row', [h('span', r[1]), inp, val]));
+      }
+    };
+    render();
+    this.openModal('Ton', [box], { icon: WW.Sprites.has('i_sound') ? 'i_sound' : 'i_menu' });
+  };
+  // Grafik: Qualität der 3D-Ansicht
+  Panels.prototype.openGraphics = function () {
+    const { h } = D();
+    const game = this.game;
+    const box = h('div');
+    const render = () => {
+      D().clear(box);
+      box.appendChild(h('p.muted', 'Gilt für die 3D-Ansicht. Niedrig ist am schonendsten für Handy und Akku.'));
+      const chips = h('div.chips');
+      for (const q of [['low', 'Niedrig'], ['mid', 'Mittel'], ['high', 'Hoch']]) chips.appendChild(h('button.chip', { type: 'button', 'aria-pressed': game.quality === q[0] ? 'true' : 'false',
+        on: { click: () => { game.setQuality(q[0]); render(); } } }, h('span', q[1])));
+      box.appendChild(chips);
+      box.appendChild(h('div.law', { style: { marginTop: '10px' } }, [h('div.lt', [h('b', 'Ansicht'), h('span', game.mode === '3d' ? 'Gerade: 3D' : 'Gerade: Pixel')]),
+        h('button.btn', { type: 'button', on: { click: () => { game.toggleMode(); render(); } } }, game.mode === '3d' ? 'Pixel' : '3D')]));
+    };
+    render();
+    this.openModal('Grafik', [box], { icon: 'i_newworld' });
+  };
+
   Panels.prototype.openChronicle = function () {
     const { h, icon } = D();
     const game = this.game, sim = game.sim;

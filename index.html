@@ -23,6 +23,9 @@
 <body>
 <div id="app">
   <canvas id="world" aria-label="Spielwelt"></canvas>
+  <canvas id="world3d" aria-label="Spielwelt (3D)" hidden></canvas>
+  <div id="labels3d" class="labels3d" hidden aria-hidden="true"></div>
+  <button id="btnCompass" class="btn icon hud compass" type="button" title="Norden (Drehung zurücksetzen)" aria-label="Norden" hidden><span class="needle">N</span></button>
 
   <!-- Kopfleiste -->
   <header id="topbar" class="hud">
@@ -38,6 +41,7 @@
     <div class="tb-right">
       <div class="seg panel" id="speedSeg" role="group" aria-label="Tempo"></div>
       <button class="btn icon panel-btn" id="btnMap" title="Minikarte (M)" aria-label="Minikarte"><i data-icon="i_map"></i></button>
+      <button class="btn icon panel-btn" id="btnSound" title="Ton (an/aus)" aria-label="Ton an/aus"></button>
       <button class="btn icon panel-btn" id="btnChron" title="Chronik (C)" aria-label="Chronik"><i data-icon="i_chronicle"></i></button>
       <button class="btn icon panel-btn" id="btnMenu" title="Menü" aria-label="Menü"><i data-icon="i_menu"></i></button>
     </div>
@@ -130,6 +134,8 @@
 <script src="js/sim/sim.js"></script>
 <script src="js/render/camera.js"></script>
 <script src="js/render/renderer.js"></script>
+<!--R3-->
+<!--/R3-->
 <script src="js/ui/dom.js"></script>
 <script src="js/ui/tools.js"></script>
 <script src="js/ui/input.js"></script>
@@ -137,6 +143,7 @@
 <script src="js/ui/panels.js"></script>
 <script src="js/ui/newworld.js"></script>
 <script src="js/ui/minimap.js"></script>
+<script src="js/ui/view3d.js"></script>
 <script src="js/main.js"></script>
 <!--/SCRIPTS-->
 </body>

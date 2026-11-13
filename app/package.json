@@ -1,0 +1,60 @@
+{
+  "name": "wuselwelt-app",
+  "productName": "Wuselwelt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wuselwelt – Gott-Sandkasten als Windows-Programm",
+  "author": "Wuselwelt",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "game": "node prepare.js",
+    "start": "node prepare.js && electron .",
+    "dist": "node prepare.js && electron-builder --win nsis portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "de.wuselwelt.spiel",
+    "productName": "Wuselwelt",
+    "copyright": "Wuselwelt",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "game/**/*",
+      "build/icon.ico",
+      "build/icon.png"
+    ],
+    "electronLanguages": ["de", "en-US"],
+    "publish": null,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Wuselwelt",
+      "installerLanguages": ["de_DE"],
+      "language": "1031",
+      "multiLanguageInstaller": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Wuselwelt-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Wuselwelt-${version}-tragbar.${ext}"
+    }
+  }
+}
