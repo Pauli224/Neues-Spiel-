@@ -130,6 +130,7 @@
 
   function hostile(sim, a, b) {
     if (a === b || a.dead || b.dead) return false;
+    if (a.role === 'prisoner' || b.role === 'prisoner') return false;   // [industry] Lager-Insassen sind nie Ziel
     // Wildnis: Räuber sind allen feind, Wahnsinnige ebenso
     if (a.role === 'bandit' || b.role === 'bandit') return a.role !== b.role;
     const t = sim.state.tick;
@@ -163,6 +164,7 @@
     if (t.foe < 0 && att.id != null) t.foe = att.id;
     if (t.hp <= 0) {
       WW.Diplo.onCasualty(sim, att.kingdomId, t.kingdomId);
+      if (WW.Camps && WW.Camps.capture(sim, att, t)) return;   // [industry] Rebellen/Kriegsgefangene ins Lager statt Tod
       kill(sim, t, 'battle');
     }
   }

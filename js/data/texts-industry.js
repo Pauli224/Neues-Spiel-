@@ -84,6 +84,37 @@
       '{n} Soldaten aus {city} steigen in den Zug an die Front. Die Fahrkarten zahlt der Staat, die Rechnung das Volk.',
       'Ein Truppenzug verlässt {city}. Die Lok pfeift, die Mütter nicht.'
     ],
+    // Arbeitslager: bitter gegen das Regime, nie spöttisch über die Gefangenen
+    campBuilt: [
+      'Vor {city} entsteht ein umzäuntes Lager. Offiziell heißt es „Erholungsheim für Andersdenkende". Niemand lacht.',
+      'Das Regime von {kingdom} baut bei {city} ein Arbeitslager. Wer fragt, wofür, steht schon auf einer Liste.'
+    ],
+    campPickup: [
+      'In {city} werden nachts {n} Menschen abgeholt, die zu laut unzufrieden waren. Am Morgen sind alle sehr leise.',
+      'Das Regime holt in {city} {n} Kritiker ab. Die Zeitung meldet: „Keine besonderen Vorkommnisse."',
+      '{n} Leute aus {city} verschwinden ins Lager. Ihr Vergehen: Sie haben gesagt, was alle denken.'
+    ],
+    campIntern: [
+      'Besiegte Aufständische aus {city} kommen ins Lager. Das Regime nennt es Ordnung, die Stadt nennt es Angst.'
+    ],
+    campPow: [
+      'Kriegsgefangene werden ins Lager bei {city} gebracht. Die Siegesparade fällt auffällig leise aus.'
+    ],
+    campBreakout: [
+      'Ausbruch bei {city}! {n} Gefangene fliehen und schließen sich dem Widerstand an. Das Regime spricht von „Missverständnis".',
+      '{n} Gefangene entkommen dem Lager bei {city}. In der Stadt wird heimlich gefeiert.'
+    ],
+    campRiot: [
+      'Aufstand im Lager bei {city}: {n} Gefangene entkommen. Die Wachen erklären, sie hätten nur kurz weggeschaut – diesmal stimmt es.'
+    ],
+    campProtest: [
+      '{other} verurteilt die Lager von {kingdom} scharf. Es ist von „Befreiung" die Rede.',
+      'In {other} gehen Leute gegen die Lager von {kingdom} auf die Straße. Die Gesandten von {kingdom} reisen früher ab.'
+    ],
+    campLiberated: [
+      'Das Lager bei {city} ist aufgelöst! {n} Befreite gehen nach Hause, die ganze Stadt steht Spalier. Wo der Zaun war, entsteht ein Mahnmal.',
+      'Befreiung in {city}: Die Tore des Lagers stehen offen, {n} Menschen sind wieder frei. Nie wieder, sagt die Stadt, und meint es.'
+    ],
     indClean: [
       'Über {city} ist der Himmel wieder blau. Alte Leute erzählen den Kindern, was „Sonne" ist.'
     ]

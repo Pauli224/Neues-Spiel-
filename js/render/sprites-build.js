@@ -2913,10 +2913,20 @@
     // alle übrigen Stadtgebäude und Mauern: Verfeinerung
     Object.keys(L.DEFS).forEach(function (k) {
       if (L.ALIAS[k]) return;
+      if (/^d_(stump|berry|flower|log|sickbush|deposit)_/.test(k)) { L.ALIAS[k] = 'hb_up_' + k; return; }
       if (/^(s_wall_|s_gate_|s_tower_|s_barricade_|s_walldev_|s_field_|s_barracks|s_market|s_monument_|s_factory_|s_lumber|s_quarry|s_mine|s_smithy|s_fishery|s_pasture|s_station|s_laborcamp|s_flagpole_|s_banner_hang_|s_banner_row_|s_deco_|s_lair_|s_site|s_ruin|s_grave|s_scaffold_|s_tent_|s_camp_)/.test(k)) {
         L.ALIAS[k] = 'hb_up_' + k; LITMAP[k] = 'hb_up_' + k + '_lit'; LITMAP['hb_up_' + k] = 'hb_up_' + k + '_lit';
       }
     });
+    // Wogendes Korn: s_field_2/3_w0..2 (Ährenreihen seitlich versetzt)
+    L.lazyDef('hs_', function (key) {
+      var m = /^hs_(s_field_[23])_(\d)$/.exec(key); if (!m) return null;
+      var d = L.DEFS[m[1]], src = upscale(d.grid, false), amp = [-1, 0, 1][+m[2] % 3], o = new Grid(src.w, src.h);
+      for (var y = 0; y < src.h; y++) { var sh = (y % 6 < 3) ? amp : 0; for (var x = 0; x < src.w; x++) { var c = src.d[y * src.w + x]; if (c) o.set(Math.min(src.w - 1, Math.max(0, x + sh)), y, c); } }
+      return { grid: o, scale: 0.5, ox: d.ox, oy: d.oy };
+    });
+    ['s_field_2', 's_field_3'].forEach(function (k) { for (var p = 0; p < 3; p++) L.ALIAS[k + '_w' + p] = 'hs_' + k + '_' + p; });
+    S._upscale = upscale;
     // Sicherheitsregel intern: Banner- und Fahnenmuster bei roter Reichsfarbe ersetzen (kein Aufrufer kann es vergessen)
     var SWAP0 = {};
     Object.keys(SAFE[0]).forEach(function (from) {

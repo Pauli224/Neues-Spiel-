@@ -6,7 +6,8 @@
 //   WW.INDUSTRY.NO_RACES    Völker ohne Fabriken (Elfen, Froschlinge)
 //   WW.INDUSTRY.CFG         Zellgröße, Schwellen, Takte
 //   WW.STRUCT_INFO.factory  Bauwerkstyp (2×2; level 2 = 3×3 bei Großstädten)
-//   Weltgesetz 'industry' (Standard an) wird an WW.LAW_INFO angehängt.
+//   Weltgesetze 'industry' und 'camps' (Standard an) werden an WW.LAW_INFO angehängt.
+//   WW.RAIL (Eisenbahn, js/sim/rail.js), WW.CAMPS (Arbeitslager, js/sim/camps.js), STRUCT_INFO station/rail/laborcamp.
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -74,6 +75,26 @@
   if (WW.STRUCT_INFO && !WW.STRUCT_INFO.station) {
     WW.STRUCT_INFO.station = { name: 'Bahnhof', w: 2, h: 2, work: 140, hp: [200], cost: [{ wood: 12, stone: 8 }], burn: 0.5 };
     WW.STRUCT_INFO.rail = { name: 'Gleis', w: 1, h: 1, work: 7, hp: [60], cost: [{ wood: 1, stone: 1 }], burn: 0.2 };
+  }
+
+  // Arbeitslager (js/sim/camps.js) – kritisch dargestellt; Insassen nur politische Gefangene, nie nach Volk
+  WW.CAMPS = {
+    GOVS: { fascism: 1, communism: 1 },
+    MIN_TIER: 2, CAP: 12, PLAN_EVERY: 120,
+    UNHAPPY: 35,        // darunter: Lager wird gebaut, Unzufriedene werden abgeholt
+    PICKUP: 0.5,        // Wahrscheinlichkeit einer Abholung je Jahr und Lager
+    CAPTURE: 0.6,       // Anteil besiegter Rebellen/Kriegsgefangener, die interniert werden (wenn Platz)
+    UNHAPPY_MOD: 10, LOYALTY_MOD: 12, FEAR: 6,   // dauerhaft −10 Zufriedenheit / −12 Loyalität; 2 Jahre „Angst" +6
+    CONDEMN: 4,         // Meinungsverlust der Nachbarn je Jahr (Demokratien ×2,5)
+    BREAKOUT: 0.07, RIOT: 0.08,   // je Jahr ab 4 Insassen
+    WORK_R: 16, RAIL_WORK: 0.12, YIELD: 0.6
+  };
+  if (WW.STRUCT_INFO && !WW.STRUCT_INFO.laborcamp) {
+    WW.STRUCT_INFO.laborcamp = { name: 'Arbeitslager', w: 2, h: 2, work: 110, hp: [180], cost: [{ wood: 10, stone: 6 }], burn: 0.6 };
+  }
+  if (Array.isArray(WW.LAW_INFO) && WW.LAW_DEFAULTS && !('camps' in WW.LAW_DEFAULTS)) {
+    WW.LAW_INFO.push({ key: 'camps', name: 'Arbeitslager', desc: 'Autoritäre Regime sperren politische Gegner ein. Aus = gibt es in dieser Welt nicht.', def: true });
+    WW.LAW_DEFAULTS.camps = true;
   }
 
   // Weltgesetz „Industrie" (an/aus)

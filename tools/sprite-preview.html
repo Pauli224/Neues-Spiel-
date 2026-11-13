@@ -306,6 +306,13 @@
     [true, false].forEach(function (old) { var c = document.createElement('canvas'); WW.SpriteScene.renderTownCompare(c, sc, old, gv); box.appendChild(c); });
   })();
 
+  // ---------------------------------------------------------------- Etappe 3: Landschaft fein (?toplandscape=2 bzw. 4)
+  if (want('toplandscape') || Q.get('toplandscape')) (function () {
+    var sc = +Q.get('toplandscape') || 2;
+    var r = section('toplandscape', 'Etappe 3: Landschaft im feinen Raster (Boden 16 px je Kachel, gerundete Küsten, Wasser-Frame ' + (+Q.get('frame') || 0) + ', Brandung, feine Deko), Maßstab ' + sc);
+    var c = document.createElement('canvas'); c.id = 'toplandcv'; WW.SpriteScene.renderLandscapeHi(c, sc, +Q.get('frame') || 0); cell(r, '', c);
+  })();
+
   // ---------------------------------------------------------------- Etappe 2: drei Regierungen komplett fein (?topcity2=4)
   if (want('topcity2') || Q.get('topcity2')) (function () {
     var sc = +Q.get('topcity2') || 4, govs = (Q.get('govs') || 'monarchy,theocracy,communism').split(',');

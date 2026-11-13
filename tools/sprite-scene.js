@@ -568,5 +568,36 @@
     items.forEach(function (it) { var fn = old ? S.drawOrig : S.draw; fn(tx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team || 0, flip: it.flip }); });
   }
 
-  WW.SpriteScene = { renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Etappe 3: Landschaft im feinen Raster (Boden 16 px je Kachel, Wasser-Frames, Brandung, feine Deko)
+  function renderLandscapeHi(canvas, scale, frame) {
+    S.init();
+    var tr = buildTerrain(), ter = tr.ter, vari = tr.vari;
+    // Stadtfläche wieder zu Wiese/Wald machen, damit die reine Landschaft zu sehen ist
+    var hi = document.createElement('canvas'); hi.width = W * 16; hi.height = H * 16;
+    var hx = hi.getContext('2d'); hx.imageSmoothingEnabled = false;
+    S.drawGroundMapHi(hx, ter, vari, W, H);
+    hx.save(); hx.scale(2, 2);
+    function T(x, y) { return x < 0 || y < 0 || x >= W || y >= H ? -1 : ter[y * W + x]; }
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var t = ter[y * W + x], wk = S.waterAnimKey(t, frame || 0);
+      if (!wk) continue;
+      S.draw(hx, wk, x * 8, y * 8);
+      var sk = S.surfKey(T(x, y - 1), T(x + 1, y), T(x, y + 1), T(x - 1, y), frame || 0);
+      if (sk) S.draw(hx, sk, x * 8, y * 8);
+    }
+    var items = [];
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var d = S.decorFor(ter[y * W + x], vari[y * W + x]);
+      if (d) items.push({ key: S.swayKey(d.key, (x + y + (frame || 0)) % 3), x: x, y: y, dx: d.dx, dy: d.dy, decor: true });
+    }
+    items.forEach(function (it) { it._s = (it.y + 1) * 8 + it.dy; });
+    items.sort(function (a, c) { return a._s - c._s || a.x - c.x; });
+    items.forEach(function (it) { S.draw(hx, it.key, it.x * 8 + it.dx, it.y * 8 + it.dy); });
+    hx.restore();
+    canvas.width = W * 8 * scale; canvas.height = H * 8 * scale;
+    var c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(hi, 0, 0, canvas.width, canvas.height);
+  }
+
+  WW.SpriteScene = { renderLandscapeHi: renderLandscapeHi, renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

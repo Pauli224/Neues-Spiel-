@@ -393,6 +393,133 @@
     return row[(variant | 0) & 255];
   }
 
+
+  // ======================================================================
+  // Etappe 3: Boden im feinen Raster (16×16 Pixel je Kachel), gerundete Ecken statt Treppen,
+  // weiche Biom-Übergänge, Felswände mit Rissen, Geröll unter Klippen.
+  var HB = new Uint16Array(256);
+  var FACESET = {};
+  for (var fi = 0; fi < N; fi++) if (GI[fi].f) { FACESET[GI[fi].f] = fi; FACESET[GI[fi].fd] = fi; }
+  var PEB = [addColor(null, '#b8b4b0'), addColor(null, '#8c8890')];
+  function surfaceColor(t) { var gi = GI[t]; return gi.water ? FOAMI : gi.b; }
+  // hx, hy = Bildschirm-/Cachepixel der Kachel (Kachel = 16×16). Nachbarn wie drawGround, dazu Diagonalen (−1 = Rand).
+  function drawGroundHi(ctx, hx, hy, id, variant, n, e, s, w, ne, se, sw, nw) {
+    if (!(id >= 0 && id < N)) id = 3;
+    function nb(t) { return t == null || t < 0 || t >= N ? id : t; }
+    n = nb(n); e = nb(e); s = nb(s); w = nb(w); ne = nb(ne); se = nb(se); sw = nb(sw); nw = nb(nw);
+    var X0 = hx >> 1, Y0 = hy >> 1, x, y, i;
+    baseTile(BUF, id, X0, Y0);
+    edges(BUF, id, X0, Y0, n, e, s, w);
+    for (y = 0; y < 16; y++) for (x = 0; x < 16; x++) HB[y * 16 + x] = BUF[(y >> 1) * 8 + (x >> 1)];
+    var me = GI[id], r = me.rank;
+    // feine Körnung auf der Grundfarbe
+    for (i = 0; i < 256; i++) if (HB[i] === me.b) { var hv = hash(hx + (i & 15), hy + (i >> 4), 811); if (hv < 0.025) HB[i] = me.d; else if (hv > 0.985) HB[i] = me.l; }
+    // Felswände: senkrechte Risse und Simse
+    for (i = 0; i < 256; i++) { var ft = FACESET[HB[i]]; if (ft == null) continue; var gx = hx + (i & 15), gy = hy + (i >> 4); if (gx % 5 === 0 && hash(gx, 0, 812) < 0.7) HB[i] = GI[ft].fd; else if (hash(gx >> 1, gy, 813) < 0.08) HB[i] = GI[ft].lip; }
+    // Geröll unter Gebirgsklippen
+    if (GI[n].rank > r && /mountain|snow|hill/.test(GI[n].key) && !me.water) {
+      var top = faceH(n, id) * 2 + 2;
+      for (i = 0; i < 6; i++) { var px = Math.floor(hash(hx, hy + i, 814) * 15), py = top + Math.floor(hash(hx + i, hy, 815) * 4); if (py < 16) { HB[py * 16 + px] = PEB[i & 1]; if (px < 15) HB[py * 16 + px + 1] = PEB[1]; } }
+    }
+    // weiche Übergänge zwischen Biomen gleicher Höhe (Streuung bis 5 Pixel tief)
+    [[n, 0], [e, 1], [s, 2], [w, 3]].forEach(function (p) {
+      var t = p[0]; if (t === id || GI[t].rank !== r || GI[t].water !== me.water) return;
+      for (var yy = 0; yy < 16; yy++) for (var xx = 0; xx < 16; xx++) {
+        var d = p[1] === 0 ? yy : (p[1] === 1 ? 15 - xx : (p[1] === 2 ? 15 - yy : xx));
+        if (d > 5) continue;
+        var pr = (1 - d / 6) * 0.7 * (0.6 + vnoise((hx + xx) / 3, (hy + yy) / 3, 820) * 0.8);
+        if (hash(hx + xx, hy + yy, 821) < pr) HB[yy * 16 + xx] = hash(hx + xx, hy + yy, 822) < 0.15 ? GI[t].d : GI[t].b;
+      }
+    });
+    // Ecken runden: konvex (eigene Kachel höher als beide Nachbarn) und konkav (alle drei Nachbarn höher)
+    var R = 6, corners = [[0, 0, n, w, nw], [16, 0, n, e, ne], [0, 16, s, w, sw], [16, 16, s, e, se]];
+    corners.forEach(function (c) {
+      var cx = c[0], cy = c[1], a = c[2], b = c[3], d = c[4], ra = GI[a].rank, rb = GI[b].rank, rd = GI[d].rank;
+      var ox = cx ? -1 : 1, oy = cy ? -1 : 1;
+      if (ra < r && rb < r) {   // konvex: Ecke abschneiden
+        var lowC = surfaceColor(ra <= rb ? a : b), cX = cx + ox * R, cY = cy + oy * R;
+        for (var yy = 0; yy < R; yy++) for (var xx = 0; xx < R; xx++) {
+          var X = cx ? 15 - xx : xx, Y = cy ? 15 - yy : yy, dd = Math.hypot(X + 0.5 - cX, Y + 0.5 - cY);
+          if (dd > R + 0.3) HB[Y * 16 + X] = lowC;
+          else if (dd > R - 0.8 && !me.water) HB[Y * 16 + X] = cy ? me.d : me.l;
+        }
+      } else if (ra > r && rb > r && rd > r) {   // konkav: Innenecke auffüllen
+        var hiC = GI[ra >= rb ? a : b].b;
+        for (yy = 0; yy < R; yy++) for (xx = 0; xx < R; xx++) {
+          var X2 = cx ? 15 - xx : xx, Y2 = cy ? 15 - yy : yy, d2 = Math.hypot(X2 + 0.5 - cx, Y2 + 0.5 - cy);
+          if (d2 < R - 1.5) HB[Y2 * 16 + X2] = hiC;
+          else if (d2 < R - 0.3) HB[Y2 * 16 + X2] = me.water ? FOAMI : me.sh;
+        }
+      }
+    });
+    var bc = me.b;
+    ctx.fillStyle = css(bc); ctx.fillRect(hx, hy, 16, 16);
+    for (y = 0; y < 16; y++) {
+      x = 0;
+      while (x < 16) {
+        var c2 = HB[y * 16 + x];
+        if (c2 === bc) { x++; continue; }
+        var x1 = x + 1; while (x1 < 16 && HB[y * 16 + x1] === c2) x1++;
+        ctx.fillStyle = css(c2); ctx.fillRect(hx + x, hy + y, x1 - x, 1);
+        x = x1;
+      }
+    }
+  }
+  // ganze Karte in einen Cache mit 16 Pixeln je Kachel
+  function drawGroundMapHi(ctx, terrain, variant, W, H, x0, y0, x1, y1) {
+    x0 = x0 || 0; y0 = y0 || 0; x1 = x1 == null ? W : x1; y1 = y1 == null ? H : y1;
+    function T(x, y) { return x < 0 || y < 0 || x >= W || y >= H ? -1 : terrain[y * W + x]; }
+    for (var y = y0; y < y1; y++) for (var x = x0; x < x1; x++)
+      drawGroundHi(ctx, x * 16, y * 16, terrain[y * W + x], variant ? variant[y * W + x] : 0,
+        T(x, y - 1), T(x + 1, y), T(x, y + 1), T(x - 1, y), T(x + 1, y - 1), T(x + 1, y + 1), T(x - 1, y + 1), T(x - 1, y - 1));
+  }
+  S.drawGroundHi = drawGroundHi;
+  S.drawGroundMapHi = drawGroundMapHi;
+
+  // ---------------------------------------------------------------- Wasser-Animation, Brandung (feine Überlagerungen, Maßstab 0,5)
+  var WA = { hi: addColor(null, '#ffffff', 150), mid: addColor(null, '#d8f2ff', 110), lo: addColor(null, '#a8dcf4', 90), dk: addColor(null, '#1c3c78', 60) };
+  var SF = [addColor(null, '#ffffff', 235), addColor(null, '#eaf8fc', 160), addColor(null, '#d4f0fa', 90)];
+  function waterAnim(typ, f) {
+    var g = new L0.Grid(16, 16), x, y;
+    if (typ === 'river') {   // Strömungsstreifen, wandern pro Frame 4 Pixel nach unten
+      for (var k = 0; k < 4; k++) { var bx = (k * 5 + 2) % 16, by = (k * 7 + f * 4) % 16; for (var j = 0; j < 4; j++) g.set(bx, (by + j) % 16, j === 0 ? WA.hi : WA.mid); g.set((bx + 8) % 16, (by + 9) % 16, WA.lo); }
+      return g;
+    }
+    var rows = typ === 'deep' ? [3, 11] : (typ === 'water' ? [2, 7, 12] : [1, 5, 9, 13]);
+    rows.forEach(function (ry, k) {
+      var len = typ === 'shallow' ? 3 : 5, x0 = (k * 6 + f * 4 + (k & 1) * 2) % 16;
+      for (var i = 0; i < len; i++) { var xx = (x0 + i) % 16; g.set(xx, ry, i === 1 ? WA.hi : WA.mid); if (typ !== 'shallow' && i > 0 && i < len - 1) g.set(xx, ry + 1, WA.dk); }
+    });
+    if (typ === 'shallow') for (var s2 = 0; s2 < 3; s2++) { var sx = (s2 * 5 + f * 3) % 16, sy = (s2 * 7 + 3) % 16; g.set(sx, sy, (f + s2) & 1 ? WA.hi : WA.lo); }
+    return g;
+  }
+  function surf(mask, f) {   // Brandung: Gischtlinie pulsiert zum Land hin
+    var g = new L0.Grid(16, 16), d0 = [0, 1, 2, 1][f];
+    for (var y = 0; y < 16; y++) for (var x = 0; x < 16; x++) {
+      var d = 99;
+      if (mask & 1) d = Math.min(d, y); if (mask & 4) d = Math.min(d, 15 - y); if (mask & 8) d = Math.min(d, x); if (mask & 2) d = Math.min(d, 15 - x);
+      if (d === 99) continue;
+      var wob = Math.round(Math.sin((x + y) * 0.7 + f) * 0.6);
+      if (d === d0 + wob) g.set(x, y, SF[0]); else if (d === d0 + wob + 1) g.set(x, y, SF[1]); else if (d === d0 + 3 + wob && hash(x, y, f + 40) < 0.5) g.set(x, y, SF[2]);
+    }
+    return g;
+  }
+  var L0 = S.lib;
+  L0.lazyDef('hw_', function (key) {
+    var m;
+    if ((m = /^hw_water_(deep|water|shallow|river)_(\d)$/.exec(key))) return { grid: waterAnim(m[1], +m[2] & 3), scale: 0.5, ox: 0, oy: 0 };
+    if ((m = /^hw_surf_(\d+)_(\d)$/.exec(key))) return { grid: surf(+m[1] & 15, +m[2] & 3), scale: 0.5, ox: 0, oy: 0 };
+    return null;
+  });
+  ['deep', 'water', 'shallow', 'river'].forEach(function (t) { for (var f = 0; f < 4; f++) L0.ALIAS['t_water_anim_' + t + '_' + f] = 'hw_water_' + t + '_' + f; });
+  for (var sm = 0; sm < 16; sm++) for (var sf = 0; sf < 4; sf++) L0.ALIAS['fx_surf_' + sm + '_' + sf] = 'hw_surf_' + sm + '_' + sf;
+  // Helfer: Wasser-Frame je Geländetyp (null bei Land), Brandungsmaske aus Nachbarn
+  S.waterAnimKey = function (terrainId, frame) { var k = GI[terrainId] && GI[terrainId].water ? GI[terrainId].key : null; return k ? 't_water_anim_' + k + '_' + ((frame | 0) & 3) : null; };
+  S.surfKey = function (n, e, s, w, frame) {
+    function land(t) { return t >= 0 && t < N && !GI[t].water; }
+    var m = (land(n) ? 1 : 0) | (land(e) ? 2 : 0) | (land(s) ? 4 : 0) | (land(w) ? 8 : 0);
+    return m ? 'fx_surf_' + m + '_' + ((frame | 0) & 3) : null;
+  };
   S.drawGround = drawGround;
   // Trampelpfad über den Boden legen (in die Bodenebene backen). mask: Bit0 N, Bit1 O, Bit2 S, Bit3 W.
   S.drawPath = function (ctx, px, py, mask) { S.draw(ctx, 't_path_' + (mask & 15), px, py); };
@@ -404,6 +531,169 @@
   S.decorFor = decorFor;
   S.groundColor = groundColor;
   S.GROUND = { mix: mix };
+
+  // ---------------------------------------------------------------- Deko im feinen Raster: hd_<art>_<n>[_w0..2]
+  // Je Art mindestens fünf Varianten mit Größenstreuung; Bäume und Büsche haben drei Wiege-Phasen (w0, w1, w2).
+  var DG = S.lib.Grid, AK = function (h) { return addColor(null, h); };
+  var LEAVES = [
+    [AK('#c8ec7a'), AK('#8fd256'), AK('#5aa840'), AK('#3a7c34'), AK('#21492a')],
+    [AK('#d8e88a'), AK('#a8c850'), AK('#78a03a'), AK('#52782e'), AK('#2e4822')],
+    [AK('#a8e0a0'), AK('#6cbc74'), AK('#3f9458'), AK('#2a6a44'), AK('#173a2a')]
+  ];
+  var JUNGLE = [AK('#8ae08a'), AK('#46b25a'), AK('#2a8a48'), AK('#1a6038'), AK('#0e3a24')];
+  var PINES = [AK('#8cc8a0'), AK('#4f9a70'), AK('#2f7254'), AK('#1f5040'), AK('#12302a')];
+  var BARK = [AK('#b0804e'), AK('#86603a'), AK('#5e4026'), AK('#3a2618')];
+  var ROCKS = [AK('#e0dee6'), AK('#b6b4c2'), AK('#8e8c9e'), AK('#686678'), AK('#3a3848')];
+  var SNOWT = [AK('#ffffff'), AK('#e4eef8'), AK('#c0d2e6')];
+  var CACT = [AK('#a8e08c'), AK('#68b85c'), AK('#3c8a48'), AK('#225834')];
+  var SHADE = S.lib.C.shade;
+  function rnd(n, k, s) { return hash(n, k, s); }
+  function lobeFill(g, cx, cy, rx, ry, P, seed) {
+    g.ellipse(cx, cy, rx, ry, function (x, y, nx, ny) {
+      var lgt = nx * 0.7 + ny * 0.9 + (hash(x, y, seed) - 0.5) * 0.5;
+      return lgt < -0.85 ? P[0] : (lgt < -0.2 ? P[1] : (lgt < 0.45 ? P[2] : P[3]));
+    });
+  }
+  function shadowEll(g, cx, cy, rx, ry) { var t = new DG(g.w, g.h); t.ellipse(cx, cy, rx, ry, SHADE); for (var i = 0; i < g.d.length; i++) if (!g.d[i] && t.d[i]) g.d[i] = SHADE; }
+  function trunk(g, x, top, bot, w) { for (var y = top; y <= bot; y++) for (var i = 0; i < w; i++) g.set(x + i, y, i === 0 ? BARK[0] : (i === w - 1 ? BARK[2] : (((y + i) % 4 === 0) ? BARK[2] : BARK[1]))); g.set(x - 1, bot, BARK[2]); g.set(x + w, bot, BARK[3]); }
+  var GEN = {
+    tree: function (n, big) {
+      var sc = (big === false ? 0.7 : 1) * (0.85 + rnd(n, 1, 901) * 0.3), P = LEAVES[n % 3], W = Math.round(26 * sc) + 2, H = Math.round(30 * sc) + 4, g = new DG(W, H);
+      var cx = W / 2, crownB = H - Math.round(9 * sc), cr = 10 * sc;
+      trunk(g, Math.round(cx) - 2, crownB - 4, H - 3, 4);
+      var lobes = 4 + (n % 3);
+      for (var k = 0; k < lobes; k++) { var a = k / lobes * 6.28 + rnd(n, k, 902), rr = cr * (0.45 + rnd(n, k, 903) * 0.2); lobeFill(g, cx + Math.cos(a) * cr * 0.45, crownB - cr + Math.sin(a) * cr * 0.4, rr, rr * 0.9, P, 904 + k); }
+      lobeFill(g, cx - 1, crownB - cr - 1, cr * 0.62, cr * 0.58, P, 910);
+      for (k = 0; k < 6; k++) { var hx = Math.round(cx - cr * 0.5 + rnd(n, k, 911) * cr * 0.6), hy = Math.round(crownB - cr * 1.5 + rnd(n, k, 912) * cr); if (g.get(hx, hy)) g.set(hx, hy, P[0]); }
+      return { g: g, crownB: crownB, edge: P[4], sh: [cx + 3, H - 3, W * 0.42, 2.2] };
+    },
+    pine: function (n, snow) {
+      var sc = 0.85 + rnd(n, 1, 921) * 0.35, P = PINES, W = Math.round(18 * sc) + 2, H = Math.round(34 * sc) + 2, g = new DG(W, H), cx = (W - 1) / 2, bot = H - 6, tiers = 4 + (n % 2);
+      for (var t = 0; t < tiers; t++) {
+        var ty = Math.round(t * (bot - 2) / tiers), th = Math.round((bot - 2) / tiers) + 4, hw0 = 1 + t * (W / 2 - 2) / tiers;
+        for (var j = 0; j < th; j++) { var hw = hw0 + j * 0.55; for (var x = 0; x < W; x++) { var dx = x - cx; if (Math.abs(dx) > hw) continue; var c = dx < -hw * 0.4 ? P[1] : (dx > hw * 0.45 ? P[3] : P[2]); if (j === th - 1) c = P[3]; if (j === 0 || (j < 2 && dx < 0)) c = P[0]; if (snow && j < 2 && dx < hw * 0.5) c = j === 0 ? SNOWT[0] : SNOWT[1]; g.set(x, ty + j, c); } }
+      }
+      trunk(g, Math.round(cx) - 1, bot, H - 3, 3);
+      return { g: g, crownB: bot, edge: P[4], sh: [cx + 3, H - 3, W * 0.4, 2] };
+    },
+    jtree: function (n) {
+      var r = GEN.tree(n, true), g = r.g;
+      for (var i = 0; i < g.d.length; i++) { var c = g.d[i], k = LEAVES[n % 3].indexOf(c); if (k >= 0) g.d[i] = JUNGLE[k]; }
+      for (var v = 0; v < 3; v++) { var vx = Math.round(4 + rnd(n, v, 931) * (g.w - 8)); for (var y = r.crownB - 2; y < r.crownB + 4 + v; y++) if (!g.get(vx, y) || g.get(vx, y) === SHADE) g.set(vx, y, JUNGLE[1]); }
+      r.edge = JUNGLE[4]; return r;
+    },
+    palm: function (n) {
+      var W = 26, H = 34, g = new DG(W, H), lean = (n % 2 ? 1 : -1) * (0.15 + rnd(n, 1, 941) * 0.15), tx, ty = 8;
+      for (var y = ty; y < H - 3; y++) { var x = Math.round(13 + (y - (H - 3)) * lean); g.set(x, y, (y % 3) ? BARK[1] : BARK[2]); g.set(x + 1, y, BARK[2]); g.set(x - 1, y, BARK[0]); }
+      tx = Math.round(13 + (ty - (H - 3)) * lean);
+      for (var f = 0; f < 7; f++) {
+        var a = -Math.PI + f / 6 * Math.PI + (rnd(n, f, 942) - 0.5) * 0.3, len = 9 + rnd(n, f, 943) * 3;
+        for (var t = 0; t <= len; t++) { var px = Math.round(tx + Math.cos(a) * t), py = Math.round(ty + Math.sin(a) * t * 0.7 + t * t * 0.03); g.set(px, py, t < 3 ? JUNGLE[2] : JUNGLE[1]); if (t > 2 && t % 2 === 0) g.set(px, py + 1, JUNGLE[3]); }
+      }
+      g.set(tx, ty + 1, BARK[3]); g.set(tx + 1, ty + 1, BARK[3]);
+      return { g: g, crownB: ty + 4, edge: JUNGLE[4], sh: [16, H - 3, 9, 2] };
+    },
+    bush: function (n) {
+      var W = 16, H = 13, g = new DG(W, H), P = LEAVES[n % 3];
+      lobeFill(g, 6, 7, 5, 4.2, P, 951 + n); lobeFill(g, 10, 7.5, 4.5, 3.8, P, 952 + n); lobeFill(g, 8, 5, 4, 3.5, P, 953 + n);
+      if (n % 3 === 1) for (var k = 0; k < 4; k++) g.set(4 + k * 2, 4 + (k & 1) * 3, [AK('#ff8aa8'), AK('#ffffff')][k & 1]);
+      return { g: g, crownB: H - 3, edge: P[4], sh: [9, H - 2, 6, 1.6] };
+    },
+    acacia: function (n) {
+      var W = 28, H = 24, g = new DG(W, H), P = LEAVES[1];
+      trunk(g, 13, 9, H - 3, 3); for (var t = 0; t < 6; t++) { g.set(13 - t, 10 - t, BARK[1]); g.set(16 + t, 10 - t, BARK[2]); }
+      g.ellipse(14, 4.5, 12 - (n % 3), 3.6, function (x, y, nx, ny) { return ny < -0.35 ? P[0] : (ny > 0.4 ? P[3] : (hash(x, y, 961) < 0.2 ? P[2] : P[1])); });
+      return { g: g, crownB: 9, edge: P[4], sh: [17, H - 3, 10, 2] };
+    },
+    cactus: function (n) {
+      var W = 14, H = 24, g = new DG(W, H), h = 14 + (n % 3) * 3;
+      function col(x, y0, y1) { for (var y = y0; y <= y1; y++) for (var i = 0; i < 4; i++) g.set(x + i, y, i === 0 ? CACT[0] : (i === 3 ? CACT[3] : ((y + i) % 3 ? CACT[1] : CACT[2]))); }
+      col(5, H - 3 - h, H - 3);
+      if (n % 2 === 0) { col(1, H - h + 1, H - h + 7); g.hline(2, H - h + 7, 4, CACT[1]); }
+      if (n % 3 !== 1) { col(9, H - h + 4, H - h + 9); g.hline(8, H - h + 9, 3, CACT[2]); }
+      if (n % 4 === 0) { g.set(6, H - 4 - h, AK('#ff8ab8')); g.set(7, H - 4 - h, AK('#ffd0e0')); }
+      return { g: g, crownB: 0, edge: CACT[3], sh: [8, H - 2, 5, 1.4] };
+    },
+    shroom: function (n) {
+      var W = 22, H = 24, g = new DG(W, H), caps = [[AK('#ff9a88'), AK('#ee5a48'), AK('#b0303a'), AK('#701e2a')], [AK('#e0b8ff'), AK('#a670dc'), AK('#7044a8'), AK('#432a70')], [AK('#ffd090'), AK('#f0963c'), AK('#b85e24'), AK('#703814')]][n % 3];
+      var cw = 14 + (n % 2) * 4, ch = 7, sh = 9 + (n % 3) * 2;
+      for (var y = H - 3 - sh; y < H - 2; y++) { g.hline(9, y, 4, AK('#f4ead2')); g.set(12, y, AK('#cfc0a0')); }
+      g.ellipse(11, H - 3 - sh, cw / 2, ch, function (x, y, nx, ny) { return y > H - 3 - sh + 1 ? null : (nx + ny < -0.8 ? caps[0] : (ny > 0.1 ? caps[2] : caps[1])); });
+      g.hline(11 - cw / 2 + 1, H - 2 - sh, cw - 2, caps[3]);
+      for (var k = 0; k < 4; k++) g.set(Math.round(11 - cw / 3 + rnd(n, k, 971) * cw * 0.6), Math.round(H - 4 - sh - rnd(n, k, 972) * ch * 0.8), AK('#ffffff'));
+      return { g: g, crownB: 0, edge: caps[3], sh: [13, H - 2, 7, 1.5] };
+    },
+    crystal: function (n) {
+      var W = 18, H = 24, g = new DG(W, H), P = n % 2 ? [AK('#fbefff'), AK('#d6aaf6'), AK('#a072d8'), AK('#6a46a0')] : [AK('#f0feff'), AK('#9eecf2'), AK('#54b4d4'), AK('#2e6e9a')];
+      var shards = 2 + (n % 3);
+      for (var k = 0; k < shards; k++) {
+        var sx = 2 + k * 4 + Math.round(rnd(n, k, 981) * 2), sh = 10 + Math.round(rnd(n, k, 982) * 10), sw = 4;
+        for (var y = 0; y < sh; y++) for (var i = 0; i < sw; i++) { var dx = i - (sw - 1) / 2; if (y < Math.abs(dx) * 2.2) continue; g.set(sx + i, H - 3 - sh + y, i === 0 ? P[0] : (dx < 0 ? P[1] : (i === sw - 1 ? P[3] : P[2]))); }
+        g.set(sx + 1, H - 1 - sh, AK('#ffffff'));
+      }
+      return { g: g, crownB: 0, edge: P[3], sh: [10, H - 2, 7, 1.4] };
+    },
+    rock: function (n, pal) {
+      var W = 16, H = 12, g = new DG(W, H), P = pal || ROCKS;
+      lobeFill(g, 7, 7, 6 + (n % 2), 4.2, P, 991 + n); lobeFill(g, 10, 8, 4, 3, P, 992 + n);
+      g.line(5, 5, 7, 8, P[3]); if (n % 3 === 0) { g.set(4, 4, LEAVES[0][2]); g.set(5, 4, LEAVES[0][1]); g.set(6, 3, LEAVES[0][2]); }
+      return { g: g, crownB: 0, edge: P[4] || P[3], sh: [9, H - 2, 6.5, 1.4] };
+    },
+    peak: function (n, snow) {
+      var W = 26, H = 26, g = new DG(W, H), cx = 12 + (n % 3), cap = snow ? 26 : 6 + (n % 3) * 2;
+      for (var y = 0; y < H - 3; y++) { var t = y / (H - 4), hw = 0.6 + Math.pow(t, 0.85) * 11, ridge = cx + t * 1.5; for (var x = 0; x < W; x++) { var xc = x + 0.5; if (xc < cx - hw || xc > cx + hw) continue; var right = xc > ridge, c = right ? ROCKS[3] : ROCKS[1]; if (!right && xc < cx - hw + 2) c = ROCKS[0]; if (y % 5 === 4 && hash(x, y, 995) < 0.6) c = ROCKS[right ? 4 : 2]; if (y < cap + (hash(x, 3, 996) < 0.5 ? 1 : 0)) c = right ? SNOWT[2] : SNOWT[0]; g.set(x, y, c); } }
+      return { g: g, crownB: 0, edge: ROCKS[4], sh: [15, H - 2, 11, 2] };
+    },
+    reed: function (n) {
+      var W = 14, H = 18, g = new DG(W, H), st = [AK('#9cc86a'), AK('#6e9a48'), AK('#4a6e34')], cat = AK('#7a4a2a');
+      for (var k = 0; k < 4 + (n % 3); k++) { var x = 1 + Math.round(rnd(n, k, 1001) * 11), h = 8 + Math.round(rnd(n, k, 1002) * 7); for (var y = H - 2 - h; y < H - 2; y++) g.set(x, y, st[k % 3]); if (k % 2 === 0) { g.vline(x, H - 4 - h, 3, cat); } }
+      return { g: g, crownB: H - 6, edge: st[2], sh: [8, H - 1, 5, 1] };
+    },
+    deadtree: function (n) {
+      var W = 20, H = 26, g = new DG(W, H), wood = [AK('#a09088'), AK('#78685e'), AK('#544640')];
+      for (var y = 6; y < H - 3; y++) { g.set(9, y, wood[0]); g.set(10, y, wood[1]); }
+      for (var b = 0; b < 4; b++) { var y0 = 8 + b * 4, dir = b & 1 ? 1 : -1, len = 4 + (n + b) % 4; for (var t = 0; t < len; t++) g.set(9 + dir * t, y0 - Math.round(t * 0.8), wood[t % 2]); }
+      return { g: g, crownB: 0, edge: wood[2], sh: [12, H - 2, 5, 1.2] };
+    }
+  };
+  var KINDMAP = {   // Deko-Art -> Generator (+ Zusatz)
+    tree: ['tree', true], tree_s: ['tree', false], jtree: ['jtree'], palm: ['palm'], bush: ['bush'], fern: ['bush'], bush_dry: ['bush'], mangrove: ['jtree'],
+    pine: ['pine', false], pine_s: ['pine', false], pine_snow: ['pine', true], acacia: ['acacia'], cactus: ['cactus'], shroom: ['shroom'], shroom_s: ['shroom'],
+    crystal: ['crystal'], reed: ['reed'], rock: ['rock'], rock_grey: ['rock'], rock_sand: ['rock', 'sand'], rock_snow: ['rock', 'snow'], peak: ['peak', false], icepeak: ['peak', true],
+    shrub: ['bush'], deadtree: ['deadtree']
+  };
+  var SANDR = [AK('#fff0c8'), AK('#e8d0a0'), AK('#c8a870'), AK('#9a7c4c'), AK('#5a4428')], SNOWR = [AK('#ffffff'), AK('#e8eef6'), AK('#c4d0e0'), AK('#9aa8c0'), AK('#5a6a80')];
+  function decorHi(kind, n, phase) {
+    var km = KINDMAP[kind]; if (!km) return null;
+    var r = km[0] === 'rock' ? GEN.rock(n, km[1] === 'sand' ? SANDR : (km[1] === 'snow' ? SNOWR : null)) : GEN[km[0]](n, km[1]);
+    var g = r.g;
+    if (phase != null && r.crownB > 0) {   // Wiegen: Zeilen oberhalb der Kronenunterkante seitlich versetzen
+      var amp = [-1, 0, 1][phase], o = new DG(g.w, g.h);
+      for (var y = 0; y < g.h; y++) { var sh = y < r.crownB ? Math.round(amp * (1 - y / r.crownB) * 1.6) : 0; for (var x = 0; x < g.w; x++) { var c = g.d[y * g.w + x]; if (c) o.set(x + sh, y, c); } }
+      g = o;
+    }
+    g = g.pad(1, 1, 1, 0).outline(r.edge);
+    shadowEll(g, r.sh[0] + 1, r.sh[1], r.sh[2], r.sh[3]);
+    return g;
+  }
+  S.lib.lazyDef('hd_', function (key) {
+    var m = /^hd_([a-z_]+?)_(\d+)(?:_w(\d))?$/.exec(key); if (!m) return null;
+    var g = decorHi(m[1], +m[2], m[3] != null ? +m[3] : null); if (!g) return null;
+    return { grid: g, scale: 0.5, ox: Math.round(8 - g.w * 0.5) / 2, oy: 8 - g.h * 0.5 };
+  });
+  // Varianten je Art (mindestens fünf) und Umleitung der alten Schlüssel
+  var VARCOUNT = { tree: 6, tree_s: 5, jtree: 5, palm: 5, bush: 5, fern: 3, bush_dry: 5, mangrove: 3, pine: 6, pine_s: 5, pine_snow: 5, acacia: 5, cactus: 5, shroom: 5, shroom_s: 5,
+    crystal: 5, reed: 5, rock: 5, rock_grey: 5, rock_sand: 3, rock_snow: 3, peak: 5, icepeak: 5, shrub: 5, deadtree: 5 };
+  Object.keys(VARCOUNT).forEach(function (k) {
+    for (var i = 0; i < VARCOUNT[k]; i++) {
+      var seed = (k.length * 7 + i * 3) % 97 + i;
+      S.lib.ALIAS['d_' + k + '_' + i] = 'hd_' + k + '_' + seed;
+      for (var p = 0; p < 3; p++) S.lib.ALIAS['d_' + k + '_' + i + '_w' + p] = 'hd_' + k + '_' + seed + '_w' + p;
+    }
+  });
+  Object.keys(DECOR).forEach(function (k) { DECOR[k].list.forEach(function (it) { if (VARCOUNT[it[0]]) it[1] = VARCOUNT[it[0]]; }); });
+  // Wiege-Phase: key + phase 0..2 -> Schlüssel (für Arten ohne Wiegen kommt der Schlüssel unverändert zurück)
+  S.swayKey = function (key, phase) { var k = key + '_w' + (((phase | 0) % 3) + 3) % 3; return S.lib.ALIAS[k] || /^s_field_[23]$/.test(key) ? k : key; };
 
   // ------------------------------------------------------------------ Sprites backen
   (WW._spriteBuilders = WW._spriteBuilders || []).push(function (L) {
