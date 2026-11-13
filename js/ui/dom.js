@@ -36,9 +36,22 @@
     const dpr = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));
     const big = inf ? Math.max(inf.w, inf.h) : 16;
     const scale = Math.max(1, Math.round(px * dpr / big));
-    const ck = key + '|' + scale + '|' + (team == null ? '' : team);
+    const trim = /^(u_|a_)/.test(key);   // Figuren: auf das Motiv zuschneiden, damit sie nicht klein wirken
+    const ck = key + '|' + scale + '|' + (team == null ? '' : team) + (trim ? '|t' : '');
     let src = cache.get(ck);
-    if (!src) { src = S.iconCanvas(key, scale, team); cache.set(ck, src); }
+    if (!src) {
+      src = S.iconCanvas(key, trim ? Math.max(1, Math.round(scale * 2)) : scale, team);
+      if (trim && src) src = trimCanvas(src);
+      cache.set(ck, src);
+    }
+    if (trim && src) {
+      const cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height;
+      cv.getContext('2d').drawImage(src, 0, 0);
+      cv.className = 'ico'; cv.setAttribute('aria-hidden', 'true');
+      const m = Math.max(src.width, src.height);
+      cv.style.width = Math.round(px * src.width / m) + 'px'; cv.style.height = Math.round(px * src.height / m) + 'px';
+      return cv;
+    }
     const cv = document.createElement('canvas');
     cv.width = src.width; cv.height = src.height;
     cv.getContext('2d').drawImage(src, 0, 0);
@@ -50,6 +63,19 @@
     cv.setAttribute('aria-hidden', 'true');
     return cv;
   }
+  // durchsichtigen Rand abschneiden (1 px Luft bleibt)
+  function trimCanvas(src) {
+    const w = src.width, hh = src.height;
+    if (!w || !hh) return src;
+    const d = src.getContext('2d').getImageData(0, 0, w, hh).data;
+    let x0 = w, y0 = hh, x1 = -1, y1 = -1;
+    for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return src;
+    const out = document.createElement('canvas'); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+    out.getContext('2d').drawImage(src, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    return out;
+  }
+
   // neutrales Platzhalter-Icon: Pixel-Kachel mit Anfangsbuchstaben
   function placeholder(label, px) {
     const dpr = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));

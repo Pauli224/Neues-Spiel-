@@ -356,6 +356,8 @@
     const isLeader = k && k.leaderId === u.id;
     this.title(icon(key, 40, k ? k.colorIndex : 10), (isLeader && k.leaderName) ? (k.leaderTitle + ' ' + k.leaderName) : u.name, role + (race ? ' · ' + race.singular : ''));
     const age = Math.floor(u.age);
+    // großes Porträt mit der Tracht der Regierung
+    body.appendChild(h('div.sec.portrait', [icon(key, 96, k ? k.colorIndex : 10)]));
     body.appendChild(h('div.sec', [
       h('dl.kv', [h('dt', 'Alter'), h('dd', age + (age === 1 ? ' Jahr' : ' Jahre')), h('dt', 'Zustand'), h('dd', u.sick ? 'krank' : (u.hp < u.maxHp * 0.5 ? 'verletzt' : 'munter')),
         u.carrying ? h('dt', 'Trägt') : null, u.carrying ? h('dd', ({ food: 'Essen', wood: 'Holz', stone: 'Stein', gold: 'Gold' })[u.carrying] || u.carrying) : null]),

@@ -865,7 +865,7 @@
     // Kampf
     const g = gov(sim, u);
     let searchR = 0;
-    if (u.role === 'soldier') searchR = 7;
+    if (u.role === 'soldier') searchR = (u.order && u.order.kind === 'march') ? 2.5 : 7;   // Heere auf dem Marsch lassen sich nicht ablenken
     else if (u.role === 'rebel') searchR = 4;
     else if (g.militia && u.role !== 'child' && u.role !== 'settler') searchR = 5;
     if ((searchR > 0 || u.foe >= 0) && u.role !== 'child' && !isEngine(u.role)) {

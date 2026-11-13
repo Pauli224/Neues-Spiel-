@@ -369,6 +369,8 @@ function warSetup(seed, govA, govB, raceA, raceB, minLevelB) {
   // fertig = Ring geschlossen auf Stufe lvB (ein laufender Ausbau auf die nächste Stufe lässt alle Stücke stehen)
   const ready = (c, lv) => c.wall.level >= lv && (c.wall.state === 'done' || c.wall.state === 'upgrading');
   run(sim, 60 * WW.CONFIG.TPY, 120, () => ready(ca, 1) && ready(cb, lvB) && sim.state.year >= 8);
+  // nur die beiden Hauptstädte bleiben (Tochterstädte würden das Kriegsziel verschieben)
+  for (const c of sim.state.cities.slice()) if (c !== ca && c !== cb) WW.Cities.destroyCity(sim, c, null);
   return { sim: sim, a: a, b: b, ca: ca, cb: cb };
 }
 
@@ -666,10 +668,11 @@ test('10 Loyalität, Abspaltung, Statthalter, Tochterstadt-Regeln', function () 
   log('Reich', k.name, 'Städte', k.cityIds.length, 'Limit', WW.Growth.cityLimit(sim, k), '· Herrscher', JSON.stringify(k.ruler), '· Statthalter von', c.name + ':', c.governor.name, '(' + c.governor.quirk + ')');
   log('Loyalität', c.name, Math.round(c.loyalty), 'Ziel', Math.round(WW.Growth.loyaltyTarget(sim, c, k)));
   // Fremdes Volk senkt die Loyalität
+  const hap0 = c.happiness; c.happiness = 30;   // unter der Obergrenze vergleichen
   const own = WW.Growth.loyaltyTarget(sim, c, k);
   const race0 = c.race; c.race = WW.RACE_KEYS.find(r => r !== k.race);
   assert(WW.Growth.loyaltyTarget(sim, c, k) < own, 'fremdes Volk ohne Malus');
-  c.race = race0;
+  c.race = race0; c.happiness = hap0;
   // Abspaltung: Loyalität unter null -> Vorhaben -> eigenes Reich
   const kn = st.kingdoms.length, oldK = k.id;
   let seen = false;

@@ -619,6 +619,39 @@
   };
 
   // Figuren-Schlüssel: u_<volk>_<rolle>, sonst u_<rolle> (Banditen, Rammen …), sonst Mensch, sonst Bauer
+  // Regierungswechsel je Reich merken (Zeitpunkt in Ticks), Tracht pro Einheit zeitversetzt
+  const COSTUME_TICKS = 360;   // 1,5 Spieljahre
+  Renderer.prototype.trackGovs = function () {
+    const st = this.st, h = this._govHist || (this._govHist = new Map());
+    if (!st.kingdoms) return;
+    for (const k of st.kingdoms) {
+      const e = h.get(k.id);
+      if (!e) h.set(k.id, { cur: k.gov, prev: k.gov, t: -1e9 });
+      else if (e.cur !== k.gov) { e.prev = e.cur; e.cur = k.gov; e.t = st.tick || 0; }
+    }
+  };
+  Renderer.prototype.costumeGov = function (u, gov) {
+    const e = this._govHist && this._govHist.get(u.kingdomId);
+    if (!e || e.cur !== gov) return gov;
+    const age = (this.st.tick || 0) - e.t;
+    if (age >= COSTUME_TICKS) return gov;
+    const r = (Math.imul((u.id | 0) ^ 0x2c1b3c6d, 2654435761) >>> 16) / 65536;
+    return r < age / COSTUME_TICKS ? gov : e.prev;
+  };
+  // Lauf-Frame: Anzahl aus unitFrames(role) (Zahl oder { walk, stand }), sonst 2
+  Renderer.prototype.unitFrame = function (u) {
+    const S = this.S;
+    let walk = 2, stand = 0;
+    if (typeof S.unitFrames === 'function') {
+      let f = null;
+      try { f = S.unitFrames(u.role || 'farmer'); } catch (e) { f = null; }
+      if (typeof f === 'number' && f > 0) walk = f;
+      else if (f && typeof f === 'object') { walk = f.walk || f.frames || 2; if (f.stand != null) stand = f.stand; else if (f.idle != null) stand = f.idle; }
+    }
+    if (!u.moving) return stand;
+    return ((this.time * (walk > 2 ? 9 : 5) + (u.id & 7) * 0.37) | 0) % walk;
+  };
+
   // Sprite über Helfer (Schlüssel-Funktion) oder Liste, gewählt nach variant; null wenn nichts existiert
   Renderer.prototype.pickVar = function (fn, list, s) {
     const S = this.S, v = varOf(s);
@@ -629,6 +662,13 @@
 
   Renderer.prototype.unitKey = function (u, gov, frame) {
     const S = this.S, race = u.race || 'human', role = u.role || 'farmer';
+    if (typeof S.unitKey === 'function') {
+      // Tracht je Regierung; nach einem Wechsel ziehen sich die Leute zeitversetzt um
+      const g = this.costumeGov(u, gov || 'tribe');
+      let k = null;
+      try { k = S.unitKey(race, role, g, frame); } catch (e) { k = null; }
+      if (k && S.has(k)) return k;
+    }
     const ck = this._ukCache || (this._ukCache = new Map());
     const id = race + '|' + role + '|' + gov + '|' + frame;
     let k = ck.get(id);
@@ -661,6 +701,7 @@
       const c = this.buildQueue.shift();
       if (!c.built) this.buildChunk(c);
     }
+    this.trackGovs();
     if (st.cities) { const m = this._cityById || (this._cityById = new Map()); m.clear(); for (const c of st.cities) m.set(c.id, c); }
     this.terrScanT -= dt;
     if (st.owner && this.terrScanT <= 0) { this.scanTerritory(); this.terrScanT = 0.3; }
@@ -820,7 +861,7 @@
         if (lu.length > 1) lu.sort((p, q) => p.y - q.y);
         for (const it of lu) {
           const u = it.u;
-          const frame = u.moving ? (((time * 5 + (u.id & 7) * 0.37) | 0) & 1) : 0;
+          const frame = it.animal ? (u.moving ? (((time * 5 + (u.id & 7) * 0.37) | 0) & 1) : 0) : this.unitFrame(u);
           const px = Math.round(it.x * 8 - 4), py = Math.round(it.y * 8 - 6);
           if (it.animal) {
             if (u.flying) { flyers.push(it); continue; }
