@@ -303,7 +303,7 @@
     let left = n;
     const step = () => {
       const t0 = performance.now();
-      while (left > 0 && performance.now() - t0 < 30) { sim.tick(); left--; }
+      try { while (left > 0 && performance.now() - t0 < 30) { sim.tick(); left--; } } catch (e) { left = 0; console.error(e); }
       if (left > 0) setTimeout(step, 0); else done();
     };
     step();
@@ -392,7 +392,7 @@
       const t0 = performance.now();
       while (game.acc >= 1 && n < maxN) {
         storePrev(sim);
-        sim.tick();
+        try { sim.tick(); } catch (e) { simFailed(e); break; }
         n++; game.acc -= 1;
         if ((sim.state.tick & 1) === 0) game.renderer.trample(sim.state.units);
         if (performance.now() - t0 > 14) { game.acc = Math.min(game.acc, 1); break; }
@@ -431,6 +431,17 @@
     game.minimap.update(dt);
     game._autoT = (game._autoT || 0) + dt;
     if (game._autoT > 60 || (game._autoDirty && game._autoT > 10)) { game._autoDirty = false; game.saveAuto(); }
+  }
+
+  // Fehler in der Simulation: einmal melden, anhalten statt Fehlerflut
+  function simFailed(e) {
+    game.acc = 0;
+    game.setSpeed(0);
+    if (!game._simErrShown) {
+      game._simErrShown = true;
+      console.error('Wuselwelt: Fehler in der Simulation', e);
+      game.hud.toast('Hoppla, die Welt hat sich verschluckt und ist angehalten. Mit „Neue Welt" geht es weiter.', { warn: true, ms: 9000 });
+    }
   }
 
   // vorige Positionen für weiche Bewegung zwischen den Schritten
