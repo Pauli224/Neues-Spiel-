@@ -84,10 +84,10 @@
     return c;
   }
   function around(sim, s) {
-    const st = sim.state, W = st.W;
-    for (let dx = 0; dx < s.w; dx++) { out.push((s.y - 1) * W + s.x + dx, (s.y + s.h) * W + s.x + dx); }
-    for (let dy = 0; dy < s.h; dy++) { out.push((s.y + dy) * W + s.x - 1, (s.y + dy) * W + s.x + s.w); }
-    return out.filter((i) => { const x = i % W, y = Math.floor(i / W); return i >= 0 && y < st.H && x >= s.x - 1 && x <= s.x + s.w; });
+    const st = sim.state, W = st.W, out = [];
+    for (let dx = 0; dx < s.w; dx++) { if (s.y > 0) out.push((s.y - 1) * W + s.x + dx); if (s.y + s.h < st.H) out.push((s.y + s.h) * W + s.x + dx); }
+    for (let dy = 0; dy < s.h; dy++) { if (s.x > 0) out.push((s.y + dy) * W + s.x - 1); if (s.x + s.w < W) out.push((s.y + dy) * W + s.x + s.w); }
+    return out;
   }
   function path(sim, a, b, kid) {
     const st = sim.state, W = st.W, H = st.H, N = W * H;
@@ -236,7 +236,9 @@
       const stations = [];
       for (const c of cities) {
         let s = stationOf(sim, c);
-        if (!s && (c.railNext | 0) <= st.tick) { s = placeStation(sim, c, k); if (!s) c.railNext = st.tick + TPY(); }
+        const g = WW.GOVERNMENTS[k.gov];
+        const ringReady = !(g && g.wallMax > 0) || (c.wall && c.wall.plan && c.wall.plan.length) || c.pop >= 60;   // sonst reißt die erste Mauer ihn ab
+        if (!s && ringReady && (c.railNext | 0) <= st.tick) { s = placeStation(sim, c, k); if (!s) c.railNext = st.tick + (TPY() >> 1); }
         if (s) stations.push(s);
       }
       if (stations.length < 2) continue;

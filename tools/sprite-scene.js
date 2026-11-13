@@ -517,7 +517,7 @@
         var dec;
         if (cleared[y * W2 + o + lx]) dec = ((lx + y) % 3 === 0) ? 'd_log_' + ((lx + y) & 1) : 'd_stump_' + ((lx * 2 + y) % 3);
         else if (st === 0) dec = 'd_tree_' + ((lx + y) % 4);
-        else if (st === 1) dec = ((lx + y) % 3 === 0) ? 'd_deadtree_' + ((lx + y) % 3) : 'd_tree_' + ((lx + y) % 4);
+        else if (st === 1) dec = ((lx + y) % 2 === 0) ? 'd_deadtree_' + ((lx + y) % 3) : (((lx * 3 + y) % 5 === 0) ? 'd_sickbush_0' : 'd_tree_' + ((lx + y) % 4));
         else dec = ((lx + y) % 4 === 0) ? 'd_sickbush_' + ((lx + y) & 1) : 'd_deadtree_' + ((lx * 3 + y) % 3);
         items.push({ key: dec, x: o + lx, y: y, decor: true });
       }

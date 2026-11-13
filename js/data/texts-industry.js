@@ -63,6 +63,27 @@
       'Bei {city} wächst nichts mehr außer der Ratlosigkeit der Bauern. {n} % der Felder sind ausgelaugt.',
       'Um {city} färbt sich die Wiese aschgrau. Die Schafe halten es für modern, die Bauern nicht.'
     ],
+    railStation: [
+      '{city} baut einen Bahnhof. Die Bahnhofsuhr geht schon vor, bevor das Dach drauf ist.',
+      'In {city} entsteht ein Bahnhof. Der Wartesaal ist zuerst fertig – man ahnt, warum.'
+    ],
+    railFirst: [
+      'Der erste Zug von {city} nach {other} fährt pünktlich ab. Ankunft: unklar.',
+      'Mit viel Dampf und noch mehr Reden rollt der erste Zug von {city} nach {other}. Die Blaskapelle fährt schwarz mit.',
+      'Zug frei zwischen {city} und {other}! Die Kühe an der Strecke haben dazu eine klare Meinung.'
+    ],
+    railBroken: [
+      'Die Strecke bei {city} ist unterbrochen. Der Zug wartet geduldig, der Lokführer weniger.',
+      'Gleise kaputt bei {city}! Der Fahrplan wird zur Kurzgeschichte.'
+    ],
+    railRepaired: [
+      'Die Strecke bei {city} ist repariert. Der Zug hat in der Zwischenzeit Moos angesetzt.',
+      'Bei {city} rollt es wieder. Die Verspätung wird offiziell „Pause" genannt.'
+    ],
+    railTroops: [
+      '{n} Soldaten aus {city} steigen in den Zug an die Front. Die Fahrkarten zahlt der Staat, die Rechnung das Volk.',
+      'Ein Truppenzug verlässt {city}. Die Lok pfeift, die Mütter nicht.'
+    ],
     indClean: [
       'Über {city} ist der Himmel wieder blau. Alte Leute erzählen den Kindern, was „Sonne" ist.'
     ]

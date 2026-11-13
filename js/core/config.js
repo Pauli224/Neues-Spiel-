@@ -17,7 +17,7 @@
     LIFESPAN: 62,             // Jahre (± 14, mal Volksfaktor)
     FOOD_PER_YEAR: 2.2,       // Nahrung je Kopf und Jahr
     BIRTH_RATE: 0.0075,       // Geburtschance je Erwachsenem und Sekunde (bei Platz + Essen)
-    START_STOCK: { food: 36, wood: 26, stone: 4, gold: 0 },
+    START_STOCK: { food: 48, wood: 26, stone: 4, gold: 0 },
     HARVEST: 14,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
     CHOP: 7, MINE: 5,         // Holz/Stein je Gang
     FISH: 3,

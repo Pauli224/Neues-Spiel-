@@ -410,16 +410,17 @@ function siege(save, mode, engines, maxTicks) {
   const [a, b] = sim.state.kingdoms;
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
   if (mode === 'none') WW.Walls.demolishAll(sim, cb);
-  if (mode === 'palisade') {
-    // dieselbe Mauer, aber nur als Palisade
+  if (mode === 'palisade' || mode === 'stone') {
+    // dieselbe Mauer als Palisade (Stufe 1) bzw. Steinmauer (Stufe 2), ohne Geräte höherer Stufen
+    const lv = mode === 'palisade' ? 1 : 2, mat = mode === 'palisade' ? 'palisade' : 'stone';
     for (const s of sim.state.structs) if (!s.dead && s.cityId === cb.id && WW.Structs.isWallish(s)) {
-      s.level = 1; s.mat = 'palisade'; s.upgradeTo = 0; s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = s.maxHp;
+      s.level = lv; s.mat = mat; s.upgradeTo = 0; s.device = null; s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = s.maxHp;
+      if (s.built) { s.progress = 1; s.paid = true; }
     }
-    cb.wall.level = 1; cb.wall.target = 1; cb.wall.state = 'done'; cb.wall.style = 'palisade';
+    cb.wall.level = lv; cb.wall.target = lv; cb.wall.state = 'done'; cb.wall.style = mat;
     cb.noSpace = false; cb.wall.plannedYear = sim.state.year + 100;
-    sim._noWallUpgrade = true;   // Testaufbau: Palisade bleibt Palisade
+    sim._noWallUpgrade = true;   // Testaufbau: die Stufe bleibt
   }
-  if (mode === 'stone') { cb.wall.plannedYear = sim.state.year + 100; }
   const made = [];
   for (let n = 0; n < 24; n++) {
     const u = WW.Units.create(sim, { x: cb.cx + 16 + (n % 4), y: cb.cy - 3 + Math.floor(n / 4), role: 'soldier', kingdomId: a.id, cityId: ca.id, race: 'orc', age: 20 });

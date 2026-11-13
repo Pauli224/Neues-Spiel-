@@ -422,7 +422,10 @@
     return makeLazy(key);
   }
 
+  var SWAPS = {};   // je Teamfarbe: Schlüssel -> Ersatzschlüssel (Sicherheitsregeln für Muster)
+  function setTeamSwap(t, map) { SWAPS[t] = map; }
   function drawFast(ctx, key, x, y, team, flip) {
+    var sw = SWAPS[team | 0]; if (sw && sw[key]) key = sw[key];
     var e = ENT[key];
     if (!e || e.alias) { e = entry(e && e.alias ? e.alias : key); if (!e) return; }
     if (e.lazy) {
@@ -486,7 +489,7 @@
     TEAM_COLORS: TEAM_COLORS,
     PALETTE: PALETTE,
     // Werkzeuge für die Motiv-Dateien
-    lib: { lazyDef: lazyDef, ALIAS: ALIAS, Grid: Grid, C: C, CHAR: CHAR, PALETTE: PALETTE, def: def, hash: hash, DEFS: DEFS, addColor: addColor, hexOf: hexOf, RGBA: RGBA },
+    lib: { setTeamSwap: setTeamSwap, lazyDef: lazyDef, ALIAS: ALIAS, Grid: Grid, C: C, CHAR: CHAR, PALETTE: PALETTE, def: def, hash: hash, DEFS: DEFS, addColor: addColor, hexOf: hexOf, RGBA: RGBA },
     // Hilfe für Werkzeuge/Vorschau
     _atlas: function () { return { base: baseCanvas, team: teamAtlas(0) }; }
   };

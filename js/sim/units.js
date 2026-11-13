@@ -482,7 +482,8 @@
       // knappe Vorräte: Beeren und Pilze im Wald sammeln, statt auf reife Felder zu warten
       const sk = WW.Cities.stock(sim, city);
       if ((!best || best.growth < 3) && sk.food < city.pop * 1.5 + 4 && !(city.besieged > st.tick) && !(u.noFishUntil > st.tick)) {
-        const i = findResource(sim, u, city, 'wood', 10);
+        let i = findResource(sim, u, city, 'wood', 10);
+        if (i < 0) i = findResource(sim, u, city, 'fertile', 8);   // ohne Wald: Beeren und Wurzeln auf der Wiese
         if (i >= 0) {
           const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
           if (g >= 0) { u.task = 'forage'; u.target = -1; u.goal = -1; u.tt = g; u.phase = 1; return; }
@@ -978,6 +979,7 @@
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
       if (u.dead) continue;
+      if (u.ind && WW.Industry && WW.Industry.unit(sim, u)) continue;   // [industry] im Zug / im Arbeitslager
       if (u.cd > 0) u.cd--;
       if (((tick + u.id) & 7) === 0) { think(sim, u); if (u.dead) continue; }
       move(sim, u);

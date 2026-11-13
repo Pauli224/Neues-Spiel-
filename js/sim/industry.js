@@ -170,9 +170,10 @@
       for (const i of plan) { const dx = (i % W) + 0.5 - px, dy = Math.floor(i / W) + 0.5 - py; sum += Math.sqrt(dx * dx + dy * dy); }
       ringR = sum / plan.size; minD = 4;
     }
-    const r = Math.min(24, WW.Cities.territoryRadius(city, sim));
+    const r = Math.min(28, Math.max(WW.Cities.territoryRadius(city, sim), ringR + 10));
+    const ownOk = (o) => o === id || o === -1 || ((sim._cities.get(o) || {}).kingdomId === city.kingdomId);
     const area = (i) => {
-      if ((owner[i] !== id && owner[i] !== -1) || inRing[i] !== -1 || plan.has(i)) return false;   // eigenes oder freies Land
+      if (!ownOk(owner[i]) || inRing[i] !== -1 || plan.has(i)) return false;   // eigenes, reichseigenes oder freies Land
       const s = sim._structs.get(st.structAt[i]);
       return !(s && WW.Structs.isWallish(s));
     };
@@ -183,7 +184,7 @@
     const want = ringR + 6;   // etwas Abstand: wachsende Mauerringe reißen ab, was im Weg steht
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const own = owner[y * W + x];
-      if (own !== id && own !== -1) continue;
+      if (!ownOk(own)) continue;
       const mx = x + w / 2, my = y + h / 2;
       const d = Math.sqrt((mx - px) * (mx - px) + (my - py) * (my - py));
       if (d < minD || d > r - 1) continue;
@@ -194,7 +195,7 @@
         if (t === T.RIVER) river++;
         else if (WW.TERRAIN_LUT.wood[t]) wood++;
       }
-      const score = -Math.abs(d - want) - Math.max(0, d - want - 4) * 2 + (river ? 3 + Math.min(2, river * 0.2) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === -1 ? 2 : 0);
+      const score = -Math.abs(d - want) - Math.max(0, d - want - 4) * 2 + (river ? 3 + Math.min(2, river * 0.2) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === id ? 0 : 2);
       if (score > bs) { bs = score; best = y * W + x; }
     }
     return best;

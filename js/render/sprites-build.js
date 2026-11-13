@@ -2523,7 +2523,8 @@
       var w = src.w, h = src.h, o = new Grid(w * 2, h * 2);
       for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
         var c = src.d[y * w + x];
-        if (!c || c === C.ink) continue;
+        if (!c) continue;
+        if (c === C.ink && (!src.get(x - 1, y) || !src.get(x + 1, y) || !src.get(x, y - 1) || !src.get(x, y + 1))) continue;   // Kontur weg, Innen-Dunkel (Bögen, Scharten) bleibt
         for (var j = 0; j < 2; j++) for (var i = 0; i < 2; i++) {
           var X = x * 2 + i, Y = y * 2 + j, v = c;
           if (c === C.shade || c === C.shadeL) v = c;
@@ -2748,6 +2749,183 @@
     });
     // Nachtfassung: leuchtende Fenster (Schlüssel bleibt gleich, Helfer liefert den passenden Nacht-Schlüssel)
     S.litKey = function (key) { return LITMAP[key] || key; };
+    // ======================================================================
+    // Etappe 2: Materialklassen der Mauerstile, Regierungssitze neu im feinen Raster, Umleitung aller Stadtgebäude
+    ['monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'player', 'tribe2', 'tribe3', 'tribe4'].forEach(function (k) {
+      var m = MAT[k]; if (!m) return;
+      var cls = { brick: 'brick', ashlar: 'stone', smooth: 'concrete', panel: 'panel', stakes: 'wood', planksH: 'wood', earth: 'plaster' }[m.pat];
+      if (!cls) return;
+      var ids = [m.topL, m.faceL, m.top, m.face, m.joint, m.base].map(function (n) { return typeof n === 'number' ? n : C[n]; });
+      var uniq = []; ids.forEach(function (i) { if (uniq.indexOf(i) < 0 && !CLS[i]) uniq.push(i); });
+      if (uniq.length) ramp(uniq, cls);
+    });
+    // --- Baukasten für feine Großbauten
+    function blocks(g, x, y, w, h, t, bw, bh) {   // Quadermauerwerk mit Fugen und Tonvariation
+      bw = bw || 6; bh = bh || 4;
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var row = Math.floor(j / bh), off = (row & 1) * (bw >> 1), bx = Math.floor((i + off) / bw), hv = hash(bx, row, 77 + x);
+        var c = (j % bh === bh - 1 || (i + off) % bw === bw - 1) ? t[3] : (hv < 0.25 ? t[0] : (hv > 0.85 ? t[2] : t[1]));
+        if (i === 0 && c !== t[3]) c = t[0]; if (i === w - 1) c = t[3];
+        g.set(x + i, y + j, c);
+      }
+    }
+    function merlons(g, x, y, w, t) { for (var i = 0; i < w; i++) { var on = (Math.floor(i / 3) & 1) === 0; if (on) { g.set(x + i, y, i % 3 === 0 ? t[0] : t[1]); g.set(x + i, y + 1, t[1]); } g.set(x + i, y + 2, t[2]); } }
+    function coneRoof(g, cx, y, w, h) {
+      for (var j = 0; j < h; j++) {
+        var hw = 0.5 + (j / (h - 1)) * (w / 2);
+        for (var i = Math.floor(cx - hw); i <= Math.ceil(cx + hw); i++) {
+          var dx = i + 0.5 - cx; if (Math.abs(dx) > hw) continue;
+          var c = dx < -hw * 0.35 ? 'Tl' : (dx > hw * 0.4 ? 'Td' : 'T');
+          if (j % 3 === 2 && ((i + j) & 1)) c = 'Td';
+          g.set(i, y + j, c);
+        }
+      }
+      g.hline(Math.round(cx - w / 2), y + h, w + 1, C.ink);
+    }
+    function roundTower(g, x, y, w, h, t) {   // Zylinder: Licht links, Schatten rechts, Steinlagen
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var u = i / (w - 1), row = Math.floor(j / 4), off = (row & 1) * 3, seam = j % 4 === 3 || (i + off) % 6 === 5;
+        var c = u < 0.2 ? t[0] : (u > 0.75 ? t[2] : t[1]);
+        g.set(x + i, y + j, seam ? t[3] : c);
+      }
+    }
+    function slit(g, x, y, lit) { g.vline(x, y, 4, lit ? LITC[1] : C.ink); g.vline(x + 1, y, 4, lit ? LITC[2] : C.plum); }
+    function archDoor(g, x, y, w, h, lit) {   // Torbogen mit Tiefe: Laibung, Holztor mit Eisenbändern
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var dx = (i + 0.5 - w / 2) / (w / 2), arc = j < w / 2 ? (1 - dx * dx) * (w / 2) >= (w / 2 - j) : true;
+        if (!arc) continue;
+        var edge = i === 0 || i === w - 1 || (j < w / 2 && (1 - dx * dx) * (w / 2) < (w / 2 - j) + 1.4);
+        g.set(x + i, y + j, edge ? C.stoneD : ((i % 3 === 1) ? C.woodD : C.wood));
+      }
+      for (j = 3; j < h; j += 4) g.hline(x + 1, y + j, w - 2, C.metalD);
+      g.vline(x + (w >> 1), y + 2, h - 2, C.ink);
+      if (lit) { g.rect(x + 2, y + h - 4, w - 4, 1, LITC[2]); }
+      g.hline(x - 1, y + h, w + 2, C.stoneL);
+    }
+    function flagH(g, x, y, h) { g.vline(x, y, h, C.woodD); g.set(x, y - 1, C.goldL); for (var j = 0; j < 6; j++) for (var i = 0; i < 9; i++) if (i < 9 - (j === 0 || j === 5 ? 1 : 0)) g.set(x + 1 + i, y + j + (i > 5 ? 1 : 0), j < 2 ? 'Tl' : (j > 3 ? 'Td' : 'T')); }
+    var STN = [C.stoneL, C.stone, C.stoneD, HCOL('#6e6a70')];
+    var WHT = [C.white, HCOL('#ece6d8'), HCOL('#d2c8b2'), HCOL('#b4a88e')];
+    var GLD = [C.goldL, C.gold, C.goldD, HCOL('#8a5a1a')];
+    var CG = 46;   // Innenbreite 3×3
+    function centerHi(gov, lit, pat) {
+      var g, x, y, i, j;
+      if (gov === 'monarchy') {
+        g = new Grid(CG, 74);
+        roundTower(g, 0, 22, 12, 48, STN); roundTower(g, 34, 22, 12, 48, STN);
+        coneRoof(g, 6, 6, 14, 16); coneRoof(g, 40, 6, 14, 16); g.vline(6, 1, 5, C.woodD); g.vline(40, 1, 5, C.woodD); g.paint(7, 1, ['TTT', 'Tt.']); g.paint(41, 1, ['TTT', 'Tt.']);
+        blocks(g, 13, 16, 20, 54, STN); merlons(g, 13, 13, 20, STN); flagH(g, 22, 0, 13);
+        for (i = 0; i < 2; i++) { slit(g, 4 + i * 34, 32, lit); slit(g, 4 + i * 34, 46, lit); }
+        winH(g, 17, 24, lit, null, true); winH(g, 25, 24, lit, null, true);
+        blocks(g, 4, 46, 38, 24, STN, 8, 4); merlons(g, 4, 43, 38, STN);
+        g.rect(9, 48, 4, 12, 'T'); g.vline(12, 48, 12, 'Td'); g.rect(33, 48, 4, 12, 'T'); g.vline(36, 48, 12, 'Td'); g.set(10, 60, 'Td'); g.set(34, 60, 'Td');
+        archDoor(g, 17, 52, 12, 18, lit);
+      } else if (gov === 'democracy') {
+        g = new Grid(CG, 70);
+        // Uhrturm mit Kuppel
+        g.ellipse(23, 8, 6, 6, function (px, py, nx, ny) { return py > 9 ? null : (nx + ny < -0.6 ? GLD[0] : (nx > 0.35 ? GLD[2] : GLD[1])); }); g.vline(23, 0, 3, GLD[2]);
+        blocks(g, 16, 10, 14, 16, WHT, 7, 4);
+        g.ellipse(23, 16.5, 4.5, 4.5, function (px, py, nx, ny) { return nx * nx + ny * ny > 0.7 ? GLD[2] : C.white; }); g.line(23, 17, 23, 13, C.ink); g.line(23, 17, 26, 17, C.ink);
+        // Giebel mit Tympanon in Teamfarbe
+        for (j = 0; j < 12; j++) { var hw = 4 + j * 1.75; for (i = 0; i < CG; i++) { var dx = i + 0.5 - 23; if (Math.abs(dx) <= hw) g.set(i, 24 + j, Math.abs(dx) > hw - 2 ? (dx < 0 ? C.white : WHT[2]) : (j > 2 ? 'T' : WHT[1])); } }
+        g.hline(1, 36, 44, C.white); g.hline(1, 37, 44, WHT[2]); g.hline(1, 38, 44, WHT[1]);
+        g.rect(2, 39, 42, 22, C.plum);
+        for (i = 0; i < 6; i++) { var cx = 3 + i * 8; for (y = 39; y < 61; y++) { g.set(cx, y, C.white); g.set(cx + 1, y, WHT[1]); g.set(cx + 2, y, WHT[2]); } g.hline(cx - 1, 39, 5, C.white); g.hline(cx - 1, 60, 5, WHT[2]); }
+        winH(g, 7, 44, lit, null, true); winH(g, 35, 44, lit, null, true); archDoor(g, 19, 45, 8, 16, lit);
+        for (j = 0; j < 3; j++) { g.hline(j, 61 + j * 2, CG - 2 * j, C.white); g.hline(j, 62 + j * 2, CG - 2 * j, WHT[2]); }
+      } else if (gov === 'fascism') {
+        g = new Grid(CG, 64);
+        var Cc = [DCON[0], DCON[1], DCON[2], DCON[3]];
+        flatT(g, 0, 6, 46, 12); flatT(g, 12, 0, 22, 8);
+        g.set(2, 5, C.fireY); g.set(43, 5, C.fireY);
+        for (j = 18; j < 60; j++) for (i = 0; i < CG; i++) { var seam = (i % 9 === 8) || (j % 8 === 7); g.set(i, j, seam ? Cc[3] : (i < 1 ? Cc[0] : (i > 44 ? Cc[2] : Cc[1]))); }
+        for (j = 12; j < 60; j++) for (i = 12; i < 34; i++) g.set(i, j, (i === 12) ? C.white : (i === 33 ? Cc[2] : ((j % 8 === 7) ? Cc[2] : Cc[0])));
+        for (i = 3; i < 11; i += 3) for (y = 22; y < 52; y += 10) { g.vline(i, y, 6, lit && hash(i, y, 5) < 0.6 ? LITC[1] : C.ink); g.vline(i + 33, y, 6, lit && hash(i + 33, y, 5) < 0.6 ? LITC[1] : C.ink); }
+        [14, 27].forEach(function (bx) { cloth(g, bx, 14, 5, 34, pat == null ? 0 : pat, 0, true); g.set(bx + 2, 48, 'Td'); });
+        archDoor(g, 20, 46, 6, 14, lit);
+        g.hline(8, 60, 30, Cc[0]); g.hline(6, 61, 34, Cc[1]); g.hline(4, 62, 38, Cc[2]);
+      } else if (gov === 'communism') {
+        g = new Grid(CG, 70);
+        for (y = 4; y < 66; y++) for (i = 0; i < 6; i++) g.set(1 + i, y, ((y >> 1) + (i >> 1)) & 1 ? C.redD : (i === 0 ? C.redL : C.red));
+        g.rect(0, 2, 8, 3, C.stoneD); g.hline(0, 2, 8, C.stone); for (y = 12; y < 64; y += 10) g.hline(1, y, 6, C.white);
+        roofTiles(g, 8, 22, 38, 12, [C.stoneL, C.stone, C.stoneD], 4);
+        wallFill('panel', g, 8, 34, 38, 30, PANEL, 3);
+        g.rect(8, 34, 38, 4, 'T'); g.hline(8, 37, 38, 'Td'); g.hline(8, 34, 38, 'Tl');
+        for (i = 11; i < 44; i += 6) { winH(g, i, 41, lit && hash(i, 1, 3) < 0.8); winH(g, i, 51, lit && hash(i, 2, 3) < 0.8); }
+        archDoor(g, 23, 52, 8, 12, lit);
+        flagH(g, 36, 4, 18);
+        g.hline(8, 64, 38, PANEL[1]); g.hline(8, 65, 38, C.stone);
+      } else if (gov === 'theocracy') {
+        g = new Grid(CG, 76);
+        [0, 39].forEach(function (tx) { roundTower(g, tx, 18, 7, 54, WHT); for (j = 0; j < 10; j++) { var hw2 = 0.4 + j * 0.35; for (i = 0; i < 7; i++) if (Math.abs(i - 3) <= hw2) g.set(tx + i, 8 + j, i < 3 ? GLD[0] : (i === 3 ? GLD[1] : GLD[2])); } g.vline(tx + 3, 4, 4, GLD[1]); slit(g, tx + 2, 30, lit); slit(g, tx + 2, 48, lit); });
+        blocks(g, 7, 42, 32, 30, WHT, 8, 5); g.hline(7, 42, 32, C.gold); g.hline(7, 43, 32, C.goldD);
+        g.ellipse(23, 30, 15, 15, function (px, py, nx, ny) { if (py > 41) return null; var s2 = nx * 0.8 + ny; return s2 < -0.9 ? C.white : (s2 < -0.2 ? C.cream : (s2 < 0.5 ? C.strawL : (s2 < 0.9 ? C.straw : C.strawD))); });
+        for (i = 10; i < 37; i += 4) g.set(i, 40, C.goldD);
+        g.ellipse(23, 13, 3, 3, function (px, py, nx, ny) { return nx + ny < -0.3 ? C.goldL : C.gold; }); g.vline(23, 6, 5, C.goldD); g.set(23, 5, C.goldL);
+        archDoor(g, 19, 54, 8, 18, lit); g.rect(10, 52, 5, 12, 'T'); g.vline(14, 52, 12, 'Td'); g.rect(31, 52, 5, 12, 'T'); g.vline(35, 52, 12, 'Td');
+        winH(g, 11, 46, lit); winH(g, 31, 46, lit);
+      } else if (gov === 'republic') {
+        g = new Grid(CG, 70);
+        [[0, 10, BRK2], [15, 2, ['Tl', 'T', 'Td']], [30, 12, ['redL', 'red', 'redD'].map(function (n2) { return C[n2]; })]].forEach(function (hs) {
+          var hx = hs[0], top = hs[1], col = hs[2].concat([MORTD]);
+          for (j = 0; j < 18; j++) { var ins = Math.max(0, Math.floor((16 - j) / 4) * 2); for (i = ins; i < 16 - ins; i++) g.set(hx + i, top + j, i === ins ? col[0] : (i === 15 - ins ? col[2] : col[1])); if (ins > 0 && j % 4 === 0) { g.set(hx + ins, top + j, C.stoneL); g.set(hx + 15 - ins, top + j, C.stoneL); } }
+          wallFill('brick', g, hx, top + 18, 16, 62 - top - 18, col, hx + 1);
+          for (y = top + 21; y < 52; y += 9) { winH(g, hx + 2, y, lit && hash(hx, y, 4) < 0.7); winH(g, hx + 9, y, lit && hash(hx + 9, y, 4) < 0.7); }
+          g.rect(hx + 6, top + 6, 4, 4, C.woodD);
+        });
+        g.hline(24, 6, 12, C.woodD); g.vline(35, 7, 8, C.stoneD); g.paint(34, 15, ['vw', 'wW']);
+        for (i = 1; i < 14; i++) { g.set(i, 54, ((i >> 1) & 1) ? 'T' : C.white); g.set(i, 55, ((i >> 1) & 1) ? 'Td' : C.cream); }
+        doorH(g, 20, 53, 9, null, lit); doorH(g, 36, 53, 9, null, lit);
+        g.paint(2, 58, ['.vw.', 'vwwW', 'wWWW']); g.paint(40, 59, ['oo..', 'kWo.', 'WWo.']);
+        g.hline(0, 63, 46, C.stoneD); g.hline(0, 64, 46, C.stone);
+      } else if (gov === 'tribe') {
+        g = new Grid(CG, 58);
+        thatchT(g, 6, 14, 36, 24);
+        g.line(8, 6, 16, 16, C.woodD); g.line(18, 6, 10, 16, C.woodD); g.line(30, 6, 38, 16, C.woodD); g.line(40, 6, 32, 16, C.woodD);
+        [8, 18, 30, 40].forEach(function (px2) { g.set(px2, 6, C.cream); g.set(px2, 5, C.cream); });
+        wallFill('planks', g, 8, 39, 32, 14, null, 5);
+        g.rect(20, 42, 8, 11, C.plum); g.rect(20, 42, 8, 6, 'T'); g.vline(27, 42, 6, 'Td'); g.set(20, 42, 'Tl');
+        g.set(19, 38, C.cream); g.set(28, 38, C.cream); g.set(18, 37, C.cream); g.set(29, 37, C.cream);
+        g.vline(2, 10, 44, C.woodD); g.vline(1, 10, 44, C.wood); g.paint(3, 12, ['TTTTu', 'TTTTT', 'TTtTT', 'tT.Tt', 't...t']);
+        for (y = 22; y < 50; y += 7) { g.hline(0, y, 4, C.red); g.set(1, y + 2, C.ink); g.set(2, y + 2, C.ink); }
+        g.paint(33, 44, ['....j...', '...jFQ..', '..QFjF..', '.QFjjFQ.', 'gWQFFQWg', '.gWWWWg.']);
+      } else {   // anarchy
+        g = new Grid(CG, 60);
+        for (j = 0; j < 22; j++) for (i = 0; i < 32; i++) { var yy = 12 + j + Math.floor(i / 10); g.set(1 + i, yy, [C.red, C.purple, C.straw, C.glass, 'Tl', C.pink, C.leafL, C.fireO, 'T'][(Math.floor(i / 6) + Math.floor(j / 5) * 3) % 9]); if (j === 21) g.set(1 + i, yy, C.woodD); }
+        wallFill('patch', g, 3, 37, 28, 19, null, 3); winH(g, 7, 41, lit); winH(g, 22, 41, lit); g.rect(15, 44, 6, 12, C.woodD); g.vline(16, 44, 12, C.wood);
+        g.vline(24, 2, 12, C.stoneD); g.vline(25, 2, 12, C.stone); g.paint(22, 0, ['.qq.', 'qggq']);
+        for (j = 0; j < 20; j++) { var hw3 = j * 0.55; for (i = 30; i < 46; i++) { var dx3 = i + 0.5 - 38; if (Math.abs(dx3) <= hw3 + 0.3) g.set(i, 36 + j, (i & 1) ? 'T' : (dx3 < 0 ? 'Tl' : 'Td')); } }
+        g.vline(38, 50, 6, C.ink);
+        var bunt = [C.red, C.fireY, 'T', C.purple, C.glass, C.pink, C.leafL, C.fireO];
+        for (i = 0; i < CG; i++) { var by = 6 + Math.round(Math.abs(i - 23) * -0.12 + 3); if (i % 3 === 0) g.vline(i, by, 3, bunt[(i / 3 | 0) % bunt.length]); else g.set(i, by - 1, C.woodD); }
+      }
+      return g;
+    }
+    L.lazyDef('hc_', function (key) {
+      var lit = /_lit$/.test(key), k = key.replace(/_lit$/, ''), m = /^hc_center_([a-z]+)(?:_p(\d))?$/.exec(k);
+      if (!m) return null;
+      var g = centerHi(m[1], lit, m[2] != null ? +m[2] : null);
+      if (!g) return null;
+      g = finishH(g, 3);
+      return { grid: g, scale: 0.5, fw: 3, fh: 3, ox: 0, oy: 24 - g.h * 0.5 + 0.5 };
+    });
+    GOVS.forEach(function (gv) { L.ALIAS['s_center_' + gv] = 'hc_center_' + gv; LITMAP['s_center_' + gv] = 'hc_center_' + gv + '_lit'; LITMAP['hc_center_' + gv] = 'hc_center_' + gv + '_lit'; });
+    for (var cp = 0; cp < 8; cp++) { L.ALIAS['s_center_fascism_p' + cp] = 'hc_center_fascism_p' + cp; LITMAP['s_center_fascism_p' + cp] = 'hc_center_fascism_p' + cp + '_lit'; }
+    // alle übrigen Stadtgebäude und Mauern: Verfeinerung
+    Object.keys(L.DEFS).forEach(function (k) {
+      if (L.ALIAS[k]) return;
+      if (/^(s_wall_|s_gate_|s_tower_|s_barricade_|s_walldev_|s_field_|s_barracks|s_market|s_monument_|s_factory_|s_lumber|s_quarry|s_mine|s_smithy|s_fishery|s_pasture|s_station|s_laborcamp|s_flagpole_|s_banner_hang_|s_banner_row_|s_deco_|s_lair_|s_site|s_ruin|s_grave|s_scaffold_|s_tent_|s_camp_)/.test(k)) {
+        L.ALIAS[k] = 'hb_up_' + k; LITMAP[k] = 'hb_up_' + k + '_lit'; LITMAP['hb_up_' + k] = 'hb_up_' + k + '_lit';
+      }
+    });
+    // Sicherheitsregel intern: Banner- und Fahnenmuster bei roter Reichsfarbe ersetzen (kein Aufrufer kann es vergessen)
+    var SWAP0 = {};
+    Object.keys(SAFE[0]).forEach(function (from) {
+      var to = SAFE[0][from];
+      SWAP0['banner_' + from] = 'banner_' + to; SWAP0['s_banner_hang_' + from] = 's_banner_hang_' + to; SWAP0['s_banner_row_' + from] = 's_banner_row_' + to;
+      SWAP0['s_flagpole_' + from + '_0'] = 's_flagpole_' + to + '_0'; SWAP0['s_flagpole_' + from + '_1'] = 's_flagpole_' + to + '_1';
+      SWAP0['s_center_fascism_p' + from] = 's_center_fascism_p' + to;
+    });
+    L.setTeamSwap(0, SWAP0);
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

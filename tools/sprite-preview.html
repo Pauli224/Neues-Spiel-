@@ -306,6 +306,14 @@
     [true, false].forEach(function (old) { var c = document.createElement('canvas'); WW.SpriteScene.renderTownCompare(c, sc, old, gv); box.appendChild(c); });
   })();
 
+  // ---------------------------------------------------------------- Etappe 2: drei Regierungen komplett fein (?topcity2=4)
+  if (want('topcity2') || Q.get('topcity2')) (function () {
+    var sc = +Q.get('topcity2') || 4, govs = (Q.get('govs') || 'monarchy,theocracy,communism').split(',');
+    var r = section('topcity2', 'Etappe 2: Stadtbild komplett fein (' + govs.join(', ') + '), Maßstab ' + sc);
+    var box = document.createElement('div'); box.id = 'topcity2cv'; box.style.display = 'flex'; box.style.gap = '8px'; r.appendChild(box);
+    govs.forEach(function (gv) { var c = document.createElement('canvas'); WW.SpriteScene.renderTownCompare(c, sc, false, gv); box.appendChild(c); });
+  })();
+
   // ---------------------------------------------------------------- Eisenbahn, Lager, Rohstoffe; Verschmutzungsstufen; Fahnen
   [['railway', 'Eisenbahn, Lager, Rohstoffe: zwei Städte, Strecke mit Kurven und Brücke, Züge in vier Richtungen, Bahnhöfe, Mine, Fischerei, Weide, Arbeitslager, Vorkommen', 'renderRailway', 'railcv'],
    ['pollution', 'Verschmutzungsstufen: dieselbe Landschaft sauber, belastet, verödet (weiche Ränder über Nachbarmaske)', 'renderPollutionStages', 'pollcv'],

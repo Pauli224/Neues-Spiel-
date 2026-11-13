@@ -92,13 +92,10 @@
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
     if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
     if (st.murk && st.murk[i] > 0 && this.S.has('t_murk')) { g.globalAlpha = Math.min(1, 0.4 + st.murk[i] / 200); this.S.drawFast(g, 't_murk', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
-    if (st.barren && st.barren[i] > 0) {
-      const b = st.barren[i], lv = b > 170 ? 3 : b > 85 ? 2 : 1;
-      const bk = this.S.has('t_barren_' + lv) ? 't_barren_' + lv : (this.S.has('t_barren') ? 't_barren' : null);
-      if (bk) this.S.drawFast(g, bk, x * 8, y * 8, 0, false);
-    }
-    if (st.soot && st.soot[i] > 0 && this.S.has('t_soot')) { g.globalAlpha = Math.min(1, 0.3 + st.soot[i] / 200); this.S.drawFast(g, 't_soot', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
-    if (st.cleared && st.cleared[i] > 0 && this.S.has('t_cleared')) this.S.drawFast(g, 't_cleared', x * 8, y * 8, 0, false);
+    // Rodung, Verödung, Ruß mit weichen Rändern (softKey + Nachbarmaske), sonst einfache Kachel
+    if (st.cleared && st.cleared[i] > 0) this.softOverlay(g, x, y, st.cleared, 't_cleared', null);
+    if (st.barren && st.barren[i] > 0) this.softOverlay(g, x, y, st.barren, 't_barren', (v) => v > 170 ? 3 : v > 85 ? 2 : 1);
+    if (st.soot && st.soot[i] > 0) this.softOverlay(g, x, y, st.soot, 't_soot', null);
     // Schienen liegen im Boden wie Pfade
     if (st.structAt && st.structAt[i] >= 0 && this.structById) {
       const rs = this.structById(st.structAt[i]);
@@ -140,10 +137,24 @@
     }
   };
 
+  // Überlagerung mit weichen Rändern: Stufe L der Kachel, Maske = Nachbarn mit Stufe >= L
+  Renderer.prototype.softOverlay = function (g, x, y, ras, base, levelOf) {
+    const S = this.S, st = this.st, W = st.W, H = st.H, i = y * W + x;
+    const lv = (v) => v > 0 ? (levelOf ? levelOf(v) : 1) : 0;
+    const L = lv(ras[i]);
+    const key0 = levelOf ? base + '_' + L : base;
+    const at = (xx, yy) => (xx < 0 || yy < 0 || xx >= W || yy >= H) ? L : lv(ras[yy * W + xx]);
+    const m = (at(x, y - 1) >= L ? 1 : 0) | (at(x + 1, y) >= L ? 2 : 0) | (at(x, y + 1) >= L ? 4 : 0) | (at(x - 1, y) >= L ? 8 : 0);
+    let k = typeof S.softKey === 'function' ? S.softKey(key0, m) : null;
+    if (!k || !S.has(k)) k = S.has(key0) ? key0 : (S.has(base) ? base : null);
+    if (k) S.drawFast(g, k, x * 8, y * 8, 0, false);
+  };
+
   Renderer.prototype.drawRailTile = function (g, s, x, y) {
     const S = this.S, m = (s.mask | 0) & 15;
-    if (typeof S.drawRail === 'function') { try { S.drawRail(g, x * 8, y * 8, m, !!s.bridge); return; } catch (e) { /* Rückfall */ } }
-    const k = (s.bridge && S.has('t_rail_bridge_' + m)) ? 't_rail_bridge_' + m : 't_rail_' + m;
+    if (s.bridge) { const bk = 't_rail_bridge_' + ((m & 10) ? 'h' : 'v'); if (S.has(bk)) { S.drawFast(g, bk, x * 8, y * 8, 0, false); return; } }
+    if (typeof S.drawRail === 'function') { try { S.drawRail(g, x * 8, y * 8, m); return; } catch (e) { /* Rückfall */ } }
+    const k = 't_rail_' + m;
     if (S.has(k)) S.drawFast(g, k, x * 8, y * 8, 0, false);
     else { g.fillStyle = '#5b4a3a'; g.fillRect(x * 8 + 1, y * 8 + 3, 6, 2); }
   };
@@ -216,8 +227,9 @@
     // gerodet: Baumstumpf statt Wald
     if (st.cleared && st.cleared[i] > 0 && !(WW.TERRAIN_LUT.wood[st.terrain[i]])) {
       const h = (Math.imul(i, 2654435761) >>> 24);
-      const k = h % 5 === 0 && this.S.has('d_deadtree_0') ? 'd_deadtree_0' : 'd_stump_0';
-      return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : null;
+      const fresh = st.cleared[i] > 200 && this.S.has('d_log_0');
+      const k = fresh ? 'd_log_' + (h & 1) : h % 5 === 0 && this.S.has('d_deadtree_0') ? 'd_deadtree_0' : 'd_stump_' + (this.S.has('d_stump_1') ? h % 3 : 0);
+      return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : (this.S.has('d_stump_0') ? { key: 'd_stump_0', dx: 0, dy: 0 } : null);
     }
     if (st.deposit && st.deposit[i] > 0) { const d = this.depositDecor(i); if (d) return d; }
     if (st.owner && st.owner[i] >= 0) {
@@ -263,6 +275,7 @@
           break;
         case 'center':
           if (s.stage != null && s.stage < 2) { if (g !== 'anarchy') add('pole', px + s.w * 8 - 4, py + 2, k, s.id); break; }
+          if (g === 'fascism') add('center', px, py + s.h * 8 - 8, k, s.id);
           if (g === 'fascism' || g === 'communism') { add('hang', px + 3, py + s.h * 8 - 10, k, s.id); add('hang', px + s.w * 8 - 9, py + s.h * 8 - 10, k, s.id + 1); }
           else if (g === 'democracy') { add('pole', px - 2, py + 4, k, s.id); add('pole', px + s.w * 8 - 2, py + 4, k, s.id + 1); }
           else if (g === 'theocracy' || g === 'tribe') add('pole', px + s.w * 8 - 3, py + 4, k, s.id);
@@ -307,7 +320,7 @@
       if (f.px < (vt.x0 - 2) * 8 || f.px > (vt.x1 + 2) * 8 || f.py < (vt.y0 - 2) * 8 || f.py > (vt.y1 + 3) * 8) continue;
       const fr = ((this.time * 3 + (f.seed & 7) * 0.4) | 0) & 1;
       let k = null;
-      try { k = S.flagKey(f.kind, f.pat, fr); } catch (e) { k = null; }
+      try { k = S.flagKey(f.kind, f.pat, f.kind === 'center' ? 0 : fr, f.team); } catch (e) { k = null; }
       if (k && S.has(k)) S.drawFast(g, k, f.px, f.py, f.team, false);
     }
   };
@@ -509,7 +522,7 @@
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
       this.burst(f);
-      if (f.type === 'trainsmoke') { this.addPlume(f.x * 8, f.y * 8 - 6, false, -6, -14, false); continue; }
+      if (f.type === 'trainsmoke') { if (typeof this.S.trainKey !== 'function') this.addPlume(f.x * 8, f.y * 8 - 6, false, -6, -14, false); continue; }
       if (f.type === 'smokeplume') { if (typeof this.S.factoryStacks !== 'function') this.addPlume(f.x * 8, f.y * 8, !!(f.filtered || f.clean), -6, -14, f.big); continue; }
       if (f.type === 'muzzle' && this.st) { (this.muzzleT || (this.muzzleT = new Map())).set((f.y | 0) * this.st.W + (f.x | 0), this.time); }
       if (f.type === 'flash') this.flash = Math.max(this.flash || 0, 0.9);
@@ -658,20 +671,39 @@
     }
   };
 
-  // Züge: Lok und Wagen; jedes Teil { x, y, dir }, Liste in train.cars/parts oder der Zug selbst
+  // Züge: Lok und Wagen (fein, unten mittig verankert). Wagen ohne eigene Position reihen sich hinter der Lok
+  // (seitlich 2 Kacheln, nord/süd 1 Kachel Abstand); Rauch 3 px vor der Lokmitte, 16 px darüber
+  const TRAIN_DIR = { e: [1, 0], w: [-1, 0], n: [0, -1], s: [0, 1], 0: [1, 0], 1: [0, 1], 2: [-1, 0], 3: [0, -1] };
   Renderer.prototype.drawTrains = function (g, list, vt) {
     const S = this.S;
+    this._trainSmoke = (this._trainSmoke || 0) - (this._lastDt || 0.016);
+    const puff = this._trainSmoke <= 0;
+    if (puff) this._trainSmoke = 0.35;
     for (const t of list) {
-      if (!t) continue;
-      const parts = Array.isArray(t.cars) ? [{ x: t.x, y: t.y, dir: t.dir, part: 'loco' }].concat(t.cars.map(c => Object.assign({ part: 'car' }, c))) :
-        Array.isArray(t.parts) ? t.parts : [{ x: t.x, y: t.y, dir: t.dir, part: 'loco' }];
-      for (const p of parts) {
-        if (!p || !(p.x >= 0) || p.x < vt.x0 - 2 || p.x > vt.x1 + 2 || p.y < vt.y0 - 2 || p.y > vt.y1 + 2) continue;
+      if (!t || !(t.x >= -2)) continue;
+      const dirOf = (d) => (typeof d === 'string' && /^[ewns]$/.test(d)) ? d : (['e', 's', 'w', 'n'][((d | 0) % 4 + 4) % 4] || 'e');
+      const dir = dirOf(t.dir), v = TRAIN_DIR[dir];
+      const cars = Array.isArray(t.cars) ? t.cars : (t.cars | 0) > 0 ? new Array(t.cars | 0).fill(null) : [];
+      const gap = v[0] ? 2 : 1;
+      const parts = [{ part: 'loco', x: t.x, y: t.y, dir: dir }];
+      cars.forEach((c, i) => {
+        const cc = c && typeof c === 'object' ? c : {};
+        parts.push({ part: 'car', kind: cc.kind || t.kind || 'freight', dir: cc.dir != null ? dirOf(cc.dir) : dir,
+          x: cc.x != null ? cc.x : t.x - v[0] * gap * (i + 1), y: cc.y != null ? cc.y : t.y - v[1] * gap * (i + 1) });
+      });
+      // hinten zuerst zeichnen, damit die Lok vorne liegt (bei Fahrt nach Süden umgekehrt)
+      const order = v[1] < 0 ? parts : parts.slice().reverse();
+      for (const p of order) {
+        if (p.x < vt.x0 - 3 || p.x > vt.x1 + 3 || p.y < vt.y0 - 3 || p.y > vt.y1 + 3) continue;
         let key = null;
-        if (typeof S.trainKey === 'function') { try { key = S.trainKey(p.part || 'car', p.kind || t.kind || 'freight', p.dir != null ? p.dir : 0); } catch (e) { key = null; } }
-        const px = Math.round(p.x * 8 - 4), py = Math.round(p.y * 8 - 6);
-        if (key && S.has(key)) S.drawFast(g, key, px, py, t.colorIndex != null ? t.colorIndex : 10, false);
-        else { g.fillStyle = '#0a1a21'; g.fillRect(px, py + 2, 8, 5); g.fillStyle = p.part === 'loco' ? '#3e3150' : '#9a6233'; g.fillRect(px + 1, py + 3, 6, 3); }
+        if (typeof S.trainKey === 'function') { try { key = S.trainKey(p.part, p.kind || 'freight', p.dir); } catch (e) { key = null; } }
+        const px = Math.round(p.x * 8), py = Math.round(p.y * 8);
+        if (key && S.has(key)) {
+          const inf = S.info(key), sc = (inf && inf.scale) || 1, w = inf ? inf.w * sc : 8, fw = inf ? inf.fw : 1;
+          S.drawFast(g, key, px - fw * 4, py - (inf ? inf.fh * 8 : 8), t.colorIndex != null ? t.colorIndex : 10, false);
+          void w;
+        } else { g.fillStyle = '#0a1a21'; g.fillRect(px - 4, py - 6, 8, 5); g.fillStyle = p.part === 'loco' ? '#3e3150' : '#9a6233'; g.fillRect(px - 3, py - 5, 6, 3); }
+        if (p.part === 'loco' && puff) this.addPlume(px + v[0] * 3, py - 16, false, -6, -14, false, 0.6);
       }
     }
   };
@@ -894,6 +926,9 @@
         if (S.has('s_factory_' + s.kind + '_' + lv)) return 's_factory_' + s.kind + '_' + lv;
         return s.w >= 3 ? 's_center_communism' : 's_barracks';   // Platzhalter, bis die Grafik da ist
       }
+      case 'station': return typeof S.stationKey === 'function' && S.has(S.stationKey(style)) ? S.stationKey(style) : (S.has('s_station') ? 's_station' : 's_market');
+      case 'laborcamp': { const k = typeof S.laborcampKey === 'function' ? S.laborcampKey(style, !!s.ruin || !!s.closed) : 's_laborcamp'; return S.has(k) ? k : 's_barracks'; }
+      case 'mine': { const k = typeof S.mineKey === 'function' ? S.mineKey(s.ore || s.kind) : 's_mine'; return S.has(k) ? k : 's_quarry'; }
       case 'lair': return this.S.has('s_lair_' + s.kind) ? 's_lair_' + s.kind : 's_ruin';
       case 'ruin': return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
       default: return this.S.has('s_' + s.type) ? 's_' + s.type : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
@@ -1093,6 +1128,7 @@
     if (st.structs) this.updatePlumes(ctx, vt, dt);
     if (st.pollution && st.pollution.length) this.drawSmog(ctx, cam, opts.view === 'air');
     // (4) Effekte, Flugzeuge
+    this._lastDt = dt;
     this.drawFx(ctx, dt);
     if (st.wild && st.wild.effects && st.wild.effects.length) this.drawEffects(ctx, st.wild.effects, vt);
     if (st.trains && st.trains.length) this.drawTrains(ctx, st.trains, vt);
@@ -1571,38 +1607,40 @@
     }
   };
 
+  // Glitzer je Block einmal vorberechnen (4 Bilder, Meer und Fluss mit versetzten Mustern), dann nur noch wechseln
+  const WFR = 4;
+  Renderer.prototype.buildWaterGlints = function (c) {
+    const frames = this.glintFrames();
+    c.wGl = [];
+    for (let f = 0; f < WFR; f++) {
+      const cv = document.createElement('canvas'); cv.width = CPX; cv.height = CPX;
+      const g = cv.getContext('2d');
+      g.fillStyle = g.createPattern(frames[(f * 2) % frames.length], 'repeat');
+      g.fillRect(0, 0, CPX, CPX);
+      g.globalCompositeOperation = 'destination-in'; g.drawImage(c.wSea, 0, 0);
+      const tmp = document.createElement('canvas'); tmp.width = CPX; tmp.height = CPX;
+      const tg = tmp.getContext('2d');
+      tg.save(); tg.translate(f * 5, f * 5); tg.fillStyle = tg.createPattern(frames[(f * 2 + 3) % frames.length], 'repeat'); tg.fillRect(-64, -64, CPX + 128, CPX + 128); tg.restore();
+      tg.globalCompositeOperation = 'destination-in'; tg.drawImage(c.wRiv, 0, 0);
+      g.globalCompositeOperation = 'source-over'; g.drawImage(tmp, 0, 0);
+      c.wGl.push(cv);
+    }
+  };
   Renderer.prototype.drawWaterLayer = function (ctx, cx0, cx1, cy0, cy1, rx, ry, low) {
     const st = this.st, t = this.time;
-    const frames = this.glintFrames(), F = frames.length;
-    if (!this._wTmp) { this._wTmp = document.createElement('canvas'); this._wTmp.width = CPX; this._wTmp.height = CPX; }
-    const tmp = this._wTmp, tg = tmp.getContext('2d');
-    const fr = ((t * 5) | 0) % F;
-    if (!this._wPat || this._wPatF !== fr) { this._wPat = tg.createPattern(frames[fr], 'repeat'); this._wPatF = fr; }
-    const fr2 = ((t * 9) | 0) % F;
-    if (!this._wPat2 || this._wPatF2 !== fr2) { this._wPat2 = tg.createPattern(frames[(fr2 + 3) % F], 'repeat'); this._wPatF2 = fr2; }
+    const fr = ((t * 4) | 0) % WFR;
     const a1 = 0.5 + 0.45 * Math.sin(t * 1.7), a2 = 0.5 + 0.45 * Math.sin(t * 1.7 - 2.1);
-    let budget = low ? 6 : 40;
+    let builds = 2;
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
       const c = this.chunks[cy * this.cw + cx];
       if (!c.built) continue;
-      if (c.waterDirty || c.hasWater == null) this.buildWater(c);
+      if (c.waterDirty || c.hasWater == null) { this.buildWater(c); c.wGl = null; }
       if (!c.hasWater) continue;
       const X = cx * CPX, Y = cy * CPX, w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
       const dx = rx(X), dy = ry(Y), dw = rx(X + w) - dx, dh = ry(Y + h) - dy;
-      if (budget-- > 0) {
-        // Meer/See: langsam treibendes Glitzern; Fluss: schneller, schräg „stromab"
-        tg.globalCompositeOperation = 'source-over';
-        tg.clearRect(0, 0, CPX, CPX);
-        tg.imageSmoothingEnabled = false;
-        tg.save(); tg.translate(Math.round((t * 3) % 64) - 64, Math.round((t * 1.3) % 64) - 64); tg.fillStyle = this._wPat; tg.fillRect(0, 0, CPX + 128, CPX + 128); tg.restore();
-        tg.globalCompositeOperation = 'destination-in'; tg.drawImage(c.wSea, 0, 0);
-        tg.globalCompositeOperation = 'source-over';
-        ctx.drawImage(tmp, 0, 0, w, h, dx, dy, dw, dh);
-        tg.clearRect(0, 0, CPX, CPX);
-        tg.save(); tg.translate(Math.round((t * 11) % 64) - 64, Math.round((t * 11) % 64) - 64); tg.fillStyle = this._wPat2; tg.fillRect(0, 0, CPX + 128, CPX + 128); tg.restore();
-        tg.globalCompositeOperation = 'destination-in'; tg.drawImage(c.wRiv, 0, 0);
-        tg.globalCompositeOperation = 'source-over';
-        ctx.drawImage(tmp, 0, 0, w, h, dx, dy, dw, dh);
+      if (!low) {
+        if (!c.wGl && builds-- > 0) this.buildWaterGlints(c);
+        if (c.wGl) ctx.drawImage(c.wGl[fr], 0, 0, w, h, dx, dy, dw, dh);
       }
       // Brandung rollt an: zwei Ringe im Wechsel
       ctx.globalAlpha = Math.max(0, a1) * 0.9; ctx.drawImage(c.wFoam1, 0, 0, w, h, dx, dy, dw, dh);
@@ -1868,7 +1906,22 @@
     return (this._glow = cv);
   };
   Renderer.prototype.drawLights = function (g, vt, k) {
-    const st = this.st, glow = this.glowSprite();
+    const st = this.st, glow = this.glowSprite(), S = this.S;
+    // erleuchtete Fenster: litKey liefert das Nachtbild des Gebäudes
+    if (typeof S.litKey === 'function') {
+      const cityK = this._cityK && this._cityK.size ? this._cityK : this.cityKingdoms();
+      g.globalAlpha = Math.min(1, k * 1.1);
+      for (const s of st.structs) {
+        if (!s.built || s.dead || (s.type !== 'house' && s.type !== 'center' && s.type !== 'barracks' && s.type !== 'market' && s.type !== 'station')) continue;
+        if (s.x + s.w < vt.x0 - 1 || s.x > vt.x1 + 1 || s.y + s.h < vt.y0 || s.y > vt.y1 + 3) continue;
+        if (s.type === 'house' && hash2(s.id, 1, 33) > 0.35 + k * 0.6) continue;
+        const kk = cityK.get(s.cityId), key = this.structKey(s, kk ? kk.gov : 'tribe'), lk = S.litKey(key);
+        if (!lk || lk === key || !S.has(lk)) continue;
+        const inf = S.info(lk), fh = inf ? inf.fh : s.h;
+        S.drawFast(g, lk, s.x * 8, (s.y + s.h - fh) * 8, kk ? kk.colorIndex | 0 : 10, false);
+      }
+      g.globalAlpha = 1;
+    }
     g.globalCompositeOperation = 'lighter';
     g.imageSmoothingEnabled = true;
     let n = 0;
