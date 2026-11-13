@@ -432,7 +432,7 @@
       }
     });
     // Ecken runden: konvex (eigene Kachel höher als beide Nachbarn) und konkav (alle drei Nachbarn höher)
-    var R = 6, corners = [[0, 0, n, w, nw], [16, 0, n, e, ne], [0, 16, s, w, sw], [16, 16, s, e, se]];
+    var R = 8, corners = [[0, 0, n, w, nw], [16, 0, n, e, ne], [0, 16, s, w, sw], [16, 16, s, e, se]];
     corners.forEach(function (c) {
       var cx = c[0], cy = c[1], a = c[2], b = c[3], d = c[4], ra = GI[a].rank, rb = GI[b].rank, rd = GI[d].rank;
       var ox = cx ? -1 : 1, oy = cy ? -1 : 1;

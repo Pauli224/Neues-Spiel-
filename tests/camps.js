@@ -28,6 +28,8 @@ function city(gov, o) {
   run(sim, 100);
   const c = sim.state.cities[0];
   for (const r of ['human', 'dwarf', 'orc', 'gnome']) sim.actions.spawnSettlers(c.cx + 2, c.cy + 2, 6, null, r);
+  // unzufriedene Stadt (sonst gäbe es keinen Anlass für ein Lager)
+  if (o.unhappy) WW.Mods.add(c, { key: 'happiness', add: -30, source: 'test', name: 'Test: Missstimmung' });
   return { sim, c, k: sim._kingdoms.get(c.kingdomId) };
 }
 function years(o, n, until) {
@@ -42,7 +44,7 @@ function builtCamp(o) { return camps(o.sim).find((s) => s.built); }
 
 test('1 Lager nur unter Faschismus und Kommunismus; Gesetz aus = keine', function () {
   for (const g of ['fascism', 'communism']) {
-    const o = city(g);
+    const o = city(g, { unhappy: g === 'communism' });
     const y = years(o, 25, () => !!builtCamp(o));
     log(g, 'Lager nach', y, 'Jahren:', camps(o.sim).length, 'Stufe', o.c.tier, 'Zufriedenheit', Math.round(o.c.happiness));
     assert(builtCamp(o), g + ' baut kein Lager');
@@ -51,7 +53,7 @@ test('1 Lager nur unter Faschismus und Kommunismus; Gesetz aus = keine', functio
     assert(st.events.some((e) => e.type === 'campBuilt'), 'keine Chronik');
   }
   for (const g of ['tribe', 'democracy', 'monarchy', 'republic', 'theocracy', 'anarchy']) {
-    const o = city(g);
+    const o = city(g, { unhappy: true });
     years(o, 15);
     assert(!camps(o.sim).length, g + ' baut ein Lager');
   }
@@ -94,13 +96,14 @@ test('2 Insassen: nie nach Volk, nie Angriffsziel, Zwangsarbeit; Folgen über Mo
 });
 
 test('3 Befreiung bei Regierungswechsel: Insassen frei, Mahnmal, Freude', function () {
-  const o = city('communism');
+  const o = city('communism', { unhappy: true });
   years(o, 25, () => !!builtCamp(o));
   const s = builtCamp(o);
   assert(s, 'kein Lager');
   const cand = o.sim.state.units.filter((u) => !u.dead && u.cityId === o.c.id && u.role === 'farmer').slice(0, 5);
   for (const u of cand) WW.Camps.intern(o.sim, u, s);
   const ids = cand.map((u) => u.id);
+  const hb = WW.Mods.value(o.sim, o.k, o.c, 'happiness', 50);
   o.sim.actions.setGovernment(o.k.id, 'democracy');
   run(o.sim, 240);
   const st = o.sim.state;
@@ -108,8 +111,8 @@ test('3 Befreiung bei Regierungswechsel: Insassen frei, Mahnmal, Freude', functi
   assert(st.structs.some((x) => !x.dead && x.type === 'ruin' && x.ruinOf === 'laborcamp'), 'kein Mahnmal');
   for (const id of ids) { const u = o.sim._units.get(id); if (u && !u.dead) assert(u.role !== 'prisoner' && u.cityId === o.c.id && !u.ind, 'Insasse nicht frei'); }
   const h = WW.Mods.value(o.sim, o.k, o.c, 'happiness', 50);
-  log('Zufriedenheit-Mod nach Befreiung 50 ->', h.toFixed(1));
-  assert(h > 55, 'Befreiung hebt Zufriedenheit nicht');
+  log('Zufriedenheit-Mod vor Befreiung', hb.toFixed(1), '-> danach', h.toFixed(1));
+  assert(h - hb >= 12, 'Befreiung hebt Zufriedenheit nicht deutlich');
   assert(st.events.some((e) => e.type === 'campLiberated'), 'keine Chronik zur Befreiung');
   log(st.events.filter((e) => e.type === 'campLiberated').map((e) => e.text + ' [' + e.effectText + ']').join(' / '));
 });
