@@ -282,7 +282,12 @@
     const z = game.cam.crispZoom(window.innerWidth < 760 ? 2 : 3);
     game.cam.zoom = z;
     if (best) { game.cam.x = (best.cx + 0.5) * 8; game.cam.y = (best.cy + 1.5) * 8; }
-    else { game.cam.x = sim.state.W * 4; game.cam.y = sim.state.H * 4; game.cam.zoom = game.cam.crispZoom(1.5); }
+    else {
+      // leere Welt: auf den besten Siedlungsplatz schauen
+      const sp = sim._startSpots && sim._startSpots[0];
+      game.cam.zoom = game.cam.crispZoom(window.innerWidth < 760 ? 1.5 : 2);
+      if (sp) { game.cam.x = (sp.x + 0.5) * 8; game.cam.y = (sp.y + 0.5) * 8; } else { game.cam.x = sim.state.W * 4; game.cam.y = sim.state.H * 4; }
+    }
     game.cam.clamp();
     game.renderer.queueAll(game.cam);
   }
@@ -301,6 +306,8 @@
   game.newWorld = function (o) {
     showBoot('Die Welt wird geknetet …');
     setTimeout(() => {
+      o = o || {};
+      if (!o.world) { const wo = WW.UI.randomWorldOpts(o.seed || WW.UI.randSeed(), o.size || 'large'); o.seed = wo.seed; o.world = WW.WorldGen.generate(wo); }
       const races = o.races && o.races !== 'random' ? [o.races] : null;
       const sim = WW.Sim.create({ seed: o.seed, world: o.world, populate: o.populate == null ? 0 : o.populate, races: races,
         govs: o.govs === 'tribe' ? null : 'mixed', animals: o.animals !== false });
@@ -479,7 +486,9 @@
     else {
       const seed = WW.UI.randSeed();
       setTimeout(() => {
-        const s = WW.Sim.create({ seed: seed, worldOpts: { template: 'continents' }, size: 'medium', populate: 0 });
+        // erster Start: komplett zufällige, leere Welt (Größe Groß)
+        const wo = WW.UI.randomWorldOpts(seed, 'large');
+        const s = WW.Sim.create({ seed: wo.seed, world: WW.WorldGen.generate(wo), populate: 0 });
         prewarm(s, s.state.cities.length ? 1200 : 0, () => { go(s); game.saveAuto(); });
       }, 20);
     }

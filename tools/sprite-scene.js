@@ -287,5 +287,54 @@
     ctx.drawImage(top, 0, 0, canvas.width, canvas.height);
   }
 
-  WW.SpriteScene = { render: render, renderTowns: renderTowns, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Zerstörung: Flugzeuge über einer Stadt, Pilzwolke, Krater, Icons
+  function renderDestruction(canvas, scale) {
+    S.init();
+    var W2 = 58, H2 = 26;
+    var ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2);
+    for (var i = 0; i < ter.length; i++) { var x = i % W2; ter[i] = x >= 18 && x < 20 ? T.SAND : (x >= 20 ? T.ASH : T.GRASS); vari[i] = Math.floor(h2(x, Math.floor(i / W2), 78) * 256); }
+    for (var yy = 0; yy < H2; yy++) for (var xx = 46; xx < W2; xx++) ter[yy * W2 + xx] = T.GRASS;
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d');
+    S.drawGroundMap(tx, ter, vari, W2, H2);
+    // Krater (Bodenüberlagerungen)
+    S.draw(tx, 't_crater_l', 47 * 8, 1 * 8); S.draw(tx, 't_crater_m', 53 * 8, 2 * 8); S.draw(tx, 't_crater', 53 * 8, 6 * 8);
+    for (var fy = 8; fy < 12; fy++) for (var fx2 = 47; fx2 < 52; fx2++) { S.draw(tx, 't_scorched', fx2 * 8, fy * 8); S.draw(tx, 't_fallout', fx2 * 8, fy * 8); S.draw(tx, 'fx_fallout', fx2 * 8, fy * 8); }
+    // Stadt
+    var items = townItems('monarchy', 0, 2, 5);
+    items.push({ key: 's_ruin_2', x: 11, y: 11, team: 0 });
+    items.forEach(function (it) { it._s = sortY(it); });
+    items.sort(function (a, b) { return a._s - b._s || a.x - b.x; });
+    items.forEach(function (it) { if (S.has(it.key)) S.draw(tx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team || 0, flip: it.flip }); });
+    // Einschläge in der Stadt
+    S.draw(tx, 't_crater', 4 * 8, 11 * 8);
+    S.draw(tx, 'fx_explosion_l_1', 5 * 8, 10 * 8); S.draw(tx, 'fx_explosion_2', 13 * 8, 6 * 8); S.draw(tx, 'fx_fire_0', 12 * 8, 11 * 8);
+    // Kanonenflugzeug mit Schatten, Leuchtspur nach unten links
+    S.draw(tx, 'fx_gunship_shadow', 11 * 8, 5 * 8 + 4); S.draw(tx, 'fx_gunship', 8 * 8, 1 * 8);
+    for (var k = 0; k < 4; k++) S.draw(tx, 'fx_tracer', 7 * 8 - k * 5, 3 * 8 + k * 6);
+    // Bomber mit fallenden Bomben
+    S.draw(tx, 'fx_bomber_shadow', 4 * 8, 19 * 8); S.draw(tx, 'fx_bomber', 1 * 8, 15 * 8);
+    S.draw(tx, 'fx_bombdrop', 2 * 8, 18 * 8); S.draw(tx, 'fx_bombdrop', 4 * 8, 20 * 8);
+    // Rakete mit Rauchspur
+    S.draw(tx, 'fx_rocket', 14 * 8, 20 * 8); S.draw(tx, 'fx_trail_0', 13 * 8, 20 * 8); S.draw(tx, 'fx_trail_1', 12 * 8, 20 * 8);
+    // Pilzwolken-Abfolge auf dem Aschefeld
+    for (var m = 0; m < 6; m++) S.draw(tx, 'fx_mushroom_' + m, (21 + m * 4) * 8 - 8, 11 * 8);
+    // Laser, schwarzes Loch, Blitz, Druckwelle, große Explosionen
+    for (var ly = 0; ly < 7; ly++) S.draw(tx, 'fx_laser', 22 * 8, (13 + ly) * 8);
+    S.draw(tx, 'fx_laser_hit_0', 22 * 8, 20 * 8);
+    S.draw(tx, 'fx_blackhole_0', 27 * 8, 17 * 8); S.draw(tx, 'fx_blackhole_2', 31 * 8, 17 * 8);
+    S.draw(tx, 'fx_shockwave', 36 * 8, 17 * 8); S.draw(tx, 'fx_flash', 36 * 8, 17 * 8);
+    for (var e = 0; e < 4; e++) S.draw(tx, 'fx_explosion_l_' + e, (40 + e * 4) * 8 - 8, 22 * 8);
+    for (e = 0; e < 4; e++) S.draw(tx, 'fx_explosion_' + e, (27 + e * 3) * 8, 22 * 8);
+    // Icons der Kategorie als Leiste
+    var keys = ['i_cat_destruction', 'i_bomb', 'i_clusterbomb', 'i_napalm', 'i_rocket', 'i_bomber', 'i_gunship', 'i_nuke', 'i_tsar', 'i_orbitallaser', 'i_blackhole'];
+    canvas.width = W2 * 8 * scale; canvas.height = H2 * 8 * scale + 64;
+    var ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#1d3b47'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    keys.forEach(function (k, n) { ctx.drawImage(S.iconCanvas(k, 3), 8 + n * 56, 8); });
+    ctx.drawImage(top, 0, 64, W2 * 8 * scale, H2 * 8 * scale);
+  }
+
+  WW.SpriteScene = { render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -260,10 +260,54 @@
     return o;
   }
 
+  // Themenwelten für „Alles würfeln“: Vorlagen und Regelbereiche mit Charakter.
+  const THEMES = [
+    { key: 'ice', name: 'Eiswelt', tpl: ['continents', 'pangaea', 'archipelago', 'coast'], s: { temperature: [0, 0.14], moisture: [0.35, 0.8], mountains: [0.3, 0.8], forests: [0.2, 0.6] } },
+    { key: 'desert', name: 'Wüstenwelt', tpl: ['pangaea', 'continents', 'twins', 'coast'], s: { temperature: [0.85, 1], moisture: [0, 0.14], forests: [0.05, 0.3], rivers: [0.1, 0.4] } },
+    { key: 'jungle', name: 'Dschungelwelt', tpl: ['continents', 'archipelago', 'lakeland', 'shards'], s: { temperature: [0.82, 1], moisture: [0.8, 1], forests: [0.75, 1], rivers: [0.5, 0.9] } },
+    { key: 'swamp', name: 'Sumpfwelt', tpl: ['lakeland', 'pangaea', 'coast'], s: { temperature: [0.45, 0.7], moisture: [0.92, 1], mountains: [0, 0.25], rivers: [0.7, 1], forests: [0.3, 0.6] } },
+    { key: 'magic', name: 'Zauberwelt', tpl: ['ringsea', 'archipelago', 'shards', 'continents'], s: { magic: [0.85, 1], moisture: [0.5, 0.9], forests: [0.4, 0.8] } },
+    { key: 'peaks', name: 'Gebirgswelt', tpl: ['highlands', 'shards', 'pangaea'], s: { mountains: [0.88, 1], rivers: [0.5, 0.9], temperature: [0.2, 0.5] } },
+    { key: 'ocean', name: 'Wasserwelt', tpl: ['archipelago'], s: { land: [0, 0.15], mountains: [0.2, 0.6], temperature: [0.5, 0.8] } },
+    { key: 'wildwood', name: 'Urwald-Kontinent', tpl: ['pangaea', 'lakeland'], s: { land: [0.75, 1], forests: [0.9, 1], moisture: [0.6, 0.85], temperature: [0.35, 0.65] } },
+    { key: 'steppe', name: 'Steppe mit Flussoasen', tpl: ['pangaea', 'continents', 'coast'], s: { temperature: [0.65, 0.85], moisture: [0.05, 0.22], rivers: [0.85, 1], forests: [0, 0.15], mountains: [0.3, 0.6] } }
+  ];
+  // Rohe Zufallswahl (ohne Startplatz-Prüfung): etwa jede dritte Welt ist eine Themenwelt.
+  function randomPick(seedInt, attempt) {
+    const r = stream(seedInt, 'randomOpts:' + attempt);
+    const real = TEMPLATES.filter(t => t.key !== 'random').map(t => t.key);
+    const o = { seed: mix32(seedInt, 7777 + attempt) % 1000000000, theme: 'mixed', themeName: 'Wilde Mischung' };
+    // Regler über den ganzen Bereich (leicht zur Mitte gezogen, Ränder bleiben erreichbar)
+    const wide = (a, b) => { const u = (r.next() + r.next() + r.next() * 0.6) / 2.6; return a + (b - a) * (r.next() < 0.3 ? r.next() : u); };
+    o.template = r.pick(real);
+    o.land = wide(0.1, 0.95); o.mountains = wide(0.05, 1); o.forests = wide(0.05, 1); o.rivers = wide(0.1, 1);
+    o.temperature = wide(0.08, 0.92); o.moisture = wide(0.08, 0.92); o.magic = r.next() < 0.25 ? r.range(0.5, 1) : r.range(0, 0.45);
+    if (r.next() < 0.34) {
+      const th = r.pick(THEMES);
+      o.theme = th.key; o.themeName = th.name; o.template = r.pick(th.tpl);
+      for (const k in th.s) o[k] = r.range(th.s[k][0], th.s[k][1]);
+    } else {
+      const tp = TEMPLATES.find(t => t.key === o.template);
+      o.themeName = tp ? tp.name : o.template;
+    }
+    for (const k of SLIDERS) o[k] = Math.round(o[k] * 100) / 100;
+    return o;
+  }
+  // Vollständig gewürfelte Einstellungen, deterministisch aus seed; mindestens 4 Startplätze.
+  // base (optional) gibt Werte vor, die nicht gewürfelt werden (z. B. size).
+  function randomOpts(seed, base) {
+    const si = seedToInt(seed == null ? 0 : seed);
+    let o = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      o = Object.assign(randomPick(si, attempt), base && base.size ? { size: base.size } : null);
+      const w = generate(o);
+      if (w.startSpots.length >= 4) break;
+    }
+    return o;
+  }
   function resolveTemplate(key, seed) {
     if (key !== 'random') return key;
-    const real = TEMPLATES.filter(t => t.key !== 'random');
-    return stream(seed, 'random-template').pick(real).key;
+    return randomPick(seed, 0).template; // gleiche Logik wie „Alles würfeln“
   }
 
   // ---------------------------------------------------------------- Vorlagen
@@ -365,8 +409,9 @@
     const nz = new Noise(r.int(2147483647));
     if (key === 'continents') {
       // verschieden große Landmassen, Gruppe aus der Mitte gerückt → Meere unterschiedlich breit
-      const K = 2 + r.int(3);
-      const sizes = [r.range(0.22, 0.28), r.range(0.13, 0.2), r.range(0.09, 0.14), r.range(0.07, 0.1)].slice(0, K);
+      const K = 2 + r.int(4);
+      const big = r.range(0.16, 0.32);
+      const sizes = [big, big * r.range(0.35, 0.95), r.range(0.07, 0.16), r.range(0.06, 0.12), r.range(0.05, 0.1)].slice(0, K);
       const gx = A * 0.5 + r.range(-0.12, 0.12) * A, gy = 0.5 + r.range(-0.06, 0.06);
       const placed = [];
       for (let k = 0; k < K; k++) {
@@ -381,7 +426,7 @@
       P.lo = 0.18; P.hi = 0.44; P.nw = 0.45;
     } else if (key === 'pangaea') {
       // riesige zerlappte Masse mit Binnenmeer
-      const cx = A * r.range(0.4, 0.6), cy = r.range(0.47, 0.53), R = 0.36;
+      const cx = A * r.range(0.38, 0.62), cy = r.range(0.45, 0.55), R = r.range(0.3, 0.4);
       lobedMass(r, S, cx, cy, R, { ls: LS, lobes: 4, pen: 2, bays: 3, isl: 1 + r.int(3) });
       const d = randDir(r);
       const sea = mkBlob(r, cx + d[0] * 0.06, cy + d[1] * 0.05, r.range(0.12, 0.17), r.range(0.07, 0.1));
@@ -390,18 +435,18 @@
       P.lo = 0.22; P.hi = 0.48; P.nw = 0.4;
     } else if (key === 'archipelago') {
       const list = [];
-      const chains = 4 + r.int(4);
+      const chains = 2 + r.int(8), isz = r.range(0.7, 1.5);
       for (let c = 0; c < chains; c++) {
         let x = r.range(A * 0.15, A * 0.85), y = r.range(0.2, 0.8);
         const d = randDir(r), n = 3 + r.int(4);
         for (let k = 0; k < n; k++) {
-          const rr = r.range(0.03, 0.075) * (k === 0 ? 1.4 : 1);
+          const rr = r.range(0.03, 0.075) * (k === 0 ? 1.4 : 1) * isz;
           list.push(mkBlob(r, x, y, rr * r.range(1, 1.7), rr));
           x += d[0] * r.range(0.07, 0.11) + r.range(-0.03, 0.03);
           y += d[1] * r.range(0.07, 0.11) + r.range(-0.03, 0.03);
         }
       }
-      const scat = 8 + r.int(6);
+      const scat = 3 + r.int(14);
       for (let k = 0; k < scat; k++) { const rr = r.range(0.03, 0.1); list.push(mkBlob(r, r.range(0.1, A - 0.1), r.range(0.12, 0.88), rr * r.range(1, 1.6), rr)); }
       S.pos = list;
       P.lo = 0.1; P.hi = 0.34; P.nw = 0.45; P.mw = 1.1; P.freq = 1.5;
@@ -450,7 +495,7 @@
       const cx = A * r.range(0.4, 0.6), cy = r.range(0.46, 0.54);
       lobedMass(r, S, cx, cy, 0.34, { ls: LS, lobes: 5, pen: 2, bays: 2, isl: r.int(3) });
       const holes = [];
-      const nh = 9 + r.int(7);
+      const nh = 5 + r.int(16);
       for (let t = 0; holes.length < nh && t < 300; t++) {
         const x = cx + r.range(-0.3, 0.3) * A, y = cy + r.range(-0.28, 0.28);
         if (holes.some(h => (h.x - x) * (h.x - x) + (h.y - y) * (h.y - y) < 0.022)) continue;
@@ -577,9 +622,10 @@
     const nClim = new Noise(mix32(seed, 105)), nVeg = new Noise(mix32(seed, 106));
 
     const rs = stream(seed, 'shape');
-    const warp = rs.range(0.22, 0.32);
+    const warp = rs.range(0.15, 0.4);
     const sizeF = Math.sqrt(Math.sqrt(H / 96));
-    const F = rs.range(2.2, 2.8) * P.freq * sizeF;
+    const F = rs.range(1.8, 3.3) * P.freq * sizeF;
+    P.nw *= rs.range(0.7, 1.4); P.mw *= rs.range(0.85, 1.2); // jede Welt etwas anders gewichtet
     const oct = H > 120 ? 6 : 5;
 
     // 1) Grundform: verzerrtes Rauschen + Vorlagenmaske − Randabfall
@@ -647,13 +693,13 @@
 
     // 5) Relief: Plattengrenzen + Kammrauschen → Gebirgszüge
     const rp = stream(seed, 'plates');
-    const K = 8 + rp.int(6);
+    const K = 4 + rp.int(14); // Zahl der Platten → Zahl und Richtung der Gebirgszüge
     const sx = new Float64Array(K), sy = new Float64Array(K), vx = new Float64Array(K), vy = new Float64Array(K);
     for (let k = 0; k < K; k++) {
       sx[k] = rp.range(-0.1, A + 0.1); sy[k] = rp.range(-0.1, 1.1);
       const d = randDir(rp), sp = rp.range(0.2, 1); vx[k] = d[0] * sp; vy[k] = d[1] * sp;
     }
-    const pw = 0.05;
+    const pw = rp.range(0.035, 0.075), massW = rp.range(0.2, 0.9), mVar = rp.range(0.7, 1.4);
     const R = new Float32Array(N), base = new Float32Array(N);
     const mc = P.mtnCenter;
     for (let i = 0; i < N; i++) {
@@ -674,7 +720,7 @@
       if (pm > 0) strength = smooth01(pm) * clamp01(0.3 + conv * 0.7);
       const rn = nRidge.ridged(px * 4.2, py * 4.2, 4);
       const massif = clamp01(nMisc.fbm(qx * 1.2 + 300, qy * 1.2, 2, 0.5) * 2.2 - 0.15);
-      let mtn = strength * (0.45 + 0.7 * rn) + 0.55 * massif * rn * rn;
+      let mtn = strength * (0.45 + 0.7 * rn) + massW * massif * rn * rn;
       if (mc) {
         const dx = (px - mc.x) / mc.rx, dy = (py - mc.y) / mc.ry, d = Math.sqrt(dx * dx + dy * dy);
         const c = 1 - d; if (c > 0) mtn += smooth01(c * 1.6) * (0.3 + 0.9 * rn);
@@ -694,7 +740,7 @@
     }
     const sM = o.mountains;
     const hb = P.mtnCenter ? 1.7 : 1;
-    const mFrac = (0.004 + 0.07 * sM + 0.11 * sM * sM) * hb;
+    const mFrac = (0.004 + 0.07 * sM + 0.11 * sM * sM) * hb * mVar;
     const hFrac = (0.03 + 0.11 * sM) * (P.mtnCenter ? 1.3 : 1);
     const thM = quantile(R, land, 1 - mFrac);
     const thH = quantile(R, land, 1 - mFrac - hFrac);
@@ -767,7 +813,7 @@
     // Senken → Seen
     {
       const cand = new Uint8Array(N);
-      const lakeTh = 0.012 - 0.006 * o.rivers;
+      const lakeTh = (0.012 - 0.006 * o.rivers) * stream(seed, 'lakes').range(0.5, 2.2); // mal seenreich, mal kaum Seen
       for (let i = 0; i < N; i++) if (land[i] && relief[i] < 2 && Fill[i] - Ed[i] > lakeTh) cand[i] = 1;
       let cc = components(cand, W, H);
       // zu große Senken nur im tiefsten Teil fluten
@@ -1018,7 +1064,16 @@
 
     // 8) Klima
     const rc = stream(seed, 'climate');
-    const eqOff = rc.range(-0.06, 0.06);
+    // Klimacharakter der Welt: Lage und Neigung des Wärmegürtels, Grundwärme, Grundfeuchte, Kontrast
+    const cm = rc.next();
+    let eqY, tilt;
+    if (cm < 0.45) { eqY = 0.5 + rc.range(-0.1, 0.1); tilt = rc.range(-0.15, 0.15); }          // zwei Pole
+    else if (cm < 0.72) { eqY = rc.next() < 0.5 ? rc.range(-0.05, 0.22) : rc.range(0.78, 1.05); tilt = rc.range(-0.2, 0.2); } // ein kalter Pol
+    else { eqY = 0.5 + rc.range(-0.25, 0.25); tilt = rc.range(-0.55, 0.55); }                  // schräger Gürtel
+    const latD = Math.max(eqY, 1 - eqY, 0.5);
+    const warmB = (rc.next() + rc.next() - 1) * 0.16, wetB = (rc.next() + rc.next() - 1) * 0.2;
+    const tCon = rc.range(0.75, 1.3), mCon = rc.range(0.75, 1.35);
+    const eqAt = qx => eqY + tilt * (qx / A - 0.5);
     const Tm = new Float32Array(N), Mo = new Float32Array(N);
     const wet = new Uint8Array(N); for (let i = 0; i < N; i++) wet[i] = (!land[i] || river[i]) ? 1 : 0;
     const dWet = distField(wet, W, H);
@@ -1043,7 +1098,7 @@
     }
     const rain = new Float32Array(N);
     for (let y = 0; y < H; y++) {
-      const lat = Math.abs((y + 0.5) / H - 0.5 - eqOff) * 2;
+      const lat = Math.abs((y + 0.5) / H - eqY) / latD;
       const wWest = smooth01((lat - 0.24) / 0.12) * (1 - smooth01((lat - 0.64) / 0.12));
       for (let x = 0; x < W; x++) { const i = y * W + x; rain[i] = wWest * rainW[i] + (1 - wWest) * rainE[i]; }
     }
@@ -1053,26 +1108,27 @@
     for (let i = 0; i < N; i++) {
       if (!land[i]) continue;
       const qx = QX[i], qy = QY[i];
-      let lat = Math.abs(qy - 0.5 - eqOff) * 2 + 0.12 * nClim.fbm(qx * 1.8, qy * 1.8, 3, 0.5);
+      let lat = Math.abs(qy - eqAt(qx)) / latD + 0.12 * nClim.fbm(qx * 1.8, qy * 1.8, 3, 0.5);
       if (lat < 0) lat = -lat;
       const alt = 0.45 * (E[i] > 0.12 ? E[i] - 0.12 : 0);
       Tm[i] = 1 - lat + 0.07 * nClim.fbm(qx * 4 + 50, qy * 4, 2, 0.5) - alt;
       absT[i] = 1.05 - 1.2 * lat - alt;
       const wp = 3 / (3 + dWet[i]);
       const mn = 0.5 + 0.8 * nClim.fbm(qx * 2.6 + 200, qy * 2.6, 3, 0.5);
-      const la = Math.abs(qy - 0.5 - eqOff) * 2;
+      const la = Math.abs(qy - eqAt(qx)) / latD;
       let latAdj = 0;
       if (la < 0.12) latAdj += 0.06 * (1 - la / 0.12);
       const sd = 1 - Math.abs(la - 0.3) / 0.16; if (sd > 0) latAdj -= 0.07 * sd;
       Mo[i] = 0.34 * rainB[i] + 0.14 * wp + 0.52 * mn + latAdj;
     }
-    // Rang-Normierung: jede Welt hat bei Standardwerten die volle Klimaspanne (kalt bis heiß,
-    // trocken bis nass); die absolute Breite fließt anteilig ein, die Regler verschieben alles.
+    // Teilweise Rang-Normierung (glatte Übergänge, nutzbare Spanne), dazu der Charakter der Welt:
+    // Grundwärme, Grundfeuchte und Kontrast verschieben die Anteile je Welt; die Regler verschieben alles.
+    const rawM = Mo.slice();
     rankNorm(Tm, land); rankNorm(Mo, land);
     for (let i = 0; i < N; i++) {
       if (!land[i]) continue;
-      Tm[i] = 0.7 * Tm[i] + 0.3 * absT[i] + tShift;
-      Mo[i] = Mo[i] + mShift;
+      Tm[i] = (0.35 * Tm[i] + 0.65 * absT[i] - 0.5) * tCon + 0.5 + warmB + tShift;
+      Mo[i] = (0.55 * Mo[i] + 0.45 * (rawM[i] - 0.05) - 0.5) * mCon + 0.5 + wetB + mShift;
     }
     // 9) Biome
     const ter = new Uint8Array(N);
@@ -1250,7 +1306,7 @@
       const d = dLand[i];
       if (lake[i]) { ter[i] = d <= 1.5 ? TT.SHALLOW : TT.WATER; continue; }
       const sh = th - h0[i] + 0.07 * nMisc.fbm(QX[i] * 5 + 61, QY[i] * 5, 2, 0.5);
-      if (d <= 1.5 || (d <= 4.5 && sh < 0.045)) ter[i] = TT.SHALLOW;
+      if (d <= 1.5 || (d <= 3.5 && sh < 0.03)) ter[i] = TT.SHALLOW;
       else if (d >= 12 || (d >= 4 && sh > 0.2)) ter[i] = TT.DEEP;
       else ter[i] = TT.WATER;
     }
@@ -1584,7 +1640,7 @@
 
   WW.WorldGen = {
     SEA_LEVEL, SIZES, TEMPLATES, DEFAULTS, SLIDERS,
-    generate, preview, render, terrainFromHeight, classifyBiome,
+    generate, preview, render, terrainFromHeight, classifyBiome, randomOpts, THEMES,
     seedToInt, hashString
   };
 

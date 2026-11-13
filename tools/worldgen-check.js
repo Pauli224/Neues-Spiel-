@@ -157,9 +157,57 @@ console.log('  längste schnurgerade Flussstrecke: ' + stat.straight + ' Kacheln
 {
   const avg = 100 * stat.desertSum / stat.desertN;
   console.log('  Wüste bei Standardwerten: Ø ' + avg.toFixed(1) + ' % der Landfläche, höchstens ' + (100 * stat.desertMax).toFixed(1) + ' %, Welten über 10 %: ' + stat.desertBig);
-  check(avg <= 5 && stat.desertBig <= stat.desertN * 0.03, 'Wüste dominiert bei Standardwerten (Ø ' + avg.toFixed(1) + ' %)');
+  check(avg <= 5, 'Wüste dominiert bei Standardwerten (Ø ' + avg.toFixed(1) + ' %)'); // Mittel über viele Welten; einzelne Welten dürfen abweichen
 }
 check(stat.straight <= 12 && stat.straightWorlds <= worlds * 0.02, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
+
+// ---------------------------------------------------------------- Alles würfeln / Vielfalt
+console.log('Alles würfeln (randomOpts), 200 Welten');
+{
+  check(typeof G.randomOpts === 'function', 'randomOpts fehlt');
+  const a = G.randomOpts(17), b = G.randomOpts(17), c = G.randomOpts('17');
+  check(JSON.stringify(a) === JSON.stringify(b) && JSON.stringify(a) === JSON.stringify(c), 'randomOpts nicht deterministisch');
+  check(G.randomOpts(17).template !== 'random' && typeof a.theme === 'string' && typeof a.themeName === 'string', 'randomOpts-Felder');
+  const keys = ['grass', 'forest', 'desert', 'savanna', 'jungle', 'swamp', 'tundra', 'snowfield', 'taiga', 'hill', 'mountain'];
+  const shares = Object.fromEntries(keys.map(k => [k, []])), lands = [], tpl = {}, themes = {};
+  let themed = 0, minSp = 99, sliderSpread = 0;
+  const sl = Object.fromEntries(G.SLIDERS.map(k => [k, []]));
+  for (let s = 1; s <= 200; s++) {
+    const o = G.randomOpts(s);
+    const w = G.generate(o);
+    if (o.theme !== 'mixed') { themed++; themes[o.themeName] = (themes[o.themeName] || 0) + 1; }
+    tpl[o.template] = (tpl[o.template] || 0) + 1;
+    for (const k of G.SLIDERS) sl[k].push(o[k]);
+    if (w.startSpots.length < minSp) minSp = w.startSpots.length;
+    let land = 0; const cnt = {};
+    for (const t of w.terrain) if (!isSea(t)) { land++; const k = WW.TERRAIN[t].key; cnt[k] = (cnt[k] || 0) + 1; }
+    lands.push(land / w.terrain.length);
+    for (const k of keys) shares[k].push((cnt[k] || 0) / land);
+  }
+  const sd = a => { const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length); };
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  console.log('  Landanteil: Ø ' + (100 * mean(lands)).toFixed(0) + ' %, Streuung ' + (100 * sd(lands)).toFixed(1) + ' Punkte, Spanne ' + (100 * Math.min(...lands)).toFixed(0) + '–' + (100 * Math.max(...lands)).toFixed(0) + ' %');
+  console.log('  Biome (Ø / Streuung / Welten ohne): ' + keys.map(k => k + ' ' + (100 * mean(shares[k])).toFixed(1) + '/' + (100 * sd(shares[k])).toFixed(1) + '/' + shares[k].filter(v => v < 0.002).length).join(', '));
+  console.log('  Regler-Streuung: ' + G.SLIDERS.map(k => k + ' ' + sd(sl[k]).toFixed(2)).join(', '));
+  console.log('  Themenwelten: ' + themed + ' von 200 (' + Object.entries(themes).map(e => e[0] + ' ' + e[1]).join(', ') + ')');
+  console.log('  Vorlagen: ' + Object.entries(tpl).map(e => e[0] + ' ' + e[1]).join(', '));
+  console.log('  Startplätze min: ' + minSp);
+  check(minSp >= 4, 'randomOpts: Welt mit weniger als 4 Startplätzen');
+  check(themed >= 40 && themed <= 100, 'Anteil Themenwelten außerhalb 20–50 %');
+  check(sd(lands) > 0.07, 'Landanteil streut zu wenig');
+  check(['desert', 'jungle', 'snowfield', 'forest', 'swamp'].every(k => sd(shares[k]) > 0.04), 'Biomanteile streuen zu wenig');
+  check(G.SLIDERS.every(k => sd(sl[k]) > 0.15), 'Regler streuen zu wenig');
+  // Klimacharakter bei festen Reglern: Biomanteile streuen auch bei Standardwerten
+  const ds = [], ss = [];
+  for (let s = 0; s < 60; s++) {
+    const w = G.generate({ seed: 7000 + s });
+    let land = 0, de = 0, sn = 0;
+    for (const t of w.terrain) if (!isSea(t)) { land++; if (t === T.DESERT || t === T.SAVANNA) de++; if (t === T.SNOWFIELD || t === T.TUNDRA) sn++; }
+    ds.push(de / land); ss.push(sn / land);
+  }
+  console.log('  Standardregler, 60 Welten: trocken-heiß Ø ' + (100 * mean(ds)).toFixed(1) + ' % (Streuung ' + (100 * sd(ds)).toFixed(1) + '), kalt Ø ' + (100 * mean(ss)).toFixed(1) + ' % (Streuung ' + (100 * sd(ss)).toFixed(1) + ')');
+  check(sd(ds) > 0.03 && sd(ss) > 0.03, 'Klima bei Standardreglern zu gleichförmig');
+}
 
 // ---------------------------------------------------------------- Regler
 console.log('Regler (Landanteil folgt dem Regler, jeder Regler wirkt)');

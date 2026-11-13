@@ -298,6 +298,15 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Zerstörung
+  if (want('destruction') || Q.get('destr')) {
+    var rd = section('destruction', 'Zerstörung: Icons, Flugzeuge über einer Stadt, Pilzwolken-Abfolge, Laser, Schwarzes Loch, Krater, Explosionen');
+    var dcv = document.createElement('canvas'); dcv.id = 'destrcv';
+    WW.SpriteScene.renderDestruction(dcv, +Q.get('destr') || 2);
+    cell(rd, '', dcv);
+    if (Q.get('destr')) return;
+  }
+
   // ---------------------------------------------------------------- Kreaturen
   if (want('creatures')) (function () {
     var r = section('creatures', 'Kreaturen (Frame 0 und 1, daneben ein Mensch als Größenvergleich)', 'Tiere, Monster, Räuber, Jäger und Belagerungsgerät auf passendem Untergrund. Der Drache fliegt (eigener Schatten am Boden).');
@@ -319,9 +328,9 @@
     cellFor('bandit', 'grass', [['u_bandit_0', 2, 16], ['u_bandit_1', 12, 16], ['u_human_farmer_0', 25, 16]], 4, 3);
     cellFor('ram', 'grass', [['u_ram_0', 4, 16], ['u_ram_1', 24, 16], ['u_human_soldier_0', 42, 16]], 6, 3, 0);
     cellFor('catapult', 'grass', [['u_catapult_0', 4, 16], ['u_catapult_1', 24, 16], ['u_human_soldier_0', 42, 16], ['fx_rock', 44, 0]], 6, 3, 0);
-    var kh = canvas(13 * 8, 3 * 8, 3);
-    groundRect(kh.x, fill(WW.T.FOREST, 13, 3), 0, 0);
-    RACES.forEach(function (race, i) { S.draw(kh.x, 'u_' + race + '_hunter_0', 2 + i * 17, 16, { team: 4 }); S.draw(kh.x, 'u_' + race + '_hunter_1', 10 + i * 17, 16, { team: 4 }); });
+    var kh = canvas(16 * 8, 3 * 8, 3);
+    groundRect(kh.x, fill(WW.T.FOREST, 16, 3), 0, 0);
+    RACES.forEach(function (race, i) { S.draw(kh.x, 'u_' + race + '_hunter_0', 2 + i * 21, 16, { team: 4 }); S.draw(kh.x, 'u_' + race + '_hunter_1', 11 + i * 21, 16, { team: 4 }); });
     cell(r, 'Jäger je Volk', kh.c);
   })();
 
@@ -335,16 +344,16 @@
     var r = section('ringstyles', 'Organischer, treppiger Mauerring in allen Stilen (1–3 Kacheln lange Stücke, viele Ecken)', 'Wie im Spiel: Masken aus den Nachbarn, ein Tor je Seite, Türme nur an wenigen Ecken.');
     var walls = [
       '                ',
-      '    ###G##      ',
+      '    ####G##     ',
       '   ##     ##    ',
-      '  ##       T#   ',
-      '  #          #  ',
-      ' T#          ## ',
-      ' G            G ',
+      '  ##       #T   ',
+      '  #         ##  ',
+      ' T#          #  ',
+      ' G           G  ',
       ' ##          #  ',
       '  #         ##  ',
-      '  T##     ###   ',
-      '     #G###      ',
+      '  T###    ###   ',
+      '     #G####     ',
       '                '];
     var terr = walls.map(function (row) { return row.replace(/./g, '.'); });
     [['tribe', 1], ['monarchy', 2], ['democracy', 2], ['fascism', 3], ['communism', 2], ['theocracy', 3], ['republic', 2], ['anarchy', 1], ['player', 2]].forEach(function (st, n) {

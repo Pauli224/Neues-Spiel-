@@ -55,7 +55,7 @@
     <div id="sliders"></div>
     <label><input type="checkbox" id="shade" checked> Schattierung</label>
     <label><input type="checkbox" id="spots" checked> Startplätze zeigen</label>
-    <div class="row" style="margin-top:10px"><button id="reset">Standardwerte</button></div>
+    <div class="row" style="margin-top:10px"><button id="rollAll">Alles würfeln</button> <button id="reset">Standardwerte</button></div>
   </div>
   <div id="mapWrap">
     <h2 id="mapTitle"></h2>
@@ -68,6 +68,7 @@
   <select id="gridMode">
     <option value="one">12 Welten der gewählten Vorlage</option>
     <option value="all">alle Vorlagen, je 12 Welten</option>
+    <option value="rand">24 Welten „Alles würfeln“</option>
   </select>
   <button id="regrid">Neu würfeln</button>
   <span class="hint" id="gridInfo"></span>
@@ -93,7 +94,8 @@
     if (k in G.DEFAULTS && typeof G.DEFAULTS[k] === 'number' && k !== 'seed') opts[k] = +v;
     else if (k === 'seed' || k === 'size' || k === 'template') opts[k] = v;
   }
-  if (hp.get('grid') === 'all') $('gridMode').value = 'all';
+  if (hp.get('grid')) $('gridMode').value = hp.get('grid');
+  let themeName = '';
   if (hp.get('salt')) gridSalt = +hp.get('salt');
 
   for (const s of G.SIZES) $('size').add(new Option(s.name + ' (' + s.w + '×' + s.h + ')', s.key));
@@ -130,7 +132,7 @@
       $('mapTitle').innerHTML = '';
       $('mapTitle').append(w.name);
       const sm = document.createElement('small');
-      sm.textContent = (tpl ? tpl.name : w.template) + ' · ' + w.W + '×' + w.H + ' · ' + w.startSpots.length + ' Startplätze · ' + (t1 - t0).toFixed(0) + ' ms';
+      sm.textContent = (themeName ? themeName + ' · ' : '') + (tpl ? tpl.name : w.template) + ' · ' + w.W + '×' + w.H + ' · ' + w.startSpots.length + ' Startplätze · ' + (t1 - t0).toFixed(0) + ' ms';
       $('mapTitle').append(sm);
       showStats(w);
     });
@@ -154,8 +156,20 @@
     const job = ++gridJob;
     const grid = $('grid'); grid.innerHTML = '';
     const mode = $('gridMode').value;
-    const tpls = mode === 'all' ? G.TEMPLATES.filter(t => t.key !== 'random') : [G.TEMPLATES.find(t => t.key === opts.template)];
+    const tpls = mode === 'all' ? G.TEMPLATES.filter(t => t.key !== 'random') : mode === 'rand' ? [] : [G.TEMPLATES.find(t => t.key === opts.template)];
     const jobs = [];
+    if (mode === 'rand') {
+      const sec = document.createElement('div'); sec.className = 'gsec';
+      const h = document.createElement('h3'); h.textContent = 'Alles würfeln – Vorlage, Regler und Thema zufällig (Seeds ' + ((gridSalt - 1) * 24 + 1) + '–' + gridSalt * 24 + ')'; sec.append(h);
+      const tiles = document.createElement('div'); tiles.className = 'gtiles'; sec.append(tiles); grid.append(sec);
+      for (let k = 0; k < 24; k++) {
+        const rs = (gridSalt - 1) * 24 + k + 1;
+        const tile = document.createElement('div'); tile.className = 'gtile';
+        const c = document.createElement('canvas'); const cap = document.createElement('div');
+        tile.append(c, cap); tiles.append(tile);
+        jobs.push({ rs, c, cap, tile });
+      }
+    }
     for (const t of tpls) {
       const sec = document.createElement('div'); sec.className = 'gsec';
       const h = document.createElement('h3'); h.textContent = t.name + ' – ' + t.desc; sec.append(h);
@@ -178,10 +192,14 @@
       while (i < jobs.length && performance.now() < end) {
         const j = jobs[i++];
         const t0 = performance.now();
+        if (j.rs !== undefined) {
+          j.o = G.randomOpts(j.rs, { size: opts.size });
+          const ro = j.o; j.tile.onclick = () => { Object.assign(opts, ro, { seed: String(ro.seed) }); themeName = ro.themeName; syncUI(); updateBig(); scrollTo(0, 0); };
+        }
         const w = G.generate(j.o);
         ms += performance.now() - t0;
         drawWorld(j.c, w, w.W * 2, w.H * 2, true);
-        j.cap.textContent = w.name + ' · ' + w.startSpots.length + ' Plätze';
+        j.cap.textContent = (j.o.themeName ? j.o.themeName + ' · ' : '') + w.name + ' · ' + w.startSpots.length + ' Plätze';
         j.c.title = 'Seed ' + j.o.seed;
       }
       $('gridInfo').textContent = i + ' / ' + jobs.length + ' Welten · Ø ' + (ms / Math.max(1, i)).toFixed(0) + ' ms';
@@ -193,6 +211,11 @@
 
   // Ereignisse
   $('seed').addEventListener('input', () => { opts.seed = $('seed').value; updateBig(); });
+  $('rollAll').onclick = () => {
+    const ro = G.randomOpts(Math.floor(Math.random() * 1e9), { size: opts.size });
+    Object.assign(opts, ro, { seed: String(ro.seed) }); themeName = ro.themeName; syncUI(); updateBig();
+  };
+  for (const k of ['template', 'size']) $(k).addEventListener('change', () => { themeName = ''; });
   $('dice').onclick = () => { opts.seed = String(Math.floor(Math.random() * 1e9)); syncUI(); updateBig(); };
   $('size').onchange = () => { opts.size = $('size').value; updateBig(); buildGrid(); };
   $('template').onchange = () => { opts.template = $('template').value; syncUI(); updateBig(); if ($('gridMode').value === 'one') buildGrid(); };

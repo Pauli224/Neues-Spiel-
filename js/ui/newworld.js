@@ -14,10 +14,27 @@
     return a[(Math.random() * a.length) | 0] + b[(Math.random() * b.length) | 0] + ((Math.random() * 90 + 10) | 0);
   }
 
+  // komplett zufällige Welt-Einstellungen (Vorlage, alle Regler); Größe bleibt
+  function randomWorldOpts(seed, size) {
+    const WG = WW.WorldGen;
+    let r = null;
+    if (typeof WG.randomOpts === 'function') { try { r = WG.randomOpts(seed); } catch (e) { r = null; } }
+    if (!r) {
+      const tpls = WG.TEMPLATES.filter(t => t.key !== 'random');
+      r = { seed: seed, template: tpls[(Math.random() * tpls.length) | 0].key };
+      for (const k of WG.SLIDERS) r[k] = Math.round(Math.random() * 100) / 100;
+      if ('land' in r) r.land = Math.round((0.25 + Math.random() * 0.6) * 100) / 100;   // kaum Land macht keinen Spaß
+    }
+    const o = Object.assign({}, WG.DEFAULTS, r);
+    o.seed = r.seed != null ? r.seed : seed;
+    o.size = size || 'large';
+    return o;
+  }
+
   function NewWorld(game) {
     this.game = game;
     this.el = document.getElementById('newworld');
-    this.o = Object.assign({}, WW.WorldGen.DEFAULTS, { seed: randSeed() });
+    this.o = randomWorldOpts(randSeed(), 'large');
     this.start = { count: 0, races: 'random', govs: 'mixed', animals: true };
     this.built = false;
     this.tplJob = 0;
@@ -25,10 +42,26 @@
 
   NewWorld.prototype.open = function () {
     if (!this.built) this.build();
+    this.rollAll();
     this.el.hidden = false;
     this.game.paused = true;
     this.redraw();
     this.queueTemplates();
+  };
+  // „Alles würfeln": neuer Seed, Vorlage und alle Regler; Größe bleibt
+  NewWorld.prototype.rollAll = function () {
+    const n = randomWorldOpts(randSeed(), this.o.size);
+    for (const k in n) this.o[k] = n[k];
+    this.applyUi();
+    this.sync(true);
+  };
+  NewWorld.prototype.applyUi = function () {
+    if (!this.built) return;
+    this.seedIn.value = String(this.o.seed);
+    for (const k in this.sliders) {
+      const v = Math.round((this.o[k] == null ? 0.5 : this.o[k]) * 100);
+      this.sliders[k].inp.value = String(v); this.sliders[k].val.textContent = v + ' %';
+    }
   };
   NewWorld.prototype.close = function () { this.el.hidden = true; this.game.paused = false; };
 
@@ -42,7 +75,7 @@
     this.tplBtns = {};
     for (const t of WW.WorldGen.TEMPLATES) {
       const c = h('canvas', { width: 72, height: 48 });
-      const b = h('button.tpl', { type: 'button', title: t.desc, 'aria-pressed': o.template === t.key ? 'true' : 'false', on: { click: () => { o.template = t.key; this.sync(); } } }, [c, h('span', t.name)]);
+      const b = h('button.tpl', { type: 'button', title: t.desc, 'aria-pressed': o.template === t.key ? 'true' : 'false', on: { click: () => { o.template = t.key; o.themeName = null; this.sync(); } } }, [c, h('span', t.name)]);
       b._cv = c; this.tplBtns[t.key] = b;
       this.tplBox.appendChild(b);
     }
@@ -50,9 +83,11 @@
     // Seed
     this.seedIn = h('input', { type: 'text', value: String(o.seed), 'aria-label': 'Seed', spellcheck: 'false', autocomplete: 'off',
       on: { input: () => { o.seed = this.seedIn.value.trim() || '1'; this.sync(true); } } });
+    side.appendChild(h('button.btn.roll', { type: 'button', title: 'Neuer Seed, zufällige Landform und alle Regler neu',
+      on: { click: () => this.rollAll() } }, [icon('i_newworld', 28), h('span', 'Alles würfeln')]));
     side.appendChild(h('h3', 'Seed'));
-    side.appendChild(h('div.seed-row', [this.seedIn, h('button.btn', { type: 'button', title: 'Würfeln', 'aria-label': 'Würfeln',
-      on: { click: () => { o.seed = randSeed(); this.seedIn.value = o.seed; this.sync(true); } } }, [icon('i_newworld', 24), h('span', 'Würfeln')])]));
+    side.appendChild(h('div.seed-row', [this.seedIn, h('button.btn', { type: 'button', title: 'Nur einen neuen Seed, Landform und Regler bleiben',
+      on: { click: () => { o.seed = randSeed(); this.seedIn.value = o.seed; this.sync(true); } } }, h('span', 'Nur neuer Seed'))]));
     // Größe
     side.appendChild(h('h3', 'Größe'));
     this.sizeBtns = {};
@@ -70,7 +105,7 @@
       const d = SL[k] || [k, '', ''];
       const val = h('em');
       const inp = h('input', { type: 'range', min: '0', max: '100', step: '1', value: String(Math.round(o[k] * 100)), 'aria-label': d[0],
-        on: { input: () => { o[k] = inp.value / 100; val.textContent = inp.value + ' %'; this.sync(false, true); } } });
+        on: { input: () => { o[k] = inp.value / 100; o.themeName = null; val.textContent = inp.value + ' %'; this.sync(false, true); } } });
       val.textContent = inp.value + ' %';
       this.sliders[k] = { inp: inp, val: val };
       side.appendChild(h('div.slider', [h('div.sl-top', [h('span', d[0]), val]), inp, h('div.sl-ends', [h('span', d[1]), h('span', d[2])])]));
@@ -142,6 +177,8 @@
     this.world = p.world;
     const tpl = WW.WorldGen.TEMPLATES.find(t => t.key === this.o.template);
     D().clear(this.nameEl);
+    const theme = this.o.themeName;
+    if (theme || tpl) this.nameEl.appendChild(D().h('span.nw-theme', (theme ? theme + ' · ' : '') + (tpl ? tpl.name : '')));
     this.nameEl.appendChild(document.createTextNode(p.world.name || 'Namenlose Welt'));
     this.nameEl.appendChild(D().h('small', (tpl ? tpl.desc : '') + ' · ' + p.world.W + '\u00a0×\u00a0' + p.world.H));
   };
@@ -176,5 +213,6 @@
   WW.UI = WW.UI || {};
   WW.UI.NewWorld = NewWorld;
   WW.UI.randSeed = randSeed;
+  WW.UI.randomWorldOpts = randomWorldOpts;
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -12,6 +12,8 @@
   function baseHp(role, race) {
     const cfg = C();
     let hp = role === 'child' ? cfg.CHILD_HP : (role === 'soldier' ? cfg.SOLDIER_HP : (role === 'leader' ? cfg.LEADER_HP : cfg.BASE_HP));
+    if (role === 'ram') return cfg.RAM_HP;
+    if (role === 'catapult') return cfg.CATAPULT_HP;
     return Math.round(hp * race.hp);
   }
 
@@ -117,7 +119,8 @@
   // --------------------------------------------------------------------------
   // Feindschaft und Kampf
   // --------------------------------------------------------------------------
-  function isFighterRole(r) { return r === 'soldier' || r === 'rebel' || r === 'leader'; }
+  function isFighterRole(r) { return r === 'soldier' || r === 'rebel' || r === 'leader' || r === 'ram' || r === 'catapult'; }
+  function isEngine(r) { return r === 'ram' || r === 'catapult'; }
 
   function hostile(sim, a, b) {
     if (a === b || a.dead || b.dead) return false;
@@ -288,6 +291,7 @@
     const tab = sim._tables[race.key] || sim._tables.human;
     let spd = C().UNIT_SPEED * race.speed * Math.max(0.3, tab.speed[t]);
     if (u.role === 'child') spd *= 0.85;
+    else if (u.role === 'ram' || u.role === 'catapult') spd *= 0.55;
     else if (u.role === 'soldier' || u.role === 'settler' || u.role === 'trader') spd *= 1.1;
     if (u.sick) spd *= 0.7;
     const tx = nx + 0.5, ty = ny + 0.5;
@@ -429,10 +433,11 @@
         const f = sim._structs.get(id);
         if (!f || f.dead) continue;
         if (f.skipUntil && f.skipUntil > st.tick) continue;
+        if (city.besieged > st.tick && st.inRing[f.y * W + f.x] !== city.id) continue;   // Belagerung: niemand geht hinaus
         const d = distTo(u, f.x + 0.5, f.y + 0.5) + (f.growth >= 3 ? 0 : 12 + f.growth * 2) + f.workers * 6;
         if (d < bs) { bs = d; best = f; }
       }
-      if (race.fishing && city.hasWater && (!best || best.growth < 3) && !(u.noFishUntil > st.tick) && sim.rng.chance(0.6)) {
+      if (race.fishing && city.hasWater && !(city.besieged > st.tick) && (!best || best.growth < 3) && !(u.noFishUntil > st.tick) && sim.rng.chance(0.6)) {
         const i = findResource(sim, u, city, 'water', 9);
         if (i >= 0) {
           const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
@@ -646,6 +651,39 @@
     moodBubble(sim, u, city);
   }
 
+  // Katapult: schießt aus Abstand auf Mauern und Türme der Zielstadt
+  function thinkCatapult(sim, u, city) {
+    const o = u.order;
+    if (!o || o.kind !== 'march') { setRole(sim, u, 'soldier'); return; }
+    const st = sim.state;
+    const tc = sim._cities.get(o.city);
+    if (!tc || tc.kingdomId !== o.k || !WW.Path.hostileKingdoms(sim, u.kingdomId, o.k)) { u.order = null; u.path = null; return; }
+    u.breach = -1;
+    const R = C().CATAPULT_RANGE;
+    let best = null, bd = 1e9;
+    for (const t of (tc.wall.plan || [])) {
+      const s = sim._structs.get(st.structAt[t]);
+      if (!s || !s.built || !WW.Structs.isWallish(s) || s.cityId !== tc.id) continue;
+      const d = distTo(u, s.x + 0.5, s.y + 0.5) + (s.type === 'tower' ? -1.5 : 0) + (s.type === 'gate' ? -0.5 : 0);
+      if (d < bd) { bd = d; best = s; }
+    }
+    if (best && bd <= R) {
+      u.path = null; u.moving = false;
+      if (u.cd <= 0) {
+        sim.fx({ type: 'rock', x: u.x, y: u.y - 0.3, x2: best.x + 0.5, y2: best.y + 0.5 });
+        if (WW.Structs.damage(sim, best, C().CATAPULT_DMG, 'hit')) {
+          const ak = sim._kingdoms.get(u.kingdomId);
+          if (ak && tc.lastBreach !== st.year) { tc.lastBreach = st.year; sim.event('wallBreach', { city: tc.name, other: ak.name }, WW.Cities.atCity(tc)); }
+        }
+        u.cd = C().CATAPULT_COOLDOWN;
+      }
+      return;
+    }
+    if (!best && distTo(u, tc.cx + 0.5, tc.cy + 0.5) < 6) { u.path = null; return; }
+    const r = goTo(sim, u, WW.Cities.centerTile(sim, tc, u.id), { breach: true, limit: C().PATH_LIMIT_LONG });
+    if (r === null && u.fails > 3) { u.order = null; u.fails = 0; }
+  }
+
   function march(sim, u) {
     const st = sim.state, W = st.W;
     const o = u.order;
@@ -658,13 +696,16 @@
           // höchstens drei Angreifer schlagen gleichzeitig auf ein Mauerstück ein
           const win = sim.state.tick >> 3;
           if (s.siegeT !== win) { s.siegeT = win; s.siegeN = 0; }
-          if (u.cd <= 0 && s.siegeN < 3) {
-            s.siegeN++;
-            if (WW.Structs.damage(sim, s, damageOf(sim, u) * (s.level >= 3 ? 0.22 : (s.level === 2 ? 0.4 : 0.8)), 'hit')) {
+          const ram = u.role === 'ram';
+          if (u.cd <= 0 && (ram || s.siegeN < 3)) {
+            if (!ram) s.siegeN++;
+            const dmg = ram ? (s.type === 'gate' ? C().RAM_GATE_DMG : C().RAM_WALL_DMG) : damageOf(sim, u) * (s.level >= 3 ? 0.22 : (s.level === 2 ? 0.4 : 0.8));
+            if (ram) sim.fx({ type: 'ram', x: s.x + 0.5, y: s.y + 0.5 });
+            if (WW.Structs.damage(sim, s, dmg, 'hit')) {
               const wc = sim._cities.get(s.cityId), ak = sim._kingdoms.get(u.kingdomId);
               if (wc && ak && wc.lastBreach !== sim.state.year) { wc.lastBreach = sim.state.year; sim.event('wallBreach', { city: wc.name, other: ak.name }, WW.Cities.atCity(wc)); }
             }
-            u.cd = 6; if (sim.rng.chance(0.1)) bubble(u, 'angry', 20);
+            u.cd = ram ? 10 : 6; if (sim.rng.chance(0.1)) bubble(u, 'angry', 20);
           }
           if (s.built) return;
         }
@@ -675,7 +716,8 @@
     const d = distTo(u, city.cx + 0.5, city.cy + 0.5);
     // Stamm: Raubzug statt Eroberung (erobert nur selten)
     const ag = gov(sim, u);
-    if (ag.war === 'raid' && d <= 3.5 && !(ctr && !ctr.built && sim.rng.chance(0.25))) { WW.Diplo.plunder(sim, city, u); return; }
+    if (u.role === 'ram' && distTo(u, city.cx + 0.5, city.cy + 0.5) <= 4) { u.path = null; return; }
+    if (ag.war === 'raid' && u.role === 'soldier' && d <= 3.5 && !(ctr && !ctr.built && sim.rng.chance(0.25))) { WW.Diplo.plunder(sim, city, u); return; }
     if (d <= 2.8) {
       if (ctr && ctr.built) {
         if (u.cd <= 0) { WW.Structs.damage(sim, ctr, damageOf(sim, u), 'hit'); u.cd = 6; }
@@ -824,7 +866,7 @@
     if (u.role === 'soldier') searchR = 7;
     else if (u.role === 'rebel') searchR = 4;
     else if (g.militia && u.role !== 'child' && u.role !== 'settler') searchR = 5;
-    if ((searchR > 0 || u.foe >= 0) && u.role !== 'child') {
+    if ((searchR > 0 || u.foe >= 0) && u.role !== 'child' && !isEngine(u.role)) {
       if (combat(sim, u, searchR)) return;
     }
     if (!city) {
@@ -839,6 +881,8 @@
       case 'miner': thinkGatherer(sim, u, city, 'stone'); break;
       case 'builder': thinkBuilder(sim, u, city); break;
       case 'soldier': thinkSoldier(sim, u, city); break;
+      case 'ram': if (u.order && u.order.kind === 'march') march(sim, u); else setRole(sim, u, 'soldier'); break;
+      case 'catapult': thinkCatapult(sim, u, city); break;
       case 'trader': thinkTrader(sim, u, city); break;
       case 'rebel': thinkRebel(sim, u, city); break;
       case 'settler': thinkSettler(sim, u); break;
@@ -874,7 +918,7 @@
   WW.Units = {
     create: create, setRole: setRole, kill: kill, buildBuckets: buildBuckets, forNear: forNear,
     hostile: hostile, updateAll: updateAll, yearly: yearly, goTo: goTo, bubble: bubble, move: move,
-    rescue: rescue, resetTask: resetTask, damageOf: damageOf, hitUnit: hitUnit, entity: entity
+    isEngine: isEngine, rescue: rescue, resetTask: resetTask, damageOf: damageOf, hitUnit: hitUnit, entity: entity
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

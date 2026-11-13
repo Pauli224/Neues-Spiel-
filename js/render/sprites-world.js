@@ -419,11 +419,12 @@
     // Überlagerungen: verbrannter Boden, Krater (Rand durchsichtig, auf jedem Boden nutzbar)
     var ashD = addColor(null, '#4a4652'), ash = addColor(null, '#5f5a66'), ember = DC.ember;
     var g2 = new Grid(8, 8);
-    g2.ellipse(4, 4, 4.2, 3.9, function (x, y, nx, ny) {
-      var r = hash(x, y, 77);
-      if (nx * nx + ny * ny > 0.6 && r < 0.45) return null;
-      return r < 0.06 ? ember : (r < 0.35 ? ashD : ash);
-    });
+    // füllt die Kachel (nur Eckpixel ausgefranst), damit verbrannte Flächen nahtlos zusammenwachsen
+    for (var sy = 0; sy < 8; sy++) for (var sx = 0; sx < 8; sx++) {
+      var r = hash(sx, sy, 77), corner = (sx === 0 || sx === 7) && (sy === 0 || sy === 7);
+      if (corner && r < 0.6) continue;
+      g2.set(sx, sy, r < 0.05 ? ember : (r < 0.3 ? ashD : ash));
+    }
     def('t_scorched', g2, { group: 'ground' });
     var soil = addColor(null, '#8a5a34'), soilD = addColor(null, '#5e3c24'), soilL = addColor(null, '#b07c4c');
     g2 = new Grid(8, 8);

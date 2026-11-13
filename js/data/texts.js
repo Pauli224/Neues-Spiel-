@@ -143,9 +143,9 @@
       '{kingdom_nom}: Neue Regierungsform {gov}! Neue Hüte für alle Wichtigen.'
     ],
     govSet: [
-      'Ein Blitz aus heiterem Himmel, und das Reich ist {gov_a}: {kingdom_nom}. Die Untertanen sind verwirrt, aber anpassungsfähig.',
-      'Von oben wird verfügt: {kingdom_nom} ist ab sofort {gov_a}. Die Druckerei arbeitet Überstunden.',
-      'Göttlicher Erlass: {kingdom_nom} wird {gov}. {leader} probiert vor dem Spiegel den neuen Hut an.',
+      'Ein Blitz aus heiterem Himmel, und schon regiert {gov_d}: {kingdom}. Die Untertanen sind verwirrt, aber anpassungsfähig.',
+      'Von oben wird verfügt: {Kingdom_in} regiert ab sofort {gov_d}. Die Druckerei arbeitet Überstunden.',
+      'Göttlicher Erlass: {Kingdom_in} regiert nun {gov_d}. {leader} probiert vor dem Spiegel den neuen Hut an.',
       'Über Nacht wird aus {oldGov_dat} {gov_a}. Beim Frühstück fragen sich alle, wer jetzt bestimmt, wer abräumt.'
     ],
     govChoice: [
@@ -155,19 +155,19 @@
       'Neue Ordnung im Reich: {gov}! Offizieller Grund: {why}. Inoffizieller Grund: neue Hüte.'
     ],
     reform: [
-      'Reform! {kingdom_nom} wird {gov}. Die Krone kommt ins Museum, der Thron wird Parkbank.',
+      'Reform! {Kingdom_in} regiert nun {gov_d}. Die Krone kommt ins Museum, der Thron wird Parkbank.',
       'Die Monarchie dankt freiwillig ab. Es lebe {gov_d}! Der Ex-Monarch eröffnet eine Bäckerei.'
     ],
     strongman: [
-      'In der Krise wählt das Volk einen „starken Mann“. In {kingdom_dat} regiert jetzt {gov_d}. Bald bereuen es alle.',
-      'Aus Angst wird gewählt, was laut ist: {kingdom_nom} wird {gov}. Die nächste Wahl fällt leider aus.'
+      'In der Krise wählt das Volk einen „starken Mann“. {Kingdom_in} regiert jetzt {gov_d}. Bald bereuen es alle.',
+      'Aus Angst wird gewählt, was laut ist: {Kingdom_in} regiert nun {gov_d}. Die nächste Wahl fällt leider aus.'
     ],
     collapse: [
       'Zusammenbruch! Niemand will mehr regieren. {kingdom_nom} ist jetzt Anarchie, das Plenum tagt ab sofort.',
-      'Die Ordnung zerfällt: In {kingdom_dat} entscheidet nun das Plenum. Oder niemand. Oder alle.'
+      'Die Ordnung zerfällt: {Kingdom_in} entscheidet nun das Plenum. Oder niemand. Oder alle.'
     ],
     evolve: [
-      'Der Stamm ist erwachsen geworden: {kingdom_nom} ist jetzt {gov_a}. Das Lagerfeuer bekommt einen Kamin.',
+      'Der Stamm ist erwachsen geworden: {Kingdom_in} regiert jetzt {gov_d}. Das Lagerfeuer bekommt einen Kamin.',
       'Aus dem Stammesrat wird {gov_a}. {leader} hält eine erste Rede und verhaspelt sich nur zweimal.',
       '{kingdom_nom}: Nach langem Palaver am Feuer entscheidet man sich für {gov_acc}.'
     ],
@@ -175,19 +175,19 @@
       'Revolution! {OldGov_d} ist gestürzt. Grund: {why}. Es lebe {gov_d}!',
       'Revolution! {OldGov_d} ist gestürzt, es lebe {gov_d}. {Kingdom_nom} sortiert seine Möbel neu.',
       'Das Volk hat genug: Aus {oldGov_dat} wird {gov_a}. Die alten Hüte landen im Fluss.',
-      'Umsturz im Reich! {kingdom_nom} ist jetzt {gov_a}. Der Hofstaat sucht neue Arbeit.'
+      'Umsturz im Reich! {Kingdom_in} herrscht jetzt {gov_d}. Der Hofstaat sucht neue Arbeit.'
     ],
     regimeFall: [
       'Das Regime ist gestürzt! Das Volk feiert auf den Straßen, die Paradeuniformen werden zu Putzlappen. Es lebe {gov_d}.',
-      'Die Kommandantur ist leer, der Diktator ist weg, und plötzlich lachen alle wieder. {kingdom_nom} wird {gov_a}.',
+      'Die Kommandantur ist leer, der Diktator ist weg, und plötzlich lachen alle wieder. {kingdom_in} regiert nun {gov_d}.',
       'Aus Angst wurde Mut: Die Strammen sind gestürzt. {Kingdom_nom} atmet auf.'
     ],
     coup: [
-      'Putsch! In Kriegszeiten reißt eine strenge Clique die Macht an sich. {kingdom_nom} wird {gov}. Niemand hat danach gefragt.',
-      'Während alle nach draußen schauen, übernimmt drinnen jemand das Kommando. {kingdom_nom} ist jetzt {gov_a}. Die Laune sinkt sofort.'
+      'Putsch! In Kriegszeiten reißt eine strenge Clique die Macht an sich. {Kingdom_in} regiert nun {gov_d}. Niemand hat danach gefragt.',
+      'Während alle nach draußen schauen, übernimmt drinnen jemand das Kommando. {Kingdom_in} herrscht jetzt {gov_d}. Die Laune sinkt sofort.'
     ],
     plenumVote: [
-      'Das Plenum stimmt nach zehn Jahren Debatte dafür, Abstimmungen künftig zu zählen. {kingdom_nom} wird {gov}.',
+      'Das Plenum stimmt nach zehn Jahren Debatte dafür, Abstimmungen künftig zu zählen. {Kingdom_in} regiert nun {gov_d}.',
       'Die Kommune hat sich selbst abgeschafft, demokratisch natürlich. Willkommen, {kingdom}.'
     ],
     succession: [
@@ -333,7 +333,7 @@
       'Königliche Hochzeit zwischen {kingdom_dat} und {other_dat}. Ab jetzt ist man verschwägert und verbündet.'
     ],
     mobilize: [
-      'Generalmobilmachung in {kingdom_dat}! Jeder, der laufen kann, bekommt einen Helm. {leader} hält eine sehr lange Rede.',
+      'Generalmobilmachung {kingdom_in}! Jeder, der laufen kann, bekommt einen Helm. {leader} hält eine sehr lange Rede.',
       '{leader} ruft alle zu den Waffen. Die Felder bleiben leer, die Kasernen sind voll.'
     ],
     raid: [
@@ -360,6 +360,65 @@
     agitation: [
       'Agitatoren aus {kingdom_dat} verteilen in {city} Flugblätter. Thema: Wem gehört eigentlich das Brot?',
       'In {city} tauchen Plakate auf: „Arbeiter aller Dörfer, vereinigt euch!“ {other_nom} ist nervös.'
+    ],
+    siegeEngines: [
+      '{city} zimmert Belagerungsgerät: Rammböcke und Katapulte rollen Richtung {otherCity}.',
+      'In {city} wird gesägt und gehämmert: Das Heer von {kingdom_dat} nimmt Rammböcke mit nach {otherCity}.'
+    ],
+    siege: [
+      '{city} wird belagert! Keiner traut sich mehr aufs Feld, die Vorräte schrumpfen.',
+      'Feinde vor den Toren von {city}. Die Bauern bleiben drinnen und zählen Rüben.'
+    ],
+    flurLost: [
+      'Grenzland von {city} fällt an {other_acc}. Die Grenzsteine werden über Nacht versetzt.',
+      '{city} verliert eine Flur an {other_acc}. Die Kühe dort muhen jetzt mit fremdem Akzent.'
+    ],
+    migrants: [
+      '{NWord} Zuwanderer ziehen nach {city}. Sie haben gehört, hier gibt es gute Suppe.',
+      '{city} wächst: {nWord} Neue klopfen an und fragen nach einem freien Bett.',
+      'Zuzug in {city}! {NWord} Leute mit Bündeln und Hoffnung kommen an.'
+    ],
+    secedeLoyalty: [
+      '{city} hat genug von {other_dat} und erklärt sich unabhängig: {kingdom}. Grund: {why}.',
+      'Abspaltung! {city} geht eigene Wege und wird {kingdom}. In {other_dat} ist man beleidigt.',
+      '{city} kündigt die Treue zu {other_dat}. Ab jetzt heißt es {kingdom}, und das Wappen ist schon gemalt.'
+    ],
+    plotWar: [
+      '{kingdom_nom} rüstet zum Krieg gegen {other_acc}. In {city} werden Speere gezählt.',
+      'Gerüchte aus {city}: {kingdom_nom} schmiedet Pläne gegen {other_acc}.',
+      '{Kingdom_in} wird mobil gemacht. Ziel der Übungen: {other_nom}, sagt jeder, nur nicht laut.'
+    ],
+    plotWarOff: [
+      '{kingdom_nom} legt die Kriegspläne gegen {other_acc} wieder in die Schublade.',
+      'Entwarnung: {kingdom_nom} rüstet doch nicht gegen {other_acc}. Die Schmiede sind enttäuscht.'
+    ],
+    plotAlliance: [
+      'Gesandte aus {kingdom_dat} reisen zu {other_dat}. Man spricht über ein Bündnis und sehr viel Kuchen.',
+      '{kingdom_nom} und {other_nom} verhandeln über ein Bündnis.'
+    ],
+    plotRevolt: [
+      'In {city} brodelt es. Hinter vorgehaltener Hand wird ein Aufstand geplant.',
+      'In den Gassen von {city} werden Mistgabeln geschärft. Noch ist es ruhig.'
+    ],
+    plotSecession: [
+      '{city} murrt über {kingdom_acc}. Man spricht offen über Unabhängigkeit.',
+      'In {city} hängen erste Fahnen eines eigenen Wappens. {kingdom_nom} schaut besorgt.'
+    ],
+    exodus: [
+      '{NWord} Unzufriedene verlassen {city} und suchen sich eigenes Land. Sie nennen sich {kingdom}.',
+      'Auswanderung! Aus {city} ziehen {nWord} Leute fort, um anderswo alles besser zu machen: {kingdom}.'
+    ],
+    exiles: [
+      '{other_nom} verbannt {nWord} Querköpfe aus {city}. Sie ziehen los und gründen {kingdom_acc}.',
+      'Verbannt! {NWord} Leute aus {city} müssen gehen. Trotzig nennen sie sich {kingdom}.'
+    ],
+    refugees: [
+      '{NWord} Flüchtlinge aus {city} fliehen vor dem Krieg. Irgendwo wollen sie neu anfangen: {kingdom}.',
+      'Aus dem eroberten {city} fliehen {nWord} Leute ins Ungewisse und nennen sich {kingdom}.'
+    ],
+    newRealm: [
+      '{NWord} Auswanderer gründen {city}. Ein neues Reich ist geboren: {kingdom}.',
+      'Auf freiem Land entsteht {city}. {kingdom_nom} hat zwar noch keine Geschichte, aber schon einen Streit.'
     ],
     armyMarch: [
       'Ein Heer von {n} Soldaten zieht von {city} nach {otherCity}. Es wird gesungen, schief.',

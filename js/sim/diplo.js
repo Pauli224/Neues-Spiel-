@@ -127,14 +127,34 @@
         let n = 0;
         // nächstgelegene Soldaten zuerst
         idle.sort((u1, u2) => (Math.abs(u1.x - pair.b.cx) + Math.abs(u1.y - pair.b.cy)) - (Math.abs(u2.x - pair.b.cx) + Math.abs(u2.y - pair.b.cy)) || u1.id - u2.id);
+        // Belagerungsgerät gegen ummauerte Städte: Rammbock ab Kaserne, Katapult mit eigener Steinmauer
+        let rams = 0, cats = 0;
+        if (send >= 4 && pair.b.wall.level >= 1 && pair.a.hasBarracks && marching === 0) {
+          rams = 1 + Math.floor(send / 10);
+          if (pair.a.wall.level >= 2 && pair.b.wall.level >= 2) cats = 1 + Math.floor(send / 14);
+        }
         for (const u of idle) {
           if (n >= send) break;
+          if (rams > 0) { WW.Units.setRole(sim, u, 'ram'); rams--; }
+          else if (cats > 0) { WW.Units.setRole(sim, u, 'catapult'); cats--; }
           u.order = { kind: 'march', city: pair.b.id, k: e.id };
           u.path = null; u.wait = 0; u.breach = -1; u.fails = 0;
           n++;
         }
+        if (n >= 4 && marching === 0 && pair.b.wall.level >= 1 && pair.a.hasBarracks) sim.event('siegeEngines', { kingdom: k.name, city: pair.a.name, otherCity: pair.b.name }, { kingdomId: k.id, cityId: pair.a.id, x: pair.a.cx + 0.5, y: pair.a.cy + 0.5 });
         if (n >= 3 && marching === 0) sim.event('armyMarch', { kingdom: k.name, other: e.name, city: pair.a.name, otherCity: pair.b.name, n: n },
           { kingdomId: k.id, cityId: pair.a.id, x: pair.a.cx + 0.5, y: pair.a.cy + 0.5 });
+      }
+    }
+    // Belagerung: viele Feinde vor der Stadt -> niemand geht hinaus (Aushungern)
+    for (const c of st.cities) {
+      if (!c.wall.plan || c.wall.level < 1) continue;
+      let foes = 0;
+      const r = Math.sqrt((c.wall.inside || 50) / 3.14) + 6;
+      WW.Units.forNear(sim, c.cx + 0.5, c.cy + 0.5, r, false, (u) => { if ((u.role === 'soldier' || WW.Units.isEngine(u.role)) && WW.Path.hostileKingdoms(sim, u.kingdomId, c.kingdomId)) foes++; });
+      if (foes >= 4) {
+        if (!(c.besieged > st.tick) && c.siegeYear !== st.year) { c.siegeYear = st.year; sim.event('siege', { city: c.name }, WW.Cities.atCity(c)); }
+        c.besieged = st.tick + 80;
       }
     }
     // Aufstände beenden

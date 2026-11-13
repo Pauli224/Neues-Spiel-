@@ -24,6 +24,8 @@
     FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
     BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
     BASE_DMG: 4, SOLDIER_DMG: 9,
+    RAM_HP: 160, RAM_GATE_DMG: 34, RAM_WALL_DMG: 14,             // Rammbock (ab Kaserne)
+    CATAPULT_HP: 90, CATAPULT_DMG: 45, CATAPULT_RANGE: 6.5, CATAPULT_COOLDOWN: 28,   // Katapult (Kaserne + eigene Steinmauer)
     WALL_MARGIN: 2.6,         // Abstand Ring zu Kerngebäuden
     WALL_RESERVE: 6.5,        // Wachstumsfläche (Radius um das Zentrum), die der erste Ring einschließt
     WALL_RESERVE_STEP: 4,     // je Stadterweiterung so viel größer
