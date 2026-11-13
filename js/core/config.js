@@ -39,7 +39,7 @@
     CITY_MIN_DIST: 20,
     FLUR_REACH: 12,           // Grundreichweite der Landnahme (Kacheln ums Zentrum), + 3 je Stadtstufe
     FLUR_CLAIM_TICKS: 120,    // frühestens alle n Ticks eine neue Flur je Stadt
-    HOUSES_PER_FLUR: 1.3,     // Häuser je Flur (plus 2 Grundstock)
+    HOUSES_PER_FLUR: 1.6,     // Häuser je Flur (plus 2 Grundstock)
     NEW_REALM_MIN_DIST: 18,   // Mindestabstand für Auswanderer-Stämme
     DAUGHTER_MIN_DIST: 18,    // Tochterstadt: Abstand zu jeder Stadt (Plan: ≥ 16)
     DAUGHTER_ADULTS: 30,        // Mindestabstand Tochterstadt / Startstadt zu anderen Städten (Mitte zu Mitte)

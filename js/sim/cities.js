@@ -513,6 +513,8 @@
     if (open < maxOpen && city.pop + 2 >= city.housing && city.houses >= houseCap) {
       // wer wachsen will, muss Land nehmen; bis dahin Häuser aufstocken
       city.needLand = true;
+      // kein Land mehr zu holen: dann wird die Mauer erweitert (die neue Ringfläche bringt Fluren mit)
+      if (city.landFull && city.wall.plan) city.noSpace = true;
       upgradeHouse(sim, city, sk);
     } else if (open < maxOpen && city.pop + 2 >= city.housing && st.units.length < WW.CONFIG.MAX_UNITS) {
       const cost = WW.Structs.costFor(sim, 'house', 1, city.id);

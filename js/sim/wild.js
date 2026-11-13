@@ -18,10 +18,14 @@
 //     zu Wiese | 5 frische Lava, kühlt ab), graze (Wiese: 0 frisch … 255 kahl, ab 128 sichtbar abgeweidet; bei flora
 //     3/5 Fortschritt), fallout (0..255, Atom-Fallout, klingt ab; > 0: nichts wächst, Leute werden krank),
 //     crack (0..255 Erdbebenriss, verblasst)
-//   wild { effects[], held, lastEv{}, seq }
+//   wild { effects[], held, lastEv{}, seq, off (true = mit animals: false erzeugt, keine Einwanderung) }
 //     effects[]: laufende Kräfte { id, type, x, y, t (Rest-Ticks), r, … } – type: 'tornado' {vx,vy}, 'acidrain',
 //       'flood' {level}, 'frost', 'volcano' {heads}, 'blackhole', 'cluster' {pts} (Darstellung liest x, y, r, type)
 //     held: { what: 'unit'|'animal', data: { … } } | null – von der Göttlichen Hand gehalten (nicht in units/animals)
+//   scars[]: { x, y (Kachel, Mitte), kind: 'crater_m' (3×3) | 'crater_l' (5×5) | 'crack', ttl (Rest-Ticks) } – große
+//     Narben für die Darstellung (t_crater_m, t_crater_l), verblassen; höchstens 200. Kleine Krater/Brandspuren bleiben
+//     im Raster mark (100..199 Krater, 1..99 verkohlt), Risse je Kachel im Raster crack. Fallout: Raster fallout > 0
+//     -> Überlagerung t_fallout.
 //   aircraft[]: { id, kind: 'gunship'|'bomber'|'rocket', x, y, angle (Bogenmaß, 0 = nach rechts), tx, ty, ttl, … }
 //     Flugzeuge/Raketen; x/y dürfen knapp außerhalb der Karte liegen (Ein-/Ausflug). Sprite a_<kind>_0/1.
 //   structs: Typ 'lair' (1×1, begehbar, cityId -1) mit kind ∈ WW.LAIR_KEYS (wolfden, bearcave, dragonhoard,
@@ -87,6 +91,22 @@
     w.lastEv = w.lastEv || {};
     w.seq = w.seq | 0;
     st.aircraft = Array.isArray(st.aircraft) ? st.aircraft : [];
+    st.scars = Array.isArray(st.scars) ? st.scars : [];
+  }
+  function ensure(sim) { const st = sim.state; if (!st.wild || !st.scars || !st.aircraft || !st.crack) defaults(st); }
+
+  // Große Narben für die Darstellung: Krater 3×3 / 5×5 und Erdbebenrisse (verblassen nach ttl Ticks)
+  function addScar(sim, x, y, kind, ttl) {
+    const st = sim.state;
+    if (!st.scars) st.scars = [];
+    if (st.scars.length >= 200) st.scars.shift();
+    st.scars.push({ x: Math.floor(x), y: Math.floor(y), kind: kind, ttl: ttl || WW.CONFIG.TPY * 4 });
+  }
+  function updateScars(sim) {
+    const st = sim.state;
+    if (!st.scars.length) return;
+    for (const s of st.scars) s.ttl -= 20;
+    if (st.scars.some((s) => !(s.ttl > 0))) st.scars = st.scars.filter((s) => s.ttl > 0);
   }
 
   // ---------------------------------------------------------------------------
@@ -206,6 +226,7 @@
   // Chronik mit Sperrfrist (gleiche Meldung je Schlüssel höchstens alle gap Ticks)
   // ---------------------------------------------------------------------------
   function chron(sim, type, vars, at, key, gap) {
+    ensure(sim);
     const st = sim.state, w = st.wild;
     const k = type + ':' + (key == null ? '' : key);
     const last = w.lastEv[k];
@@ -812,6 +833,7 @@
   // Göttliche Hand und weitere Aktionen
   // ---------------------------------------------------------------------------
   function grab(sim, id) {
+    ensure(sim);
     const st = sim.state;
     if (st.wild.held || id == null) return false;
     const u = sim._units.get(id);
@@ -838,6 +860,7 @@
     return false;
   }
   function drop(sim, x, y) {
+    ensure(sim);
     const st = sim.state, W = st.W;
     const h = st.wild.held;
     if (!h || !WW.SimUtil.isNum(x) || !WW.SimUtil.isNum(y) || x < 0 || y < 0 || x >= W || y >= st.H) return null;
@@ -868,7 +891,7 @@
   }
 
   function actions(sim, safe) {
-    const st = () => sim.state;
+    const st = () => { ensure(sim); return sim.state; };
     const isNum = WW.SimUtil.isNum;
     const inMap = (x, y) => isNum(x) && isNum(y) && x >= 0 && y >= 0 && x < st().W && y < st().H;
     return {
@@ -905,7 +928,9 @@
   // Takt
   // ---------------------------------------------------------------------------
   function update(sim) {
+    ensure(sim);
     const st = sim.state, tick = st.tick;
+    if (tick % 20 === 9) updateScars(sim);
     if (WW.Powers.update) WW.Powers.update(sim);
     // Einheiten mit Wildnis-Aufgaben (gleiche Phase wie die Einheiten-KI)
     const units = st.units;
@@ -932,9 +957,10 @@
     if (tick % 30 === 17) updateLairs(sim);
   }
   function yearly(sim) {
+    ensure(sim);
     const st = sim.state;
     yearlyLairs(sim);
-    immigrate(sim);
+    if (!st.wild.off) immigrate(sim);
     // heimatlose Räuber ziehen manchmal weiter
     for (const u of st.units) if (!u.dead && u.role === 'bandit' && u.wHome < 0 && sim.rng.chance(0.15)) WW.Units.kill(sim, u, 'gone');
     // alte Sperrfristen vergessen
@@ -943,7 +969,7 @@
   }
 
   WW.Wild = {
-    defaults: defaults, RASTERS: RASTERS, bandOf: bandOf, terrainForBand: terrainForBand, terrainFromHeight: terrainFromHeight,
+    defaults: defaults, ensure: ensure, addScar: addScar, RASTERS: RASTERS, bandOf: bandOf, terrainForBand: terrainForBand, terrainFromHeight: terrainFromHeight,
     setTerrain: setTerrain, setHeight: setHeight, finishTerrain: finishTerrain, plantTree: plantTree, capOf: capOf, habitat: habitat,
     chron: chron, cityNear: cityNear, scare: scare, sendSoldiers: sendSoldiers, placeLair: placeLair, lairsOf: lairsOf,
     spawnBandit: spawnBandit, makeMad: makeMad, populate: populate, immigrate: immigrate, grab: grab, drop: drop,

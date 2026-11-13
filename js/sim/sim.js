@@ -406,6 +406,7 @@
     let n = (opts.populate === true || opts.populate == null) ? 3 : (opts.populate === false ? 0 : (opts.populate | 0));
     n = Math.max(0, Math.min(8, n));
     if (n > 0) populate(sim, n, opts);
+    if (opts.animals === false && st.wild) st.wild.off = true;   // [wild] keine Tierwelt: auch kein Einwandern
     if (opts.animals !== false) {
       const area = W * H;
       WW.Creatures.populate(sim, Math.round(area / 260), Math.round(area / 2600));

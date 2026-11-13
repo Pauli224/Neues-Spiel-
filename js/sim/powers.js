@@ -81,6 +81,7 @@
     const st = sim.state;
     x = clampX(sim, x); y = clampY(sim, y);
     if (o.fx !== false) sim.fx({ type: 'explosion', x: x, y: y, r: r });
+    if (r >= 2.4 && !WW.TERRAIN_LUT.water[st.terrain[Math.floor(y) * st.W + Math.floor(x)]]) W_().addScar(sim, x, y, r >= 4 ? 'crater_l' : 'crater_m');
     unitsIn(sim, x, y, r, (u, d2) => hurt(sim, u, power * (1 - 0.6 * Math.sqrt(d2) / r), o.cause || 'bomb'));
     animalsIn(sim, x, y, r, (a, d2) => WW.Creatures.hit(sim, a, power * (1 - 0.6 * Math.sqrt(d2) / r), null));
     for (const s of structsIn(sim, x, y, r)) {
@@ -121,6 +122,8 @@
     sim.fx({ type: 'flash', x: x, y: y, r: outer * 1.5 });
     sim.fx({ type: 'shockwave', x: x, y: y, r: outer * 1.4 });
     sim.fx({ type: 'mushroom', x: x, y: y, big: !!big });
+    W_().addScar(sim, x, y, 'crater_l', WW.CONFIG.TPY * 10);
+    if (big) for (let k = 0; k < 8; k++) W_().addScar(sim, clampX(sim, x + G16[k * 4] * 6), clampY(sim, y + G16[k * 4 + 1] * 6), 'crater_l', WW.CONFIG.TPY * 10);
     unitsIn(sim, x, y, outer, (u, d2) => {
       const d = Math.sqrt(d2);
       if (d < core) { WW.Units.kill(sim, u, 'nuke'); return; }
@@ -435,6 +438,7 @@
     meteor: function (sim, x, y) {
       const st = sim.state;
       sim.fx({ type: 'meteor', x: x, y: y });
+      W_().addScar(sim, x, y, 'crater_m');
       unitsIn(sim, x, y, 3, (u) => hurt(sim, u, 80, 'meteor'));
       animalsIn(sim, x, y, 3, (a) => WW.Creatures.hit(sim, a, 80, null));
       for (const s of structsIn(sim, x, y, 2.6)) {
@@ -501,7 +505,7 @@
         const px = x + dx * s - dy * wob, py = y + dy * s + dx * wob;
         if (px < 0 || py < 0 || px >= st.W || py >= st.H) continue;
         const i = Math.floor(py) * st.W + Math.floor(px);
-        if (!WW.TERRAIN_LUT.water[st.terrain[i]]) { st.crack[i] = 230; sim.markDirty(i); }
+        if (!WW.TERRAIN_LUT.water[st.terrain[i]]) { st.crack[i] = 230; sim.markDirty(i); if (Math.round(s * 2) % 6 === 0) W_().addScar(sim, px, py, 'crack', WW.CONFIG.TPY * 2); }
         for (const b of structsIn(sim, px, py, 1.1)) {
           if (hitS.has(b.id) || b.dead) continue;
           hitS.add(b.id);

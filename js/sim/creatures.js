@@ -3,7 +3,10 @@
 // Gestaffelte KI: jedes Tier denkt alle 8 Ticks, bewegt sich jeden Tick (gierig, Kachel für Kachel).
 (function (WW) { 'use strict';
 
-  const DEFS = (WW.WILD && WW.WILD.CREATURES) || {};
+  const DEFS = (WW.WILD && WW.WILD.CREATURES) || {
+    sheep: { name: 'Schaf', plural: 'Schafe', category: 'animal', hp: 12, speed: 0.035, ai: 'grazer', move: 'land', habitat: ['grass', 'flowers', 'savanna', 'tundra'], area: 60, max: 70, life: 12, breed: 0.05, group: [3, 6], diet: 'grass', food: 4, flock: true },
+    wolf: { name: 'Wolf', plural: 'Wölfe', category: 'animal', hp: 26, speed: 0.07, hostile: true, ai: 'predator', move: 'land', habitat: ['forest', 'taiga', 'grass', 'tundra'], area: 320, max: 26, life: 12, breed: 0.03, group: [3, 4], diet: 'meat', dmg: 2.5, sight: 7, prey: ['sheep'], huntsUnits: true, pack: true, food: 3 }
+  };
   WW.CREATURES = {};
   const MOVE = { land: 0, water: 1, sand: 2, air: 3, ghost: 3 };
   for (const k in DEFS) {
@@ -18,7 +21,8 @@
   const DY = [-1, 0, 1, 0, -1, 1, 1, -1];
   const THINK = 8;
 
-  function CFG() { return WW.WILD.CFG; }
+  const CFG0 = { ANIMALS_PER_TILE: 0.03, ANIMALS_MIN: 150, ANIMALS_MAX: 900, FOOD_DECAY: 3, GRAZE_BITE: 90, GRAZE_SHOW: 128 };
+  function CFG() { return (WW.WILD && WW.WILD.CFG) || CFG0; }
   function maxAnimals(sim) {
     const c = CFG(), N = sim.state.W * sim.state.H;
     return Math.max(c.ANIMALS_MIN, Math.min(c.ANIMALS_MAX, Math.round(N * c.ANIMALS_PER_TILE)));
@@ -121,7 +125,8 @@
   // Angriff einer Kreatur auf Einheit oder Tier
   function attack(sim, a, t, dmg) {
     if (!t || t.dead) return;
-    if (t.role !== undefined) WW.Units.hitUnit(sim, { id: a.id, kingdomId: -1 }, t, dmg);
+    // Einheiten verfolgen angreifende Tiere nicht selbst (spart Wegsuche); Soldaten finden Monster über die Einheiten-KI
+    if (t.role !== undefined) WW.Units.hitUnit(sim, { id: t.role === 'soldier' ? a.id : -1, kingdomId: -1 }, t, dmg);
     else hit(sim, t, dmg, a);
   }
 
@@ -599,6 +604,7 @@
 
   function updateAll(sim) {
     const st = sim.state, W = st.W;
+    if (!st.fallout || !st.flora) WW.Env.ensureRasters(st);
     const cnt = sim._animalCount = {};
     for (const a of st.animals) if (!a.dead) cnt[a.kind] = (cnt[a.kind] || 0) + 1;
     const tick = st.tick;

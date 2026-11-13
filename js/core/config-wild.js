@@ -22,7 +22,7 @@
     FLOWER_BIRTH: 0.0006, FLOWER_DEATH: 0.0004,
     BERRY_BIRTH: 0.00006, BERRY_DEATH: 0.004, BERRY_REGROW: 0.05,
     ALARM_TICKS: 120,            // so lange bleibt eine Stadt nach einer Sichtung in Alarm
-    ALARM_SCAN: 20,              // Städte prüfen alle 20 Ticks auf Gefahren
+    ALARM_SCAN: 40,              // Städte prüfen alle 20 Ticks auf Gefahren
     SORTIE_MAX: 6,               // so viele Soldaten rücken höchstens gegen eine Gefahr aus
     CLEAR_RANGE: 12,             // Lager bis Gebietsradius + so viele Kacheln werden ausgeräumt
     MAX_EFFECTS: 40,             // gleichzeitige Dauer-Effekte (Sturm, Flut, Frost …)

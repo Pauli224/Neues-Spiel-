@@ -132,9 +132,11 @@
     h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
     return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
   }
+  const CFG_FALLBACK = { SLICES: 16, CRACK_DECAY: 2, FALLOUT_DECAY: 2, ASH_STEP: 3, LAVA_STEP: 4, GRAZE_REGROW: 6, GRAZE_SHOW: 128,
+    BERRY_DEATH: 0.004, BERRY_REGROW: 0.05, BERRY_BIRTH: 0.00006, FLOWER_BIRTH: 0.0006, FLOWER_DEATH: 0.0004 };
   function natureSlice(sim) {
     const st = sim.state, W = st.W, H = st.H, N = W * H;
-    const C = WW.WILD.CFG, T = WW.T, LUT = WW.TERRAIN_LUT;
+    const C = (WW.WILD && WW.WILD.CFG) || CFG_FALLBACK, T = WW.T, LUT = WW.TERRAIN_LUT;
     const per = Math.ceil(N / C.SLICES);
     const k = st.tick % C.SLICES;
     const i0 = k * per, i1 = Math.min(N, i0 + per);
@@ -335,8 +337,15 @@
     }
   }
 
+  // Wildnis-Raster nachrüsten (fehlende Felder dürfen nie werfen, auch ohne wild.js)
+  const WILD_RASTERS = ['flora', 'graze', 'fallout', 'crack'];
+  function ensureRasters(st) {
+    const N = st.W * st.H;
+    for (const r of WILD_RASTERS) if (!st[r] || st[r].length !== N) st[r] = new Uint8Array(N);
+  }
   function update(sim) {
     const t = sim.state.tick;
+    if (!sim.state.crack) ensureRasters(sim.state);
     if (t % 10 === 3) updateFields(sim);
     if (t % 5 === 1) updateFire(sim);
     if (t % 7 === 2) updateTowers(sim);
@@ -352,7 +361,7 @@
   }
 
   WW.Env = {
-    update: update, yearly: yearly, ignite: ignite, igniteForce: igniteForce, extinguish: extinguish, setMark: setMark,
+    ensureRasters: ensureRasters, update: update, yearly: yearly, ignite: ignite, igniteForce: igniteForce, extinguish: extinguish, setMark: setMark,
     regrow: regrow, regrowAt: regrowAt, burnable: burnable, coolLava: coolLava, FL_BERRY: FL_BERRY, FL_BUSH: FL_BUSH, FL_ASH: FL_ASH, FL_LAVA: FL_LAVA
   };
 

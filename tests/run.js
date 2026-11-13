@@ -10,7 +10,7 @@ function log() { const s = Array.prototype.join.call(arguments, ' '); currentLog
 function assert(cond, msg) { if (!cond) throw new Error('Annahme verletzt: ' + msg); }
 
 function test(name, fn) {
-  if (filter && name.toLowerCase().indexOf(filter.toLowerCase()) < 0) return;
+  if (filter && !filter.toLowerCase().split(',').some(f => name.toLowerCase().indexOf(f) >= 0)) return;
   console.log('\n=== ' + name);
   currentLog = [];
   const t0 = Date.now();
@@ -560,7 +560,9 @@ test('6 Gotteshandlungen-Fuzz (2000 Aktionen)', function () {
 // 8. Wachstum
 // --------------------------------------------------------------------------
 test('8 Wachstum (Stufen, Stadterweiterung, Tochterstädte, 40 000 Ticks)', function () {
-  const sim = makeSim({ seed: 'wachstum-1', size: 'medium', populate: 3 });
+  // fester eigener Testaufbau (unabhängig vom Weltgenerator): große Wiese, zwei Völker
+  const world = meadowWorld(170, 110, { hills: true, river: true, spots: [{ x: 50, y: 55 }, { x: 120, y: 55 }] });
+  const sim = makeSim({ seed: 'wachstum-1', world: world, populate: 2, races: ['human', 'dwarf'], animals: false });
   const counts = {};
   const orig = sim.event;
   sim.event = function (type) { counts[type] = (counts[type] || 0) + 1; return orig.apply(this, arguments); };
