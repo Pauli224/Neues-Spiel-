@@ -1963,6 +1963,214 @@
     deco('s_deco_laundry', ['W.....W', 'WWWWWWW', 'W.r.T.W', 'Wlrbutw', 'W.l.b.W', 'W.....W']);
     S.DECO_KEYS = ['s_deco_well', 's_deco_stall', 's_deco_hay', 's_deco_cart', 's_deco_garden_0', 's_deco_garden_1', 's_deco_garden_2', 's_deco_woodpile', 's_deco_barrels', 's_deco_laundry'];
 
+    // ======================================================================
+    // Mauerstufen 4–6 je Regierung (Stamm und Anarchie 2–4): gleiche Extrusion, höher und dicker,
+    // dazu Aufbauten je Regierung und Stufe als Überlagerung. Geräte (s_walldev_*) sitzen obenauf.
+    WALL[4] = { a: 1, b: 6, h: 10 }; WALL[5] = { a: 1, b: 6, h: 11 }; WALL[6] = { a: 0, b: 7, h: 12 };
+    MAT.tribe2 = { top: 'woodL', topL: 'woodL', face: 'wood', faceL: 'woodL', joint: 'woodD', base: 'woodD', pat: 'stakes', merlon: 1, cap: 'woodL' };
+    MAT.tribe3 = { top: AC(null, '#8fae5a'), topL: AC(null, '#a6c46a'), face: AC(null, '#9a6e44'), faceL: AC(null, '#b08250'), joint: AC(null, '#7a5232'), base: AC(null, '#5e3e24'), pat: 'earth', merlon: 0 };
+    MAT.tribe4 = { top: 'wood', topL: 'woodL', face: 'wood', faceL: 'woodL', joint: 'woodD', base: 'woodD', pat: 'planksH', merlon: 1, cap: 'woodL' };
+    MAT.anarchy2 = { top: 'woodL', topL: 'woodL', face: 'wood', faceL: 'woodL', joint: 'ink', base: 'ink', pat: 'junk', merlon: 0 };
+    MAT.anarchy3 = { top: 'metal', topL: 'metalL', face: 'metal', faceL: 'metalL', joint: 'metalD', base: 'rockD' in C ? 'rockD' : 'metalD', pat: 'scrap', merlon: 0 };
+    MAT.anarchy4 = { top: 'cream', topL: 'white', face: 'cream', faceL: 'white', joint: 'plum', base: 'plum', pat: 'art', merlon: 0 };
+    var ARTC = ['pink', 'fireY', 'glass', 'leafL', 'purple', 'red', 'fireO', 'Tl'];
+    var _matFace = matFace;
+    matFace = function (m, x, row, hh, merlon) {
+      if (row >= hh - 1) return m.base;
+      if (m.pat === 'stakes') return (x % 2) ? m.face : m.faceL;
+      if (m.pat === 'planksH') return row % 3 === 2 ? m.joint : (x === 0 ? m.faceL : m.face);
+      if (m.pat === 'earth') return row < 2 ? m.top : (hash(x, row, 5) < 0.2 ? m.joint : m.face);
+      if (m.pat === 'junk') { var hj = hash(x >> 1, row >> 1, 61); return hj < 0.35 ? ((x + row) % 3 === 0 ? 'dusk' : 'ink') : (hj < 0.7 ? (x & 1 ? 'wood' : 'woodL') : (hj < 0.85 ? 'red' : 'fireY')); }
+      if (m.pat === 'scrap') { var hs = hash(x >> 1, (row + 1) >> 2, 62); return hs < 0.3 ? 'metalD' : (hs < 0.55 ? 'metal' : (hs < 0.75 ? 'stoneD' : (hs < 0.88 ? 'fireO' : 'metalL'))); }
+      if (m.pat === 'art') return ARTC[(Math.floor((x + Math.sin(row * 0.8) * 2 + 8) / 2) + (row >> 2)) % ARTC.length];
+      return _matFace(m, x, row, hh, merlon);
+    };
+    var LVMAX = { tribe: 4, anarchy: 4 };
+    function matOf(st, lv) { if (st === 'tribe' || st === 'anarchy') return MAT[st + lv]; return MAT[st]; }
+    function geom(st, lv) {   // Mauer-Geometrie: Stamm/Anarchie nutzen eigene Stärken
+      if (st === 'tribe' || st === 'anarchy') return { 2: { a: 2, b: 5, h: 6 }, 3: { a: 1, b: 6, h: 7 }, 4: { a: 1, b: 6, h: 10 } }[lv];
+      return WALL[lv];
+    }
+    // Hilfen für Aufbauten: Kronenpunkte entlang der Mittellinie, Vorderfläche
+    function crownPts(P, mask, h, Htot) {
+      var sp = Math.floor((P.a + P.b) / 2), pts = [], horiz = (mask & 10) || !(mask & 5);
+      if (horiz) for (var x = 0; x < 8; x++) { if (occ(mask, P.a, P.b, x, sp)) pts.push([x, sp - h + Htot]); }
+      if (mask & 5) for (var gy = 0; gy < 8; gy++) if (occ(mask, P.a, P.b, sp, gy) && !(horiz && gy === sp)) pts.push([sp, gy - h + Htot]);
+      return pts;
+    }
+    function facePts(P, mask, h, Htot) {   // Spalten der Vorderfläche (gy = b) und deren Zeilenbereich
+      var out = [];
+      for (var x = 0; x < 8; x++) if (occ(mask, P.a, P.b, x, P.b) && !occ(mask, P.a, P.b, x, P.b + 1)) out.push([x, P.b - h + 1 + Htot, P.b + Htot]);
+      return out;
+    }
+    var GLOW = AC(null, '#9ff6ff', 210), GLOWG = AC(null, '#ffe98a', 160), LAMP = AC(null, '#fff2a0'), SANDS = AC(null, '#e8d9a8'), EARTH = AC(null, '#7c9a4a'), EARTHD = AC(null, '#5e7a38');
+    var DECO = {
+      monarchy: [null, function (g, c, f) { c.forEach(function (p, i) { g.set(p[0], p[1] - 3, 'T'); g.set(p[0], p[1] - 4, i & 1 ? 'Td' : 'Tl'); if (i % 3 === 0) { g.set(p[0], p[1] - 1, 'woodD'); g.set(p[0], p[1] - 2, 'woodD'); } }); },
+        'outer',
+        function (g, c, f) { f.forEach(function (q, i) { g.set(q[0], q[1] + 1, i & 1 ? 'ink' : 'stoneD'); g.set(q[0], q[1], 'stoneL'); }); c.forEach(function (p, i) { if (i % 4 === 1) { g.vline(p[0], p[1] - 6, 5, 'woodD'); g.paint(p[0] + 1, p[1] - 6, ['TT', 'Tt']); } }); }],
+      democracy: [null, function (g, c, f) { f.forEach(function (q) { g.set(q[0], q[2] + 1, 'stoneD'); }); },
+        'earth',
+        function (g, c, f) { f.forEach(function (q) { g.set(q[0], q[2] + 1, 'stoneD'); g.set(q[0], q[2] + 2, 'shade'); }); c.forEach(function (p, i) { if (i % 4 === 2) { g.vline(p[0], p[1] - 5, 4, 'woodD'); g.paint(p[0] + 1, p[1] - 5, ['TTT', 'TTt']); } }); }],
+      fascism: [null, function (g, c) { c.forEach(function (p, i) { var k = i % 3; g.set(p[0], p[1] - 1 - (k === 1 ? 1 : 0), 'metalL'); g.set(p[0], p[1] - 2 + (k === 1 ? 1 : 0), 'ink'); if (k === 0) g.set(p[0], p[1] - 3, 'metal'); }); },
+        function (g, c, f) { f.forEach(function (q, i) { var y = q[1] + Math.floor((q[2] - q[1]) / 2); if (i % 4 < 3) g.set(q[0], y, 'ink'); }); },
+        function (g, c, f) { var y = g.h - 2; [1, 5].forEach(function (x) { g.line(x - 1, y - 2, x + 1, y, 'metalD'); g.line(x + 1, y - 2, x - 1, y, 'metal'); }); }],
+      communism: [null, function (g, c) { c.forEach(function (p) { g.set(p[0], p[1] - 1, 'stoneL'); g.set(p[0], p[1] - 2, 'white'); g.set(p[0], p[1], 'stone'); }); },
+        function (g, c) { var y = g.h - 1; for (var x = 0; x < 8; x++) { g.set(x, y - 3, (x & 1) ? 'metalL' : 'metalD'); if (x % 3 === 0) { g.vline(x, y - 4, 5, 'metalD'); } } },
+        function (g, c) { var y = g.h - 1; for (var x = 0; x < 8; x++) { g.set(x, y, SANDS); g.set(x, y - 1, SANDS); } c.forEach(function (p, i) { if (i === 3) { g.vline(p[0], p[1] - 8, 8, 'metalD'); g.hline(p[0], p[1] - 9, 3, 'metalD'); g.set(p[0] + 2, p[1] - 8, LAMP); g.set(p[0] + 2, p[1] - 7, GLOWG); } }); }],
+      theocracy: [null, function (g, c, f) { f.forEach(function (q, i) { g.set(q[0], q[1] + 2, i & 1 ? 'gold' : 'goldL'); g.set(q[0], q[1] + 3, 'goldD'); }); },
+        function (g, c, f) { f.forEach(function (q, i) { if (i % 4 === 1) { var y = q[1] + 4; g.set(q[0], y, GLOW); g.set(q[0] + 1, y, GLOW); g.set(q[0], y + 1, GLOW); g.set(q[0] + 1, y + 1, 'white'); } }); },
+        function (g, c) { c.forEach(function (p, i) { if (i === 2 || i === 6) for (var y = 0; y < p[1] - 1; y++) if (!g.get(p[0], y)) { g.set(p[0], y, GLOWG); if (y > p[1] - 6) g.set(p[0] + 1, y, GLOWG); } }); }],
+      republic: [null, function (g, c, f) { f.forEach(function (q, i) { if (i % 3 === 1) { g.set(q[0], q[1] + 3, 'ink'); g.set(q[0], q[1] + 4, 'ink'); } }); },
+        function (g, c, f) { f.forEach(function (q, i) { if (i % 4 === 2) { var y = q[1] + 4; g.set(q[0] - 1, y, 'ink'); g.set(q[0], y, 'ink'); g.set(q[0] - 1, y + 1, 'ink'); g.set(q[0], y + 1, 'metalD'); g.set(q[0], y + 2, 'metal'); } }); },
+        function (g, c) { c.forEach(function (p, i) { if (i === 1 || i === 6) { g.set(p[0], p[1] - 1, 'metalD'); g.set(p[0], p[1] - 2, 'fireO'); g.set(p[0], p[1] - 3, 'fireY'); g.set(p[0], p[1] - 4, 'goldL'); } }); }],
+      tribe: [null, null, 'double', function (g, c) { c.forEach(function (p, i) { if (i % 2 === 0) { g.set(p[0], p[1] - 1, 'woodD'); g.set(p[0], p[1] - 2, 'woodL'); } }); },
+        function (g, c) { c.forEach(function (p, i) { g.set(p[0], p[1] - 4, i & 1 ? 'straw' : 'strawL'); if (i % 3 === 0) { g.vline(p[0], p[1] - 3, 3, 'woodD'); } }); }],
+      anarchy: [null, null, function (g, c) { c.forEach(function (p, i) { if (i % 3 === 0) { g.set(p[0], p[1] - 1, 'ink'); g.set(p[0], p[1] - 2, 'dusk'); } }); },
+        function (g, c) { c.forEach(function (p, i) { if (i % 3 === 1) { g.set(p[0], p[1] - 1, 'metalD'); g.set(p[0], p[1] - 2, 'fireO'); } }); },
+        function (g, c) { c.forEach(function (p, i) { g.set(p[0], p[1] - 1, ARTC[i % ARTC.length]); }); }]
+    };
+    function decoFor(st, lv) { var d = DECO[st]; if (!d) return null; return d[st === 'tribe' || st === 'anarchy' ? lv : lv - 2]; }
+    // Zellen mit Zusatzgeometrie: 'outer' = niedrige Vormauer, 'double' = zweite Pfahlreihe, 'earth' = Erdwall davor
+    function cellsFor(st, lv, mask) {
+      var m = matOf(st, lv), P = geom(st, lv), dec = decoFor(st, lv);
+      var saveW = WALL[lv]; WALL[lv] = P;
+      var base = wallCellsS(m, lv, mask);
+      WALL[lv] = saveW;
+      if (dec === 'outer' || dec === 'earth' || dec === 'double') {
+        return function (gx, gy) {
+          var c = base(gx, gy); if (c) return c;
+          var line = 7;
+          if (occ(mask, line, line, gx, gy) && !occ(mask, P.a, P.b, gx, gy)) {
+            if (dec === 'earth') return { h: 3, top: function () { return EARTH; }, face: function (x, row, y, hh) { return row === hh - 1 ? EARTHD : EARTH; } };
+            if (dec === 'double') return { h: 5 + ((gx + gy) & 1), top: function () { return 'woodL'; }, face: function (x) { return (x & 1) ? 'wood' : 'woodD'; } };
+            return { h: 5, top: function () { return m.topL; }, face: function (x, row, y, hh) { return matFace(m, x, row, hh, false); } };
+          }
+          return null;
+        };
+      }
+      return base;
+    }
+    function wallLv(st, lv, mask, water) {
+      var m = matOf(st, lv), P = geom(st, lv), h = P.h + (m.dh || 0), Htot = h + 4 + 9;
+      var cells = cellsFor(st, lv, mask);
+      if (water) {
+        var c0 = cells, vert = water === 'v';
+        cells = function (gx, gy) {
+          var c = c0(gx, gy); if (!c) return null;
+          if (!(gx >= 0 && gx < 8 && gy >= 0 && gy < 8)) return c;
+          if (vert && gy >= 2 && gy <= 5) return { h: c.h, base: 3, top: c.top, face: c.face };
+          if (!vert) { var f0 = c.face; return { h: c.h, top: c.top, face: function (x, row, y, hh) { var fb = hh - row; if (y === P.b && x >= 2 && x <= 5 && fb <= 4) return fb === 1 ? 'river' : (fb === 4 ? 'ink' : (x & 1 ? 'metalD' : 'ink')); return f0(x, row, y, hh); } }; }
+          return c;
+        };
+      }
+      var g = extrude(cells, Htot);
+      var dec = decoFor(st, lv);
+      if (typeof dec === 'function') {
+        var sv = WALL[lv]; WALL[lv] = P;
+        dec(g, crownPts(P, mask, h, Htot), facePts(P, mask, h, Htot));
+        WALL[lv] = sv;
+      }
+      return g;
+    }
+    var WGOVS = STYLED.concat(['tribe', 'anarchy']);
+    WGOVS.forEach(function (st) {
+      var from = (st === 'tribe' || st === 'anarchy') ? 2 : 4, to = LVMAX[st] || 6;
+      for (var lv = from; lv <= to; lv++) {
+        for (var mk = 0; mk < 16; mk++) def('s_wall_' + st + '_' + lv + '_' + mk, wallLv(st, lv, mk), { group: 'wall' });
+        def('s_wall_' + st + '_' + lv + '_water_h', wallLv(st, lv, 10, 'h'), { group: 'wall' });
+        def('s_wall_' + st + '_' + lv + '_water_v', wallLv(st, lv, 5, 'v'), { group: 'wall' });
+        var mg = matOf(st, lv), sv = WALL[lv]; WALL[lv] = geom(st, lv);
+        ['h', 'v'].forEach(function (d) {
+          var gg = st === 'fascism' ? gateCheckpoint(Math.min(lv, 3), d === 'v') : gateArt(mg, lv, d === 'v');
+          def('s_gate_' + st + '_' + lv + '_' + d, gg, { group: 'wall' });
+        });
+        WALL[lv] = sv;
+        if (st !== 'anarchy' && st !== 'tribe') def('s_tower_' + st + '_' + lv, towerLv(st, lv), { group: 'wall', ox: -2 });
+      }
+    });
+    // höhere Türme: Schaft wächst je Stufe, gleiche Kappen wie Stufe 3, ab 5 mit Zusatz
+    function towerLv(st, lv) {
+      var g = towerS(st, 3), extra = (lv - 3) * 3, out = new Grid(g.w, g.h + extra);
+      // obere Hälfte (Kappe) nach oben versetzen, Schaft dazwischen strecken
+      var cut = g.h - 10;
+      for (var y = 0; y < g.h; y++) for (var x = 0; x < g.w; x++) {
+        var c = g.d[y * g.w + x]; if (!c) continue;
+        if (y < cut) out.set(x, y, c); else out.set(x, y + extra, c);
+      }
+      for (y = cut; y < cut + extra; y++) for (x = 0; x < g.w; x++) { var c2 = g.d[cut * g.w + x]; if (c2) out.set(x, y, c2); }
+      if (lv >= 5) { out.set(5, cut + 2, 'ink'); out.set(6, cut + 2, 'ink'); }
+      if (lv >= 6) { out.set(1, cut, 'T'); out.set(10, cut, 'T'); }
+      return out;
+    }
+    // Stamm: Holz-Ausguck für alle Stufen; Anarchie: keine Türme
+    // Rückfall-Logik: höchste vorhandene Stufe
+    S.wallKey = function (gov, level, mask) {
+      level = level | 0; mask = mask & 15;
+      if (gov === 'anarchy') return level <= 1 ? 's_barricade_' + mask : 's_wall_anarchy_' + Math.min(4, level) + '_' + mask;
+      if (gov === 'tribe') return level <= 1 ? 's_wall_1_' + mask : 's_wall_tribe_' + Math.min(4, level) + '_' + mask;
+      if (level <= 1 || !MAT[gov]) return 's_wall_1_' + mask;
+      return 's_wall_' + gov + '_' + Math.min(6, level) + '_' + mask;
+    };
+    S.waterWallKey = function (gov, level, dir) {
+      dir = dir === 'v' ? 'v' : 'h';
+      if ((gov === 'tribe' || gov === 'anarchy') && level >= 2) return 's_wall_' + gov + '_' + Math.min(4, level) + '_water_' + dir;
+      if (level <= 1 || !MAT[gov] || gov === 'tribe' || gov === 'anarchy') return 's_wall_1_water_' + dir;
+      return 's_wall_' + gov + '_' + Math.min(6, level) + '_water_' + dir;
+    };
+    S.gateKey = function (gov, level, dir) {
+      dir = dir === 'v' ? 'v' : 'h';
+      if ((gov === 'tribe' || gov === 'anarchy') && level >= 2) return 's_gate_' + gov + '_' + Math.min(4, level) + '_' + dir;
+      if (level <= 1 || !MAT[gov] || gov === 'tribe' || gov === 'anarchy') return 's_gate_1_' + dir;
+      return 's_gate_' + gov + '_' + Math.min(6, level) + '_' + dir;
+    };
+    S.towerKey = function (gov, level) {
+      if (gov === 'anarchy') return null;
+      if (gov === 'tribe' || !MAT[gov] || level <= 1) return 's_tower_tribe';
+      return 's_tower_' + gov + '_' + Math.min(6, Math.max(2, level | 0));
+    };
+    S.wallMaxLevel = function (gov) { return LVMAX[gov] || 6; };
+
+    // ---------------------------------------------------------------- Verteidigungsgeräte (Aufsatz auf der Mauerkrone)
+    function dev(key, rows, post) {
+      var gr = new Grid(rows[0].length, rows.length); gr.paint(0, 0, rows); if (post) post(gr);
+      def(key, gr.pad(1, 1, 1, 1).outline(), { group: 'walldev' });
+    }
+    // Selbstschussanlage: Kasten mit Trichterrohr, löst selbst aus (_1 = Schuss)
+    dev('s_walldev_selfshot_0', ['.GGGG..', 'GgggG..', 'GgqgGMM', 'GgggGMm', 'GGGGG..', '.M..M..']);
+    dev('s_walldev_selfshot_1', ['.GGGG...', 'GgggG.j.', 'GgqgGMMF', 'GgggGMmj', 'GGGGG.j.', '.M..M...']);
+    def('s_walldev_selfshot', L.DEFS.s_walldev_selfshot_0.grid, { group: 'walldev' });
+    dev('s_walldev_mgnest_0', ['...MMM.', '.aaMaa.', 'aAaaaAa', 'AaAaAaA', '.AAAAA.']);
+    dev('s_walldev_mgnest_1', ['...MMMjF', '.aaMaa.j', 'aAaaaAa.', 'AaAaAaA.', '.AAAAA..']);
+    def('s_walldev_mgnest', L.DEFS.s_walldev_mgnest_0.grid, { group: 'walldev' });
+    dev('s_walldev_ballista_0', ['w.....w', '.w...w.', '..wnw..', 'llwwwlnn', '..WwW..', '.W...W.']);
+    dev('s_walldev_ballista_1', ['.w...w.', '..w.w..', '..www..', '..wwwW.', '..WwW..', '.W...W.']);
+    def('s_walldev_ballista', L.DEFS.s_walldev_ballista_0.grid, { group: 'walldev' });
+    dev('s_walldev_cannon_0', ['.......', '.oooooo', 'oMmmmmo', '.ooooo.', 'oWo.oWo', '.o...o.']);
+    dev('s_walldev_cannon_1', ['......jF', '.oooooQj', 'oMmmmmoF', '.ooooo.j', 'oWo.oWo.', '.o...o..']);
+    def('s_walldev_cannon', L.DEFS.s_walldev_cannon_0.grid, { group: 'walldev' });
+    [0, 1].forEach(function (f) {
+      var gr = new Grid(7, 7);
+      gr.ellipse(3.5, 3.5, 3.4, 3.4, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d > 0.55 ? 'gold' : (d < 0.2 ? (f ? 'white' : GLOW) : (f ? GLOW : null)); });
+      gr.set(3, 0, 'goldL');
+      def('s_walldev_ward_' + f, gr.pad(1, 1, 1, 1).outline('goldD'), { group: 'walldev' });
+    });
+    def('s_walldev_ward', L.DEFS.s_walldev_ward_0.grid, { group: 'walldev' });
+    dev('s_walldev_post', ['.uTTt.', 'uTTTTt', 'tttttt', '.wbbW.', '.wbbW.', '.wwwW.', '.wwwW.']);
+    dev('s_walldev_spikes', ['l..l..l.', 'v.vv.vv.', 'wvwwvwwv', 'WwWWwWWw', 'hhhhhhhh']);
+    dev('s_walldev_trap', ['n.n.n.n.', 'mnmnmnmn', 'MMMMMMMM', '..vw.oo.', '.vwWoWWo']);
+    function fxg(rows) { var gg = new Grid(rows[0].length, rows.length); gg.paint(0, 0, rows); return gg; }
+    def('fx_muzzle_0', fxg(['.j.', 'jlj', '.j.']), { group: 'fx', anchor: 'center' });
+    def('fx_muzzle_1', fxg(['j.F.j', '.FlF.', 'FlllF', '.FlF.', 'j.F.j']), { group: 'fx', anchor: 'center' });
+    def('fx_bolt_shot', fxg(['W......', 'wwwwwwn', 'W......']), { group: 'fx', anchor: 'center' });
+    // Aufsatzhöhe: Logikpixel relativ zur Kachel-Oberkante, an denen die Unterkante des Geräts liegt
+    S.wallDevOffset = function (gov, level, devKey) {
+      if (/spikes|trap/.test(devKey || '')) return 0;          // stehen vor der Mauer am Boden
+      var st = gov, lv = Math.max(1, level | 0), P, m;
+      if (gov === 'tribe' || gov === 'anarchy') { lv = Math.min(4, lv); if (lv <= 1) return -1; P = geom(gov, lv); m = matOf(gov, lv); }
+      else { lv = Math.min(6, lv); if (lv <= 1 || !MAT[gov]) return -1; P = WALL[lv]; m = MAT[gov]; }
+      var sp = Math.floor((P.a + P.b) / 2);
+      return (sp - (P.h + (m.dh || 0)) + 1) - 8;
+    };
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

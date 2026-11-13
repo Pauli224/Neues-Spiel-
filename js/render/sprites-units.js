@@ -1165,6 +1165,12 @@
       else if (hat === 'minerhelm') { g.rect(A.hx0, A.hy0 - 1, A.hx1 - A.hx0 + 1, 3, C.gold); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, C.goldD); g.set(A.hx1 + 1, A.hy0, C.fireY); g.set(A.hx1 + 2, A.hy0, C.goldL); }
       else if (hat && HAT[hat]) HAT[hat](g, A);
       if (cs.mask) g.hline(A.hx0 + 1, eyY + 2, A.hx1 - A.hx0, cs.mask);
+      // --- Soldaten: Schulterstücke in Teamfarbe, Glanzlicht am Helm
+      if (cls === 'soldier') {
+        g.hline(tx0 - 1, ty0, tw + 2, 'T'); g.set(tx0 - 1, ty0, 'Tl'); g.set(tx0, ty0, 'Tl'); g.set(tx0 - 1, ty0 + 1, 'Td'); g.set(tx1 + 1, ty0 + 1, 'Td');
+        if (hat && hat !== 'pot') { g.set(A.hx0 + 1, A.hy0, C.white); g.set(A.hx0 + 2, A.hy0, C.white); }
+      }
+      var attack = frame === 5;
       // --- vorderer Arm und Hand, Werkzeug
       if (cs.ragged) { g.rect(tx1 - 1, ty0 + 1, 6, 2, sl[1]); g.rect(tx1 + 5, ty0 + 1, 2, 2, skin[1]); g.rect(tx0 - 1, ty0 + 2, 2, 1, sl[2]); }
       var tool = cls === 'soldier' ? WEAP[gov] || WEAP.tribe : (cls === 'leader' ? null : TOOL2[role]);
@@ -1173,7 +1179,11 @@
       var ax = tx1 - 1 + fa, ay = ty0 + 1, hx = hold ? Math.max(tx1 + 2, Math.ceil(hcx + hr) + 1) : ax, hy = ty0 + th - 2;
       if (hold) { g.rect(tx1 - 1, ay, 2, 3, sl[1]); g.rect(tx1, ay + 2, hx - tx1 + 1, 2, sl[1]); g.set(tx1 + 1, ay + 2, sl[0]); g.rect(hx, hy - 1, 2, 2, skin[1]); hy = hy - 1; }
       else { g.rect(ax, ay, 2, th - 2, sl[1]); g.vline(ax, ay, th - 2, sl[0]); g.rect(ax, ty0 + th - 1, 2, 1, skin[1]); }
+      if (attack && hold) { g.rect(tx1, ty0 - 3, 2, 5, sl[1]); g.rect(hx, ty0 - 4, 2, 2, skin[1]); hy = ty0 - 4; hx = hx + 1; }
       if (tool) tool(g, hx, hy, A);
+      if (cls === 'soldier' && /tribe|democracy|communism|theocracy|anarchy/.test(gov)) {   // Wimpel an der Waffe
+        var py = Math.max(0, (attack ? hy - 12 : A.top - 2)); g.paint(hx + 2, py, ['TTu', 'TTT', 'tT.', 't..']);
+      }
       if (cls === 'leader' && gov === 'monarchy') { g.vline(hx + 1, hy - 6, 8, C.gold); g.set(hx + 1, hy - 7, C.red); }
       var out = g.pad(1, 1, 1, 0).outline();
       // leere Zeilen oben abschneiden
@@ -1186,7 +1196,7 @@
     L.lazyDef('h_', function (key) {
       var p = key.split('_');   // h, race, role, gov, frame
       if (p.length !== 5 || RACES2.indexOf(p[1]) < 0 || GOVS2.indexOf(p[3]) < 0) return null;
-      var fr = +p[4]; if (!(fr >= 0 && fr <= 4)) return null;
+      var fr = +p[4]; if (!(fr >= 0 && fr <= 5)) return null;
       var g = figure(p[1], p[2], p[3], fr);
       // Füße 1 Logikpixel über der Kachelunterkante wie bisher, Bodenschatten liegt darunter
       return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
@@ -1197,10 +1207,10 @@
       if (ROLES2.indexOf(role) < 0) role = 'farmer';
       if (GOVS2.indexOf(gov) < 0) gov = 'neutral';
       if (role === 'leader' && (gov === 'anarchy' || gov === 'neutral')) { role = 'farmer'; gov = gov === 'neutral' ? 'tribe' : 'anarchy'; }
-      frame = frame | 0; if (frame < 0 || frame > 4) frame = ((frame % 4) + 4) % 4;
+      frame = frame === 'attack' ? 5 : (frame | 0); if (frame < 0 || frame > 5) frame = ((frame % 4) + 4) % 4;
       return 'h_' + race + '_' + role + '_' + gov + '_' + frame;
     };
-    S.unitFrames = function (role) { return { walk: 4, stand: 4, total: 5 }; };
+    S.unitFrames = function (role) { return { walk: 4, stand: 4, attack: 5, total: 6 }; };
     // alte Schlüssel auf das feine Raster umleiten (neutrale Tracht; Anführer in ihrer Regierung)
     RACES2.forEach(function (race) {
       ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'child', 'trader', 'rebel', 'settler', 'hunter'].forEach(function (role) {

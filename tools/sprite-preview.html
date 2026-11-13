@@ -298,6 +298,25 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Soldaten aller Regierungen
+  if (want('soldiers') || Q.get('soldiers')) (function () {
+    var r = section('soldiers', 'Soldaten aller acht Regierungen: stehend, laufend, Angriff; daneben ein Bürger zum Vergleich (Maßstab 2, 3, 4)');
+    var GV = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'], TEAM = [9, 5, 4, 3, 0, 2, 1, 7];
+    var wrapS = document.createElement('div'); wrapS.id = 'soldcv'; wrapS.style.display = 'flex'; wrapS.style.flexDirection = 'column'; wrapS.style.alignItems = 'flex-start'; wrapS.style.gap = '6px';
+    r.appendChild(wrapS);
+    [2, 3, 4].forEach(function (sc) {
+      var W = 8 * 34 + 20, k = canvas(Math.ceil(W / 8) * 8, 24, sc);
+      groundRect(k.x, fill(WW.T.GRASS, Math.ceil(W / 8), 3), 0, 0);
+      GV.forEach(function (gv, i) {
+        S.draw(k.x, S.unitKey('human', 'soldier', gv, 4), 2 + i * 34, 12, { team: TEAM[i] });
+        S.draw(k.x, S.unitKey('human', 'soldier', gv, 1), 12 + i * 34, 12, { team: TEAM[i] });
+        S.draw(k.x, S.unitKey('human', 'soldier', gv, 'attack'), 22 + i * 34, 12, { team: TEAM[i] });
+      });
+      S.draw(k.x, S.unitKey('human', 'farmer', 'monarchy', 4), 8 * 34 + 8, 12, { team: 5 });
+      wrapS.appendChild(k.c);
+    });
+  })();
+
   // ---------------------------------------------------------------- Kreaturen im feinen Raster, alt und neu
   if (want('creaturesfine') || Q.get('creaturesfine')) (function () {
     var r = section('creaturesfine', 'Tiere, Monster und Belagerungsgerät im feinen Raster (je: alt | neu Frame 0..3 | Figur zum Größenvergleich), Maßstab 4');

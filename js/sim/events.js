@@ -445,7 +445,9 @@
       return hit === 1 ? 'ein Gebäude beschädigt' : hit + ' Gebäude beschädigt';
     },
     leader: function (sim, ctx, e) {
-      const k = ctx.k; if (!k || WW.GOVERNMENTS[k.gov].noLeader) return '';
+      const k = ctx.k;
+      if (k) ctx.vars.oldLeader = WW.Gov.leaderFull(k);
+      if (!k || WW.GOVERNMENTS[k.gov].noLeader) return '';
       const oldFull = WW.Gov.leaderFull(k);
       const old = sim._units.get(k.leaderId);
       if (old && !old.dead) WW.Units.setRole(sim, old, 'farmer');

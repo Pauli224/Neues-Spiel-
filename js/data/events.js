@@ -428,6 +428,261 @@
       'Die Unzufriedenheit {kingdom_in} ist zu groß: {oldLeader} muss gehen. {Leader} verspricht alles besser zu machen.',
       'Während einer Rede wird {oldLeader} ausgebuht und tritt zurück. {Leader} übernimmt und bringt Kekse mit.'] });
 
+  // ===========================================================================
+  // VOLKSEIGENES
+  // ===========================================================================
+  const race = r => c => c.race === r ? 2.2 : 0;
+  ev('elf_baumgesang', 'race', 'city', 'Baumgesang', { weight: 1, cooldown: 6, when: race('elf'),
+    effects: [{ mod: 'wood', mul: 1.2, years: 3 }, { mod: 'happiness', add: 4, years: 3 }],
+    texts: ['Die Elfen von {city} singen drei Nächte lang für die Bäume. Die Bäume schenken ihnen herabgefallene Äste, ganz freiwillig.',
+      'In {city} wird das Fest des Ersten Blattes gefeiert. {Person} trägt dabei eine Krone aus Moos und weint vor Rührung.',
+      'Ein uralter Elf in {city} erzählt die Geschichte jeder einzelnen Eiche. Es dauert ein Jahr, aber alle sind entspannt.',
+      'Die Elfen von {city} bitten die Wälder um Holz. Die Wälder sagen ja, sagt zumindest {person}.'] });
+  ev('elf_hochmut', 'race', 'pair', 'Elfischer Hochmut', { weight: 1, cooldown: 8, when: c => c.race === 'elf' ? 2 : 0,
+    effects: [{ opinion: [-20, -10] }, { mod: 'happiness', add: 2, years: 2 }],
+    texts: ['Ein elfischer Gesandter {kingdom_dat} lobt die Hütten {other_dat} als „rustikal“. Es ist nicht als Lob angekommen.',
+      'Die Elfen {kingdom_dat} schicken {other_dat} ein Buch über gutes Benehmen. Mit Unterstreichungen.',
+      '{Kingdom_nom} rümpft die elfische Nase über die Esskultur {other_dat}. Man isst dort Suppe mit Gabeln, sagt man.'] });
+  ev('elf_mondfest', 'race', 'kingdom', 'Mondfest', { weight: 1, cooldown: 7, when: race('elf'),
+    effects: [{ mod: 'growth', mul: 1.25, years: 3 }, { stock: 'food', add: -12 }],
+    texts: ['Die Elfen {kingdom_dat} feiern das Mondfest, das nur alle {num} Jahre stattfindet. Danach gibt es auffällig viele Elfenkinder.',
+      'Unter dem Vollmond tanzen die Elfen von {capital} bis zum Morgengrauen. Die Speisekammer leert sich, die Herzen füllen sich.',
+      'Mondfest {kingdom_in}: Die Elfen singen so schön, dass selbst die Eulen zuhören.'] });
+  ev('zwerg_tiefe', 'race', 'city', 'Zu tief gegraben', { weight: 1, cooldown: 7, when: race('dwarf'),
+    effects: [{ stock: 'stone', add: [30, 60] }, { damage: 0.4 }],
+    texts: ['Die Zwerge von {city} graben zu tief. Sie finden viel Stein und einen Hohlraum unter einem Haus. Das Haus findet ihn auch.',
+      'In {city} graben Zwerge einen neuen Stollen. Der Boden bebt, ein Dach wackelt, der Steinhaufen wächst.',
+      '{Person} aus {city} hört den Berg flüstern: „Hier graben!“ Man gräbt. Es kracht. Aber Stein gibt es reichlich.'] });
+  ev('zwerg_bart', 'race', 'city', 'Bartwettbewerb', { weight: 1, cooldown: 5, when: race('dwarf'),
+    effects: [{ happy: 6 }, { mod: 'work', mul: 1.04, years: 2 }],
+    texts: ['Der große Bartwettbewerb von {city} ist entschieden: {person} gewinnt mit einem Bart, der dreimal geflochten ist.',
+      'In {city} misst man Bärte. Der längste reicht vom Kinn bis zur Werkbank. Alle arbeiten voller Stolz weiter.',
+      'Ein Zwerg aus {city} rasiert sich aus Versehen. Die ganze Stadt trägt aus Solidarität falsche Bärte.'] });
+  ev('zwerg_bier', 'race', 'kingdom', 'Braurecht', { weight: 1, cooldown: 6, when: race('dwarf'),
+    effects: [{ stock: 'food', add: [-20, -8] }, { mod: 'happiness', add: 6, years: 3 }],
+    texts: ['Die Zwerge {kingdom_dat} brauen ein Gerstenbier, so stark, dass die Kessel sich verbiegen. Die Laune ist prächtig.',
+      'In {capital} wird das Reinheitsgebot für Malzbier ausgerufen: Malz, Wasser und Gebrummel.',
+      'Braufest {kingdom_in}: {NWord} Fässer werden geleert. Die Vorräte schrumpfen, das Singen wird lauter.'] });
+  ev('ork_kraftprobe', 'race', 'city', 'Kraftprobe', { weight: 1, cooldown: 5, when: race('orc'),
+    effects: [{ mod: 'strength', mul: 1.12, years: 3 }, { pop: -1, cause: 'event' }],
+    texts: ['Die Orks von {city} veranstalten eine Kraftprobe: Wer hebt den Ochsen? {Person} schafft es. Ein anderer übernimmt sich gründlich.',
+      'In {city} wird Steineweitwurf gespielt. Ein Stein fliegt bis ins Nachbardorf. Ein Zuschauer kehrt nicht zurück.',
+      'Ringkampf in {city}! {Person} gewinnt, die anderen trainieren seitdem noch härter.'] });
+  ev('ork_brüllen', 'race', 'pair', 'Grenzbrüllen', { weight: 1, cooldown: 6, when: c => c.race === 'orc' ? 2 : 0, rel: ['peace', 'war'],
+    effects: [{ opinion: [-18, -8] }, { mod: 'aggression', add: 0.08, years: 3 }],
+    texts: ['Die Orks {kingdom_dat} brüllen an der Grenze so laut, dass in {otherCity} die Milch sauer wird.',
+      '{Kingdom_nom} schickt {other_dat} eine Herausforderung: ein Wettbrüllen. {Other_nom} lehnt höflich ab, was als Feigheit gilt.',
+      'Ein orkischer Trupp aus {capital} hüpft brüllend vor den Toren von {otherCity} herum. Diplomatie auf Orkisch.'] });
+  ev('ork_festmahl', 'race', 'kingdom', 'Großes Fressen', { weight: 1, cooldown: 6, when: race('orc'),
+    effects: [{ stock: 'food', pct: -0.25 }, { mod: 'happiness', add: 7, years: 2 }],
+    texts: ['Die Orks {kingdom_dat} feiern das Große Fressen. Am Ende sind {num} Ochsen weg und alle sehr zufrieden.',
+      'Festmahl in {capital}: Ein Ork isst einen ganzen {@essen}-Kessel. Er bekommt einen Orden aus Knochen.',
+      'Beim orkischen Erntefest wird alles gegessen, was nicht wegläuft. Und einiges, was es versucht.'] });
+  ev('wichtel_zaehlung', 'race', 'city', 'Wichtelzählung', { weight: 1, cooldown: 6, when: race('gnome'),
+    effects: [{ pop: [2, 4] }, { stock: 'gold', add: [-8, -3] }],
+    texts: ['In {city} werden die Wichtel gezählt. Man findet {nWord} mehr als gedacht, die sich im Schrank versteckt hatten.',
+      'Die Volkszählung von {city} ergibt: Es gibt zu viele Wichtel, um sie zu zählen. Drei Zähler werden zusätzlich eingestellt, die gleich mitwohnen.',
+      '{NWord} Wichtel tauchen in {city} aus einem Maulwurfshügel auf und behaupten, schon immer hier gewohnt zu haben.'] });
+  ev('wichtel_streich', 'race', 'city', 'Wichtelstreich', { weight: 1.1, cooldown: 4, when: race('gnome'),
+    effects: [{ mod: 'happiness', add: 4, years: 2 }, { mod: 'work', mul: 0.95, years: 1 }],
+    texts: ['Die Wichtel von {city} binden allen Kühen Schleifen um die Hörner. Niemand arbeitet, alle lachen.',
+      'In {city} sind über Nacht alle Türen bunt angemalt. Die Wichtel tun unschuldig, haben aber Farbe an den Mützen.',
+      'Ein Wichtel aus {city} versteckt die Werkzeuge der {@beruf}e. Die Suche dauert eine Woche und ist sehr lustig.'] });
+  ev('wichtel_tunnel', 'race', 'kingdom', 'Wichtelpost', { weight: 1, cooldown: 6, when: race('gnome'),
+    effects: [{ mod: 'loyalty', add: 6, years: 4 }, { mod: 'immigration', mul: 1.3, years: 4 }],
+    texts: ['Die Wichtel {kingdom_dat} graben Tunnel zwischen allen Städten. Briefe kommen jetzt in einer Stunde an, Nachbarn auch.',
+      '{Kingdom_nom} eröffnet die Wichtelpost. Jede Nachricht wird von einem Wichtel persönlich vorgesungen.',
+      'Ein Netz aus Wichtelgängen verbindet {kingdom_acc}. Man fühlt sich näher, besonders wenn ein Wichtel aus dem Boden ploppt.'] });
+  ev('frosch_regen', 'race', 'city', 'Froschregen', { weight: 1, cooldown: 6, when: race('frog'),
+    effects: [{ power: 'rain' }, { mod: 'food', mul: 1.15, years: 2 }, { happy: 3 }],
+    texts: ['Die Froschlinge von {city} quaken drei Tage lang um Regen. Es regnet. Sie quaken weiter, aus Dankbarkeit.',
+      'In {city} wird der große Regentanz aufgeführt. Die Wolken kommen, die Fliegen auch, beides gut.',
+      '{Person} aus {city} quakt so schön, dass eine Wolke stehen bleibt und sich ausweint.'] });
+  ev('frosch_laich', 'race', 'city', 'Laichzeit', { weight: 1, cooldown: 5, when: race('frog'),
+    effects: [{ mod: 'growth', mul: 1.35, years: 2 }, { mod: 'work', mul: 0.92, years: 1 }],
+    texts: ['Laichzeit in {city}! Alle Froschlinge sitzen im Teich und sind beschäftigt. Die Arbeit ruht, die Kinderstube füllt sich.',
+      'In {city} ist der Teich voller Laich. Die Kinderzimmer werden knapp.',
+      'Die Froschlinge von {city} feiern die Laichzeit mit Gesang. Niemand schläft, aber alle sind glücklich.'] });
+  ev('frosch_fliegen', 'race', 'kingdom', 'Fliegenschwemme', { weight: 1, cooldown: 6, when: race('frog'),
+    effects: [{ stock: 'food', add: [20, 40] }, { mod: 'happiness', add: 3, years: 2 }],
+    texts: ['Ein warmer Sommer bringt Fliegen über {kingdom_acc}. Die Froschlinge essen sich rund und satt.',
+      'Über {capital} schwirren Wolken von Mücken. Für die Froschlinge ist es ein Festbankett.',
+      'Die Fliegenernte {kingdom_dat} ist ein Rekord. Man trocknet sie für den Winter, guten Appetit.'] });
+  ev('mensch_buergerverein', 'race', 'city', 'Bürgerverein', { weight: 1, cooldown: 6, when: race('human'),
+    effects: [{ mod: 'build', mul: 1.1, years: 3 }, { loyal: 4 }],
+    texts: ['In {city} gründet sich der Verein der Freunde des geraden Zauns. Erste Amtshandlung: Zäune gerade machen.',
+      'Der Bürgerverein von {city} beschließt, die Stadt zu verschönern. {Person} bringt Blumenkästen, alle packen mit an.',
+      'In {city} gibt es jetzt {num} Vereine. Jeder hat eine Fahne, keiner hat Zeit, aber gebaut wird trotzdem fleißig.'] });
+  ev('mensch_kompromiss', 'race', 'kingdom', 'Kompromiss', { weight: 1, cooldown: 6, when: race('human'),
+    effects: [{ mod: 'happiness', add: 3, years: 3 }, { mod: 'gold', mul: 1.08, years: 3 }],
+    texts: ['Nach langem Streit über {@ding} einigt man sich {kingdom_in} auf einen Kompromiss: Alle sind ein bisschen unzufrieden, also zufrieden.',
+      'In {capital} wird ein Streit mit einem Handschlag beigelegt. Anschließend gibt es Würstchen.',
+      '{Kingdom_nom} entdeckt das Mittelmaß: Nicht zu viel, nicht zu wenig. Die Leute fühlen sich wohl dabei.'] });
+  ev('mensch_jahrmarkt', 'race', 'city', 'Jahrmarkt', { weight: 1, cooldown: 5, when: race('human'),
+    effects: [{ stock: 'gold', add: [12, 28] }, { happy: 4 }],
+    texts: ['Jahrmarkt in {city}! Es gibt Zuckerwatte, einen Flohzirkus und einen Mann, der behauptet, der stärkste der Welt zu sein.',
+      'Auf dem Jahrmarkt von {city} wird {person} zur Rübenkönigin gekrönt. Die Händler machen gute Geschäfte.',
+      'Der Jahrmarkt in {city} lockt Besucher aus dem ganzen Land. Das Karussell wird von einem sehr geduldigen Ochsen gezogen.'] });
+
+  // ===========================================================================
+  // REGIERUNGSEIGENES
+  // ===========================================================================
+  const gv = g => c => c.gov === g ? 2.2 : 0;
+  ev('tribe_trommel', 'gov', 'kingdom', 'Trommelnacht', { weight: 1, cooldown: 5, when: gv('tribe'),
+    effects: [{ mod: 'loyalty', add: 6, years: 3 }, { happy: 3 }],
+    texts: ['Der Stamm {kingdom_dat} trommelt eine ganze Nacht. Die Nachbarn können nicht schlafen, der Stamm fühlt sich verbunden.',
+      'Ums Feuer von {capital} erzählt {leader} von den Ahnen. Jeder bekommt eine Geschichte und ein Stück Brot.',
+      'Trommelnacht {kingdom_in}: Man trommelt so laut, dass sich ein Gewitter beschwert.'] });
+  ev('tribe_jagd', 'gov', 'city', 'Große Jagd', { weight: 1, cooldown: 5, when: c => c.gov === 'tribe' && !c.law('jagdverbot') ? 2 : 0,
+    effects: [{ stock: 'food', add: [20, 40] }, { mod: 'strength', mul: 1.05, years: 2 }],
+    texts: ['Die große Jagd von {city} bringt ein Wildschwein so groß wie eine Hütte. Es wird tagelang gefeiert.',
+      'Die Jäger von {city} kehren zurück: mit Beute, Kratzern und einer sehr übertriebenen Geschichte.',
+      '{Person} aus {city} erlegt einen Hirsch mit bloßen Händen. Zumindest erzählt {person} das so.'] });
+  ev('tribe_totem', 'gov', 'city', 'Neuer Totempfahl', { weight: 1, cooldown: 6, when: gv('tribe'),
+    effects: [{ stock: 'wood', add: -12 }, { mod: 'happiness', add: 5, years: 4 }],
+    texts: ['In {city} wird ein Totempfahl geschnitzt. Ganz oben thront ein Dachs mit sehr strengem Blick.',
+      'Der neue Totempfahl von {city} zeigt alle Ahnen des Stammes. Bei einem ist man sich nicht sicher, ob es eine Kartoffel ist.',
+      'Die Schnitzer von {city} erschaffen einen Totem, so hoch wie drei Bäume. Er wackelt, aber er wacht.'] });
+  ev('monarchy_ball', 'gov', 'kingdom', 'Hofball', { weight: 1, cooldown: 5, when: gv('monarchy'),
+    effects: [{ stock: 'gold', add: [-35, -15] }, { mod: 'loyalty', add: 8, years: 3 }],
+    texts: ['{Leader} gibt einen Hofball. Die Statthalter tanzen Polonaise und versprechen ewige Treue.',
+      'Großer Ball am Hof {kingdom_dat}! Die Perücken sind höher als je zuvor, die Kasse ist leerer als je zuvor.',
+      'Beim Hofball in {capital} tritt {leader} {person} auf den Fuß. Man spricht noch Jahre davon, mit Stolz.'] });
+  ev('monarchy_hofnarr', 'gov', 'kingdom', 'Hofnarr', { weight: 1, cooldown: 6, when: gv('monarchy'),
+    effects: [{ mod: 'happiness', add: 5, years: 3 }, { mod: 'taxes', add: -0.005, years: 3 }],
+    texts: ['Ein neuer Hofnarr {kingdom_dat} macht Witze über die Steuern. {Leader} lacht so sehr, dass die Steuern gesenkt werden.',
+      '{Person}, der Hofnarr von {capital}, jongliert mit der Krone. {Leader} ist amüsiert, das Volk auch.',
+      'Der Hofnarr {kingdom_dat} imitiert {leader} so gut, dass er einen Tag regieren darf. Er senkt die Steuern.'] });
+  ev('monarchy_prinz', 'gov', 'kingdom', 'Königliches Kind', { weight: 0.8, prio: 1.5, cooldown: 10, when: gv('monarchy'),
+    effects: [{ happy: 8 }, { mod: 'loyalty', add: 5, years: 6 }, { stock: 'food', add: -10 }],
+    texts: ['Am Hof {kingdom_dat} wird ein Thronfolger geboren. Er schreit lauter als alle Herolde zusammen.',
+      'Glocken läuten in {capital}: {leader} ist Elternteil geworden. Das Kind bekommt {num} Vornamen.',
+      'Ein Prinzesschen wird {kingdom_in} geboren. Das ganze Reich bekommt einen Tag frei und Kuchen.'] });
+  ev('democracy_buergerhaushalt', 'gov', 'kingdom', 'Bürgerhaushalt', { weight: 1, cooldown: 6, when: gv('democracy'),
+    effects: [{ mod: 'build', mul: 1.12, years: 3 }, { mod: 'happiness', add: 3, years: 3 }],
+    texts: ['{Kingdom_nom} lässt die Bürger über den Haushalt abstimmen. Gewinner: mehr Bänke, mehr Brunnen, eine Rutsche.',
+      'Bürgerhaushalt {kingdom_in}: {pct} % stimmen für neue Dächer, {pctNo} % für einen Brunnen mit Limonade.',
+      'In {capital} entscheidet das Volk über die Bauprojekte. Es wird gebaut, als gäbe es kein Morgen.'] });
+  ev('democracy_ausschuss', 'gov', 'kingdom', 'Ausschuss', { weight: 1, cooldown: 5, when: gv('democracy'),
+    effects: [{ mod: 'build', mul: 0.9, years: 2 }, { mod: 'loyalty', add: 4, years: 3 }],
+    texts: ['Ein Ausschuss {kingdom_dat} prüft, ob man einen Ausschuss für Ausschüsse braucht. Ergebnis in {years} Jahren.',
+      'Das Parlament von {capital} gründet einen Unterausschuss für Zaunhöhen. Alles verzögert sich, aber gründlich.',
+      '{Kingdom_nom} lässt {@ding} von {num} Gutachtern prüfen. Alle sind sich einig: Es ist {@ding}.'] });
+  ev('democracy_skandal', 'gov', 'kingdom', 'Ministerrücktritt', { weight: 1, cooldown: 6, when: gv('democracy'),
+    effects: [{ mod: 'happiness', add: -3, years: 1 }, { mod: 'loyalty', add: 3, years: 3 }],
+    texts: ['Ein Minister {kingdom_dat} tritt zurück, weil er {@ding} privat benutzt hat. Die Presse jubelt, das Volk vertraut wieder.',
+      'Rücktritt in {capital}: Die Ministerin für Brunnen hat in den Brunnen gespuckt. Ein Nachfolger schwört Besserung.',
+      'Die Zeitung {kingdom_dat} enthüllt: Der Bauminister wohnt im Zelt. Er tritt zurück und baut sich ein Haus.'] });
+  ev('fascism_parade', 'gov', 'kingdom', 'Pflichtparade', { weight: 1.1, cooldown: 4, when: gv('fascism'),
+    effects: [{ mod: 'work', mul: 0.94, years: 1 }, { mod: 'strength', mul: 1.08, years: 2 }, { happy: -4 }],
+    texts: ['{Leader} lässt eine Parade abhalten. Alle müssen jubeln, die Kinder bekommen dafür Holzfähnchen. Niemand arbeitet.',
+      'Die Pflichtparade in {capital} dauert {num} Stunden. Ein Soldat marschiert im Kreis, weil keiner ihm „Halt“ sagt.',
+      'Militärparade {kingdom_in}: Die Stiefel glänzen, die Gesichter nicht.'] });
+  ev('fascism_spitzel', 'gov', 'city', 'Spitzelwesen', { weight: 1.1, cooldown: 4, when: gv('fascism'),
+    effects: [{ mod: 'happiness', add: -6, years: 3 }, { loyal: 6 }],
+    texts: ['In {city} beobachten sich alle gegenseitig. {Person} meldet den Nachbarn, weil er zu fröhlich gepfiffen hat.',
+      'Die Spitzel von {city} schreiben so viele Berichte, dass das Papier knapp wird. Die Leute flüstern nur noch.',
+      'In {city} wird ein Briefkasten für Anzeigen aufgestellt. Er quillt über, meist mit Beschwerden über den Briefkasten.'] });
+  ev('fascism_widerstand', 'gov', 'city', 'Flugblätter', { weight: 1, prio: 1.5, cooldown: 5, when: c => c.gov === 'fascism' && c.L.happy < 40 ? 2.5 : 0,
+    effects: [{ loyal: -10 }, { mod: 'happiness', add: 3, years: 2 }],
+    texts: ['In {city} tauchen nachts Flugblätter auf: „Wir wollen Kuchen statt Kommandos!“ Die Leute lesen sie heimlich und lächeln.',
+      'Unbekannte malen in {city} Blumen auf die grauen Mauern. Die Wache wischt, die Blumen kommen wieder.',
+      'Der Widerstand in {city} wächst: Beim Pflichtjubel jubelt jemand absichtlich falsch. Alle machen mit.'] });
+  ev('communism_soll', 'gov', 'city', 'Planübererfüllung', { weight: 1.1, cooldown: 4, when: gv('communism'),
+    effects: [{ stock: 'food', add: [15, 30] }, { mod: 'work', mul: 0.95, years: 2 }],
+    texts: ['{city} meldet 300 % Planerfüllung bei Rüben. Niemand weiß, wohin damit, und vor lauter Stolz arbeitet keiner mehr.',
+      'Die Brigade „Morgenrot“ aus {city} übererfüllt das Soll. Sie wird ausgezeichnet und schläft danach eine Woche.',
+      'In {city} werden {big} Rüben geerntet und {big} Formulare ausgefüllt. Beides wird gestapelt.'] });
+  ev('communism_schlange', 'gov', 'city', 'Warteschlange', { weight: 1.1, cooldown: 4, when: gv('communism'),
+    effects: [{ mod: 'work', mul: 0.93, years: 1 }, { mod: 'happiness', add: -3, years: 1 }],
+    texts: ['In {city} bildet sich eine Schlange vor dem Laden. Niemand weiß, wofür, aber alle stellen sich an.',
+      'Die Warteschlange in {city} ist so lang, dass sie bis ins Nachbardorf reicht. Ganz vorne gibt es Knöpfe.',
+      '{Person} aus {city} steht seit drei Wochen an. Es gibt Socken, aber nur linke.'] });
+  ev('communism_held', 'gov', 'kingdom', 'Held der Arbeit', { weight: 1, cooldown: 5, when: gv('communism'),
+    effects: [{ mod: 'work', mul: 1.1, years: 3 }, { mod: 'build', mul: 1.05, years: 3 }],
+    texts: ['{Person} wird zum Helden der Arbeit {kingdom_dat} ernannt, weil {person} {big} Ziegel an einem Tag gestapelt hat. Alle eifern nach.',
+      'Das Volkshaus von {capital} ehrt {person} mit einer Blechmedaille. Seitdem schuften alle für eine eigene.',
+      'Plakate in ganz {kingdom} zeigen {person} mit Schaufel. Das spornt an, sagen die Plakate.'] });
+  ev('theocracy_fasten', 'gov', 'kingdom', 'Fastenzeit', { weight: 1, cooldown: 5, when: gv('theocracy'),
+    effects: [{ stock: 'food', add: [15, 30] }, { mod: 'happiness', add: -3, years: 1 }, { mod: 'loyalty', add: 5, years: 3 }],
+    texts: ['{Leader} ruft eine Fastenzeit zu Ehren von {deity} aus. Die Vorräte wachsen, die Mägen knurren.',
+      'Fastenzeit {kingdom_in}: Erlaubt sind nur Wasser und Gebete. {Person} betet um ein Würstchen.',
+      'Die Priester {kingdom_dat} verkünden: {deity} mag keine vollen Teller. Die Speisekammern füllen sich.'] });
+  ev('theocracy_reliquie', 'gov', 'city', 'Reliquie', { weight: 1, cooldown: 6, when: gv('theocracy'),
+    effects: [{ stock: 'gold', add: [20, 40] }, { mod: 'happiness', add: 4, years: 3 }],
+    texts: ['In {city} wird eine Reliquie gefunden: die Lieblingsgabel von {deity}. Pilger zahlen gern fürs Anschauen.',
+      'Ein heiliger Knochen taucht in {city} auf. Er gehörte einem Huhn, aber einem sehr frommen.',
+      'Die Reliquie von {city} – ein Stein mit der Form eines Knödels – lockt Gläubige und Gold an.'] });
+  ev('theocracy_zehnt', 'gov', 'kingdom', 'Zehnt', { weight: 1, cooldown: 5, when: gv('theocracy'),
+    effects: [{ stock: 'gold', add: [15, 35] }, { mod: 'happiness', add: -4, years: 2 }],
+    texts: ['Der Tempel {kingdom_dat} verlangt den Zehnten. {Deity} braucht angeblich einen neuen Mantel.',
+      'Die Priester sammeln den Zehnten ein. In {capital} zahlt man in Hühnern, die Priester sind nicht glücklich.',
+      'Für einen größeren Schrein erhebt {leader} eine Abgabe. Die Gläubigen murren leise und fromm.'] });
+  ev('republic_bank', 'gov', 'kingdom', 'Bankgründung', { weight: 1, cooldown: 6, when: gv('republic'),
+    effects: [{ mod: 'gold', mul: 1.25, years: 5 }, { stock: 'gold', add: -20 }],
+    texts: ['{Kingdom_nom} gründet die erste Bank. Man legt Gold hinein, und am Ende des Jahres ist mehr da. Magie!',
+      'In {capital} eröffnet das Bankhaus {person} & Söhne. Zinsen werden in Kuchen ausgezahlt.',
+      'Die Händler {kingdom_dat} erfinden den Schuldschein. Plötzlich sind alle reich, auf dem Papier.'] });
+  ev('republic_zoll', 'gov', 'pair', 'Zollstreit', { weight: 1, cooldown: 6, when: gv('republic'), rel: ['peace', 'alliance'],
+    effects: [{ stock: 'gold', add: [15, 30] }, { opinion: [-15, -8] }],
+    texts: ['{Kingdom_nom} erhebt Zoll auf Waren aus {other_dat}. Die Kasse klingelt, die Nachbarn murren.',
+      'Ein Zollstreit zwischen {kingdom} und {other}: Es geht um Gurken, Prinzipien und sehr viel Gold.',
+      'Die Zöllner von {capital} verlangen für jede Kuh aus {otherCity} eine Münze. Die Kühe sind empört.'] });
+  ev('republic_luxus', 'gov', 'city', 'Luxusmode', { weight: 1, cooldown: 5, when: gv('republic'),
+    effects: [{ stock: 'gold', add: [-25, -10] }, { mod: 'happiness', add: 5, years: 2 }, { mod: 'immigration', mul: 1.3, years: 2 }],
+    texts: ['In {city} tragen jetzt alle Hüte mit Federn. Je höher die Feder, desto wichtiger der Kaufmann.',
+      'Eine Mode aus Seide erobert {city}. Die Kasse leert sich, die Stadt glänzt und zieht Besucher an.',
+      '{Person} aus {city} trägt Schuhe mit goldenen Schnallen. Bald trägt die ganze Stadt welche.'] });
+  ev('anarchy_kommune', 'gov', 'city', 'Gemeinschaftsgarten', { weight: 1, cooldown: 5, when: gv('anarchy'),
+    effects: [{ mod: 'food', mul: 1.15, years: 3 }, { happy: 4 }],
+    texts: ['Die Kommune von {city} legt einen Gemeinschaftsgarten an. Jeder pflanzt, was er will. Es wächst erstaunlich viel.',
+      'In {city} gehört der Garten allen. Auch die Schnecken halten sich daran.',
+      'Ein bunter Garten wächst mitten in {city}. {Person} hat Kürbisse und Sonnenblumen gesät, alle ernten.'] });
+  ev('anarchy_streit', 'gov', 'kingdom', 'Dauerplenum', { weight: 1, cooldown: 4, when: gv('anarchy'),
+    effects: [{ mod: 'work', mul: 0.9, years: 2 }, { mod: 'happiness', add: 2, years: 2 }],
+    texts: ['Das Plenum {kingdom_dat} diskutiert im {years}. Jahr, ob ein Tor Herrschaft ist. Die Tür bleibt vorerst angelehnt.',
+      'Im Plenum von {capital} wird über die Farbe des Protokollbuchs abgestimmt. Ergebnis: alle Farben.',
+      'Das Plenum {kingdom_dat} hat eine Rednerliste mit {big} Namen. Gearbeitet wird zwischen den Beiträgen.'] });
+  ev('anarchy_tausch', 'gov', 'city', 'Tauschring', { weight: 1, cooldown: 5, when: gv('anarchy'),
+    effects: [{ stock: 'wood', add: [10, 20] }, { stock: 'food', add: [10, 20] }, { loyal: 4 }],
+    texts: ['In {city} entsteht ein Tauschring: eine Stunde Holzhacken gegen eine Stunde Vorlesen. Alle haben mehr.',
+      'Der Tauschmarkt von {city} läuft ohne Geld. {Person} tauscht {@ding} gegen drei Säcke Mehl.',
+      'In {city} tauscht man jetzt alles gegen alles. Am Ende des Tages hat jeder etwas, das er braucht.'] });
+
+  // ===========================================================================
+  // WELTGESCHEHEN (alle Reiche)
+  // ===========================================================================
+  ev('komet', 'world', 'world', 'Komet', { weight: 1, cooldown: 25,
+    effects: [{ mod: 'happiness', add: 3, years: 2, on: 'all' }, { mod: 'aggression', add: -0.05, years: 2, on: 'all' }],
+    texts: ['Ein Komet zieht über die ganze Welt. Alle Reiche schauen nach oben und vergessen kurz ihren Streit.',
+      'Ein Schweif aus Licht am Himmel! Die Gelehrten streiten, ob es ein Omen ist. Die Kinder wünschen sich etwas.',
+      'Ein Komet erhellt die Nächte. Selbst die Generäle sitzen im Gras und staunen.'] });
+  ev('weltkaese', 'world', 'world', 'Käsemangel', { weight: 1, cooldown: 25,
+    effects: [{ mod: 'happiness', add: -3, years: 2, on: 'all' }, { mod: 'food', mul: 0.95, years: 2, on: 'all' }],
+    texts: ['Weltweiter Käsemangel! Niemand weiß, wohin der Käse verschwunden ist. Die Mäuse schweigen.',
+      'Auf der ganzen Welt wird der Käse knapp. Selbst die Könige essen Brot ohne Belag.',
+      'Eine Käsekrise erschüttert alle Reiche. In den Chroniken spricht man vom „Jahr des trockenen Brotes“.'] });
+  ev('goldenes_jahr', 'world', 'world', 'Goldenes Jahr', { weight: 1, cooldown: 25,
+    effects: [{ mod: 'food', mul: 1.15, years: 2, on: 'all' }, { mod: 'growth', mul: 1.1, years: 2, on: 'all' }],
+    texts: ['Ein goldenes Jahr bricht an: Überall wächst das Korn, und alle Kühe geben doppelt Milch.',
+      'Die ganze Welt erlebt einen Sommer wie aus dem Bilderbuch. Die Chronisten haben nichts zu meckern.',
+      'Sonne und Regen im besten Takt: In allen Reichen quellen die Scheunen über.'] });
+  ev('grosser_winter', 'world', 'world', 'Großer Winter', { weight: 1, cooldown: 25,
+    effects: [{ mod: 'food', mul: 0.85, years: 1, on: 'all' }, { mod: 'work', mul: 0.92, years: 1, on: 'all' }],
+    texts: ['Ein großer Winter legt sich über die Welt. Selbst die Wölfe tragen Schals.',
+      'Schnee bis zum Dach in allen Reichen. Man arbeitet langsam und isst schnell.',
+      'Der kälteste Winter seit Menschengedenken: Die Brunnen frieren, die Nasen auch.'] });
+  ev('friedensfest', 'world', 'world', 'Weltfriedenstag', { weight: 1, cooldown: 30,
+    effects: [{ mod: 'aggression', add: -0.15, years: 3, on: 'all' }, { mod: 'happiness', add: 2, years: 3, on: 'all' }],
+    texts: ['Ein Weltfriedenstag wird ausgerufen. Alle Reiche schicken Kuchen über die Grenzen.',
+      'Wanderbarden singen in allen Reichen dasselbe Lied über Frieden. Es ist sehr eingängig.',
+      'Die Völker der Welt beschließen, einen Tag lang nett zueinander zu sein. Es gefällt ihnen so, dass sie es verlängern.'] });
+  ev('wanderzirkus', 'world', 'world', 'Wanderzirkus', { weight: 1, cooldown: 20,
+    effects: [{ mod: 'happiness', add: 4, years: 1, on: 'all' }, { mod: 'immigration', mul: 1.2, years: 2, on: 'all' }],
+    texts: ['Ein Wanderzirkus zieht durch alle Reiche. Ein Bär fährt Einrad, ein Huhn rechnet.',
+      'Der große Zirkus Kunterbunt tourt um die Welt. Überall laufen ihm Leute hinterher und bleiben irgendwo hängen.',
+      'Akrobaten, Gaukler und ein singender Esel besuchen jedes Reich der Welt. Die Laune steigt überall.'] });
+
   // @@MEHR@@
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

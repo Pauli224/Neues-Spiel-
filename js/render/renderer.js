@@ -141,7 +141,7 @@
         if (d) S.drawFast(g, d.key, x * 8 + d.dx, y * 8 + d.dy, 0, false);
       }
       const ls = rows[y - y0];
-      if (ls) { ls.sort((p, q) => p.x - q.x); for (const s of ls) this.drawStruct(g, s, this._cityKTmp, false, bars); }
+      if (ls) { ls.sort((p, q) => p.x - q.x); for (const s of ls) { this.drawStruct(g, s, this._cityKTmp, false, bars); if (s.device === 'spikes') this.drawDevice(g, s); } }
     }
     c.decorDirty = false;
     c.decorT = this.time;
@@ -165,7 +165,14 @@
       const k = h % 5 === 0 && this.S.has('d_deadtree_0') ? 'd_deadtree_0' : 'd_stump_0';
       return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : null;
     }
-    if (st.owner && st.owner[i] >= 0) { const d = this.cityDeco(i); if (d) return d; }
+    if (st.owner && st.owner[i] >= 0) {
+      // Ergebnis je Kachel eine Sekunde zwischenspeichern (Nachbarsuche ist teuer)
+      const N = st.W * st.H;
+      if (!this._decoC || this._decoC.length !== N || this.time - this._decoT > 1) { this._decoC = this._decoC && this._decoC.length === N ? this._decoC.fill(-1) : new Int16Array(N).fill(-1); this._decoT = this.time; this._decoObj = this._decoObj || []; }
+      let c = this._decoC[i];
+      if (c === -1) { const d = this.cityDeco(i); if (d) { c = this._decoObj.indexOf(d.key); if (c < 0) { this._decoObj.push(d.key); c = this._decoObj.length - 1; } } else c = -2; this._decoC[i] = c; }
+      if (c >= 0) return { key: this._decoObj[c], dx: 0, dy: 0 };
+    }
     return this.S.decorFor(st.terrain[i], st.variant ? st.variant[i] : 0);
   };
 
@@ -342,7 +349,7 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
@@ -352,6 +359,7 @@
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
+      if (f.type === 'muzzle' && this.st) { (this.muzzleT || (this.muzzleT = new Map())).set((f.y | 0) * this.st.W + (f.x | 0), this.time); }
       if (f.type === 'flash') this.flash = Math.max(this.flash || 0, 0.9);
       let sh = f.type === 'meteor' ? 0.35 : 0;
       if (f.type === 'mushroom' || f.type === 'shockwave') sh = 0.8;
@@ -442,6 +450,8 @@
   // Bauwerks-Variante 0..255 (alte Welten ohne Feld: aus der ID)
   function varOf(s) { return s.variant != null ? s.variant & 255 : (Math.imul(s.id | 0, 2654435761) >>> 24) & 255; }
 
+  function k2(t) { return ((t * 20) | 0) & 1; }
+
   function rnd(seed, k) { let h = (seed * 374761393 + k * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 
   Renderer.prototype.drawFx = function (g, dt) {
@@ -453,10 +463,17 @@
       out.push(f);
       const k = f.t / f.d, px = f.x * 8, py = f.y * 8;
       switch (f.type) {
+        case 'muzzle': {
+          const k = S.has('fx_muzzle_' + (k2(f.t) ? 1 : 0)) ? 'fx_muzzle_' + (k2(f.t) ? 1 : 0) : 'fx_sparkle_0';
+          S.drawFast(g, k, px - 4, py - 8, 0, false);
+          break;
+        }
+        case 'bolt_shot':
         case 'arrow': {
+          const ak = f.type === 'bolt_shot' && S.has('fx_bolt_shot') ? 'fx_bolt_shot' : 'fx_arrow';
           const x = px + ((f.x2 * 8) - px) * k, y = py + ((f.y2 * 8) - py) * k - Math.sin(k * Math.PI) * 6;
           const ang = Math.atan2((f.y2 - f.y) * 8, (f.x2 - f.x) * 8);
-          g.save(); g.translate(x, y); g.rotate(ang); S.drawFast(g, 'fx_arrow', -4, -4, 0, false); g.restore();
+          g.save(); g.translate(x, y); g.rotate(ang); S.drawFast(g, ak, -4, -4, 0, false); g.restore();
           break;
         }
         case 'bolt':
@@ -603,15 +620,7 @@
       }
       case 'field': return 's_field_' + Math.max(0, Math.min(3, s.growth | 0));
       case 'monument': return 's_monument_' + style;
-      case 'wall': {
-        const st = this.st;
-        if (st.terrain[s.y * st.W + s.x] === WW.T.RIVER && style !== 'anarchy') return S.waterWallKey(style, s.level, (s.mask & 10) ? 'h' : 'v');
-        return S.wallKey(style, s.level, s.mask);
-      }
-      case 'gate':
-        if (style === 'anarchy') return S.wallKey(style, s.level, s.mask);
-        return S.gateKey(style, s.level, s.orient === 'v' ? 'v' : 'h');
-      case 'tower': return S.towerKey(style, s.level) || S.wallKey(style, s.level, s.mask);
+      case 'wall': case 'gate': case 'tower': return this.wallishKey(s, style);
       case 'lair': return this.S.has('s_lair_' + s.kind) ? 's_lair_' + s.kind : 's_ruin';
       case 'ruin': return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
       default: return this.S.has('s_' + s.type) ? 's_' + s.type : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
@@ -648,8 +657,27 @@
       if (typeof f === 'number' && f > 0) walk = f;
       else if (f && typeof f === 'object') { walk = f.walk || f.frames || 2; if (f.stand != null) stand = f.stand; else if (f.idle != null) stand = f.idle; }
     }
-    if (!u.moving) return stand;
+    if (!u.moving) {
+      // Kampf-Pose im Wechsel mit dem Steh-Frame
+      if (this._hasAttack == null) { let f = null; try { f = typeof S.unitFrames === 'function' ? S.unitFrames('soldier') : null; } catch (e) { f = null; } this._hasAttack = !!(f && f.attack); }
+      if (this._hasAttack && u.foe != null && u.foe >= 0 && ((this.time * 4 + (u.id & 3)) | 0) & 1) return 'attack';
+      return stand;
+    }
     return ((this.time * (walk > 2 ? 9 : 5) + (u.id & 7) * 0.37) | 0) % walk;
+  };
+
+  // Mauer, Tor, Turm: Stufe bis 6 durchreichen; fehlt das Sprite, nächstniedrigere Stufe
+  Renderer.prototype.wallishKey = function (s, style) {
+    const S = this.S, st = this.st;
+    const river = st.terrain[s.y * st.W + s.x] === WW.T.RIVER;
+    for (let lv = Math.max(1, s.level | 0); lv >= 1; lv--) {
+      let k = null;
+      if (s.type === 'wall') k = river && style !== 'anarchy' ? S.waterWallKey(style, lv, (s.mask & 10) ? 'h' : 'v') : S.wallKey(style, lv, s.mask);
+      else if (s.type === 'gate') k = style === 'anarchy' ? S.wallKey(style, lv, s.mask) : S.gateKey(style, lv, s.orient === 'v' ? 'v' : 'h');
+      else k = S.towerKey(style, lv) || S.wallKey(style, lv, s.mask);
+      if (k && S.has(k)) return k;
+    }
+    return s.type === 'gate' ? 's_gate_1_h' : 's_wall_1_' + (s.mask & 15);
   };
 
   // Sprite über Helfer (Schlüssel-Funktion) oder Liste, gewählt nach variant; null wenn nichts existiert
@@ -668,7 +696,9 @@
       let k = null;
       try { k = S.unitKey(race, role, g, frame); } catch (e) { k = null; }
       if (k && S.has(k)) return k;
+      if (typeof frame !== 'number') { try { k = S.unitKey(race, role, g, 0); } catch (e) { k = null; } if (k && S.has(k)) return k; }
     }
+    if (typeof frame !== 'number') frame = 0;
     const ck = this._ukCache || (this._ukCache = new Map());
     const id = race + '|' + role + '|' + gov + '|' + frame;
     let k = ck.get(id);
@@ -810,6 +840,7 @@
     const st = this.st, S = this.S, W = st.W;
     const y0 = vt.y0, y1 = vt.y1, nrows = y1 - y0 + 1;
     const rowU = this.rowU, rowS = this.rowS;
+    if (this._spikes) this._spikes.length = 0;
     for (let r = 0; r < nrows; r++) { (rowU[r] || (rowU[r] = [])).length = 0; (rowS[r] || (rowS[r] = [])).length = 0; }
     let drawn = 0;
     const kings = this._kings || (this._kings = new Map());
@@ -827,6 +858,7 @@
         const by = s.y + s.h - 1;
         if (by < y0 || by > y1 || s.x + s.w - 1 < sx0 || s.x > sx1) continue;
         rowS[by - y0].push(s);
+        if (s.device === 'spikes' && by + 1 - y0 < nrows) (this._spikes || (this._spikes = [])).push(s);
       }
     }
     // Figuren und Tiere
@@ -885,6 +917,7 @@
         }
       }
       for (const s of ls) if (s.type !== 'field') { this.drawStruct(ctx, s, cityK, zoomBig, bars); drawn++; }
+      if (this._spikes && this._spikes.length) for (const sp of this._spikes) if (sp.y + sp.h === y) this.drawDevice(ctx, sp);
     }
     // Fliegende Wesen über allem, mit Schatten am Boden
     for (const it of flyers) {
@@ -960,6 +993,8 @@
     const fh = inf ? inf.fh : s.h;
     const px = s.x * 8, py = (s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
+    // Verteidigungsgerät auf dem Mauerstück (Stacheln stehen davor und werden eine Zeile tiefer gezeichnet)
+    if (s.device && s.device !== 'spikes' && s.built !== false) this.drawDevice(ctx, s);
     // Lagerfeuer: Feuer-Frames der Lager-Sprites, sonst fx_fire in der Mitte
     if (s.type === 'center' && s.stage === 0 && s.built !== false && key.indexOf('s_camp') === 0) {
       const fr = ((this.time * 6) | 0) % 3;
@@ -984,6 +1019,13 @@
     if (s.upgrading) return;
     if (!s.built && s.progress > 0) bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.progress, col: '#f2b541' });
     else if (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin') bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.hp / s.maxHp, col: '#e2543d' });
+  };
+
+  Renderer.prototype.drawDevice = function (ctx, s) {
+    const S = this.S, base = 's_walldev_' + s.device;
+    const shot = this.muzzleT && this.time - (this.muzzleT.get(s.y * this.st.W + s.x) || -9) < 0.25;
+    const k = S.has(base + '_' + (shot ? 1 : 0)) ? base + '_' + (shot ? 1 : 0) : (S.has(base) ? base : null);
+    if (k) S.drawFast(ctx, k, s.x * 8, s.y * 8 + (s.device === 'spikes' ? 8 : 0), 0, false);
   };
 
   // Figur an der Göttlichen Hand: hängt am Zeiger, zappelt

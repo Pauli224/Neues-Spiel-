@@ -327,7 +327,9 @@
     { const mb = this.modsBlock(c); if (mb) body.appendChild(mb); }
     // Mauer
     const w = c.wall || {};
-    const wName = w.level > 0 || w.total > 0 ? (WW.WALL_STYLE_NAMES[w.style] || 'Mauer') : 'keine';
+    const gl = k && WW.GOVERNMENTS[k.gov] && WW.GOVERNMENTS[k.gov].wallLevels;
+    const lvName = gl && w.level > 0 && gl[w.level - 1] ? (gl[w.level - 1].name || gl[w.level - 1]) : null;
+    const wName = w.level > 0 || w.total > 0 ? (lvName || WW.WALL_STYLE_NAMES[w.style] || 'Mauer') : 'keine';
     const wsec = h('div.sec', [h('h3', 'Mauer')]);
     if (w.total > 0) {
       const p = Math.round(100 * (w.built || 0) / Math.max(1, w.total));
@@ -335,6 +337,12 @@
       wsec.appendChild(h('div.bar' + (p < 100 ? '.warn' : ''), [h('b', { style: { width: p + '%' } })]));
       wsec.appendChild(h('div.muted', { style: { marginTop: '4px' } }, (w.gates && w.gates.length ? w.gates.length + ' Tor' + (w.gates.length > 1 ? 'e' : '') : '') +
         (w.towers && w.towers.length ? ' · ' + w.towers.length + ' Türme' : '')));
+      // Verteidigungsgeräte auf der Mauer
+      const dev = {};
+      for (const s of sim.state.structs) if (s.cityId === c.id && s.device && !s.dead) dev[s.device] = (dev[s.device] || 0) + 1;
+      const DN = WW.WALL_DEVICES || {};
+      const dl = Object.keys(dev).map(d => ((DN[d] && (DN[d].name || DN[d])) || d) + ' ×' + dev[d]);
+      if (dl.length) wsec.appendChild(h('div.muted', { style: { marginTop: '4px' } }, 'Verteidigung: ' + dl.join(', ')));
     } else {
       const g = k ? WW.GOVERNMENTS[k.gov] : null;
       wsec.appendChild(h('div.muted', g ? 'Noch keine. Diese Regierung plant ab ' + g.wallThreshold + ' Einwohnern einen Mauerring.' : 'Noch keine.'));

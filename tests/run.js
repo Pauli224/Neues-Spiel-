@@ -819,10 +819,12 @@ function forestWorld(W, H, spots) {
   return { W: W, H: H, terrain: terrain, startSpots: spots, name: 'Waldtest' };
 }
 function forestShare(sim, city) {
+  // fester Kreis um die Stadt (unabhängig davon, wie viel Land sie inzwischen besitzt)
   const st = sim.state;
   let land = 0, wood = 0;
   for (let i = 0; i < st.W * st.H; i++) {
-    if (st.owner[i] !== city.id || st.inRing[i] !== -1) continue;
+    const x = i % st.W, y = (i - x) / st.W;
+    if (Math.hypot(x - city.cx, y - city.cy) > 26 || st.inRing[i] !== -1) continue;
     const t = st.terrain[i];
     if (WW.TERRAIN_LUT.walk[t] <= 0) continue;
     land++; if (WW.TERRAIN_LUT.wood[t]) wood++;
@@ -840,7 +842,7 @@ test('14 Kahlschlag (exploit) gegen Naturschutz (care)', function () {
   const fa0 = forestShare(sim, ca), fb0 = forestShare(sim, cb);
   run(sim, 20000, 2000, () => checkInvariants(sim, 'Wald'));
   const fa = forestShare(sim, ca), fb = forestShare(sim, cb);
-  let cleared = 0; for (let i = 0; i < sim.state.cleared.length; i++) if (sim.state.cleared[i] && sim.state.owner[i] === ca.id) cleared++;
+  let cleared = 0; for (let i = 0; i < sim.state.cleared.length; i++) if (sim.state.cleared[i] && Math.hypot(i % sim.state.W - ca.cx, Math.floor(i / sim.state.W) - ca.cy) < 30) cleared++;
   log('Waldanteil im Gebiet:', a.name, (fa0 * 100).toFixed(0) + ' % → ' + (fa * 100).toFixed(0) + ' %', '(nature ' + ca.nature + ', Stümpfe ' + cleared + ')', '|', b.name, (fb0 * 100).toFixed(0) + ' % → ' + (fb * 100).toFixed(0) + ' %', '(nature ' + cb.nature + ')');
   const ev = sim.state.events.filter(e => e.type === 'clearcut' || e.type === 'natureComplaint').map(e => e.text);
   if (ev.length) log('  ' + ev[0]);
