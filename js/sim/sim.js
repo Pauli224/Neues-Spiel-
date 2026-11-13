@@ -163,7 +163,25 @@
 //     soldiers   Cities.assignJobs (Soldatenanteil, Basis gov.soldierShare)
 //     strength   Units.damageOf (Kampfkraft)                     aggression Diplo.yearly (Kriegslust des Reichs, vor Wahrscheinlichkeit)
 //     loyalty    Growth.loyaltyTarget (Zielwert der Loyalität)   immigration Growth.yearly (Anzahl Zuwanderer)
-//   Flag 'nature' ('care'|'use'|'exploit') überschreibt den Umgang mit der Natur (siehe NATUR, sobald vorhanden).
+//   Flag 'nature' ('care'|'use'|'exploit') überschreibt den Umgang mit der Natur (siehe NATUR).
+//
+// NATUR (Kahlschlag / Naturschutz)
+//   WW.GOVERNMENTS[g].nature 'exploit' (Faschismus, Kommunismus, Handelsrepublik mit natureMul 0.6) | 'use' (Stamm,
+//     Monarchie, Demokratie) | 'care' (Theokratie, Anarchie); WW.RACES[r].nature 'care' (Elfen, Froschlinge) hat Vorrang,
+//     WW.RACES.orc.natureMul 1.4 verstärkt. Demokratie mit Wahlsieg der Partei 'green' (policy.bonus) -> care.
+//     Auswahl: WW.Growth.natureMode(sim, kingdom, race?) (Mods-Flag zuerst).
+//   exploit: Holzfäller roden fast jede gefällte Kachel und gehen bis 20 Kacheln weit; Steinmetze tragen Hügel ab (-> Wiese);
+//     Felder sind nach CONFIG.FIELD_EXHAUST Ernten ausgelaugt (-> Tundra); gerodetes Land im eigenen Gebiet bleibt kahl.
+//   care: kein Roden, Holz erst ab 9 Kacheln Abstand (Hain bleibt), jährliches Nachpflanzen im eigenen Gebiet.
+//   state.cleared Uint8 (W*H): > 0 = hier wurde gerodet (Baumstümpfe zeichnen), sinkt jährlich um 24, außer im Gebiet eines
+//     exploit-Reichs. Alte Spielstände ohne Raster: 0.
+//   city.nature / kingdom.nature 0..100: Anteil intakter Natur im Gebiet (ohne Mauerinneres), jährlich. Unter 30 sinkt die
+//     Zufriedenheit (care-Völker stärker). care-Reiche verlieren Meinung über exploit-Reiche mit kahlem Land.
+//   Ereignisse: clearcut, natureComplaint. Feld field.uses (Ernten unter exploit).
+// SONSTIGE ERGÄNZUNGEN: Rolle 'bandit' und u.wMad > tick gelten als feindlich (Wildnis); declareWar/makePeace/makeAlliance mit
+//   type 'silent' schreiben keine Chronik; nach jedem Regierungswechsel WW.Events.onGovChange(sim, kingdom), falls vorhanden.
+//   Heere: Wegsuche gedeckelt (CONFIG.PATH_LIMIT_ARMY, ARMY_PATH_SHARE des Budgets je Tick, u.nextPath = Wartezeit).
+//   Farmer sammeln bei knappen Vorräten Beeren im Wald (task 'forage', CONFIG.FORAGE). city.resCache = Rohstoff-Zwischenspeicher.
 // =============================================================================
 (function (WW) { 'use strict';
 
