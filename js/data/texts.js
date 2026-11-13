@@ -383,6 +383,16 @@
       'Agitatoren aus {kingdom_dat} verteilen in {city} Flugblätter. Thema: Wem gehört eigentlich das Brot?',
       'In {city} tauchen Plakate auf: „Arbeiter aller Dörfer, vereinigt euch!“ {other_nom} ist nervös.'
     ],
+    clearcut: [
+      '{kingdom_nom} meldet: Der Wald rund um {city} wurde erfolgreich besiegt.',
+      'Rund um {city} stehen nur noch Baumstümpfe. {leader} nennt das „Aussicht“.',
+      'In {city} wird der letzte Baum feierlich zu Brettern verarbeitet. Die Eichhörnchen ziehen aus.'
+    ],
+    natureComplaint: [
+      '{kingdom_nom} beschwert sich über den Kahlschlag in {other_dat}. Die Bäume weinen, sagt man dort.',
+      'Gesandte aus {kingdom_dat} bringen {other_dat} einen Setzling als Mahnung. Er wird sofort zu Brennholz.',
+      '{kingdom_nom} ist empört: In {other_dat} gibt es kaum noch Wald. Man legt Trauerflor an die Grenzbäume.'
+    ],
     siegeEngines: [
       '{city} zimmert Belagerungsgerät: Rammböcke und Katapulte rollen Richtung {otherCity}.',
       'In {city} wird gesägt und gehämmert: Das Heer von {kingdom_dat} nimmt Rammböcke mit nach {otherCity}.'

@@ -295,7 +295,7 @@
     const want = Math.max(2, Math.round(city.adults * (k.gov === 'fascism' ? 0.35 : 0.25)));
     for (const u of city._members) {
       if (n >= want) break;
-      if (u.role === 'soldier' || u.role === 'leader' || u.role === 'child' || u.role === 'settler' || u.merc) continue;
+      if (u.role === 'soldier' || u.role === 'leader' || u.role === 'child' || u.role === 'settler' || u.merc || u.order || WW.Units.isEngine(u.role)) continue;
       WW.Units.setRole(sim, u, 'rebel');
       WW.Units.bubble(u, 'angry', 50);
       n++;

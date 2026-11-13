@@ -89,7 +89,7 @@
     let best = null, bs = -1e9;
     for (const u of sim.state.units) {
       if (u.dead || u.kingdomId !== k.id) continue;
-      if (u.role === 'child' || u.role === 'rebel' || u.role === 'settler' || u.merc || u.role === 'leader') continue;
+      if (u.role === 'child' || u.role === 'rebel' || u.role === 'settler' || u.merc || u.role === 'leader' || u.order || WW.Units.isEngine(u.role)) continue;
       let sc = 0;
       if (cap && u.cityId === cap.id) sc += 50;
       if (u.role === 'soldier') sc += (k.gov === 'fascism' ? 20 : -10);
@@ -262,7 +262,7 @@
     const st = sim.state;
     const cap = capital(sim, k);
     const n = 2 + sim.rng.int(2);
-    const bonuses = sim.rng.shuffle(['bread', 'walls', 'nap', 'trade', 'safety']).slice(0, n);
+    const bonuses = sim.rng.shuffle(['bread', 'walls', 'nap', 'trade', 'safety', 'green']).slice(0, n);
     const cands = [];
     let sum = 0;
     for (let i = 0; i < n; i++) {

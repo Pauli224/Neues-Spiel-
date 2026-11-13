@@ -40,7 +40,7 @@
   // ===========================================================================
   // GESETZE – jede Regierung beschließt auf ihre Art (wichtig: prio 2)
   // ===========================================================================
-  const lawWhen = g => c => c.gov === g && c.wanted ? 3 : 0;
+  const lawWhen = g => c => c.gov === g && c.wanted ? 1.3 : 0;
   ev('law_democracy', 'laws', 'kingdom', 'Volksabstimmung', { weight: 1, prio: 2, cooldown: 2, when: lawWhen('democracy'),
     effects: [{ law: 'auto' }, { happy: 2 }], pickTexts: lawOnOff, texts: [''],
     textsBy: {
@@ -252,10 +252,15 @@
       'Die Statthalter {kingdom_dat} zanken um {@ding}. Die Bauarbeiten ruhen derweil.'] });
   ev('putsch_versuch', 'politics', 'kingdom', 'Putschversuch', { weight: 0.5, prio: 2, cooldown: 12,
     when: c => c.L.happy < 35 && c.gov !== 'anarchy' && c.gov !== 'democracy' && canGov(c) ? 2 : 0,
-    effects: [{ gov: ['fascism', 'democracy', 'anarchy', 'monarchy'] }, { happy: -5 }],
-    texts: ['Putsch {kingdom_in}! Eine Gruppe Unzufriedener stürmt den Palast. Ab heute herrscht {gov_d} – vorerst.',
-      'Während {leader} beim Mittagsschlaf ist, wechselt {kingdom} die Regierungsform: {gov}. Das Kissen wird beschlagnahmt.',
-      'In {capital} wird die Fahne ausgetauscht. Die neue gehört {gov_dat_dummy}', 'Ein Umsturz in {capital} bringt {gov_acc_dummy}'].slice(0, 2) });
+    effects: [{ gov: ['fascism', 'democracy', 'anarchy', 'monarchy'] }, { happy: -5 }], texts: [''],
+    pickTexts: c => (c.vars.oldGov ? 'ok' : 'fail'), textsBy: {
+      ok: ['Putsch {kingdom_in}! Eine Gruppe Unzufriedener stürmt den Palast. Ab heute herrscht {gov_d}, vorerst.',
+        'Während des Mittagsschlafs wechselt die Regierung: Aus {oldGov} wird {gov}. {Kingdom_nom} reibt sich die Augen.',
+        'In {capital} wird über Nacht die Fahne ausgetauscht. {Gov_d} übernimmt, die alte Fahne wird zum Putzlappen.'],
+      fail: ['Ein Putschversuch in {capital} scheitert, weil die Verschwörer sich in der Uhrzeit geirrt haben. Die Stimmung ist trotzdem mies.',
+        'Verschwörer wollen {leader} stürzen, verlaufen sich aber im Palast. Man findet sie hungrig in der Speisekammer.',
+        'Ein Umsturz {kingdom_in} bleibt im Ansatz stecken: Der Anführer der Verschwörung hat verschlafen.']
+    } });
   ev('volksfest_politik', 'politics', 'city', 'Bürgerfest', { weight: 1, cooldown: 5, when: c => c.L.happy > 55,
     effects: [{ mod: 'happiness', add: 5, years: 2 }, { stock: 'food', add: -10 }],
     texts: ['{city} feiert das {@fest}. Der Anlass: {@anlass}. Es wird so viel gegessen, dass die Vorräte schrumpfen.',

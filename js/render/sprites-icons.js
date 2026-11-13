@@ -735,15 +735,17 @@
     ['sheep', 'wolf', 'cow', 'chicken', 'rabbit', 'deer', 'bear', 'crab', 'fish', 'dragon', 'zombie', 'skeleton', 'slime', 'ghost', 'demon', 'giantchicken', 'yeti', 'sandworm', 'treant', 'golem']
       .forEach(function (k) {
         var d = L.DEFS['a_' + k + '_0']; if (!d) return;
-        var src = d.grid, sc = (src.w > 21 || src.h > 21) ? 2 : 1;
+        var hi = WW.Sprites._creatureGrid && WW.Sprites._creatureGrid(k === 'slime' ? 'slime' : k, k === 'fish' ? 1 : 0);
+        var src = hi || d.grid, sc = hi ? 2 : ((src.w > 21 || src.h > 21) ? 2 : 1);
+        if (hi && (src.w > 36 || src.h > 36)) sc = 3;
         var w = Math.ceil(src.w / sc), h = Math.ceil(src.h / sc), g = new Grid(16, 16);
         var ox = Math.floor((16 - w) / 2), oy = Math.floor((16 - h) / 2);
         for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
           var c = src.get(x * sc, y * sc);
-          if (sc === 2 && (!c || c === L.C.shade)) c = src.get(x * sc + 1, y * sc + 1) || src.get(x * sc + 1, y * sc) || c;
+          if (sc >= 2 && (!c || c === L.C.shade)) c = src.get(x * sc + 1, y * sc + 1) || src.get(x * sc + 1, y * sc) || c;
           if (c && c !== L.C.shade && c !== L.C.shadeL) g.set(ox + x, oy + y, c);   // außerhalb 16×16 wird abgeschnitten
         }
-        if (sc === 2) g = (function (o) { var t = new Grid(16, 16); for (var i = 0; i < o.d.length; i++) t.d[i] = (o.d[i] === L.C.ink) ? 0 : o.d[i]; return t.outline(); })(g);
+        if (sc >= 2) g = (function (o) { var t = new Grid(16, 16); for (var i = 0; i < o.d.length; i++) t.d[i] = (o.d[i] === L.C.ink) ? 0 : o.d[i]; return t.outline(); })(g);
         def('i_a_' + k, g, { group: 'icon', anchor: 'icon' });
       });
 

@@ -448,6 +448,93 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Natur: Umgang je Regierung/Volk (care | use | exploit), Rodungsmarken, Kennzahl nature 0..100
+  // ---------------------------------------------------------------------------
+  function natureMode(sim, k, race) {
+    const f = WW.SimUtil.modFlag(sim, k, 'nature');
+    if (f === 'care' || f === 'use' || f === 'exploit') return f;
+    const r = race ? (typeof race === 'string' ? WW.RACES[race] : race) : (k && WW.RACES[k.race]);
+    if (r && r.nature) return r.nature;
+    if (!k) return 'use';
+    if (k.policy && k.policy.bonus === 'green') return 'care';
+    return (WW.GOVERNMENTS[k.gov] || WW.GOVERNMENTS.tribe).nature || 'use';
+  }
+  function natureMul(sim, k, race) {
+    const g = WW.GOVERNMENTS[(k && k.gov) || 'tribe'];
+    const r = race ? (typeof race === 'string' ? WW.RACES[race] : race) : null;
+    return (g.natureMul || 1) * ((r && r.natureMul) || 1);
+  }
+
+  // jährlich: Rodungsmarken altern, Kahlschlag hält das Land kahl, Pflanzen, Kennzahlen, Meinungen
+  function natureYearly(sim) {
+    const st = sim.state, W = st.W, N = W * st.H;
+    const LUT = WW.TERRAIN_LUT;
+    const modeOf = new Map();
+    for (const c of st.cities) {
+      const k = sim._kingdoms.get(c.kingdomId);
+      modeOf.set(c.id, natureMode(sim, k, c.race));
+    }
+    const land = new Map(), intact = new Map();
+    for (let i = 0; i < N; i++) {
+      const o = st.owner[i];
+      const m = o >= 0 ? modeOf.get(o) : null;
+      if (st.cleared[i]) {
+        // unter Kahlschlag bleibt gerodetes Land kahl (Stümpfe), sonst verblassen die Spuren
+        if (m !== 'exploit') st.cleared[i] = Math.max(0, st.cleared[i] - 24);
+      }
+      if (o < 0) continue;
+      const t = st.terrain[i];
+      if (LUT.walk[t] <= 0 || LUT.water[t] || st.inRing[i] !== -1) continue;
+      land.set(o, (land.get(o) || 0) + 1);
+      if (st.structAt[i] === -1 && !st.cleared[i]) intact.set(o, (intact.get(o) || 0) + (LUT.wood[t] ? 1 : 0.8));
+    }
+    for (const c of st.cities) {
+      const l = land.get(c.id) || 1;
+      const prev = c.nature == null ? 100 : c.nature;
+      c.nature = Math.round(Math.min(100, (intact.get(c.id) || 0) / l * 100));
+      const k = sim._kingdoms.get(c.kingdomId);
+      if (prev >= 25 && c.nature < 25 && k && modeOf.get(c.id) === 'exploit' && c.natureMsgYear == null) {
+        c.natureMsgYear = st.year;
+        sim.event('clearcut', { city: c.name, kingdom: k.name, leader: WW.Gov.leaderFull(k) }, WW.Cities.atCity(c));
+      }
+      // Schonende pflanzen nach: Wiese neben Wald im eigenen Gebiet wird wieder Wald
+      if (modeOf.get(c.id) === 'care') plantTrees(sim, c, 6);
+    }
+    for (const k of st.kingdoms) {
+      let s = 0, n = 0;
+      for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && c.nature != null) { s += c.nature; n++; } }
+      k.nature = n ? Math.round(s / n) : 100;
+    }
+    // Schonende Nachbarn nehmen Kahlschlag übel
+    for (const a of st.kingdoms) {
+      if (natureMode(sim, a) !== 'care') continue;
+      for (const b of st.kingdoms) {
+        if (a === b || natureMode(sim, b) !== 'exploit' || (b.nature == null ? 100 : b.nature) > 45) continue;
+        const ra = a.relations[b.id], rb = b.relations[a.id];
+        if (!ra || !rb) continue;
+        const pen = a.race === 'elf' ? 6 : 3;
+        ra.opinion = Math.max(-100, ra.opinion - pen); rb.opinion = Math.max(-100, rb.opinion - pen * 0.5);
+        if (sim.rng.chance(0.15)) sim.event('natureComplaint', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: a.capitalId, x: -1, y: -1 });
+      }
+    }
+  }
+  function plantTrees(sim, city, n) {
+    const st = sim.state, W = st.W, H = st.H, T = WW.T;
+    const map = {}; map[T.GRASS] = T.FOREST; map[T.SAVANNA] = T.JUNGLE; map[T.TUNDRA] = T.TAIGA; map[T.FLOWERS] = T.FOREST;
+    for (let m = 0; m < n * 6 && n > 0; m++) {
+      const x = city.cx + sim.rng.irange(-18, 18), y = city.cy + sim.rng.irange(-18, 18);
+      if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
+      const i = y * W + x;
+      if (st.owner[i] !== city.id || st.inRing[i] !== -1 || st.structAt[i] !== -1) continue;
+      const to = map[st.terrain[i]];
+      if (to === undefined) continue;
+      if (Math.abs(x - city.cx) + Math.abs(y - city.cy) < 9) continue;
+      if (st.terrain[i - 1] !== to && st.terrain[i + 1] !== to && st.terrain[i - W] !== to && st.terrain[i + W] !== to) continue;
+      st.terrain[i] = to; st.cleared[i] = 0; sim.markDirty(i); n--;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Aktualisierung
   // ---------------------------------------------------------------------------
   // alle 30 Ticks je Stadt: Land nehmen, wenn gebraucht
@@ -470,6 +557,8 @@
   function yearly(sim) {
     ensure(sim);
     const st = sim.state;
+    if (!st.cleared || st.cleared.length !== st.W * st.H) st.cleared = new Uint8Array(st.W * st.H);
+    natureYearly(sim);
     // abgeschnittene Fluren, Grenzfluren im Krieg
     for (const city of st.cities) if (!city.dead) cutOff(sim, city);
     let anyWar = false;
@@ -516,7 +605,7 @@
     cutOff: cutOff, warFlips: warFlips, makeGovernor: makeGovernor, ensureRuler: ensureRuler, cityLimit: cityLimit,
     loyaltyTarget: loyaltyTarget, loyaltyRaw: loyaltyRaw, secedeByLoyalty: secedeByLoyalty, planWar: planWar, planAlliance: planAlliance,
     addPlot: addPlot, removePlot: removePlot, updatePlots: updatePlots, emigrate: emigrate, freeSite: freeSite,
-    update: update, yearly: yearly, QUIRKS: QUIRKS
+    update: update, yearly: yearly, QUIRKS: QUIRKS, natureMode: natureMode, natureMul: natureMul, natureYearly: natureYearly
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

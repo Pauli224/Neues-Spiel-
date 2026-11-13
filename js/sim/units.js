@@ -396,6 +396,27 @@
   }
 
   // Rohstoffkachel nahe der Stadt suchen (Holz, Stein, Wasser)
+  // wie findResource, aber erst ab Abstand minR (Hain um die Stadt bleibt stehen); Rückfall ohne Mindestabstand
+  function findResourceFrom(sim, u, city, res, minR, maxR) {
+    const st = sim.state, W = st.W, H = st.H, tab = WW.TERRAIN_LUT[res];
+    const cand = [];
+    for (let r = minR; r <= maxR && cand.length < 6; r++) {
+      const test = (x, y) => {
+        if (x < 0 || y < 0 || x >= W || y >= H) return;
+        const i = y * W + x;
+        if (!tab[st.terrain[i]]) return;
+        const o = st.owner[i];
+        if (o !== -1 && o !== city.id) { const oc = sim._cities.get(o); if (oc && oc.kingdomId !== city.kingdomId) return; }
+        if (st.inRing[i] !== -1 && st.inRing[i] !== city.id) return;
+        cand.push(i);
+      };
+      for (let d = -r; d <= r; d++) { test(city.cx + d, city.cy - r); test(city.cx + d, city.cy + r); }
+      for (let d = -r + 1; d <= r - 1; d++) { test(city.cx - r, city.cy + d); test(city.cx + r, city.cy + d); }
+    }
+    if (!cand.length) return findResource(sim, u, city, res, maxR);
+    return cand[sim.rng.int(cand.length)];
+  }
+
   function findResource(sim, u, city, res, maxR) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
     const tab = LUT[res], ter = st.terrain, inRing = st.inRing, owner = st.owner;
@@ -494,6 +515,16 @@
         const fert = Math.max(0.2, WW.TERRAIN_LUT.fertile[st.terrain[f.y * W + f.x]]);
         u.carrying = 'food'; u.carryAmt = (u.carryAmt || 0) + C().HARVEST * fert * mul;
         f.growth = 0; f.gprog = 0; sim.markDirty(f.y * W + f.x);
+        // ausgelaugte Felder unter Kahlschlag-Regime
+        if (WW.Growth.natureMode(sim, k, race) === 'exploit') {
+          f.uses = (f.uses || 0) + 1;
+          if (f.uses >= C().FIELD_EXHAUST) {
+            const fi = f.y * W + f.x;
+            WW.Structs.remove(sim, f);
+            if (WW.TERRAIN_LUT.fertile[st.terrain[fi]] > 0.3) { st.terrain[fi] = WW.T.TUNDRA; sim.markDirty(fi); }
+            st.cleared[fi] = C().CLEARED_MAX;
+          }
+        }
         u.phase = 3;
         // Nachbarfeld gleich mit abernten (bis zu drei Felder pro Gang)
         if (u.carryAmt < C().HARVEST * 2.5) {
@@ -518,7 +549,9 @@
     if (u.carrying) { deliver(sim, u, city); return; }
     const race = WW.RACES[u.race] || WW.RACES.human;
     if (u.phase === 0) {
-      const i = findResource(sim, u, city, res, 13);
+      const nm = WW.Growth.natureMode(sim, sim._kingdoms.get(u.kingdomId), race);
+      // Kahlschlag zieht immer weiter hinaus, Schonende lassen einen Hain um die Stadt stehen
+      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResource(sim, u, city, res, nm === 'exploit' ? 20 : 13);
       if (i < 0) { wander(sim, u, city, 4); return; }
       const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
       if (g < 0) { wander(sim, u, city, 4); return; }
@@ -541,12 +574,19 @@
       const plan = k && k.policy && k.policy.plan;
       if (res === 'wood') {
         u.carrying = 'wood'; u.carryAmt = C().CHOP * WW.SimUtil.mod(sim, k, city, 'wood', race.yields.wood) * (plan && plan.focus === 'wood' ? 1.5 : 1);
-        if (!race.noDeforest && sim.rng.chance(0.2)) {
+        // Umgang mit der Natur (care | use | exploit): Kahlschlag-Regime roden alles, Schonende gar nicht
+        const nm = WW.Growth.natureMode(sim, k, race);
+        const p = nm === 'care' ? 0 : (nm === 'exploit' ? 0.85 * WW.Growth.natureMul(sim, k, race) : 0.2);
+        if (p > 0 && sim.rng.chance(Math.min(1, p))) {
           const t = st.terrain[u.target], nt = WW.Walls.deforested(t);
-          if (nt !== t) { st.terrain[u.target] = nt; sim.markDirty(u.target); }
+          if (nt !== t) { st.terrain[u.target] = nt; sim.markDirty(u.target); st.cleared[u.target] = C().CLEARED_MAX; }
         }
       } else {
         u.carrying = 'stone'; u.carryAmt = C().MINE * WW.SimUtil.mod(sim, k, city, 'stone', race.yields.stone) * (plan && plan.focus === 'stone' ? 1.5 : 1);
+        // Kahlschlag-Regime tragen Hügel ab
+        if (st.terrain[u.target] === WW.T.HILL && WW.Growth.natureMode(sim, k, race) === 'exploit' && sim.rng.chance(0.05 * WW.Growth.natureMul(sim, k, race))) {
+          st.terrain[u.target] = WW.T.GRASS; st.cleared[u.target] = C().CLEARED_MAX; sim.markDirty(u.target); sim.terrainChanged();
+        }
       }
       if (sim.rng.chance(0.15)) bubble(u, 'hammer', 20);
       u.phase = 3;

@@ -78,6 +78,7 @@
       food: o.food == null ? 70 : o.food, home: o.home == null ? -1 : o.home, size: size, state: 0, t: 0, mad: 0
     };
     if (cr.burrow) a.buried = true;
+    if (o.byPlayer) a.byPlayer = true;   // vom Spieler gesetzt (vererbt): ignoriert die Schonregeln für junge Siedlungen
     st.animals.push(a);
     sim._animals.set(a.id, a);
     const c = counts(sim); c[kind] = (c[kind] || 0) + 1;
@@ -100,7 +101,7 @@
     // Schleim teilt sich
     if (a.kind === 'slime' && a.size > 1 && !a.noSplit) {
       for (let k = 0; k < 2; k++) {
-        const b = spawn(sim, 'slime', a.x + (k ? 0.6 : -0.6), a.y, { size: a.size - 1, force: true });
+        const b = spawn(sim, 'slime', a.x + (k ? 0.6 : -0.6), a.y, { size: a.size - 1, force: true, byPlayer: a.byPlayer });
         if (b) b.wait = 8;
       }
       sim.fx({ type: 'split', x: a.x, y: a.y });
@@ -242,7 +243,7 @@
     const cap = WW.Wild ? WW.Wild.capOf(sim, a.kind) : cr.max;
     if (n >= cap || a.age < 1) return;
     if (sim.rng.next() < p * (1 - n / cap)) {
-      const b = spawn(sim, a.kind, a.x + sim.rng.range(-1, 1), a.y + sim.rng.range(-1, 1), { home: a.home, food: 55 });
+      const b = spawn(sim, a.kind, a.x + sim.rng.range(-1, 1), a.y + sim.rng.range(-1, 1), { home: a.home, food: 55, byPlayer: a.byPlayer });
       if (b) { a.food -= 25; b.age = 0; }
     }
   }
@@ -342,7 +343,8 @@
           prey = nearestAnimal(sim, a, cr.sight, (b) => cr.prey.indexOf(b.kind) >= 0);
           // Bewohner nur, wenn allein draußen und hungrig (hinter Mauern ist man sicher)
           // nur Einzelne weit draußen (≥ 14 Kacheln von jeder Stadtmitte), nie Kinder, nicht in Gruppen
-          if (!prey && cr.huntsUnits && a.food < 25 && WW.Wild && WW.Wild.cityDist2(sim, a.x, a.y) > 14 * 14) prey = nearestUnit(sim, a, cr.sight * 0.6, true, (u) => {
+          if (!prey && cr.huntsUnits && (a.byPlayer ? a.food < 70 : a.food < 25 && WW.Wild && WW.Wild.cityDist2(sim, a.x, a.y) > 14 * 14)) prey = nearestUnit(sim, a, cr.sight * (a.byPlayer ? 1 : 0.6), true, (u) => {
+            if (a.byPlayer) return true;
             if (u.role === 'child' || WW.Wild.cityDist2(sim, u.x, u.y) < 14 * 14) return false;
             let company = 0;
             WW.Units.forNear(sim, u.x, u.y, 2.5, false, (v) => { if (v !== u) company++; });
@@ -415,7 +417,7 @@
           if (a.tx < 0) { a.state = 2; a.t = 4; }
         } else if (a.state === 2) {                // speit Feuer
           // ohne Raubzug-Befehl kein Feuer nahe Siedlungen
-          if (a.cd <= 0 && (a.raidCity >= 0 || !WW.Wild || WW.Wild.cityDist2(sim, a.x, a.y) > 16 * 16)) breathe(sim, a, a.x + sim.rng.range(-1.5, 1.5), a.y + 1 + sim.rng.range(-1, 1));
+          if (a.cd <= 0 && (a.raidCity >= 0 || a.byPlayer || !WW.Wild || WW.Wild.cityDist2(sim, a.x, a.y) > 16 * 16)) breathe(sim, a, a.x + sim.rng.range(-1.5, 1.5), a.y + 1 + sim.rng.range(-1, 1));
           if (--a.t <= 0) {
             a.state = 3;
             if (home) a.tx = home.y * st.W + home.x; else wanderTarget(sim, a, cr, 20);
@@ -437,7 +439,7 @@
         if (t) {
           const tx = t.x, ty = t.y, isUnit = t.role !== undefined, race = t.race;
           if (engage(sim, a, cr, t, cr.dmg) === 'kill' && t.kind !== 'fish' && (counts(sim).zombie || 0) < cr.max) {
-            const z = spawn(sim, 'zombie', tx, ty, { force: true });
+            const z = spawn(sim, 'zombie', tx, ty, { force: true, byPlayer: a.byPlayer });
             if (z) { z.wait = 16; sim.fx({ type: 'zombify', x: tx, y: ty }); if (isUnit) z.race = race; }
             if (WW.Wild) WW.Wild.onZombieBite(sim, a, tx, ty, isUnit);
           }
@@ -518,7 +520,7 @@
         if (s && s.type === 'field') {
           if (s.growth > 0 || s.gprog > 0) { s.growth = 0; s.gprog = 0; sim.markDirty(i); sim.fx({ type: 'dust', x: a.x, y: a.y }); if (WW.Wild) WW.Wild.onTrample(sim, a, s); }
         }
-        if (sim.rng.chance(0.006)) { const b = spawn(sim, 'chicken', a.x, a.y); if (b) sim.fx({ type: 'egg', x: a.x, y: a.y }); }
+        if (sim.rng.chance(0.006)) { const b = spawn(sim, 'chicken', a.x, a.y, { byPlayer: a.byPlayer }); if (b) sim.fx({ type: 'egg', x: a.x, y: a.y }); }
         const u = nearestUnit(sim, a, 1.4, false);
         if (u && a.cd <= 0) { attack(sim, a, u, cr.dmg); WW.Units.bubble(u, 'question', 25); a.cd = 16; }
         if (a.tx < 0 && sim.rng.chance(0.4)) {

@@ -444,6 +444,11 @@ function siege(save, mode, engines, maxTicks) {
       if (r && r.status !== 'war') sim.actions.setRelation(a.id, b.id, 'war');
       if (r && b.relations[a.id]) { r.weariness = 0; b.relations[a.id].weariness = 0; }   // Belagerung ohne Friedensschluss
       if (i % 1000 === 0) checkInvariants(sim, 'Belagerung');
+      if (process.env.SIEGE_DEBUG && (i % 200 === 0 || i < 200)) {
+        const eng = sim.state.units.filter(u => u.kingdomId === a.id && (u.role === 'ram' || u.role === 'catapult'));
+        const sold = sim.state.units.filter(u => u.kingdomId === a.id && u.role === 'soldier' && u.order);
+        log('  [' + mode + (engines ? '+Gerät' : '') + '] t' + i, 'Gerät', eng.map(u => u.role[0] + Math.round(u.hp) + '@' + Math.round(Math.hypot(u.x - cb.cx, u.y - cb.cy))).join(' '), '· Soldaten', sold.length, '· Mauer', cb.wall.built + '/' + cb.wall.total);
+      }
     }
   }
   return { sim: sim, fell: fell, city: cb, att: a, def: b };
@@ -455,6 +460,10 @@ test('4b Belagerung: Mauer hält länger, Stein länger als Palisade, mit Gerät
   assert(cb.wall.level >= 2 && (cb.wall.state === 'done' || cb.wall.state === 'upgrading') && !leaks(sim, cb).leak, 'Vorlauf: keine fertige, dichte Steinmauer (' + cb.wall.state + ' Stufe ' + cb.wall.level + ')');
   const save = sim.serialize();
   const LIM = 24000;
+  if (process.env.SIEGE_DEBUG) {
+    const sr = WW.Units.setRole;
+    WW.Units.setRole = function (sm, u, role) { if (u && (u.role === 'ram' || u.role === 'catapult') && role !== u.role) log('    Gerät wird ' + role + ' bei Tick ' + sm.state.tick + ' order=' + JSON.stringify(u.order) + ' ' + new Error().stack.split('\n').slice(2, 4).map(x => x.trim()).join(' < ')); return sr.apply(this, arguments); };
+  }
   const open = siege(save, 'none', false, LIM);
   const stoneNo = siege(save, 'stone', false, LIM);
   const stoneEng = siege(save, 'stone', true, LIM);
@@ -762,6 +771,90 @@ test('12 Vom Lager zur Stadt (Zentrum-Stufen, Zelte, Speichern im Ausbau)', func
   assert(oc && oc.stage === 2 && !oc.upgrading, 'alter Spielstand: Zentrum ohne Stufe 2');
   for (let i = 0; i < 500; i++) old.tick();
   log('Alter Spielstand ohne stage lädt: Zentrum Stufe', oc.stage);
+});
+
+// --------------------------------------------------------------------------
+// 13. Junge Siedlungen überleben
+// --------------------------------------------------------------------------
+test('13 Junge Siedlungen überleben (10 Seeds × 4 Gruppen, mit und ohne Tiere)', function () {
+  if (!WW.WorldGen) { log('ohne Weltgenerator übersprungen'); return; }
+  for (const animals of [true, false]) {
+    let good = 0;
+    const rows = [];
+    for (let n = 0; n < 10; n++) {
+      const world = WW.WorldGen.generate({ seed: 'jung-' + n, size: 'medium' });
+      const sim = makeSim({ seed: 'jung-' + n, world: world, populate: 0, animals: animals });
+      const ids = [];
+      for (const sp of world.startSpots) {
+        if (ids.length >= 4) break;
+        const r = sim.actions.spawnSettlers(sp.x, sp.y, 6, null, 'human');
+        if (r && ids.indexOf(r.cityId) < 0) ids.push(r.cityId);
+      }
+      run(sim, 6000);
+      const pops = ids.map(id => { const c = sim._cities.get(id); return c ? c.pop : 0; });
+      const ok = ids.length === 4 && pops.every(p => p > 6);
+      if (ok) good++;
+      rows.push('jung-' + n + ': ' + pops.join('/') + (ok ? '' : ' (!) ' + JSON.stringify(sim._deaths || {})));
+    }
+    log((animals ? 'mit Tieren: ' : 'ohne Tiere: ') + good + '/10 Seeds mit vier gewachsenen Siedlungen · ' + rows.join(' · '));
+    assert(good >= 9, (animals ? 'mit' : 'ohne') + ' Tiere(n) überleben nur in ' + good + ' von 10 Seeds alle vier Siedlungen');
+  }
+});
+
+// --------------------------------------------------------------------------
+// 14. Kahlschlag und Naturschutz
+// --------------------------------------------------------------------------
+function forestWorld(W, H, spots) {
+  const T = WW.T, N = W * H, terrain = new Uint8Array(N);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const e = Math.min(x, y, W - 1 - x, H - 1 - y);
+    let t = e < 2 ? T.WATER : (e < 3 ? T.SAND : T.GRASS);
+    // viel Wald in Streifen, symmetrisch zu beiden Städten
+    if (e >= 3) {
+      for (const sp of spots) { const d = Math.hypot(x - sp.x, y - sp.y); if (d > 9 && d < 26 && ((x + y) % 4 !== 0)) t = T.FOREST; }
+      for (const sp of spots) { const d = Math.hypot(x - sp.x - 12, y - sp.y + 10); if (d < 3) t = T.HILL; }
+    }
+    terrain[y * W + x] = t;
+  }
+  return { W: W, H: H, terrain: terrain, startSpots: spots, name: 'Waldtest' };
+}
+function forestShare(sim, city) {
+  const st = sim.state;
+  let land = 0, wood = 0;
+  for (let i = 0; i < st.W * st.H; i++) {
+    if (st.owner[i] !== city.id || st.inRing[i] !== -1) continue;
+    const t = st.terrain[i];
+    if (WW.TERRAIN_LUT.walk[t] <= 0) continue;
+    land++; if (WW.TERRAIN_LUT.wood[t]) wood++;
+  }
+  return land ? wood / land : 0;
+}
+test('14 Kahlschlag (exploit) gegen Naturschutz (care)', function () {
+  const spots = [{ x: 35, y: 40 }, { x: 105, y: 40 }];
+  const sim = makeSim({ seed: 'wald', world: forestWorld(140, 80, spots), populate: 2, govs: ['fascism', 'theocracy'], races: ['human', 'human'], animals: false });
+  const [a, b] = sim.state.kingdoms;
+  a.govLocked = b.govLocked = true;
+  sim.actions.setLaw('wars', false);
+  const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
+  assert(WW.Growth.natureMode(sim, a) === 'exploit' && WW.Growth.natureMode(sim, b) === 'care', 'Naturmodus falsch');
+  const fa0 = forestShare(sim, ca), fb0 = forestShare(sim, cb);
+  run(sim, 20000, 2000, () => checkInvariants(sim, 'Wald'));
+  const fa = forestShare(sim, ca), fb = forestShare(sim, cb);
+  let cleared = 0; for (let i = 0; i < sim.state.cleared.length; i++) if (sim.state.cleared[i] && sim.state.owner[i] === ca.id) cleared++;
+  log('Waldanteil im Gebiet:', a.name, (fa0 * 100).toFixed(0) + ' % → ' + (fa * 100).toFixed(0) + ' %', '(nature ' + ca.nature + ', Stümpfe ' + cleared + ')', '|', b.name, (fb0 * 100).toFixed(0) + ' % → ' + (fb * 100).toFixed(0) + ' %', '(nature ' + cb.nature + ')');
+  const ev = sim.state.events.filter(e => e.type === 'clearcut' || e.type === 'natureComplaint').map(e => e.text);
+  if (ev.length) log('  ' + ev[0]);
+  assert(fa < fb * 0.75, 'Kahlschlag-Regime hat nicht deutlich weniger Wald');
+  assert(cleared > 0, 'keine Rodungsmarken (state.cleared)');
+  assert(ca.nature < cb.nature, 'Kennzahl nature unterscheidet sich nicht');
+  // Speichern/Laden und alter Spielstand ohne Raster
+  const save = sim.serialize();
+  const D = WW.Sim.load(save);
+  assert(D && D.state.cleared && D.serialize() === save, 'cleared nicht gespeichert');
+  const o = JSON.parse(save); delete o.rasters.cleared;
+  const old = WW.Sim.load(JSON.stringify(o));
+  assert(old && old.state.cleared.length === sim.state.W * sim.state.H, 'alter Spielstand ohne cleared lädt nicht');
+  for (let i = 0; i < 300; i++) old.tick();
 });
 
 // --------------------------------------------------------------------------

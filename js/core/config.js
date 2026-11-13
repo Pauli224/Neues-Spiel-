@@ -21,12 +21,14 @@
     HARVEST: 14,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
     CHOP: 7, MINE: 5,         // Holz/Stein je Gang
     FISH: 3,
-    FORAGE: 4,                // Beeren/Pilze sammeln, wenn die Vorräte knapp sind
+    FORAGE: 4, 
+    FIELD_EXHAUST: 30,        // Ernten, nach denen ein Feld unter Kahlschlag-Regime ausgelaugt ist
+    CLEARED_MAX: 240,         // Rodungsmarke (state.cleared) beim Fällen               // Beeren/Pilze sammeln, wenn die Vorräte knapp sind
     FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
     BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
     BASE_DMG: 4, SOLDIER_DMG: 9,
-    RAM_HP: 160, RAM_GATE_DMG: 34, RAM_WALL_DMG: 14,             // Rammbock (ab Kaserne)
-    CATAPULT_HP: 90, CATAPULT_DMG: 45, CATAPULT_RANGE: 6.5, CATAPULT_COOLDOWN: 28,   // Katapult (Kaserne + eigene Steinmauer)
+    RAM_HP: 380, RAM_GATE_DMG: 34, RAM_WALL_DMG: 14,             // Rammbock (ab Kaserne)
+    CATAPULT_HP: 200, CATAPULT_DMG: 60, CATAPULT_RANGE: 6.5, CATAPULT_COOLDOWN: 28,   // Katapult (Kaserne + eigene Steinmauer)
     WALL_MARGIN: 2.6,         // Abstand Ring zu Kerngebäuden
     WALL_RESERVE: 6.5,        // Wachstumsfläche (Radius um das Zentrum), die der erste Ring einschließt
     WALL_RESERVE_STEP: 4,     // je Stadterweiterung so viel größer
@@ -68,7 +70,7 @@
     wallThreshold: 10, wallMax: 3, wallHpMul: 1, wallSpeedMul: 1, buildMul: 1, workMul: 1,
     happiness: 0, growthMul: 1, soldierShare: 0.1, goldMul: 1, taxes: 0, aggression: 0.35,
     militia: false, noLeader: false, sharedStock: false, noMarket: false, barricades: false,
-    neverWar: false, traders: false, mercenaries: false, buysPeace: false, cityLimit: 3, landReach: 0,
+    neverWar: false, traders: false, mercenaries: false, buysPeace: false, cityLimit: 3, landReach: 0, nature: 'use', natureMul: 1,
     // Kriegsführung: raid | knights | defend | mass | agitate | holy | mercs | militia
     war: 'raid', soldierMul: 1, unitHpMul: 1, unitDmgMul: 1,
     // Bauprogramm: je Typ { first: ab Einwohnern, per: je weitere n Einwohner, max }; towerSpacing 0 = keine Türme
@@ -88,7 +90,8 @@
       wallThreshold: 14, wallMax: 1, happiness: 5, soldierShare: 0.08, aggression: 0.35,
       war: 'raid', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 99, max: 1 }, towerSpacing: 0 },
       looks: { center: 'Langhaus mit Lagerfeuer', wall: 'Palisade, hölzerner Ausguck', house: 'Strohhütte', monument: 'Hinkelstein' },
-      cityLimit: 2, landReach: -2
+      cityLimit: 2, landReach: -2,
+      nature: 'use'
     },
     monarchy: {
       name: 'Monarchie', titleM: 'König', titleF: 'Königin', realm: 'Königreich',
@@ -99,7 +102,8 @@
       wallThreshold: 8, wallHpMul: 1.3, taxes: 0.02, happiness: -3, soldierShare: 0.13, aggression: 0.5,
       war: 'knights', unitHpMul: 1.3, unitDmgMul: 1.2, build: { barracks: { first: 14, per: 25, max: 2 }, market: { first: 18, per: 40, max: 1 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 5 },
       looks: { center: 'Burg', wall: 'grauer Stein, runde Türme mit Kegeldach und Wimpel', house: 'Fachwerkhaus', monument: 'Königsstatue' },
-      cityLimit: 5, landReach: 1
+      cityLimit: 5, landReach: 1,
+      nature: 'use'
     },
     democracy: {
       name: 'Demokratie', titleM: 'Kanzler', titleF: 'Kanzlerin', realm: 'Freistaat',
@@ -110,7 +114,8 @@
       happiness: 15, growthMul: 1.15, soldierShare: 0.05, aggression: 0.12,
       war: 'defend', build: { barracks: { first: 35, per: 60, max: 1 }, market: { first: 14, per: 25, max: 2 }, monument: { first: 20, per: 60, max: 1 }, towerSpacing: 8 },
       looks: { center: 'Rathaus mit Uhrturm und Säulen', wall: 'heller Sandstein, Türme mit Fahne', house: 'buntes Bürgerhaus', monument: 'Rednerpult mit Wahlurne' },
-      cityLimit: 4, landReach: 0
+      cityLimit: 4, landReach: 0,
+      nature: 'use'
     },
     fascism: {
       name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Strammstaat',
@@ -121,7 +126,8 @@
       wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9,
       war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3 },
       looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' },
-      cityLimit: 4, landReach: 2
+      cityLimit: 4, landReach: 2,
+      nature: 'exploit'
     },
     communism: {
       name: 'Kommunismus', titleM: 'Generalsekretär', titleF: 'Generalsekretärin', realm: 'Volksrepublik',
@@ -132,7 +138,8 @@
       buildMul: 1.25, workMul: 0.9, sharedStock: true, noMarket: true, goldMul: 0, soldierShare: 0.12, aggression: 0.45,
       war: 'agitate', build: { barracks: { first: 22, per: 50, max: 1 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 18, per: 60, max: 1 }, towerSpacing: 7 },
       looks: { center: 'Volkshaus mit Fahne und Schornstein', wall: 'Betonplatten, schlichte Blocktürme', house: 'Plattenbau', monument: 'Denkmal der Planübererfüllung (Riesenrübe)' },
-      cityLimit: 5, landReach: 1
+      cityLimit: 5, landReach: 1,
+      nature: 'exploit'
     },
     theocracy: {
       name: 'Theokratie', titleM: 'Hohepriester', titleF: 'Hohepriesterin', realm: 'Gottesstaat',
@@ -143,7 +150,8 @@
       happiness: 5, workMul: 0.9, soldierShare: 0.1, aggression: 0.55,
       war: 'holy', build: { barracks: { first: 24, per: 60, max: 1 }, market: { first: 22, per: 60, max: 1 }, monument: { first: 10, per: 12, max: 3 }, towerSpacing: 6 },
       looks: { center: 'Tempel mit Kuppel und goldener Spitze', wall: 'weißer Stein mit goldenen Kappen, Kuppeltürme', house: 'Fachwerk mit Türmchen', monument: 'Schrein der Gottheit' },
-      cityLimit: 3, landReach: 0
+      cityLimit: 3, landReach: 0,
+      nature: 'care'
     },
     republic: {
       name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsrepublik',
@@ -154,7 +162,8 @@
       goldMul: 2, taxes: 0.01, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true,
       war: 'mercs', build: { barracks: { first: 30, per: 60, max: 1 }, market: { first: 10, per: 14, max: 3 }, monument: { first: 22, per: 60, max: 1 }, towerSpacing: 7 },
       looks: { center: 'Kontor mit Treppengiebel und Kran', wall: 'roter Backstein, Türme mit Handelsflaggen', house: 'Giebelhaus', monument: 'Goldene Waage' },
-      cityLimit: 4, landReach: 0
+      cityLimit: 4, landReach: 0,
+      nature: 'exploit', natureMul: 0.6
     },
     anarchy: {
       name: 'Anarchie', titleM: '', titleF: '', realm: 'Freie Kommune',
@@ -166,7 +175,8 @@
       militia: true, noLeader: true, barricades: true, neverWar: true,
       war: 'militia', build: { barracks: { first: 99, per: 99, max: 0 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 16, per: 99, max: 1 }, towerSpacing: 0 },
       looks: { center: 'Kommune (bunter Flickenbau)', wall: 'Barrikaden aus Gerümpel', house: 'Bauwagen und Flickenhütten', monument: 'bemalte Wand' },
-      cityLimit: 2, landReach: -1
+      cityLimit: 2, landReach: -1,
+      nature: 'care'
     }
   };
   WW.GOVERNMENTS = {};
@@ -206,7 +216,7 @@
   WW.RACE_KEYS = ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'];
   const RACE_BASE = {
     speed: 1, hp: 1, strength: 1, lifespan: 1, fertility: 1,
-    yields: { food: 1, wood: 1, stone: 1 }, wallMul: 1, housingBonus: 0, aggression: 0, cityLimit: 0, landReach: 0,
+    yields: { food: 1, wood: 1, stone: 1 }, wallMul: 1, housingBonus: 0, aggression: 0, cityLimit: 0, landReach: 0, nature: null, natureMul: 1,
     favTerrain: ['grass'], walkOverride: null, buildOn: null, noDeforest: false, ranged: false, fishing: false
   };
   const R = {
@@ -220,7 +230,7 @@
       name: 'Elfen', singular: 'Elf', adjective: 'elfisch',
       desc: 'Schlank, schnell, uralt und ein wenig hochnäsig gegenüber Bäumefällern.',
       speed: 1.15, hp: 0.9, strength: 0.95, lifespan: 2.2, fertility: 0.5, cityLimit: 1,
-      yields: { food: 0.9, wood: 1.1, stone: 0.8 }, noDeforest: true, ranged: true,
+      yields: { food: 0.9, wood: 1.1, stone: 0.8 }, noDeforest: true, ranged: true, nature: 'care',
       favTerrain: ['forest', 'jungle', 'mushroom', 'taiga'],
       govPrefs: { tribe: 1, monarchy: 2, democracy: 2, fascism: 0.2, communism: 0.5, theocracy: 3, republic: 2, anarchy: 1 }
     },
@@ -235,7 +245,7 @@
     orc: {
       name: 'Orks', singular: 'Ork', adjective: 'orkisch',
       desc: 'Stark, laut, kinderreich und überzeugt, dass jeder Streit eine Einladung ist.',
-      hp: 1.5, strength: 1.4, lifespan: 0.8, fertility: 1.4, aggression: 0.3, landReach: 2, cityLimit: -1,
+      hp: 1.5, strength: 1.4, lifespan: 0.8, fertility: 1.4, aggression: 0.3, landReach: 2, cityLimit: -1, natureMul: 1.4,
       yields: { food: 0.7, wood: 1, stone: 1.1 },
       favTerrain: ['savanna', 'desert', 'ash'],
       govPrefs: { tribe: 4, monarchy: 2, democracy: 0.4, fascism: 1.6, communism: 1, theocracy: 1, republic: 0.5, anarchy: 1 }
@@ -250,7 +260,7 @@
     frog: {
       name: 'Froschlinge', singular: 'Froschling', adjective: 'froschig',
       desc: 'Quakfreudige Sumpfbewohner, die in jedem Fluss eine Abkürzung sehen.',
-      walkOverride: { river: 1.1, swamp: 1.1 }, buildOn: ['swamp'], fishing: true,
+      walkOverride: { river: 1.1, swamp: 1.1 }, buildOn: ['swamp'], fishing: true, nature: 'care',
       favTerrain: ['swamp', 'grass', 'jungle'],
       govPrefs: { tribe: 2, monarchy: 1, democracy: 2, fascism: 0.3, communism: 1, theocracy: 3, republic: 1, anarchy: 2 }
     }

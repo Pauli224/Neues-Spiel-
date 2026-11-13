@@ -1118,6 +1118,8 @@
       if (cs.scarf) { g.hline(tx0 + 1, ty0, tw - 2, cs.scarf); g.set(Math.round(cx) + 1, ty0 + 1, cs.scarf); g.set(Math.round(cx) + 1, ty0 + 2, 'Td'); }
       if (cs.trim) { g.hline(tx0, ty0, tw, cs.trim); g.vline(Math.round(cx), ty0, th, cs.trim); }
       if (cs.patches) { g.rect(tx0 + 1, ty0 + 2, 2, 2, 'T'); g.set(tx1 - 1, ty1 - 2, C.fireY); g.set(tx1 - 2, ty0 + 1, C.glass); }
+      if (cs.ribs) { g.vline(Math.round(cx), ty0, th, skin[2]); for (y = ty0 + 1; y < ty1; y += 2) { g.hline(tx0, y, tw, skin[2]); g.set(Math.round(cx), y, skin[1]); } }
+      if (cs.ragged) for (x = tx0; x <= tx1; x += 2) { g.set(x, ty1, skin[1]); g.set(x + 1, ty1 + 1, top[2]); }
       // --- Robe / Mantel bis zu den Füßen
       var robe = cs.robe || cs.coat;
       if (robe) {
@@ -1159,16 +1161,17 @@
       var hat = cs.hat;
       if (role === 'miner' && cls === 'citizen') hat = 'minerhelm';
       if (child && cls === 'citizen' && hat !== 'mohawk') hat = null;
-      if (race === 'gnome' && cls === 'citizen' && hat !== 'mohawk') HAT.gnomecap(g, A, cs.top && typeof cs.top[1] === 'number' ? [cs.top[1], cs.top[2]] : null);
+      if (race === 'gnome' && cls === 'citizen' && hat !== 'mohawk') HAT.gnomecap(g, A, cs.top ? [cs.top[1], cs.top[2]] : null);
       else if (hat === 'minerhelm') { g.rect(A.hx0, A.hy0 - 1, A.hx1 - A.hx0 + 1, 3, C.gold); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, C.goldD); g.set(A.hx1 + 1, A.hy0, C.fireY); g.set(A.hx1 + 2, A.hy0, C.goldL); }
       else if (hat && HAT[hat]) HAT[hat](g, A);
       if (cs.mask) g.hline(A.hx0 + 1, eyY + 2, A.hx1 - A.hx0, cs.mask);
       // --- vorderer Arm und Hand, Werkzeug
+      if (cs.ragged) { g.rect(tx1 - 1, ty0 + 1, 6, 2, sl[1]); g.rect(tx1 + 5, ty0 + 1, 2, 2, skin[1]); g.rect(tx0 - 1, ty0 + 2, 2, 1, sl[2]); }
       var tool = cls === 'soldier' ? WEAP[gov] || WEAP.tribe : (cls === 'leader' ? null : TOOL2[role]);
       var hold = !!tool || cls === 'leader';
       var fa = walk && !hold ? [[1, 0], [0, 0], [-1, 0], [0, 0]][frame][0] : 0;
-      var ax = tx1 - 1 + fa, ay = ty0 + 1, hx = hold ? tx1 + 2 : ax, hy = ty0 + th - 2;
-      if (hold) { g.rect(tx1 - 1, ay, 2, 3, sl[1]); g.rect(tx1, ay + 2, 3, 2, sl[1]); g.set(tx1 + 1, ay + 2, sl[0]); g.rect(hx, hy - 1, 2, 2, skin[1]); hy = hy - 1; }
+      var ax = tx1 - 1 + fa, ay = ty0 + 1, hx = hold ? Math.max(tx1 + 2, Math.ceil(hcx + hr) + 1) : ax, hy = ty0 + th - 2;
+      if (hold) { g.rect(tx1 - 1, ay, 2, 3, sl[1]); g.rect(tx1, ay + 2, hx - tx1 + 1, 2, sl[1]); g.set(tx1 + 1, ay + 2, sl[0]); g.rect(hx, hy - 1, 2, 2, skin[1]); hy = hy - 1; }
       else { g.rect(ax, ay, 2, th - 2, sl[1]); g.vline(ax, ay, th - 2, sl[0]); g.rect(ax, ty0 + th - 1, 2, 1, skin[1]); }
       if (tool) tool(g, hx, hy, A);
       if (cls === 'leader' && gov === 'monarchy') { g.vline(hx + 1, hy - 6, 8, C.gold); g.set(hx + 1, hy - 7, C.red); }
@@ -1213,6 +1216,292 @@
       });
     });
     [0, 1].forEach(function (f) { L.ALIAS['u_bandit_' + f] = 'h_human_bandit_neutral_' + (f ? 2 : 0); });
+
+    // ================================================================== Tiere und Monster im feinen Raster (Maßstab 0,5)
+    // Gleiche Schlüssel wie bisher (a_<kind>_<frame>, u_ram_*, u_catapult_*); sie werden auf c_<kind>_<frame> umgeleitet.
+    var CP = {
+      wool: [HC('#ffffff'), HC('#eceae4'), HC('#c8c4bc')], face: [HC('#5a4a4a'), HC('#3e3232'), HC('#2a2222')],
+      cowW: [HC('#ffffff'), HC('#efece6'), HC('#cfcac0')], cowB: [HC('#4a3a3a'), HC('#33282a'), HC('#221a1c')], pinkN: [HC('#ffc8c8'), HC('#f4a0a8'), HC('#d07880')],
+      hen: [HC('#fffaf0'), HC('#f2e8d6'), HC('#d8c8a8')], comb: HC('#e8413a'), beak: HC('#f6b23a'),
+      hare: [HC('#e8d2b0'), HC('#c9a77c'), HC('#9c7a52')],
+      deer: [HC('#d8a46a'), HC('#b47c46'), HC('#86582e')], antler: [HC('#f0e0c0'), HC('#d4bc90'), HC('#a88c60')],
+      wolf: [HC('#b8bcc8'), HC('#8c92a2'), HC('#626878')], bear: [HC('#a8784a'), HC('#7c5230'), HC('#55361e')],
+      crab: [HC('#ff8a6a'), HC('#e85a40'), HC('#b0382c')], fishC: [HC('#c8eef8'), HC('#7cc8e8'), HC('#4a8cc0')],
+      drg: [HC('#a8e070'), HC('#64b04a'), HC('#3a7838')], drgB: HC('#f8e8a8'),
+      zomb: [HC('#b8d49a'), HC('#8cb070'), HC('#64884e')], bone: [HC('#ffffff'), HC('#ecebe2'), HC('#c4c2b4')],
+      slime: [HC('#c8f4a0'), HC('#86d862'), HC('#4ea440')], demon: [HC('#ff7a5a'), HC('#e0443a'), HC('#a02a30')],
+      yeti: [HC('#ffffff'), HC('#e6eef6'), HC('#b8c8da')], yetiF: [HC('#a8d0f0'), HC('#7aaad8'), HC('#5582b0')],
+      worm: [HC('#f0c890'), HC('#d49a62'), HC('#a06c3e')], wormM: HC('#8a2a3a'),
+      bark: [HC('#b08458'), HC('#86603a'), HC('#5a3e24')], leaf: [HC('#a8e070'), HC('#5aa848'), HC('#357a3a')],
+      gem: [HC('#e8fcff'), HC('#8ee0f0'), HC('#4a9ec8')], gemD: HC('#2e6a96')
+    };
+    var GHW = AC(null, '#f6faff', 205), GHB = AC(null, '#c4d4f6', 190), GHO = AC(null, '#4a5a98', 230), GHE = AC(null, '#2a3060', 240);
+    function blobS(g, cx, cy, rx, ry, p, seedN) {
+      g.ellipse(cx, cy, rx, ry, function (x, y, nx, ny) { var s2 = nx * 0.8 + ny + (seedN ? (L.hash(x, y, seedN) - 0.5) * 0.4 : 0); return s2 < -0.75 ? p[0] : (s2 > 0.55 ? p[2] : p[1]); });
+    }
+    function eyeAt(g, x, y, big) { g.set(x, y, C.ink); if (big) { g.set(x, y + 1, C.ink); g.set(x + 1, y, C.white); } }
+    // vier Beine (Diagonalgang): xs = [hintenA, hintenB, vornA, vornB], f = Frame 0..3
+    var GAIT = [[1, -1], [0, 0], [-1, 1], [0, 0]];
+    function legs4(g, xs, y0, y1, f, col, colD, hoof) {
+      var o = GAIT[f];
+      xs.forEach(function (x, i) {
+        var d = (i === 0 || i === 3) ? o[0] : o[1], far = (i === 1 || i === 3);
+        g.line(x, y0, x + d, y1, far ? colD : col); g.line(x + 1, y0, x + 1 + d, y1, far ? colD : col);
+        if (hoof) g.hline(x + d, y1, 2, hoof);
+      });
+    }
+    var CRIT = {};
+    CRIT.sheep = function (g, f) {
+      legs4(g, [6, 9, 15, 18], 11, 15, f, CP.face[1], CP.face[2], C.ink);
+      blobS(g, 12, 8.5, 9, 5.2, CP.wool, 0);
+      [[5, 6], [9, 4], [14, 4], [18, 6], [7, 11], [16, 11]].forEach(function (p) { g.ellipse(p[0], p[1], 2.2, 2, function (x, y, nx, ny) { return nx + ny < -0.3 ? CP.wool[0] : CP.wool[1]; }); });
+      blobS(g, 21, 7, 3, 2.6, CP.face, 0); g.set(18, 5, CP.face[1]); g.set(19, 4, CP.face[1]);
+      eyeAt(g, 22, 6); g.set(21, 6, C.white);
+    };
+    CRIT.cow = function (g, f) {
+      legs4(g, [6, 9, 20, 23], 14, 19, f, CP.cowW[1], CP.cowW[2], CP.cowB[2]);
+      blobS(g, 15, 10, 11, 5.5, CP.cowW, 0);
+      [[9, 8, 3, 2.2], [17, 11, 3.5, 2.5], [12, 13, 2, 1.3], [21, 7, 2, 1.6]].forEach(function (p) { g.ellipse(p[0], p[1], p[2], p[3], CP.cowB[1]); });
+      g.line(4, 7, 2, 12, CP.cowW[2]); g.set(2, 13, CP.cowB[1]);                         // Schwanz
+      g.ellipse(14, 15.5, 2, 1.2, CP.pinkN[1]);                                           // Euter
+      blobS(g, 27, 7, 3.5, 3.4, CP.cowW, 0); g.ellipse(29, 9, 2.4, 1.6, CP.pinkN[1]); g.set(29, 9, CP.pinkN[2]); g.set(30, 9, CP.pinkN[2]);
+      g.set(25, 3, CP.antler[0]); g.set(26, 3, CP.antler[1]); g.set(29, 3, CP.antler[1]); g.set(24, 5, CP.cowB[1]); g.set(23, 5, CP.cowB[1]);
+      eyeAt(g, 28, 6, true);
+    };
+    CRIT.chicken = function (g, f) {
+      var o = GAIT[f];
+      g.line(6, 11, 6 + o[0], 14, CP.beak); g.line(9, 11, 9 + o[1], 14, CP.beak); g.hline(5 + o[0], 14, 3, CP.beak); g.hline(8 + o[1], 14, 3, CP.beak);
+      blobS(g, 7.5, 8, 5.5, 4, CP.hen, 0); g.ellipse(2.5, 5.5, 2, 2.5, CP.hen[1]);
+      g.line(5, 8, 9, 9, CP.hen[2]);
+      blobS(g, 11, 4, 2.6, 2.8, CP.hen, 0); g.paint(10, 0, ['.r.', 'rrr']); g.replace(C.red, CP.comb);
+      g.hline(13, 4, 2, CP.beak); g.set(13, 5, CP.beak); g.set(11, 6, CP.comb); eyeAt(g, 11, 3);
+    };
+    CRIT.rabbit = function (g, f) {
+      var hop = f === 1 || f === 3 ? -1 : 0, o = GAIT[f];
+      blobS(g, 6.5, 8 + hop, 5, 3.5, CP.hare, 0); g.ellipse(1.5, 7 + hop, 1.6, 1.6, C.white);
+      blobS(g, 11, 5 + hop, 2.8, 2.6, CP.hare, 0);
+      g.vline(9, 0 + hop, 4, CP.hare[1]); g.vline(10, 0 + hop, 4, CP.hare[0]); g.vline(11, 1 + hop, 3, CP.hare[2]); g.set(10, 1 + hop, CP.pinkN[1]);
+      eyeAt(g, 12, 4 + hop); g.set(13, 6 + hop, CP.pinkN[1]);
+      g.hline(3 + o[0], 11, 3, CP.hare[2]); g.hline(9 + o[1], 11, 2, CP.hare[1]);
+    };
+    CRIT.deer = function (g, f) {
+      legs4(g, [6, 9, 17, 20], 15, 22, f, CP.deer[1], CP.deer[2], C.ink);
+      blobS(g, 13, 12, 9, 4.5, CP.deer, 0); g.ellipse(5, 11, 1.6, 1.4, C.white);
+      [[9, 11], [12, 10], [15, 12], [11, 13]].forEach(function (p) { g.set(p[0], p[1], CP.deer[0]); });
+      g.line(19, 10, 21, 5, CP.deer[1]); g.line(20, 10, 22, 5, CP.deer[1]); g.line(21, 10, 23, 5, CP.deer[2]);
+      blobS(g, 23.5, 4.5, 3, 2.4, CP.deer, 0); g.set(26, 5, C.ink); eyeAt(g, 24, 3);
+      g.set(21, 2, CP.deer[2]);
+      g.line(22, 2, 20, -0, CP.antler[1]); g.line(22, 2, 24, -0, CP.antler[1]); g.set(19, 0, CP.antler[0]); g.set(25, 0, CP.antler[0]); g.set(21, 0, CP.antler[2]); g.set(23, 1, CP.antler[1]);
+    };
+    CRIT.wolf = function (g, f) {
+      legs4(g, [5, 8, 16, 19], 10, 14, f, CP.wolf[1], CP.wolf[2], CP.wolf[2]);
+      blobS(g, 12, 8, 8.5, 3.6, CP.wolf, 0); g.hline(7, 10, 10, CP.wolf[0]);
+      g.line(3, 6, 0, 10, CP.wolf[1]); g.line(3, 7, 0, 11, CP.wolf[2]); g.set(0, 11, CP.wolf[0]);
+      blobS(g, 20.5, 6, 3, 2.6, CP.wolf, 0); g.hline(22, 7, 3, CP.wolf[1]); g.set(25, 7, C.ink); g.hline(22, 8, 3, CP.wolf[0]);
+      g.set(19, 2, CP.wolf[1]); g.set(19, 3, CP.wolf[2]); g.set(21, 2, CP.wolf[1]); g.set(21, 3, CP.wolf[2]);
+      eyeAt(g, 21, 5); g.set(22, 5, CP.fishC[0]);
+    };
+    CRIT.bear = function (g, f) {
+      legs4(g, [6, 9, 19, 22], 13, 18, f, CP.bear[1], CP.bear[2], CP.bear[2]);
+      g.rect(5, 12, 4, 3, CP.bear[1]); g.rect(18, 12, 6, 3, CP.bear[1]);
+      blobS(g, 14, 9, 10, 5.5, CP.bear, 3);
+      blobS(g, 25, 7, 4, 3.6, CP.bear, 0); g.ellipse(28, 8.5, 2, 1.5, CP.hare[0]); g.set(29, 8, C.ink);
+      g.ellipse(23, 3.5, 1.4, 1.4, CP.bear[1]); g.set(23, 3, CP.bear[2]); eyeAt(g, 26, 6);
+    };
+    CRIT.crab = function (g, f) {
+      var o = f & 1;
+      for (var i = 0; i < 3; i++) { g.line(5 + i * 2, 7, 2 + i * 2 - o, 10, CP.crab[2]); g.line(13 - i * 2, 7, 16 - i * 2 + o, 10, CP.crab[2]); }
+      blobS(g, 9, 5.5, 6, 3.2, CP.crab, 0);
+      g.ellipse(2, 3 - o, 2, 1.8, CP.crab[1]); g.ellipse(16, 3 - (1 - o), 2, 1.8, CP.crab[1]); g.set(1, 2 - o, C.white);
+      g.vline(7, 0, 3, CP.crab[2]); g.vline(11, 0, 3, CP.crab[2]); g.set(7, 0, C.ink); g.set(11, 0, C.ink);
+    };
+    CRIT.fish = function (g, f) {
+      if (f === 0) {   // Rücken in der Welle
+        g.paint(6, 6, ['...b..', '..bbB.', '.bbbBB']); g.replace(C.glass, CP.fishC[1]); g.replace(C.waterD, CP.fishC[2]);
+        for (var x = 0; x < 20; x++) { g.set(x, 9 + ((x >> 2) & 1), C.white); g.set(x, 10 + ((x >> 2) & 1), CP.fishC[0]); }
+      } else {
+        g.ellipse(10, 5, 6, 2.6, function (x, y, nx, ny) { return ny < -0.3 ? CP.fishC[0] : (ny > 0.4 ? CP.fishC[2] : CP.fishC[1]); });
+        g.paint(1, 2, ['b...', 'bb..', 'bbb.', 'bb..', 'b...']); g.replace(C.glass, CP.fishC[1]);
+        eyeAt(g, 14, 4); g.set(16, 6, C.ink); g.set(9, 2, CP.fishC[2]); g.set(10, 2, CP.fishC[2]);
+        g.paint(2, 11, ['l.l....l.l', '.J......J.']);
+      }
+    };
+    CRIT.dragon = function (g, f) {
+      var up = f === 0 || f === 3, mid = f === 1;
+      // Schwanz
+      g.line(0, 15, 8, 19, CP.drg[2]); g.line(0, 16, 8, 20, CP.drg[1]); g.paint(0, 13, ['r.', 'rr']); g.replace(C.red, 'T');
+      blobS(g, 17, 20, 10, 5.5, CP.drg, 0); g.hline(10, 23, 14, CP.drgB); g.hline(12, 24, 10, CP.drgB);
+      for (var x = 9; x < 25; x += 3) g.set(x, 15, CP.drg[0]);
+      // Hals und Kopf
+      g.line(24, 18, 30, 10, CP.drg[1]); g.line(25, 19, 31, 11, CP.drg[1]); g.line(26, 19, 32, 12, CP.drgB);
+      blobS(g, 33, 9, 5, 3.6, CP.drg, 0); g.hline(34, 11, 5, CP.drg[2]); g.set(38, 10, C.ink); g.set(37, 12, C.white); g.set(35, 12, C.white);
+      g.line(31, 6, 29, 2, CP.antler[1]); g.line(33, 6, 32, 2, CP.antler[1]);
+      eyeAt(g, 34, 7, true);
+      // Beine
+      g.rect(12, 24, 3, 3, CP.drg[2]); g.rect(20, 24, 3, 3, CP.drg[2]); g.hline(12, 27, 4, C.ink); g.hline(20, 27, 4, C.ink);
+      // kräftige Flügel: Flughaut in Teamfarbe zwischen drei Fingerknochen
+      var root = [16, 16], tips = up ? [[0, 5], [7, 0], [23, 1]] : (mid ? [[0, 13], [5, 6], [22, 8]] : [[0, 30], [9, 35], [23, 31]]);
+      for (var k = 0; k < tips.length - 1; k++) fillT(g, root, tips[k], tips[k + 1], k & 1 ? 'Td' : 'T');
+      fillT(g, root, tips[2], [root[0] + 4, root[1]], 'Tl');
+      tips.forEach(function (t) { g.line(root[0], root[1], t[0], t[1], CP.drg[2]); });
+      g.line(tips[0][0], tips[0][1], tips[1][0], tips[1][1], CP.drg[2]);
+    };
+    function fillT(g, a, b, c, col) {
+      for (var yy = 0; yy < g.h; yy++) for (var xx = 0; xx < g.w; xx++) {
+        var px = xx + 0.5, py = yy + 0.5;
+        var d1 = (px - b[0]) * (a[1] - b[1]) - (a[0] - b[0]) * (py - b[1]), d2 = (px - c[0]) * (b[1] - c[1]) - (b[0] - c[0]) * (py - c[1]), d3 = (px - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (py - a[1]);
+        if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) g.set(xx, yy, col);
+      }
+    }
+    CRIT.slime = function (g, f, sz) {
+      var w = sz === 's' ? 12 : (sz === 'l' ? 28 : 20), h = sz === 's' ? 8 : (sz === 'l' ? 18 : 13);
+      var sq = [0, 1, 0, -1][f], rx = w / 2 + sq * 0.8, ry = h / 2 - sq * 0.8, cy = g.h - 1 - ry;
+      g.ellipse(w / 2 + 1, cy, rx, ry, function (x, y, nx, ny) { return y > g.h - 1 ? null : (nx + ny < -0.9 ? C.white : (nx + ny < -0.3 ? CP.slime[0] : (ny > 0.45 ? CP.slime[2] : CP.slime[1]))); });
+      var ex = Math.round(w / 2 + 2), ey = Math.round(cy - ry * 0.15);
+      eyeAt(g, ex, ey, sz !== 's'); eyeAt(g, ex + Math.max(2, Math.round(w / 6)), ey, sz !== 's');
+      if (sz !== 's') g.hline(ex, ey + 3, Math.max(2, Math.round(w / 6)) + 1, CP.slime[2]);
+      if (sz === 'l') { g.ellipse(6, cy + 2, 1.5, 1.5, CP.slime[0]); g.set(5, cy - 3, C.white); }
+    };
+    CRIT.ghost = function (g, f) {
+      var bob = [0, -1, 0, 1][f];
+      g.ellipse(9, 7 + bob, 7, 7, GHW); g.rect(2, 7 + bob, 14, 8, GHW);
+      for (var x = 2; x < 16; x++) { var wv = ((x + f) >> 1) & 1; g.set(x, 15 + bob + wv, GHW); }
+      g.vline(15, 6 + bob, 9, GHB); g.hline(3, 14 + bob, 12, GHB);
+      g.ellipse(10, 6 + bob, 1.3, 1.8, GHE); g.ellipse(14, 6 + bob, 1.3, 1.8, GHE); g.set(10, 5 + bob, C.white); g.set(14, 5 + bob, C.white);
+      g.ellipse(12, 10 + bob, 1.6, 1.3, GHE);
+      g.line(2, 8 + bob, 0, 11 + bob - (f & 1), GHW); g.line(16, 8 + bob, 18, 6 + bob + (f & 1), GHW);
+    };
+    CRIT.demon = function (g, f) {
+      var o = GAIT[f];
+      g.line(7, 15, 6 + o[0], 20, CP.demon[2]); g.line(8, 15, 7 + o[0], 20, CP.demon[2]); g.line(11, 15, 11 + o[1], 20, CP.demon[1]); g.line(12, 15, 12 + o[1], 20, CP.demon[1]);
+      g.line(5, 14, 1, 16, CP.demon[2]); g.line(1, 16, 0, 13, CP.demon[2]); g.paint(0, 11, ['.R', 'RR']);   // Schwanz mit Spitze
+      blobS(g, 10, 12, 4.5, 4, CP.demon, 0); g.hline(8, 14, 5, C.ink);
+      fillT(g, [8, 10], [1, 4], [5, 12], C.redD); fillT(g, [8, 10], [3, 2], [1, 4], C.plum);   // Flügelchen
+      blobS(g, 11, 6, 4, 3.6, CP.demon, 0);
+      g.set(8, 2, C.cream); g.set(7, 1, C.cream); g.set(14, 2, C.cream); g.set(15, 1, C.cream);
+      g.set(12, 5, C.fireY); g.set(14, 5, C.fireY); g.hline(12, 8, 3, C.ink); g.set(13, 9, C.white);
+      g.vline(16, 3, 13, C.woodD); g.paint(15, 0, ['n.n', 'nnn', '.m.']); g.rect(14, 10, 2, 2, CP.demon[1]);
+    };
+    CRIT.giantchicken = function (g, f) {
+      var o = GAIT[f];
+      g.line(10, 21, 9 + o[0] * 2, 27, CP.beak); g.line(11, 21, 10 + o[0] * 2, 27, CP.beak); g.line(15, 21, 15 + o[1] * 2, 27, CP.beak); g.line(16, 21, 16 + o[1] * 2, 27, CP.beak);
+      g.hline(7 + o[0] * 2, 27, 5, CP.beak); g.hline(14 + o[1] * 2, 27, 5, CP.beak);
+      blobS(g, 12, 15, 10, 7, CP.hen, 5); g.ellipse(3, 10, 3.5, 5, CP.hen[1]); g.ellipse(2, 7, 2, 3, CP.hen[0]);
+      g.line(8, 15, 16, 17, CP.hen[2]); g.line(9, 13, 15, 15, CP.hen[2]);
+      blobS(g, 20, 6, 5, 5, CP.hen, 0);
+      g.paint(17, 0, ['.r.r.', 'rrrrr']); g.replace(C.red, CP.comb);
+      g.rect(24, 6, 4, 2, CP.beak); g.hline(24, 8, 3, CP.beak); g.set(22, 9, CP.comb); g.set(22, 10, CP.comb);
+      g.ellipse(21, 5, 2, 2, C.white); g.set(22, 5, C.ink); g.set(21, 4, C.ink);   // großes verdutztes Auge
+    };
+    CRIT.yeti = function (g, f) {
+      var o = GAIT[f];
+      g.rect(7 + o[0], 21, 4, 5, CP.yeti[2]); g.rect(13 + o[1], 21, 4, 5, CP.yeti[1]); g.hline(6 + o[0], 26, 6, CP.yetiF[2]); g.hline(12 + o[1], 26, 6, CP.yetiF[1]);
+      blobS(g, 12, 15, 8, 8, CP.yeti, 9);
+      g.rect(2, 12 + o[1], 4, 9, CP.yeti[2]); g.rect(18, 12 + o[0], 4, 9, CP.yeti[1]); g.rect(2, 20 + o[1], 4, 2, CP.yetiF[1]); g.rect(18, 20 + o[0], 4, 2, CP.yetiF[1]);
+      blobS(g, 13, 6, 5, 5, CP.yeti, 9);
+      g.ellipse(14, 7, 3.4, 2.6, CP.yetiF[1]); g.set(13, 6, C.ink); g.set(16, 6, C.ink); g.hline(13, 9, 4, CP.yetiF[2]); g.set(14, 10, C.white);
+    };
+    CRIT.sandworm = function (g, f) {
+      if (f === 1 || f === 3) {   // Erdhügel
+        g.ellipse(12, 26, 11, 4, function (x, y, nx, ny) { return y > 27 ? null : (ny < -0.4 ? C.strawL : (nx > 0.3 ? C.sandD : C.sand)); });
+        for (var x = 3; x < 22; x += 4) g.set(x, 25, C.sandD);
+        return;
+      }
+      g.ellipse(12, 26, 11, 4, function (x, y, nx, ny) { return y > 27 ? null : (ny < -0.4 ? C.strawL : (nx > 0.3 ? C.sandD : C.sand)); });
+      for (var y = 6; y < 26; y++) { var cx = 12 + Math.round(Math.sin(y * 0.28 + 1) * 3), w = 7 - Math.floor((26 - y) / 10); for (var xx = 0; xx < w; xx++) g.set(cx - (w >> 1) + xx, y, xx === 0 ? CP.worm[0] : (xx === w - 1 ? CP.worm[2] : CP.worm[1])); if (y % 3 === 0) g.hline(cx - (w >> 1), y, w, CP.worm[2]); }
+      // großes Maul mit Zahnkranz
+      g.ellipse(12, 4, 7, 4.5, CP.worm[1]); g.ellipse(13, 4, 5, 3.2, CP.wormM); g.ellipse(13.5, 4.5, 2.6, 1.6, C.ink);
+      for (var a = 0; a < 10; a++) { var t = a / 10 * Math.PI * 2; g.set(Math.round(13 + Math.cos(t) * 4.2), Math.round(4 + Math.sin(t) * 2.8), C.white); }
+      g.set(6, 6, C.fireY); g.set(7, 5, C.ink);
+    };
+    CRIT.treant = function (g, f) {
+      var o = GAIT[f];
+      g.rect(8 + o[0], 24, 3, 6, CP.bark[2]); g.rect(14 + o[1], 24, 3, 6, CP.bark[1]); g.hline(7 + o[0], 29, 5, CP.bark[2]); g.hline(13 + o[1], 29, 5, CP.bark[2]);
+      g.rect(7, 13, 11, 12, CP.bark[1]); g.vline(7, 13, 12, CP.bark[0]); g.vline(17, 13, 12, CP.bark[2]);
+      for (var y = 15; y < 25; y += 3) g.set(9 + (y & 1), y, CP.bark[2]);
+      g.line(7, 15, 2, 11 + o[1], CP.bark[1]); g.line(18, 15, 23, 12 + o[0], CP.bark[1]); g.set(1, 10 + o[1], CP.leaf[1]); g.set(23, 11 + o[0], CP.leaf[1]);
+      [[12, 7, 9, 6], [6, 9, 5, 4], [19, 9, 5, 4], [12, 3, 5, 3.5]].forEach(function (b, i) { blobS(g, b[0], b[1], b[2], b[3], CP.leaf, 20 + i); });
+      g.ellipse(10.5, 17, 1.4, 1.8, C.ink); g.ellipse(14.5, 17, 1.4, 1.8, C.ink); g.set(11, 16, C.fireY); g.set(15, 16, C.fireY);
+      g.hline(10, 21, 6, CP.bark[2]); g.set(16, 20, CP.bark[2]);
+      g.set(5, 6, C.pink); g.set(18, 4, C.pink);
+    };
+    CRIT.golem = function (g, f) {
+      var o = GAIT[f];
+      g.rect(6 + o[0], 19, 4, 5, CP.gem[2]); g.rect(13 + o[1], 19, 4, 5, CP.gem[1]);
+      function shardBlock(x, y, w, h) { g.rect(x, y, w, h, CP.gem[1]); g.vline(x, y, h, CP.gem[0]); g.vline(x + w - 1, y, h, CP.gem[2]); g.hline(x, y, w, CP.gem[0]); g.line(x + 1, y + h - 1, x + w - 2, y + 1, CP.gem[2]); }
+      shardBlock(5, 9, 13, 11);
+      shardBlock(1, 10 + o[1], 4, 9); shardBlock(18, 10 + o[0], 4, 9);
+      shardBlock(8, 2, 8, 7);
+      g.set(9, 1, CP.gem[0]); g.set(13, 0, CP.gem[0]); g.set(14, 1, CP.gem[1]); g.set(4, 8, CP.gem[0]); g.set(19, 8, CP.gem[0]);
+      g.set(11, 5, C.fireY); g.set(14, 5, C.fireY); g.hline(11, 7, 3, CP.gemD);
+      g.ellipse(11.5, 14, 1.6, 1.6, C.purple); g.set(11, 13, C.white);
+    };
+    // Belagerungsgerät
+    CRIT.ram = function (g, f) {
+      var push = [0, 1, 2, 1][f];
+      g.rect(3, 8, 20, 3, C.wood); g.hline(3, 8, 20, C.woodL); g.hline(3, 10, 20, C.woodD);                  // Gestell
+      g.line(4, 8, 10, 1, C.woodD); g.line(21, 8, 15, 1, C.woodD); g.line(5, 8, 11, 1, C.wood); g.line(20, 8, 14, 1, C.wood);
+      g.rect(9, 0, 8, 2, 'T'); g.hline(9, 0, 8, 'Tl'); g.hline(9, 1, 8, 'Td');                                   // Dach mit Teamtuch
+      g.rect(2 + push, 11, 22, 3, C.woodL); g.hline(2 + push, 13, 22, C.woodD); for (var x = 4 + push; x < 22 + push; x += 5) g.vline(x, 11, 3, C.metalD);   // Rammbalken
+      g.paint(23 + push, 10, ['mn.', 'mnn', 'mMn', 'MM.']);                                                  // Widderkopf aus Eisen
+      [[5, 17], [18, 17]].forEach(function (w, i) { g.ellipse(w[0], w[1], 3, 3, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d < 0.25 ? C.metal : (d > 0.6 ? C.ink : C.woodD); }); var a = (f + i) * 0.8; g.set(Math.round(w[0] + Math.cos(a) * 2), Math.round(w[1] + Math.sin(a) * 2), C.woodL); });
+    };
+    CRIT.catapult = function (g, f) {
+      var fire = f === 1;
+      g.rect(2, 16, 22, 3, C.wood); g.hline(2, 16, 22, C.woodL); g.hline(2, 18, 22, C.woodD);
+      g.line(6, 16, 12, 8, C.woodD); g.line(18, 16, 12, 8, C.woodD); g.line(7, 16, 13, 8, C.wood);
+      g.rect(10, 7, 5, 3, C.woodD); g.rect(11, 8, 3, 1, 'T');
+      if (!fire) { g.line(12, 8, 1, 13, C.woodL); g.line(12, 9, 1, 14, C.wood); g.paint(0, 10, ['.WW.', 'WggW', 'WGgW']); }
+      else { g.line(12, 8, 21, 0, C.woodL); g.line(13, 8, 22, 0, C.wood); g.paint(20, 0, ['WW.', 'W.W']); }
+      g.rect(18, 12, 4, 4, C.stone); g.hline(18, 12, 4, C.stoneL);   // Gegengewicht/Steine
+      [[6, 21], [19, 21]].forEach(function (w) { g.ellipse(w[0], w[1], 3, 3, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d < 0.25 ? C.metal : (d > 0.6 ? C.ink : C.woodD); }); });
+    };
+    var CSIZE = { sheep: [26, 17], cow: [33, 21], chicken: [16, 16], rabbit: [15, 13], deer: [28, 24], wolf: [27, 16], bear: [31, 20], crab: [19, 12],
+      fish: [21, 14], dragon: [42, 36], ghost: [20, 19], demon: [19, 22], giantchicken: [30, 29], yeti: [24, 28], sandworm: [25, 29], treant: [26, 31],
+      golem: [23, 25], ram: [28, 21], catapult: [26, 25], slime_s: [14, 9], slime: [22, 14], slime_l: [30, 19] };
+    var FRAMES = { fish: 2, sandworm: 2, catapult: 2 };
+    function creatureGrid(kind, f) {
+      var sz = CSIZE[kind]; if (!sz) return null;
+      var g = new Grid(sz[0], sz[1]);
+      if (/^slime/.test(kind)) CRIT.slime(g, f, kind === 'slime_s' ? 's' : (kind === 'slime_l' ? 'l' : 'm'));
+      else CRIT[kind](g, f);
+      var edge = kind === 'ghost' ? GHO : (/^slime/.test(kind) ? C.leafDD : null);
+      var o = g.pad(1, 1, 1, 0).outline(edge);
+      if (kind === 'dragon' || kind === 'ghost') return o;     // schweben: eigener Schatten
+      return o.pad(0, 0, 0, 2).footShade();
+    }
+    S._creatureGrid = creatureGrid;
+    var LIFT = { dragon: 10, ghost: 3 };
+    L.lazyDef('c_', function (key) {
+      var p = key.slice(2).split('_'), f = +p.pop(), kind = p.join('_');
+      if (kind === 'dragon_shadow') { var s2 = new Grid(36, 10); s2.ellipse(18, 5, 17, 4.5, C.shade); return { grid: s2, scale: 0.5, ox: Math.floor((8 - 18) / 2), oy: 8 - 5 }; }
+      var g = creatureGrid(kind, f); if (!g) return null;
+      var dw = g.w * 0.5, dh = g.h * 0.5;
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - dw) / 2), oy: 8 - dh - (LIFT[kind] || 0) };
+    });
+    Object.keys(CSIZE).forEach(function (kind) {
+      var n = FRAMES[kind] || 4, base = (kind === 'ram' || kind === 'catapult') ? 'u_' + kind : 'a_' + kind;
+      for (var f = 0; f < 4; f++) L.ALIAS[base + '_' + f] = 'c_' + kind + '_' + (n === 2 ? (f & 1) : f);
+      // alte zwei Frames: _1 entspricht der Gegenphase (Frame 2), außer bei zweiphasigen Arten
+      if (n === 4) L.ALIAS[base + '_1'] = 'c_' + kind + '_2';
+    });
+    L.ALIAS.a_dragon_shadow = 'c_dragon_shadow_0';
+    S.creatureFrames = function (kind) { return FRAMES[kind] || 4; };
+    // alte Sprites für den Vergleich behalten
+    ['sheep', 'cow', 'chicken', 'rabbit', 'deer', 'wolf', 'bear', 'crab', 'fish', 'dragon', 'zombie', 'skeleton', 'slime', 'ghost', 'demon', 'giantchicken', 'yeti', 'sandworm', 'treant', 'golem']
+      .forEach(function (k) { var d = L.DEFS['a_' + k + '_0']; if (d) def('lo_a_' + k + '_0', d.grid, { group: 'old', ox: d.ox, oy: d.oy }); });
+    ['u_ram_0', 'u_catapult_0'].forEach(function (k) { var d = L.DEFS[k]; if (d) def('lo_' + k, d.grid, { group: 'old', ox: d.ox, oy: d.oy }); });
+    // Zombie und Skelett als Figuren im feinen Raster (eigene Körper und Trachten)
+    BODY.zombie = { skin: CP.zomb, tw: 7, th: 7, leg: 6, hr: 3.8, hair: K2.hairDk };
+    BODY.skeleton = { skin: CP.bone, tw: 5, th: 7, leg: 6, hr: 3.6, hair: null };
+    RACES2.push('zombie', 'skeleton');
+    COST.zombie = { top: T3(C.dusk, C.plum, C.ink), sleeve: T3(C.dusk, C.plum, C.ink), pants: T3(K2.brown, K2.brownD, K2.brownD), shoes: C.ink, patches: 0, hat: null, ragged: 1 };
+    COST.skeleton = { top: null, sleeve: null, pants: null, shoes: CP.bone[2], ribs: 1, hat: null };
+    GOVS2.push('zombie', 'skeleton');
+    ['zombie', 'skeleton'].forEach(function (k) {
+      for (var f = 0; f < 4; f++) L.ALIAS['a_' + k + '_' + f] = 'h_' + k + '_monster_' + k + '_' + f;
+      L.ALIAS['a_' + k + '_1'] = 'h_' + k + '_monster_' + k + '_2';
+    });
   });
 
   WW.SPRITE_RACES = RACES;

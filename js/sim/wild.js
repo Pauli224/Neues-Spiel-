@@ -37,6 +37,8 @@
 //   units[] zusätzlich: role 'bandit' (Räuber: kingdomId -1, cityId -1, wHome = Lager-ID, task 'camp'|'raid'|'back'|'roam',
 //     carrying 'food'|'gold'), wMad (Tick: wahnsinnig; während dessen kingdomId/cityId -1, Original in wMadK/wMadC),
 //     wClear (Ort-ID, den der Soldat ausräumen soll), wClearT
+//   byPlayer (Tiere, Räuber, Orte): vom Spieler gesetzt (spawnAnimal, spawnBandits, placeLair), vererbt an Nachwuchs,
+//     Schleim-Teile, Angesteckte, Bewohner des Orts – ignoriert alle Schonregeln für junge Siedlungen (Sandkasten).
 //   cities[] zusätzlich: wAlarm (Tick, bis zu dem Alarm herrscht)
 //
 // KREATUREN (WW.CREATURES[kind], Daten in WW.WILD.CREATURES): name, plural, desc, category ('animal'|'monster'),
@@ -324,8 +326,8 @@
     return out;
   }
   function spawnResident(sim, s, L) {
-    if (L.resident === 'bandit') return spawnBandit(sim, s.x + 0.5, s.y + 0.5, s.id) ? 1 : 0;
-    const a = WW.Creatures.spawn(sim, L.resident, s.x + 0.5 + sim.rng.range(-1, 1), s.y + 0.5 + sim.rng.range(-1, 1), { home: s.id, age: 1 });
+    if (L.resident === 'bandit') { const u = spawnBandit(sim, s.x + 0.5, s.y + 0.5, s.id); if (u && s.byPlayer) u.byPlayer = true; return u ? 1 : 0; }
+    const a = WW.Creatures.spawn(sim, L.resident, s.x + 0.5 + sim.rng.range(-1, 1), s.y + 0.5 + sim.rng.range(-1, 1), { home: s.id, age: 1, byPlayer: !!s.byPlayer });
     if (!a) return 0;
     if (L.resident === 'dragon') { a.state = 0; a.t = 600 + sim.rng.int(900); }
     return 1;
@@ -341,7 +343,7 @@
     for (const u of st.units) if (!u.dead && u.role === 'bandit' && u.wHome >= 0) res[u.wHome] = (res[u.wHome] || 0) + 1;
     for (const s of lairs) {
       const L = WW.LAIRS[s.kind];
-      if (L.resident && L.hostile !== false && cityDist2(sim, s.x, s.y) < 18 * 18) { /* ruht, solange eine Stadt nah ist */ }
+      if (L.resident && L.hostile !== false && !s.byPlayer && cityDist2(sim, s.x, s.y) < 18 * 18) { /* ruht, solange eine Stadt nah ist */ }
       else if (L.resident) {
         if (s.spawnT > 0) s.spawnT -= 30;
         else if ((res[s.id] || 0) < L.max) {
@@ -472,12 +474,12 @@
     let target = -1, city = null;
     let trader = null;
     WW.Units.forNear(sim, s.x + 0.5, s.y + 0.5, 24, false, (u) => { if (!trader && u.role === 'trader') trader = u; });
-    if (trader && sturdy(sim, sim._cities.get(trader.cityId))) target = trader.id;
+    if (trader && (s.byPlayer || sturdy(sim, sim._cities.get(trader.cityId)))) target = trader.id;
     else if (trader) return;
     else {
       let bd = 40 * 40;
       for (const c of st.cities) { const dx = c.cx - s.x, dy = c.cy - s.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; city = c; } }
-      if (!city || !sturdy(sim, city)) return;
+      if (!city || (!s.byPlayer && !sturdy(sim, city))) return;
       const open = !(city.wall && city.wall.level >= 1);
       if (open && sim.rng.chance(0.5)) target = city.centerId;
       else {
@@ -576,7 +578,7 @@
     if (!home && sim.rng.chance(0.01)) {
       // heimatlose Räuber versuchen ab und zu ihr Glück an einem Feld
       let f = null;
-      for (const c of st.cities) { const dx = c.cx - u.x, dy = c.cy - u.y; if (dx * dx + dy * dy < 900 && sturdy(sim, c) && c.fields && c.fields.length) { f = sim._structs.get(sim.rng.pick(c.fields)); break; } }
+      for (const c of st.cities) { const dx = c.cx - u.x, dy = c.cy - u.y; if (dx * dx + dy * dy < 900 && (u.byPlayer || sturdy(sim, c)) && c.fields && c.fields.length) { f = sim._structs.get(sim.rng.pick(c.fields)); break; } }
       if (f) { u.task = 'raid'; u.target = f.id; u.tt = 0; u.path = null; }
     }
   }
@@ -711,9 +713,9 @@
     const st = sim.state;
     const home = a.home >= 0 ? sim._structs.get(a.home) : null;
     const px = home ? home.x + 0.5 : a.x, py = home ? home.y + 0.5 : a.y;
-    if (sim.rng.chance(home ? 0.35 : 0.3)) {
-      let best = null, bd = (home ? 40 : 30) ** 2;
-      for (const c of st.cities) { if (c.pop < 40 || st.year - (c.founded || 0) < 15) continue; const dx = c.cx - px, dy = c.cy - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
+    if (a.byPlayer || sim.rng.chance(home ? 0.35 : 0.3)) {
+      let best = null, bd = (a.byPlayer ? 60 : (home ? 40 : 30)) ** 2;
+      for (const c of st.cities) { if (!a.byPlayer && (c.pop < 40 || st.year - (c.founded || 0) < 15)) continue; const dx = c.cx - px, dy = c.cy - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
       if (best) {
         const x = Math.max(0, Math.min(st.W - 1, best.cx + sim.rng.irange(-4, 4))), y = Math.max(0, Math.min(st.H - 1, best.cy + sim.rng.irange(-4, 4)));
         chron(sim, 'dragonRaid', { city: best.name }, WW.Cities.atCity(best), best.id, WW.CONFIG.TPY);
@@ -722,7 +724,7 @@
     }
     const x = Math.floor(px + sim.rng.range(-20, 20)), y = Math.floor(py + sim.rng.range(-20, 20));
     if (x < 0 || y < 0 || x >= st.W || y >= st.H) return null;
-    if (cityDist2(sim, x, y) < 16 * 16) return null;   // Streifzüge nur fern von Siedlungen
+    if (!a.byPlayer && cityDist2(sim, x, y) < 16 * 16) return null;   // Streifzüge nur fern von Siedlungen
     return { i: y * st.W + x, cityId: -1 };
   }
 
@@ -924,6 +926,7 @@
         if (!inMap(x, y) || !WW.LAIRS[kind]) return null;
         const s = placeLair(sim, x, y, kind);
         if (!s) return null;
+        s.byPlayer = true;
         const L = WW.LAIRS[kind];
         if (L.resident) { spawnResident(sim, s, L); s.spawnT = L.respawn; s.hatched = 1; }
         return s.id;
@@ -932,7 +935,7 @@
         if (!inMap(x, y)) return 0;
         n = isNum(n) ? Math.max(1, Math.min(10, Math.floor(n))) : 3;
         let k = 0;
-        for (let j = 0; j < n; j++) { const u = spawnBandit(sim, x + sim.rng.range(-1, 1), y + sim.rng.range(-1, 1), -1); if (u) { u.task = 'roam'; k++; } }
+        for (let j = 0; j < n; j++) { const u = spawnBandit(sim, x + sim.rng.range(-1, 1), y + sim.rng.range(-1, 1), -1); if (u) { u.task = 'roam'; u.byPlayer = true; k++; } }
         return k;
       })
     };
@@ -976,7 +979,7 @@
     yearlyLairs(sim);
     if (!st.wild.off) immigrate(sim);
     // heimatlose Räuber ziehen manchmal weiter
-    for (const u of st.units) if (!u.dead && u.role === 'bandit' && u.wHome < 0 && sim.rng.chance(0.15)) WW.Units.kill(sim, u, 'gone');
+    for (const u of st.units) if (!u.dead && u.role === 'bandit' && u.wHome < 0 && !u.byPlayer && sim.rng.chance(0.15)) WW.Units.kill(sim, u, 'gone');
     // alte Sperrfristen vergessen
     const w = st.wild;
     for (const k in w.lastEv) if (st.tick - w.lastEv[k] > WW.CONFIG.TPY * 5) delete w.lastEv[k];

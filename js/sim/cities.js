@@ -654,6 +654,7 @@
     else if (sk.food > city.pop * 2) h += 5;
     if (city.pop > city.housing) h -= Math.min(15, (city.pop - city.housing) * 2);
     if (k && WW.Diplo.atWar(sim, k.id)) h -= 8;
+    if (city.nature != null && city.nature < 30) h -= (WW.RACES[city.race] && WW.RACES[city.race].nature === 'care') ? 10 : 4;   // kahle Umgebung
     if (city.occupiedUntil && sim.state.year < city.occupiedUntil) h -= (g.war === 'mass' ? 22 : 10);
     if (city.hasMonument) h += (k && k.gov === 'theocracy') ? 14 : 5;
     if (k && k.gov === 'fascism') h += Math.min(25, city.propaganda || 0);

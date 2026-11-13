@@ -437,6 +437,41 @@ test('8b Junge Siedlungen überleben die Wildnis (10 Seeds, je 4 Gruppen, 6000 T
   assert(res.true >= Math.min(9, res.false) - 1, 'junge Siedlungen gehen an der Wildnis unter');
 });
 
+test('8c Vom Spieler gesetzter Drache tobt sich aus, natürlicher verschont junge Städte', function () {
+  const res = {};
+  for (const byPlayer of [true, false]) {
+    const sim = makeSim({ seed: 'drache-jung', world: testWorld(96, 64), populate: 1, races: ['human'], govs: ['tribe'], animals: false });
+    const st = sim.state, c = st.cities[0];
+    run(sim, 300);
+    const x = c.cx + 14.5, y = c.cy + 0.5;
+    let id;
+    if (byPlayer) id = sim.actions.spawnAnimal(x, y, 'dragon');
+    else { const a = WW.Creatures.spawn(sim, 'dragon', x, y); id = a && a.id; }
+    assert(id != null, 'Drache nicht gesetzt');
+    assert(!!sim.query.animal(id).byPlayer === byPlayer, 'Kennzeichen byPlayer falsch');
+    let fires = 0, hp0 = 0;
+    for (const s of st.structs) if (!s.dead && s.cityId === c.id) hp0 += s.hp;
+    const pop0 = st.units.filter(u => !u.dead && u.cityId === c.id).length;
+    run(sim, 900, 5, () => { for (let i = 0; i < st.fire.length; i++) if (st.fire[i]) { const dx = (i % st.W) - c.cx, dy = Math.floor(i / st.W) - c.cy; if (dx * dx + dy * dy < 144) fires++; } });
+    let hp1 = 0; for (const s of st.structs) if (!s.dead && s.cityId === c.id) hp1 += s.hp;
+    const pop1 = st.units.filter(u => !u.dead && u.cityId === c.id).length;
+    res[byPlayer] = { fires, lost: Math.round(hp0 - hp1), died: pop0 - pop1 };
+    checkInvariants(sim, 'Drache ' + byPlayer);
+  }
+  log('gesetzt:', JSON.stringify(res.true), '· natürlich:', JSON.stringify(res.false));
+  assert(res.true.fires > 0, 'gesetzter Drache greift die junge Stadt nicht an');
+  assert(res.false.fires === 0, 'natürlicher Drache brennt eine junge Stadt nieder');
+  // Vererbung
+  const sim = makeSim({ seed: 'erbe', world: testWorld(96, 64), populate: 0, animals: false });
+  const sl = sim.query.animal(sim.actions.spawnAnimal(40.5, 30.5, 'slime'));
+  WW.Creatures.hit(sim, sl, 9999, null);
+  const kids = sim.state.animals.filter(a => !a.dead && a.kind === 'slime');
+  assert(kids.length === 2 && kids.every(a => a.byPlayer), 'Schleim-Teile erben byPlayer nicht');
+  assert(sim.actions.spawnBandits(40, 30, 2) === 2 && sim.state.units.filter(u => u.role === 'bandit').every(u => u.byPlayer), 'gesetzte Räuber ohne byPlayer');
+  const D = WW.Sim.load(sim.serialize());
+  assert(D.state.animals.filter(a => a.kind === 'slime').every(a => a.byPlayer), 'byPlayer nicht gespeichert');
+});
+
 test('9 ms/Tick-Aufschlag der Wildnis (mittlere Karte, ~800 Einheiten)', function () {
   const sim = makeSim({ seed: 'leistung', size: 'medium', populate: 8 });
   run(sim, 3000);

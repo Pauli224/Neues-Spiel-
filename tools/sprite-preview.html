@@ -298,6 +298,30 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Kreaturen im feinen Raster, alt und neu
+  if (want('creaturesfine') || Q.get('creaturesfine')) (function () {
+    var r = section('creaturesfine', 'Tiere, Monster und Belagerungsgerät im feinen Raster (je: alt | neu Frame 0..3 | Figur zum Größenvergleich), Maßstab 4');
+    var L3 = [['sheep', 'grass'], ['cow', 'grass'], ['chicken', 'grass'], ['rabbit', 'flowers'], ['deer', 'forest'], ['wolf', 'forest'], ['bear', 'forest'], ['crab', 'sand'], ['fish', 'water'],
+      ['dragon', 'grass'], ['zombie', 'ash'], ['skeleton', 'ash'], ['slime_s', 'swamp'], ['slime', 'swamp'], ['slime_l', 'swamp'], ['ghost', 'tundra'], ['demon', 'ash'], ['giantchicken', 'grass'],
+      ['yeti', 'snowfield'], ['sandworm', 'desert'], ['treant', 'forest'], ['golem', 'crystal'], ['ram', 'grass'], ['catapult', 'grass']];
+    var wrapc = document.createElement('div'); wrapc.id = 'critfine'; wrapc.style.display = 'flex'; wrapc.style.flexWrap = 'wrap'; wrapc.style.gap = '6px';
+    r.appendChild(wrapc);
+    L3.forEach(function (c) {
+      var kind = c[0], unitK = kind === 'ram' || kind === 'catapult', big = /dragon|giantchicken|treant|slime_l|sandworm|yeti|bear|cow|ram|catapult|deer|golem/.test(kind);
+      var step = big ? 20 : 12, nF = S.creatureFrames(kind), wT = Math.ceil((step * (nF + 1) + 14) / 8), hT = kind === 'dragon' ? 6 : (big ? 4 : 3);
+      var k = canvas(wT * 8, hT * 8, 4);
+      groundRect(k.x, fill(WW.TERRAIN_BY_KEY[c[1]].id, wT, hT), 0, 0);
+      var by = (hT - 1) * 8, base = unitK ? 'u_' + kind : 'a_' + kind, old = 'lo_' + base + '_0';
+      if (S.has(old)) S.draw(k.x, old, 3, by, { team: 0 });
+      for (var f = 0; f < nF; f++) {
+        if (kind === 'dragon') S.draw(k.x, 'a_dragon_shadow', 3 + step * (f + 1), by);
+        S.draw(k.x, base + '_' + f, 3 + step * (f + 1), by, { team: 0 });
+      }
+      S.draw(k.x, S.unitKey('human', 'farmer', 'monarchy', 4), wT * 8 - 10, by, { team: 4 });
+      var d = document.createElement('div'); d.className = 'cell'; d.appendChild(k.c); var sp = document.createElement('span'); sp.textContent = kind; d.appendChild(sp); wrapc.appendChild(d);
+    });
+  })();
+
   // ---------------------------------------------------------------- Trachten (feines Raster)
   if (want('costumes') || Q.get('costumes')) (function () {
     var r = section('costumes', 'Trachten je Regierung (Figuren im doppelt feinen Raster, Maßstab 4)', 'Je Regierung: Bauer, Holzfäller, Steinmetz, Baumeister, Händler, Siedler, Jäger, Kind, Soldat, Anführer; dazu Rebell und Räuber. Darunter alle Völker als Bauer und Soldat in zwei Regierungen.');

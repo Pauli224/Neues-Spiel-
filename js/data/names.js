@@ -89,10 +89,11 @@
     walls: ['Mauerfreunde e. V.', 'Partei der dicken Wände', 'Liga für hohe Zäune', 'Bund der Ziegelzähler'],
     nap: ['Partei für längeren Mittagsschlaf', 'Union der Gemütlichen', 'Die Kissenfraktion', 'Bund der Hängematte'],
     trade: ['Handelsliga', 'Partei des freien Kuchenmarkts', 'Bund der Feilscher', 'Die Kleingeld-Koalition'],
-    safety: ['Partei für Ordnung im Vorgarten', 'Wachsame Bürger', 'Allianz gegen Wölfe', 'Bund der Laternenputzer']
+    safety: ['Partei für Ordnung im Vorgarten', 'Wachsame Bürger', 'Allianz gegen Wölfe', 'Bund der Laternenputzer'],
+    green: ['Partei der Bäume', 'Bund der Baumumarmer', 'Die Moosgrünen', 'Liga für mehr Eichhörnchen']
   };
   const PARTY_BONUS_NAMES = {
-    bread: 'mehr Nahrung', walls: 'schnellerer Mauerbau', nap: 'bessere Laune', trade: 'mehr Gold', safety: 'mehr Wachen'
+    bread: 'mehr Nahrung', walls: 'schnellerer Mauerbau', nap: 'bessere Laune', trade: 'mehr Gold', safety: 'mehr Wachen', green: 'Naturschutz'
   };
   const REGIME_PARTIES = ['Partei der Strammen Ordnung', 'Bund für Pünktlichkeit und Gehorsam', 'Allianz der Stillstehenden',
     'Vereinigung der Gleichgekämmten', 'Ordnungsfreunde des Vaterhauses'];
