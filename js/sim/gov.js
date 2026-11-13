@@ -522,12 +522,12 @@
     if (hap < 40 || anyHungry(sim, k) || o.unhappy) { bump('communism', 2.6, 'die Leute sind arm, hungrig und haben die Nase voll'); bump('fascism', 1.4, 'jemand verspricht, endlich aufzuräumen'); bump('democracy', 0.8); }
     if (pop < 18 && hap > 62) { bump('democracy', 2, 'alle sind zufrieden und wollen mitreden'); bump('anarchy', 1.8, 'man kennt sich und braucht keinen Chef'); }
     const tr = TRAITS[k.leaderTrait];
-    if (tr) for (const g in tr) bump(g, tr[g], 'es der Charakter des Anführers so will');
+    if (tr) for (const g in tr) bump(g, tr[g], 'der Anführer will es so, und er hat eine laute Stimme');
     if (o.unhappy && w[k.gov] != null) w[k.gov] *= 0.05;
     if (k.gov !== 'tribe' && w[k.gov] != null) w[k.gov] *= 0.3;
     const gov = sim.rng.weighted(w);
     const reasons = why[gov] || [];
-    const text = reasons.length ? reasons[sim.rng.int(reasons.length)] : sim.rng.pick(['es sich so ergeben hat', 'die Mehrheit beim Abendessen dafür war', 'das Los so entschieden hat', 'es auf dem Schild gut aussieht']);
+    const text = reasons.length ? reasons[sim.rng.int(reasons.length)] : sim.rng.pick(['die Mehrheit war beim Abendessen dafür', 'das Los hat so entschieden', 'es sieht auf dem Schild gut aus', 'niemand hat widersprochen']);
     return { gov: gov, why: text };
   }
 

@@ -76,8 +76,8 @@
       'Neuer Markt in {city}! Ab sofort gibt es dreierlei Senf.'
     ],
     repurpose: [
-      'In {city} werden Gebäude umgewidmet, die zur {gov} nicht passen. Aus der Kaserne wird eine Wohngemeinschaft.',
-      '{city} baut um: Was die {gov} nicht braucht, wird zu Wohnungen. Die Möbelpacker haben viel zu tun.'
+      'In {city} werden Gebäude umgewidmet, die zu {gov_dat} nicht passen. Aus der Kaserne wird eine Wohngemeinschaft.',
+      '{city} baut um: Was {gov_d} nicht braucht, wird zu Wohnungen. Die Möbelpacker haben viel zu tun.'
     ],
 
     // ---------------------------------------------------------------- Mauern
@@ -139,27 +139,27 @@
     // ---------------------------------------------------------------- Regierungen
     gov: [
       'Das Reich heißt jetzt {kingdom} und wird als {gov} regiert. Die alten Schilder werden übermalt.',
-      'Aus der {oldGov} wird eine {gov}. Die Leute nicken höflich und machen weiter.',
+      'Aus {oldGov_dat} wird {gov_a}. Die Leute nicken höflich und machen weiter.',
       '{kingdom_nom}: Neue Regierungsform {gov}! Neue Hüte für alle Wichtigen.'
     ],
     govSet: [
-      'Ein Blitz aus heiterem Himmel, und das Reich ist eine {gov}: {kingdom_nom}. Die Untertanen sind verwirrt, aber anpassungsfähig.',
-      'Von oben wird verfügt: {kingdom_nom} ist ab sofort eine {gov}. Die Druckerei arbeitet Überstunden.',
+      'Ein Blitz aus heiterem Himmel, und das Reich ist {gov_a}: {kingdom_nom}. Die Untertanen sind verwirrt, aber anpassungsfähig.',
+      'Von oben wird verfügt: {kingdom_nom} ist ab sofort {gov_a}. Die Druckerei arbeitet Überstunden.',
       'Göttlicher Erlass: {kingdom_nom} wird {gov}. {leader} probiert vor dem Spiegel den neuen Hut an.',
-      'Über Nacht wird aus der {oldGov} eine {gov}. Beim Frühstück fragen sich alle, wer jetzt bestimmt, wer abräumt.'
+      'Über Nacht wird aus {oldGov_dat} {gov_a}. Beim Frühstück fragen sich alle, wer jetzt bestimmt, wer abräumt.'
     ],
     govChoice: [
-      '{kingdom_nom} hat sich entschieden: Ab jetzt regiert die {gov}. Begründung: {why}.',
-      'Großer Rat am Feuer: Man wählt die {gov}, weil {why}. Es heißt jetzt {kingdom}.',
-      'Nach langem Palaver wird aus dem Stamm eine {gov}. Der Grund: {why}.',
+      '{kingdom_nom} hat sich entschieden: Ab jetzt regiert {gov_d}. Begründung: {why}.',
+      'Großer Rat am Feuer: Man wählt {gov_acc}. Es heißt jetzt {kingdom}, denn {why}.',
+      'Nach langem Palaver wird aus dem Stamm {gov_a}. Der Grund: {why}.',
       'Neue Ordnung im Reich: {gov}! Offizieller Grund: {why}. Inoffizieller Grund: neue Hüte.'
     ],
     reform: [
       'Reform! {kingdom_nom} wird {gov}. Die Krone kommt ins Museum, der Thron wird Parkbank.',
-      'Die Monarchie dankt freiwillig ab. Es lebe die {gov}! Der Ex-Monarch eröffnet eine Bäckerei.'
+      'Die Monarchie dankt freiwillig ab. Es lebe {gov_d}! Der Ex-Monarch eröffnet eine Bäckerei.'
     ],
     strongman: [
-      'In der Krise wählt das Volk einen „starken Mann“. {kingdom_nom} ist jetzt eine {gov}. Bald bereuen es alle.',
+      'In der Krise wählt das Volk einen „starken Mann“. In {kingdom_dat} regiert jetzt {gov_d}. Bald bereuen es alle.',
       'Aus Angst wird gewählt, was laut ist: {kingdom_nom} wird {gov}. Die nächste Wahl fällt leider aus.'
     ],
     collapse: [
@@ -167,24 +167,24 @@
       'Die Ordnung zerfällt: In {kingdom_dat} entscheidet nun das Plenum. Oder niemand. Oder alle.'
     ],
     evolve: [
-      'Der Stamm ist erwachsen geworden: {kingdom_nom} ist jetzt eine {gov}. Das Lagerfeuer bekommt einen Kamin.',
-      'Aus dem Stammesrat wird eine {gov}. {leader} hält eine erste Rede und verhaspelt sich nur zweimal.',
-      '{kingdom_nom}: Nach langem Palaver am Feuer entscheidet man sich für die {gov}.'
+      'Der Stamm ist erwachsen geworden: {kingdom_nom} ist jetzt {gov_a}. Das Lagerfeuer bekommt einen Kamin.',
+      'Aus dem Stammesrat wird {gov_a}. {leader} hält eine erste Rede und verhaspelt sich nur zweimal.',
+      '{kingdom_nom}: Nach langem Palaver am Feuer entscheidet man sich für {gov_acc}.'
     ],
     revolution: [
-      'Revolution! Die {oldGov} ist gestürzt, weil {why}. Es lebe die {gov}!',
-      'Revolution! Die {oldGov} ist gestürzt, es lebe die {gov}. {Kingdom_nom} sortiert seine Möbel neu.',
-      'Das Volk hat genug: Aus der {oldGov} wird eine {gov}. Die alten Hüte landen im Fluss.',
-      'Umsturz im Reich! {kingdom_nom} ist jetzt eine {gov}. Der Hofstaat sucht neue Arbeit.'
+      'Revolution! {OldGov_d} ist gestürzt. Grund: {why}. Es lebe {gov_d}!',
+      'Revolution! {OldGov_d} ist gestürzt, es lebe {gov_d}. {Kingdom_nom} sortiert seine Möbel neu.',
+      'Das Volk hat genug: Aus {oldGov_dat} wird {gov_a}. Die alten Hüte landen im Fluss.',
+      'Umsturz im Reich! {kingdom_nom} ist jetzt {gov_a}. Der Hofstaat sucht neue Arbeit.'
     ],
     regimeFall: [
-      'Das Regime ist gestürzt! Das Volk feiert auf den Straßen, die Paradeuniformen werden zu Putzlappen. Es lebe die {gov}.',
-      'Die Kommandantur ist leer, der Diktator ist weg, und plötzlich lachen alle wieder. {kingdom_nom} wird eine {gov}.',
+      'Das Regime ist gestürzt! Das Volk feiert auf den Straßen, die Paradeuniformen werden zu Putzlappen. Es lebe {gov_d}.',
+      'Die Kommandantur ist leer, der Diktator ist weg, und plötzlich lachen alle wieder. {kingdom_nom} wird {gov_a}.',
       'Aus Angst wurde Mut: Die Strammen sind gestürzt. {Kingdom_nom} atmet auf.'
     ],
     coup: [
       'Putsch! In Kriegszeiten reißt eine strenge Clique die Macht an sich. {kingdom_nom} wird {gov}. Niemand hat danach gefragt.',
-      'Während alle nach draußen schauen, übernimmt drinnen jemand das Kommando. {kingdom_nom} ist jetzt eine {gov}. Die Laune sinkt sofort.'
+      'Während alle nach draußen schauen, übernimmt drinnen jemand das Kommando. {kingdom_nom} ist jetzt {gov_a}. Die Laune sinkt sofort.'
     ],
     plenumVote: [
       'Das Plenum stimmt nach zehn Jahren Debatte dafür, Abstimmungen künftig zu zählen. {kingdom_nom} wird {gov}.',
@@ -477,6 +477,10 @@
     if (cas === 'in') return (g === 'f' ? 'in der ' : 'im ') + name;
     return ART[cas][g] + ' ' + name;
   }
+  // Regierungsnamen mit Artikel (Faschismus/Kommunismus/Stammesrat männlich, Rest weiblich)
+  const GOV_M = { Stammesrat: 1, Faschismus: 1, Kommunismus: 1 };
+  const GART = { a: { m: 'ein', f: 'eine' }, d: { m: 'der', f: 'die' }, acc: { m: 'den', f: 'die' }, dat: { m: 'dem', f: 'der' } };
+  function govArticle(name, cas) { const g = GOV_M[name] ? 'm' : 'f'; return GART[cas][g] + ' ' + name; }
   function capFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
   function format(type, vars, rng) {
@@ -492,6 +496,12 @@
         const base = mm[1].toLowerCase();
         const r = withArticle(vars[base], mm[2]);
         return mm[1][0] === mm[1][0].toUpperCase() ? capFirst(r) : r;
+      }
+      const gm = /^([gG]ov|[oO]ldGov)_(a|d|acc|dat)$/.exec(key);
+      if (gm) {
+        const base = gm[1].charAt(0).toLowerCase() + gm[1].slice(1);
+        const r = govArticle(String(vars[base] || ''), gm[2]);
+        return gm[1][0] === gm[1][0].toUpperCase() ? capFirst(r) : r;
       }
       if (key === 'nWord') return WW.SimUtil ? WW.SimUtil.numWord(n | 0, false) : String(n);
       if (key === 'NWord') return WW.SimUtil ? WW.SimUtil.numWord(n | 0, true) : String(n);

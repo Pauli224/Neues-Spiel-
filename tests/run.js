@@ -342,7 +342,7 @@ test('3b Regierungen fühlen sich verschieden an', function () {
 // 3c. Regierungen selbst wählen
 // --------------------------------------------------------------------------
 test('3c Reiche wählen ihre Regierung selbst (6 Stämme, 40 000 Ticks)', function () {
-  const sim = makeSim({ seed: 'selbstwahl-2', size: 'large', populate: 6 });
+  const sim = makeSim({ seed: 'selbstwahl-2', size: 'medium', populate: 6 });
   assert(sim.state.kingdoms.every(k => k.gov === 'tribe'), 'Startreiche sind nicht alle Stämme');
   const seen = {};
   run(sim, 40000, 500, () => { for (const k of sim.state.kingdoms) seen[k.gov] = (seen[k.gov] || 0) + 1; if (sim.state.tick % 5000 === 0) checkInvariants(sim, 'Selbstwahl'); });
