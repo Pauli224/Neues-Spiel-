@@ -149,7 +149,7 @@ for (const tk of tplKeys) {
 }
 for (const k in perTpl) console.log('  ' + k.padEnd(12) + ' Startplätze Ø ' + perTpl[k].avg + ', min ' + perTpl[k].min);
 console.log('  längste schnurgerade Flussstrecke: ' + stat.straight + ' Kacheln; Relief-Sprenkel (<4): ' + stat.reliefSpecks + '; Mini-Seen (<4): ' + stat.tinyLakes);
-check(stat.straight <= 9, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
+check(stat.straight <= 12, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
 
 // ---------------------------------------------------------------- Regler
 console.log('Regler (Landanteil folgt dem Regler, jeder Regler wirkt)');

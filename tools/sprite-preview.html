@@ -14,9 +14,7 @@
   section { margin: 0 0 18px; padding: 10px; background: #12313d; border: 2px solid var(--kante); }
   .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
   .cell { background: var(--pult); border: 2px solid var(--kante); padding: 3px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .cell span { font-size: 10px; color: var(--papier-matt); max-width: 130px; overflow-wrap: anywhere; text-align: center; }
-  .cell.sel { background: var(--bernstein); }
-  .cell.sel span { color: #1d3b47; }
+  .cell span { font-size: 10px; color: var(--papier-matt); max-width: 140px; overflow-wrap: anywhere; text-align: center; }
   canvas { image-rendering: pixelated; display: block; }
   .note { font-size: 12px; color: var(--papier-matt); margin: 0 0 6px; }
 </style>
@@ -37,8 +35,11 @@
   var out = document.getElementById('out');
   var KEYS = S.keys();
   var GOVS = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
+  var GOVN = { tribe: 'Stammesrat', monarchy: 'Monarchie', democracy: 'Demokratie', fascism: 'Faschismus', communism: 'Kommunismus', theocracy: 'Theokratie', republic: 'Handelsrepublik', anarchy: 'Anarchie' };
   var RACES = ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'];
   var ROLES = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'child', 'trader', 'rebel', 'settler'];
+  var Q = new URLSearchParams(location.search);
+  var ONLY = Q.get('only');
 
   function section(id, title, note) {
     var s = document.createElement('section'); s.id = id;
@@ -48,141 +49,170 @@
     out.appendChild(s);
     return r;
   }
+  function want(id) { return !ONLY || ONLY.split(',').indexOf(id) >= 0; }
   function canvas(w, h, scale) {
     var c = document.createElement('canvas'); c.width = w * scale; c.height = h * scale;
     var x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(scale, scale);
     return { c: c, x: x };
   }
-  function cell(row, label, cv, sel) {
-    var d = document.createElement('div'); d.className = 'cell' + (sel ? ' sel' : '');
+  function cell(row, label, cv) {
+    var d = document.createElement('div'); d.className = 'cell';
     d.appendChild(cv);
     if (label) { var s = document.createElement('span'); s.textContent = label; d.appendChild(s); }
     row.appendChild(d);
   }
-  function ground(ctx, key, x0, y0, w, h, seed) {
-    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
-      var k = key.indexOf('t_') === 0 ? key : S.terrainKey(WW.TERRAIN_BY_KEY[key].id, ((x * 7 + y * 13 + (seed || 0)) * 2654435761) >>> 3);
-      S.draw(ctx, k, x0 + x * 8, y0 + y * 8);
+  // Fläche aus Geländerastern zeichnen (wie der Renderer): rows = Liste von ID-Arrays
+  function groundRect(ctx, rows, x0, y0) {
+    var H = rows.length, W = rows[0].length;
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var id = rows[y][x];
+      S.drawGround(ctx, x0 + x * 8, y0 + y * 8, id, 0,
+        y > 0 ? rows[y - 1][x] : -1, x < W - 1 ? rows[y][x + 1] : -1, y < H - 1 ? rows[y + 1][x] : -1, x > 0 ? rows[y][x - 1] : -1);
     }
   }
-  // Einzelnes Sprite auf Untergrund
+  function fill(id, w, h) { var r = []; for (var y = 0; y < h; y++) { r.push([]); for (var x = 0; x < w; x++) r[y].push(id); } return r; }
+  // Sprite auf passendem Untergrund
   function showSprite(row, key, opts) {
     opts = opts || {};
     var inf = S.info(key); if (!inf) return;
     var bw = inf.fw * 8, bh = inf.fh * 8;
-    var top = Math.max(0, -inf.oy) + 2, side = Math.max(0, -inf.ox, inf.w - bw) + 2;
-    var W = bw + side * 2, H = bh + top + 2;
+    var top = Math.max(0, -inf.oy) + 2, side = Math.max(0, -inf.ox, inf.w + inf.ox - bw) + 3;
+    var W = Math.ceil((bw + side * 2) / 8) * 8, H = Math.ceil((bh + top + 4) / 8) * 8;
+    side = Math.floor((W - bw) / 16) * 8; top = H - bh - 8;
     var sc = opts.scale || 4;
     var k = canvas(W, H, sc);
     if (opts.bg === 'pult') { k.x.fillStyle = '#1d3b47'; k.x.fillRect(0, 0, W, H); }
     else if (opts.bg !== 'none') {
-      var bgk = opts.bg || 'grass', bid = WW.TERRAIN_BY_KEY[bgk].id, n = 0;
-      for (var y = top % 8 - 8; y < H; y += 8) for (var x = side % 8 - 8; x < W; x += 8) S.draw(k.x, S.terrainKey(bid, n++ * 7), x, y);
+      var bid = WW.TERRAIN_BY_KEY[opts.bg || 'grass'].id;
+      groundRect(k.x, fill(bid, W / 8, H / 8), 0, 0);
     }
     S.draw(k.x, key, side, top, { team: opts.team || 0, flip: opts.flip });
-    cell(row, opts.label === undefined ? key : opts.label, k.c, opts.sel);
+    cell(row, opts.label === undefined ? key : opts.label, k.c);
   }
 
-  var Q = new URLSearchParams(location.search);
-  // Beispielszene: ?scene=2 oder ?scene=4 zeigt nur die Szene in dieser Vergrößerung
-  (function () {
+  // ---------------------------------------------------------------- Beispielszene
+  if (want('scene') || Q.get('scene')) {
     var sc = +Q.get('scene') || 2;
-    var rs = section('scene', 'Beispielszene (60×40 Kacheln, 1 Logikpixel = ' + sc + ' Bildschirmpixel)');
+    var rs = section('scene', 'Beispielszene (60×40 Kacheln, 1 Logikpixel = ' + sc + ' Bildschirmpixel)',
+      'Boden per drawGround (mit Höhenkanten), darüber Deko, Bauwerke und Figuren nach Fußlinie sortiert – so soll der Renderer zeichnen.');
     var cv = document.createElement('canvas'); cv.id = 'scenecv';
     WW.SpriteScene.render(cv, sc);
     cell(rs, '', cv);
-  })();
-  if (Q.get('scene')) return;
+    if (Q.get('scene')) return;
+  }
+
   // Lupe: ?keys=a,b,c&scale=8&bg=grass&team=0
   if (Q.get('keys')) {
     var rz = section('zoom', 'Lupe');
-    var want = Q.get('keys').split(',');
-    KEYS.filter(function (k) { return want.some(function (w) { return w.slice(-1) === '*' ? k.indexOf(w.slice(0, -1)) === 0 : k === w; }); })
+    var wl = Q.get('keys').split(',');
+    KEYS.filter(function (k) { return wl.some(function (w) { return w.slice(-1) === '*' ? k.indexOf(w.slice(0, -1)) === 0 : k === w; }); })
       .forEach(function (k) { showSprite(rz, k, { scale: +Q.get('scale') || 8, bg: Q.get('bg') || 'grass', team: +Q.get('team') || 0 }); });
     return;
   }
 
   // ---------------------------------------------------------------- Biome
-  var r = section('biomes', 'Biom-Übersicht (alle 22 Geländetypen)', 'Je Biom eine 6×4-Fläche mit gemischten Varianten, darunter dieselbe Karte stark verkleinert (1 Pixel je Kachel aus dem Mittelwert).');
-  (function () {
-    var T = WW.TERRAIN, cols = 11, bw = 6, bh = 4, gap = 1;
-    var W = cols * (bw + gap) * 8, H = 2 * (bh + gap) * 8 + 8;
+  if (want('biomes')) (function () {
+    var r = section('biomes', 'Biom-Übersicht (alle 22 Geländetypen)',
+      'Je Biom eine 6×4-Fläche mit Deko, umgeben von Wiese bzw. Strand (Höhenkanten sichtbar). Rechts dasselbe stark verkleinert.');
+    var T = WW.TERRAIN, cols = 6, bw = 8, bh = 6;
+    var W = cols * bw * 8, H = Math.ceil(T.length / cols) * (bh + 1) * 8;
     var k = canvas(W, H, 2);
     k.x.fillStyle = '#0f2a35'; k.x.fillRect(0, 0, W, H);
+    var items = [];
     T.forEach(function (t, i) {
-      var cx = (i % cols) * (bw + gap) * 8, cy = Math.floor(i / cols) * (bh + gap) * 8 + 8;
-      // Reihenweise von oben nach unten, damit Überhänge stimmen
-      for (var y = 0; y < bh; y++) for (var x = 0; x < bw; x++)
-        S.draw(k.x, S.terrainKey(t.id, x * 7 + y * 11 + i), cx + x * 8, cy + y * 8);
+      var cx = (i % cols) * bw * 8, cy = Math.floor(i / cols) * (bh + 1) * 8;
+      var around = t.water ? WW.T.SAND : WW.T.GRASS;
+      if (t.key === 'grass') around = WW.T.FOREST;
+      var rows = fill(around, bw, bh);
+      for (var y = 1; y < bh - 1; y++) for (var x = 1; x < bw - 1; x++) rows[y][x] = t.id;
+      groundRect(k.x, rows, cx, cy);
+      for (y = 0; y < bh; y++) for (x = 0; x < bw; x++) {
+        var v = (x * 37 + y * 101 + i * 13) & 255;
+        var d = S.decorFor(rows[y][x], v);
+        if (d) items.push({ key: d.key, x: cx + x * 8 + d.dx, y: cy + y * 8 + d.dy, s: cy + y * 8 + d.dy });
+      }
+    });
+    items.sort(function (a, b) { return a.s - b.s; }).forEach(function (it) { S.draw(k.x, it.key, it.x, it.y); });
+    T.forEach(function (t, i) {
+      var cx = (i % cols) * bw * 8, cy = Math.floor(i / cols) * (bh + 1) * 8;
+      k.x.fillStyle = '#f3ead2'; k.x.font = '6px sans-serif'; k.x.fillText(i + ' ' + t.name, cx + 2, cy + bh * 8 + 6);
     });
     cell(r, '', k.c);
-    // verkleinert: Mittelwert-Farbe jedes Bodensprites
-    var avg = {};
-    var probe = document.createElement('canvas'); probe.width = 8; probe.height = 32;
-    var px = probe.getContext('2d');
-    function mean(key) {
-      if (avg[key]) return avg[key];
-      px.clearRect(0, 0, 8, 32); S.draw(px, key, 0, 16);
-      var d = px.getImageData(0, 16 - 8, 8, 16).data, rr = 0, gg = 0, bb = 0, n = 0;
-      for (var i = 0; i < d.length; i += 4) if (d[i + 3] > 200) { rr += d[i]; gg += d[i + 1]; bb += d[i + 2]; n++; }
-      return (avg[key] = 'rgb(' + (rr / n | 0) + ',' + (gg / n | 0) + ',' + (bb / n | 0) + ')');
+    var sm = document.createElement('canvas'); sm.width = W / 4; sm.height = H / 4;
+    var sx = sm.getContext('2d'); sx.imageSmoothingEnabled = true; sx.imageSmoothingQuality = 'high';
+    sx.drawImage(k.c, 0, 0, W / 4, H / 4);
+    sm.style.width = (W / 2) + 'px';
+    cell(r, 'verkleinert (1/4)', sm);
+  })();
+
+  // ---------------------------------------------------------------- Höhenstufen
+  if (want('heights')) (function () {
+    var r = section('heights', 'Höhenstufen und Übergänge',
+      'Tiefsee → Meer → Flachwasser → Strand → Wiese → Hügel → Gebirge → Schneegipfel als Ringe; links Wüste, Tundra, Schneefeld, Sumpf, Asche mit Lava, ein Fluss.');
+    var K = WW.T, W = 24, H = 18, rows = [];
+    for (var y = 0; y < H; y++) {
+      rows.push([]);
+      for (var x = 0; x < W; x++) {
+        var d = Math.max(Math.abs(x - 15) / 1.25, Math.abs(y - 8)) + ((x * 7 + y * 3) % 5 === 0 ? 0.6 : 0);
+        var id = d > 9.5 ? K.DEEP : d > 8 ? K.WATER : d > 7 ? K.SHALLOW : d > 6 ? K.SAND : d > 4.5 ? K.GRASS : d > 3.2 ? K.HILL : d > 1.6 ? K.MOUNTAIN : K.SNOW;
+        if (x < 7 && y > 1 && y < 16 && id === K.GRASS) id = y < 6 ? K.DESERT : (y < 10 ? K.SNOWFIELD : K.SWAMP);
+        if (x >= 1 && x < 6 && y >= 6 && y < 9) id = K.TUNDRA;
+        if (x >= 1 && x < 4 && y >= 11 && y < 14) id = K.ASH;
+        if (x === 2 && y === 12) id = K.LAVA;
+        rows[y].push(id);
+      }
     }
-    var k2 = canvas(cols * 7, 2 * 5, 8);
-    k2.x.fillStyle = '#0f2a35'; k2.x.fillRect(0, 0, cols * 7, 10);
-    T.forEach(function (t, i) {
-      var cx = (i % cols) * 7, cy = Math.floor(i / cols) * 5;
-      for (var y = 0; y < 4; y++) for (var x = 0; x < 6; x++) { k2.x.fillStyle = mean(S.terrainKey(t.id, x * 7 + y * 11 + i)); k2.x.fillRect(cx + x, cy + y, 1, 1); }
-    });
-    cell(r, 'Minikarte (Mittelwerte)', k2.c);
-    var names = document.createElement('p'); names.className = 'note';
-    names.textContent = T.map(function (t, i) { return i + ' ' + t.name; }).join(' · ');
-    r.parentNode.appendChild(names);
+    for (x = 3; x < 12; x++) rows[16 - Math.floor(x / 4)][x] = K.RIVER;
+    var k = canvas(W * 8, H * 8, 3);
+    groundRect(k.x, rows, 0, 0);
+    var items = [];
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) { var dd = S.decorFor(rows[y][x], (x * 53 + y * 29) & 255); if (dd) items.push([dd, x, y]); }
+    items.forEach(function (it) { S.draw(k.x, it[0].key, it[1] * 8 + it[0].dx, it[2] * 8 + it[0].dy); });
+    cell(r, 'mit Deko', k.c);
+    var k2 = canvas(W * 8, H * 8, 3);
+    groundRect(k2.x, rows, 0, 0);
+    cell(r, 'nur Boden', k2.c);
   })();
 
-  // Übergänge: Bänder nebeneinander
-  r = section('transitions', 'Übergänge', 'Meer → Flachwasser → Strand → Wiese → Savanne → Wüste; Wiese → Wald → Nadelwald → Tundra → Schneefeld; Hügel → Gebirge → Schneegipfel; Sumpf, Fluss, Blumen, Pilze, Kristall, Asche, Lava.');
-  (function () {
-    var bands = [
-      ['deep', 'water', 'shallow', 'sand', 'grass', 'savanna', 'desert'],
-      ['flowers', 'grass', 'forest', 'taiga', 'tundra', 'snowfield', 'snow'],
-      ['jungle', 'swamp', 'river', 'grass', 'hill', 'mountain', 'snow'],
-      ['mushroom', 'flowers', 'crystal', 'ash', 'lava', 'ash', 'desert']
-    ];
-    var bw = 4, W = bands[0].length * bw * 8, H = bands.length * 5 * 8 + 8;
-    var k = canvas(W, H, 2);
-    bands.forEach(function (b, j) {
-      for (var y = 0; y < 5; y++) b.forEach(function (key, i) {
-        for (var x = 0; x < bw; x++) {
-          // ausgefranste Kanten
-          var kk = key; var h = ((x * 13 + y * 7 + i * 3) * 2654435761 >>> 0) % 7;
-          if (x === 0 && i > 0 && h < 2) kk = b[i - 1];
-          if (x === bw - 1 && i < b.length - 1 && h < 2) kk = b[i + 1];
-          S.draw(k.x, S.terrainKey(WW.TERRAIN_BY_KEY[kk].id, x * 5 + y * 3 + i), (i * bw + x) * 8, 8 + (j * 5 + y) * 8);
-        }
-      });
-    });
-    cell(r, '', k.c);
-  })();
-
-  // ---------------------------------------------------------------- Galerie nach Gruppen
-  function gallery(id, title, filter, opts) {
-    var rr = section(id, title);
+  // ---------------------------------------------------------------- Deko
+  function gallery(id, title, filter, opts, note) {
+    var rr = section(id, title, note);
     KEYS.filter(filter).forEach(function (key) { showSprite(rr, key, typeof opts === 'function' ? opts(key) : opts); });
   }
-  gallery('ground', 'Boden-Sprites einzeln', function (k) { return /^t_/.test(k) && !/^t_foam/.test(k); }, function (k) { return { bg: 'none', scale: 4 }; });
-  gallery('foam', 'Uferschaum (Zusatz, auf Wasser)', function (k) { return /^t_foam/.test(k); }, { bg: 'water', scale: 3 });
+  if (want('decor')) gallery('decor', 'Deko-Sprites (d_*): stehen auf einer Kachel, ragen nach oben', function (k) { return /^d_/.test(k); }, function (k) {
+    var bg = /cactus|rock_sand/.test(k) ? 'desert' : /pine_snow|rock_snow/.test(k) ? 'snowfield' : /icepeak/.test(k) ? 'snow' : /peak|rock_grey/.test(k) ? 'mountain' :
+      /shroom/.test(k) ? 'mushroom' : /crystal/.test(k) ? 'crystal' : /reed|mangrove/.test(k) ? 'swamp' : /jtree|palm|fern/.test(k) ? 'jungle' : /pine/.test(k) ? 'taiga' :
+      /acacia|bush_dry/.test(k) ? 'savanna' : /dead|stump/.test(k) ? 'ash' : /shrub/.test(k) ? 'tundra' : /tree/.test(k) ? 'forest' : 'grass';
+    return { bg: bg, scale: 4 };
+  });
+  if (want('ground')) gallery('ground', 'Boden-Grundkacheln t_* (ohne Kanten; im Spiel drawGround benutzen)', function (k) { return /^t_/.test(k); }, { bg: 'none', scale: 4 });
 
-  // ---------------------------------------------------------------- Karten-Zeichner für Mauertests und Szene
-  // terrainRows: Zeichen -> Gelände; structs: Liste { key, x, y, team, flip } bzw. Mauerzeichen im Raster
-  var TCH = { '~': 'water', '=': 'deep', ',': 'shallow', 'r': 'river', '.': 'grass', ':': 'sand', 'f': 'forest', 'h': 'hill', 'm': 'mountain', '*': 'flowers', 'd': 'desert', 'p': 'taiga', 's': 'swamp' };
-  function drawMap(ctx, terr, wallRows, extra, level, team) {
+  // ---------------------------------------------------------------- Bauwerke je Regierung
+  if (want('govs')) (function () {
+    var r = section('govs', 'Zentren (3×3), Denkmäler (1×1) und Anführer je Regierung', 'Jede Regierung mit eigener Silhouette; Teamfarbe wechselt je Spalte.');
+    GOVS.forEach(function (gv, i) {
+      var k = canvas(48, 56, 3);
+      groundRect(k.x, fill(WW.T.GRASS, 6, 7), 0, 0);
+      S.draw(k.x, 's_center_' + gv, 8, 16, { team: i });
+      S.draw(k.x, 's_monument_' + gv, 32, 40, { team: i });
+      if (gv !== 'anarchy') S.draw(k.x, 'u_leader_' + gv + '_0', 18, 41, { team: i });
+      else S.draw(k.x, 'u_human_punk_0', 18, 41, { team: i });
+      S.draw(k.x, 'banner_' + i, 0, 40, { team: i });
+      cell(r, GOVN[gv], k.c);
+    });
+  })();
+  if (want('builds')) gallery('builds', 'Häuser, Betriebe, Felder, Baustellen, Ruinen', function (k) {
+    return /^s_/.test(k) && !/^s_(wall|barricade|gate|tower|center|monument)/.test(k);
+  }, { scale: 4 });
+
+  // ---------------------------------------------------------------- Mauern
+  function drawMap(ctx, terr, wallRows, level, team) {
+    var TCH = { '~': WW.T.WATER, 'r': WW.T.RIVER, '.': WW.T.GRASS, ':': WW.T.SAND };
+    var rows = terr.map(function (row) { return row.split('').map(function (c) { return TCH[c] != null ? TCH[c] : WW.T.GRASS; }); });
+    groundRect(ctx, rows, 0, 0);
     var H = terr.length, W = terr[0].length, items = [];
+    function wallish(x, y) { var c = wallRows[y] && wallRows[y][x]; return c === '#' || c === 'T' || c === 'G' || c === 'B'; }
     for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
-      var tk = TCH[terr[y][x]] || 'grass';
-      S.draw(ctx, S.terrainKey(WW.TERRAIN_BY_KEY[tk].id, (x * 7 + y * 13) ^ (x * y)), x * 8, y * 8);
-    }
-    function wallish(x, y) { var c = wallRows && wallRows[y] && wallRows[y][x]; return c === '#' || c === 'T' || c === 'G' || c === 'B'; }
-    if (wallRows) for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
       var c = wallRows[y][x];
       if (!c || c === ' ' || c === '.') continue;
       var m = (wallish(x, y - 1) ? 1 : 0) | (wallish(x + 1, y) ? 2 : 0) | (wallish(x, y + 1) ? 4 : 0) | (wallish(x - 1, y) ? 8 : 0);
@@ -192,74 +222,82 @@
       if (c === 'B') key = 's_barricade_' + m;
       if (c === 'T') key = 's_tower_' + Math.max(2, level);
       if (c === 'G') key = 's_gate_' + level + '_' + (horiz ? 'h' : 'v');
-      if (key) items.push({ key: key, x: x, y: y, team: team });
+      if (key) items.push({ key: key, x: x, y: y });
     }
-    (extra || []).forEach(function (it) { items.push(it); });
-    items.sort(function (a, b) { return (a.y + (a.fh || 1)) - (b.y + (b.fh || 1)) || a.x - b.x; });
-    items.forEach(function (it) {
-      var inf = S.info(it.key);
-      if (!inf) { console.warn('fehlt', it.key); return; }
-      S.draw(ctx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team || 0, flip: it.flip });
-    });
+    items.sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+    items.forEach(function (it) { S.draw(ctx, it.key, it.x * 8, it.y * 8, { team: team }); });
   }
+  if (want('wallring')) (function () {
+    var r = section('wallring', 'Mauerring je Stufe: Ecken, T-Stücke, Kreuz, Tore h/v, Türme, Wassertor; Barrikaden (Anarchie)',
+      'Masken wie im Spiel aus den Nachbarn (Mauer, Turm, Tor zählen als verbunden). Fluss unter der Mauer = Wassertor.');
+    var terr = ['..............', '..............', '..........r...', '..........r...', '..........r...', '..........r...', '..........r...', '..............', '..............', '..............', '..............'];
+    var walls = ['              ', ' T###G###T    ', ' #       #    ', ' #  #    ###T ', ' G  ##   #  # ', ' #  #    G  # ', ' #       #  # ', ' T##G##T##### ', '        #     ', '      ###     ', '              '];
+    [1, 2, 3, 'B'].forEach(function (lv) {
+      var wr = walls;
+      if (lv === 1) wr = walls.map(function (row) { return row.replace(/T/g, '#'); });
+      if (lv === 'B') wr = walls.map(function (row) { return row.replace(/[#T]/g, 'B').replace(/G/g, ' '); });
+      var k = canvas(terr[0].length * 8, terr.length * 8, 3);
+      drawMap(k.x, terr, wr, lv === 'B' ? 1 : lv, 4);
+      cell(r, lv === 'B' ? 'Barrikaden' : 'Stufe ' + lv, k.c);
+    });
+  })();
+  if (want('walls')) (function () {
+    var r = section('walls', 'Mauermasken einzeln: s_wall_<Stufe>_<0..15> (Bit0 N, Bit1 O, Bit2 S, Bit3 W), Tore, Türme, Wassertore');
+    [1, 2, 3].forEach(function (lv) { for (var m = 0; m < 16; m++) showSprite(r, 's_wall_' + lv + '_' + m, { scale: 3, label: lv + '/' + m }); });
+    ['s_gate_1_h', 's_gate_1_v', 's_gate_2_h', 's_gate_2_v', 's_gate_3_h', 's_gate_3_v', 's_tower_2', 's_tower_3',
+      's_wall_1_water_h', 's_wall_1_water_v', 's_wall_2_water_h', 's_wall_2_water_v', 's_wall_3_water_h', 's_wall_3_water_v']
+      .forEach(function (k) { showSprite(r, k, { scale: 3, bg: /water/.test(k) ? 'river' : 'grass' }); });
+  })();
 
-  r = section('walls', 'Mauern: alle 16 Masken je Stufe (Bit0 N, Bit1 O, Bit2 S, Bit3 W)');
-  [1, 2, 3].forEach(function (lv) {
-    for (var m = 0; m < 16; m++) showSprite(r, 's_wall_' + lv + '_' + m, { scale: 4, label: lv + '/' + m });
-  });
-  r = section('barricades', 'Barrikaden (Anarchie), 16 Masken');
-  for (var bm = 0; bm < 16; bm++) showSprite(r, 's_barricade_' + bm, { scale: 4, label: '' + bm });
-
-  r = section('wallring', 'Mauerring-Test je Stufe: Ecken, T-Stücke, Kreuz, Tore h/v, Türme, Wassertor', 'Masken werden wie im Spiel aus den Nachbarn berechnet (Mauer, Turm, Tor zählen als verbunden).');
-  [1, 2, 3].forEach(function (lv) {
-    var terr = [
-      '..............',
-      '..............',
-      '..............',
-      '..........r...',
-      '..........r...',
-      '..............',
-      '..............',
-      '..............',
-      '..............',
-      '..............',
-      '..............'];
-    var walls = [
-      '              ',
-      ' T###G###T    ',
-      ' #       #    ',
-      ' #  #    ###T ',
-      ' G  ##   #  # ',
-      ' #  #    G  # ',
-      ' #       #  # ',
-      ' T##G##T##### ',
-      '        #     ',
-      '      ###     ',
-      '              '];
-    if (lv === 1) walls = walls.map(function (row) { return row.replace(/T/g, '#'); });
-    var W = terr[0].length * 8, H = terr.length * 8;
-    var k = canvas(W, H, 3);
-    drawMap(k.x, terr, walls, [], lv, 0);
-    cell(r, 'Stufe ' + lv, k.c);
-  });
-
-  gallery('builds', 'Bauwerke (Teamfarbe 0)', function (k) { return /^s_/.test(k) && !/^s_(wall|barricade|gate|tower)/.test(k); }, { scale: 4 });
-  // Völker × Berufe
-  r = section('races', 'Völker × Berufe (Frame 0 und 1, Teamfarbe wechselt je Zeile)', 'Spalten: ' + ROLES.join(', ') + ', punk, dann Anführer je Regierung.');
-  (function () {
+  // ---------------------------------------------------------------- Völker
+  if (want('races')) (function () {
+    var r = section('races', 'Völker × Berufe (Frame 0 und 1)', 'Zeilen: ' + RACES.join(', ') + '. Spalten: ' + ROLES.join(', ') + ', punk, dann Anführer je Regierung (ohne Anarchie).');
     var cols = ROLES.concat(['punk']).concat(GOVS.slice(0, 7).map(function (g) { return 'leader_' + g; }));
-    var cw = 14, ch = 18, W = cols.length * cw * 2 + 4, H = RACES.length * ch + 4;
-    var k = canvas(W, H, 4);
-    for (var y = -1; y * 8 < H; y++) for (var x = 0; x * 8 < W; x++) S.draw(k.x, S.terrainKey(3, x * 5 + y * 3), x * 8, y * 8);
+    var cw = 12, ch = 16, W = Math.ceil((cols.length * cw * 2 + 4) / 8) * 8, H = Math.ceil((RACES.length * ch + 4) / 8) * 8;
+    var k = canvas(W, H, 3);
+    groundRect(k.x, fill(WW.T.GRASS, W / 8, H / 8), 0, 0);
     RACES.forEach(function (race, j) {
       cols.forEach(function (role, i) {
-        for (var f = 0; f < 2; f++) S.draw(k.x, 'u_' + race + '_' + role + '_' + f, 2 + (i * 2 + f) * cw, 2 + j * ch + ch - 8 - 1, { team: j * 2 % 12 });
+        for (var f = 0; f < 2; f++) S.draw(k.x, 'u_' + race + '_' + role + '_' + f, 2 + (i * 2 + f) * cw, j * ch + 4, { team: 4 });
       });
     });
     cell(r, '', k.c);
+    var k2 = canvas(64, 16, 4);
+    groundRect(k2.x, fill(WW.T.GRASS, 8, 2), 0, 0);
+    ['a_sheep_0', 'a_sheep_1', 'a_wolf_0', 'a_wolf_1'].forEach(function (a, i) { S.draw(k2.x, a, 4 + i * 14, 4); });
+    cell(r, 'Tiere', k2.c);
   })();
 
-  window.__previewHelpers = { section: section, canvas: canvas, cell: cell, showSprite: showSprite, ground: ground, gallery: gallery, GOVS: GOVS, RACES: RACES, ROLES: ROLES };
+  // ---------------------------------------------------------------- Teamfarben
+  if (want('teams')) (function () {
+    var r = section('teams', 'Teamfarben (12): Haus, Turm, Soldat, Banner');
+    S.TEAM_COLORS.forEach(function (tc, t) {
+      var k = canvas(40, 40, 3);
+      groundRect(k.x, fill(WW.T.GRASS, 5, 5), 0, 0);
+      S.draw(k.x, 's_house_2_a', 2, 16, { team: t });
+      S.draw(k.x, 'banner_' + (t % 8), 22, 8, { team: t });
+      S.draw(k.x, 's_tower_2', 28, 24, { team: t });
+      S.draw(k.x, 'u_soldier_0', 20, 31, { team: t });
+      cell(r, t + ' ' + tc.name, k.c);
+    });
+  })();
+
+  // ---------------------------------------------------------------- Effekte, Blasen, Banner
+  if (want('fx')) gallery('fx', 'Effekte', function (k) { return /^fx_/.test(k); }, { scale: 4 });
+  if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
+  if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
+
+  // ---------------------------------------------------------------- UI-Icons
+  if (want('icons')) (function () {
+    var r = section('icons', 'UI-Icons 16×16 (iconCanvas, Maßstab 3) auf Tafelfarbe --pult-hell');
+    KEYS.filter(function (k) { return /^i_/.test(k); }).forEach(function (k) {
+      var c = S.iconCanvas(k, 3);
+      var wrap = document.createElement('div'); wrap.style.background = '#2a5261'; wrap.style.padding = '4px'; wrap.appendChild(c);
+      cell(r, k.slice(2), wrap);
+    });
+  })();
+
+  window.__preview = { section: section, canvas: canvas, cell: cell, showSprite: showSprite, groundRect: groundRect };
 })();
 </script>
 </body>

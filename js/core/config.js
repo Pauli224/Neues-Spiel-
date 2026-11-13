@@ -12,20 +12,21 @@
     MAX_UNITS: 1500,
     MAX_ANIMALS: 240,
     MAX_EVENTS: 400,
-    UNIT_SPEED: 0.085,        // Kacheln pro Tick bei walk = 1
+    UNIT_SPEED: 0.1,         // Kacheln pro Tick bei walk = 1
     ADULT_AGE: 6,             // Jahre
     LIFESPAN: 62,             // Jahre (± 14, mal Volksfaktor)
     FOOD_PER_YEAR: 2.2,       // Nahrung je Kopf und Jahr
     BIRTH_RATE: 0.0075,       // Geburtschance je Erwachsenem und Sekunde (bei Platz + Essen)
     START_STOCK: { food: 36, wood: 26, stone: 4, gold: 0 },
     HARVEST: 11,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
-    CHOP: 3, MINE: 2,         // Holz/Stein je Gang
+    CHOP: 7, MINE: 5,         // Holz/Stein je Gang
     FISH: 3,
     FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
     BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
     BASE_DMG: 4, SOLDIER_DMG: 9,
-    WALL_MARGIN: 3.0,         // Abstand Ring zu Kerngebäuden
-    WALL_EXPAND_MARGIN: 6.6,
+    WALL_MARGIN: 2.6,         // Abstand Ring zu Kerngebäuden
+    WALL_RESERVE: 6.5,        // Wachstumsfläche (Radius um das Zentrum), die der erste Ring einschließt
+    WALL_RESERVE_STEP: 4,     // je Stadterweiterung so viel größer
     WALL_EXPAND_YEARS: 5,     // frühestens alle n Jahre erweitern
     TOWER_RANGE: 5.5, TOWER_DMG: 7, TOWER_COOLDOWN: 14,
     PATH_BUDGET: 9000,        // A*-Knoten pro Tick weltweit
@@ -115,7 +116,7 @@
       desc: 'Jedes Problem hat einen Preis, und der Rat kennt ihn auswendig.',
       pros: ['Gold ×2', 'Händler zwischen den Städten', 'Söldner und Freikauf aus Kriegen'],
       cons: ['Kaum eigene Soldaten', 'Abhängig vom Geldbeutel'],
-      goldMul: 2, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true
+      goldMul: 2, taxes: 0.01, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true
     },
     anarchy: {
       name: 'Anarchie', titleM: '', titleF: '', realm: 'Freie Kommune',

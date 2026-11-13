@@ -17,7 +17,8 @@
   }
 
   // Berechnet den Ring. Rückgabe { tiles, gates, towers, inside, region } in Welt-Indizes oder null
-  function computeRing(sim, city, margin) {
+  // reserve: Radius einer Wachstumsfläche um das Zentrum, die zum Kern zählt (Platz für neue Häuser)
+  function computeRing(sim, city, margin, reserve) {
     const st = sim.state, W = st.W, H = st.H;
     const core = [];
     for (const s of st.structs) {
@@ -25,6 +26,20 @@
       for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) core.push(s.x + dx, s.y + dy);
     }
     if (!core.length) return null;
+    const rr = reserve || 0;
+    if (rr > 0) {
+      const walk0 = WW.TERRAIN_LUT.walk;
+      for (let dy = -Math.ceil(rr); dy <= Math.ceil(rr); dy++) for (let dx = -Math.ceil(rr); dx <= Math.ceil(rr); dx++) {
+        if (dx * dx + dy * dy > rr * rr) continue;
+        const x = city.cx + dx, y = city.cy + dy;
+        if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
+        const i = y * W + x;
+        if (walk0[st.terrain[i]] <= 0) continue;
+        if (st.owner[i] !== -1 && st.owner[i] !== city.id) continue;
+        if (st.inRing[i] !== -1 && st.inRing[i] !== city.id) continue;
+        core.push(x, y);
+      }
+    }
     let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1;
     for (let i = 0; i < core.length; i += 2) {
       if (core[i] < minX) minX = core[i]; if (core[i] > maxX) maxX = core[i];
@@ -267,7 +282,9 @@
   // Ring planen und Baustellen anlegen
   function plan(sim, city, margin, level, expanding) {
     const st = sim.state, W = st.W;
-    const ring = computeRing(sim, city, margin);
+    const C = WW.CONFIG;
+    const reserve = C.WALL_RESERVE + C.WALL_RESERVE_STEP * ((city.wall.expansions || 0) + (expanding ? 1 : 0));
+    const ring = computeRing(sim, city, margin, reserve);
     if (!ring) return false;
     const k = sim._kingdoms.get(city.kingdomId);
     const gov = WW.GOVERNMENTS[k ? k.gov : 'tribe'];
@@ -475,7 +492,7 @@
     if (city.noSpace && st.year - (w.plannedYear || 0) >= WW.CONFIG.WALL_EXPAND_YEARS && city.pop >= city.housing - 3) {
       const lv = gov.barricades ? 1 : Math.max(1, w.level);
       const before = w.plan ? w.plan.length : 0;
-      if (plan(sim, city, WW.CONFIG.WALL_EXPAND_MARGIN, lv, true)) {
+      if (plan(sim, city, WW.CONFIG.WALL_MARGIN, lv, true)) {
         if (w.plan.length <= before * 0.9) {
           // Ring wurde nicht größer (Platz verbaut) – alte Pläne behalten
           w.state = 'expanding';

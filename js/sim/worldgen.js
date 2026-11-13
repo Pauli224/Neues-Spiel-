@@ -522,7 +522,7 @@
       const ux = (x + 0.5) / W * 2 - 1, uy = (y + 0.5) / H * 2 - 1, u4 = ux * ux * ux * ux + uy * uy * uy * uy;
       // abgerundetes Rechteck statt harter Kante, dazu Rauschen → kein eckiger Kartenrand
       let dx0 = x + 0.5, dx1 = W - x - 0.5;
-      if (P.open === 'W') dx0 += 0.1 * H; else if (P.open === 'E') dx1 += 0.1 * H; // offene Seite: Land läuft bis nah an den Rand
+      if (P.open === 'W') dx0 += 0.03 * H; else if (P.open === 'E') dx1 += 0.03 * H; // offene Seite: Land läuft bis nah an den Rand
       let e = Math.min(dx0, dx1, y + 0.5, H - y - 0.5) / H;
       if (!P.open) e = Math.min(e, (1 - Math.sqrt(Math.sqrt(u4))) * 0.5);
       e += 0.07 * nWarp.fbm(ax * 3.5 + 9, ay * 3.5, 2, 0.5);
@@ -547,7 +547,7 @@
     {
       const rv = stream(seed, 'volcano');
       const dLand0 = distField(land, W, H);
-      const want = o.magic * 1.7 * areaScale;
+      const want = o.magic * 2.2 * areaScale;
       const n = Math.floor(want + rv.next() * (o.magic > 0 ? 1 : 0) * 0.999);
       for (let k = 0; k < n; k++) {
         for (let t = 0; t < 80; t++) {
@@ -569,7 +569,7 @@
     // 4) Ozean vs. Seen, Abstandsfelder
     const notLand = new Uint8Array(N); for (let i = 0; i < N; i++) notLand[i] = land[i] ? 0 : 1;
     const ocean = floodOcean(land, W, H);
-    const lake = new Uint8Array(N); for (let i = 0; i < N; i++) lake[i] = (!land[i] && !ocean[i]) ? 1 : 0; if (globalThis.WG_LK) { let c = 0; for (let i = 0; i < N; i++) c += lake[i]; globalThis.WG_LK.push(c); }
+    const lake = new Uint8Array(N); for (let i = 0; i < N; i++) lake[i] = (!land[i] && !ocean[i]) ? 1 : 0;
     let dWater = distField(notLand, W, H);
     const dLand = distField(land, W, H);
 
@@ -711,7 +711,7 @@
       const sR = o.rivers;
       const dOcean = distField(ocean, W, H);
       const Pot = new Float32Array(N);
-      for (let i = 0; i < N; i++) Pot[i] = ocean[i] ? -0.06 : Fill[i] + 0.004 * dOcean[i];
+      for (let i = 0; i < N; i++) Pot[i] = ocean[i] ? -0.06 : Fill[i] + 0.004 * dOcean[i] + (relief[i] === 2 ? 0.25 : 0); // Gebirge meiden
       const Ps = boxBlur(boxBlur(Pot, W, H, 2), W, H, 2);
       const samp = (x, y) => {
         x -= 0.5; y -= 0.5;
@@ -800,8 +800,8 @@
             if (gl < 1e-9) { gx = vx; gy = vy; } else { gx /= gl; gy /= gl; }
             let m = 2.2 * nMisc.fbm(sLen * 0.085 + phase, phase * 0.37 + 0.5, 2, 0.45);
             let dx = gx - m * gy, dy = gy + m * gx;
-            if (runLen >= 4) { // lange Geraden aufbrechen: quer zur Laufachse schieben, bergab bevorzugt
-              const k = 0.5 * (runLen - 3);
+            if (runLen >= 3) { // lange Geraden aufbrechen: quer zur Laufachse schieben, bergab bevorzugt
+              const k = 0.9 * (runLen - 2);
               const horiz = runDir === 1 || runDir === -1, gp = horiz ? gy : gx;
               if (!jogSide) jogSide = gp > 0.15 ? 1 : gp < -0.15 ? -1 : (m >= 0 ? 1 : -1); // Seite bleibt fest
               const push = jogSide * k * Math.sqrt(dx * dx + dy * dy);
@@ -810,13 +810,20 @@
             const dl2 = Math.sqrt(dx * dx + dy * dy); dx /= dl2; dy /= dl2;
             vx = vx * 0.66 + dx * 0.34; vy = vy * 0.66 + dy * 0.34;
             vl = Math.sqrt(vx * vx + vy * vy) || 1; vx /= vl; vy /= vl;
-            const nx = px + vx * 0.4, ny = py + vy * 0.4; sLen += 0.4;
+            let nx = px + vx * 0.4, ny = py + vy * 0.4; sLen += 0.4;
             if (nx < 0 || ny < 0 || nx >= W || ny >= H) break;
             const t = Math.floor(ny) * W + Math.floor(nx);
             const last = path[path.length - 1];
             if (t !== last) {
+              const hadJog = jogSide, prevDir = runDir;
               if (walkTo(t, false, px, py, nx, ny)) break;
               const now = path[path.length - 1];
+              // Spurwechsel festhalten: in die Mitte der neuen Spur rücken, sonst zieht das Gefälle zurück
+              if (hadJog && path.length >= 2) {
+                const sd = now - path[path.length - 2];
+                if ((prevDir === 1 || prevDir === -1) && (sd === W || sd === -W)) ny = Math.floor(ny) + 0.5;
+                else if ((prevDir === W || prevDir === -W) && (sd === 1 || sd === -1)) nx = Math.floor(nx) + 0.5;
+              }
               if (Pot[now] < best - 1e-7) { best = Pot[now]; since = 0; } else if (++since > 30) mode = 1;
             }
             px = nx; py = ny;
@@ -847,21 +854,19 @@
           riverH[t] = h; // Höhe fällt entlang des Laufs
         }
       }
-      const srcs = [];
+      const srcs = [], srcD = 13 - 6 * sR;
       let made = 0;
       for (let q = 0; q < idx.length && made < target; q++) {
         const s = cand[idx[q]], sx0 = s % W, sy0 = (s - sx0) / W;
         if (river[s]) continue;
         let ok = true;
-        for (let k = 0; k < srcs.length; k++) { const dx = srcs[k][0] - sx0, dy = srcs[k][1] - sy0; if (dx * dx + dy * dy < 144) { ok = false; break; } }
-        if (!ok || nearRiver(river, W, H, sx0, sy0, 4)) continue;
+        for (let k = 0; k < srcs.length; k++) { const dx = srcs[k][0] - sx0, dy = srcs[k][1] - sy0; if (dx * dx + dy * dy < srcD * srcD) { ok = false; break; } }
+        if (!ok || nearRiver(river, W, H, sx0, sy0, sR > 0.7 ? 2 : 3)) continue;
         curId++;
         const st = trace(s, rr.range(0, 200), false);
-        if (globalThis.WG_RIV) globalThis.WG_RIV.push(["try", st, path.length, target]);
         if (!st) continue;
         if (path.length < (st === 2 ? Math.round(minLen * 0.6) : minLen)) continue;
         commit(curId); srcs.push([sx0, sy0]); made++;
-        if (globalThis.WG_RIV) globalThis.WG_RIV.push([sx0, sy0, st, path.length]);
       }
       // Seen mit Zufluss (oder große Seen) bekommen einen Abfluss
       if (made > 0) {
@@ -1012,13 +1017,14 @@
     const magicSpots = [];
     {
       const rm = stream(seed, 'mushroom');
-      const nm = Math.floor(o.magic * 3.2 * areaScale + (o.magic > 0 ? rm.next() : 0));
+      const nm = Math.floor(o.magic * 4.5 * areaScale + (o.magic > 0 ? rm.next() : 0));
+      const ms = 0.6 + 0.8 * o.magic;
       growPatches(nm, rm, i => (ter[i] === TT.FOREST || ter[i] === TT.JUNGLE || ter[i] === TT.GRASS || ter[i] === TT.FLOWERS || ter[i] === TT.SWAMP) && Mo[i] > 0.45 && dWater[i] >= 2.5,
-        TT.MUSHROOM, Math.round(30 * Math.sqrt(areaScale)), Math.round(70 * Math.sqrt(areaScale)));
+        TT.MUSHROOM, Math.round(30 * ms * Math.sqrt(areaScale)), Math.round(70 * ms * Math.sqrt(areaScale)));
       const rk = stream(seed, 'crystal');
-      const nk = Math.floor(o.magic * 2.6 * areaScale + (o.magic > 0 ? rk.next() : 0));
+      const nk = Math.floor(o.magic * 3.6 * areaScale + (o.magic > 0 ? rk.next() : 0));
       growPatches(nk, rk, i => (ter[i] === TT.HILL || ter[i] === TT.TUNDRA || ter[i] === TT.DESERT || ter[i] === TT.SNOWFIELD || ter[i] === TT.GRASS || ter[i] === TT.SAVANNA) && dWater[i] >= 2 && nearType(ter, W, H, i, TT.MOUNTAIN, 4),
-        TT.CRYSTAL, Math.round(16 * Math.sqrt(areaScale)), Math.round(38 * Math.sqrt(areaScale)));
+        TT.CRYSTAL, Math.round(16 * ms * Math.sqrt(areaScale)), Math.round(38 * ms * Math.sqrt(areaScale)));
     }
     function growPatches(n, r, ok, id, minS, maxS) {
       const cands = [];
@@ -1081,6 +1087,24 @@
           if (Math.sqrt(dx * dx + dy * dy) <= rad + 1.2 * nMisc.n2(xx * 0.5 + 3, yy * 0.5)) ter[i] = TT.ASH;
         }
         magicSpots.push([cx, cy, TT.ASH]);
+      }
+    }
+
+    // Relief-Krümel (von Flüssen abgeschnittene Hügel-/Gebirgsreste) einebnen
+    {
+      const up = new Uint8Array(N);
+      for (let i = 0; i < N; i++) up[i] = LUT.rank[ter[i]] >= 5 ? 1 : 0;
+      const cc = components(up, W, H);
+      for (let i = 0; i < N; i++) {
+        if (!up[i] || cc.sizes[cc.lab[i]] >= 4) continue;
+        const x = i % W, y = (i - x) / W; let best = TT.GRASS, bc = 0;
+        const cnt = {};
+        for (let yy = y - 1; yy <= y + 1; yy++) for (let xx = x - 1; xx <= x + 1; xx++) {
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const u = ter[yy * W + xx]; if (LUT.rank[u] !== 4 || u === TT.LAVA) continue;
+          cnt[u] = (cnt[u] || 0) + 1; if (cnt[u] > bc) { bc = cnt[u]; best = u; }
+        }
+        ter[i] = best;
       }
     }
 

@@ -214,35 +214,57 @@
     want.soldier = n >= 4 ? Math.round(n * Math.min(0.55, soldierShare)) : 0;
     if (g.soldierShare > 0 && n >= 6 && want.soldier < 1) want.soldier = 1;
     const sites = city.sites.length;
-    if (sites > 0) want.builder = Math.max(1, Math.min(Math.ceil(sites / 3), Math.floor(n * 0.35)));
+    // offener Materialbedarf der Baustellen
+    let needWood = 0, needStone = 0;
+    for (const id of city.sites) {
+      const s = sim._structs.get(id);
+      if (!s || s.paid) continue;
+      const c = WW.Structs.costFor(sim, s.type, s.upgradeTo || s.level, city.id);
+      needWood += c.wood; needStone += c.stone;
+    }
+    needWood = Math.max(0, needWood - st.wood);
+    needStone = Math.max(0, needStone - st.stone);
+    if (sites > 0) want.builder = Math.max(1, Math.min(Math.ceil(sites / 5) + 1, Math.floor(n * 0.3)));
     // Nahrung
     const need = city.pop * WW.CONFIG.FOOD_PER_YEAR;
-    const perFarmer = 9 * race.yields.food * g.workMul;
-    let farmers = Math.ceil(need / perFarmer * 1.15);
+    const perFarmer = 14 * race.yields.food * g.workMul;
+    let farmers = Math.ceil(need / perFarmer * 1.1);
     if (st.food < city.pop * 1.5) farmers += 1;
     if (st.food < city.pop * 0.5) farmers += 1;
-    if (st.food > city.pop * 5 + 30) farmers -= 1;
-    want.farmer = Math.max(1, farmers);
-    // Stein
-    const wantsStone = (city.wall.level >= 1 && g.wallMax >= 2) || city.tier >= 1;
-    want.miner = city.hasStone ? (wantsStone ? Math.max(1, Math.round(n * 0.16)) : (st.stone < 10 ? 1 : 0)) : 0;
-    if (st.stone > 120) want.miner = Math.min(want.miner, 1);
-    // Fünfjahresplan
+    if (st.food > city.pop * 4 + 30) farmers -= 1;
+    if (st.food > city.pop * 8 + 60) farmers -= 1;
     const plan = k && k.policy && k.policy.plan;
-    if (plan && plan.focus === 'food') want.farmer += 1;
-    if (plan && plan.focus === 'stone' && city.hasStone) want.miner += 1;
-    let rest = n - want.soldier - want.builder - want.farmer - want.miner;
-    if (rest < 0) {
-      // Reihenfolge der Kürzung: Steinmetze, Baumeister, Soldaten
-      for (const r of ['miner', 'builder', 'soldier']) { while (rest < 0 && want[r] > (r === 'builder' && sites ? 1 : 0)) { want[r]--; rest++; } }
-      while (rest < 0 && want.farmer > 1) { want.farmer--; rest++; }
+    if (plan && plan.focus === 'food') farmers += 1;
+    want.farmer = Math.max(1, farmers);
+    // Stein: nach Bedarf (Baustellen, Mauerausbau, Hausausbau)
+    if (city.hasStone && n >= 5) {
+      const wantsStone = (city.wall.level >= 1 && g.wallMax >= 2 && !g.barricades) || city.tier >= 2;
+      let m = needStone > 0 ? Math.ceil(needStone / 25) : 0;
+      if (wantsStone && st.stone < 60) m = Math.max(m, 1 + (n >= 14 ? 1 : 0));
+      if (plan && plan.focus === 'stone') m += 1;
+      want.miner = Math.min(m, Math.ceil(n * 0.18));
     }
-    want.lumberjack = Math.max(0, rest);
-    // Holz braucht jede Stadt: notfalls einen Bauern abziehen
-    if (city.hasWood && want.lumberjack < 1 && n >= 3 && st.wood < 40) { want.lumberjack = 1; if (want.farmer > 1) want.farmer--; else if (want.builder > 1) want.builder--; }
-    if (city.hasWood && want.lumberjack < 2 && n >= 8 && st.wood < 20 && want.farmer > 2) { want.lumberjack++; want.farmer--; }
-    if (!city.hasWood) { want.farmer += want.lumberjack; want.lumberjack = 0; }
-    if (st.wood > 150 && want.lumberjack > 1) { const m = want.lumberjack - 1; want.lumberjack = 1; want.farmer += Math.ceil(m / 2); want.miner += city.hasStone ? Math.floor(m / 2) : 0; if (!city.hasStone) want.farmer += Math.floor(m / 2); }
+    // Holz: Mindestens einer, mehr bei Bedarf
+    if (city.hasWood) {
+      let l = 1 + Math.ceil(needWood / 20);
+      if (st.wood < 15) l++;
+      if (st.wood > 120) l = 1;
+      if (plan && plan.focus === 'wood') l += 1;
+      want.lumberjack = Math.min(l, Math.ceil(n * 0.45));
+    }
+    let rest = n - want.soldier - want.builder - want.farmer - want.miner - want.lumberjack;
+    if (rest < 0) {
+      // Kürzung: erst Steinmetze, dann Holzfäller bis auf einen, Baumeister bis auf einen, Soldaten, Bauern
+      const order = [['miner', 0], ['lumberjack', 1], ['builder', sites ? 1 : 0], ['soldier', 0], ['lumberjack', 0], ['farmer', 1]];
+      for (const o of order) { while (rest < 0 && want[o[0]] > o[1]) { want[o[0]]--; rest++; } }
+    }
+    // Überschuss: Holz, wenn knapp, sonst Felder; Kommunismus mit Plan-Schwerpunkt
+    while (rest > 0) {
+      if (city.hasWood && (st.wood < 80 || needWood > 0)) want.lumberjack++;
+      else if (city.hasStone && st.stone < 40 && n >= 8) want.miner++;
+      else want.farmer++;
+      rest--;
+    }
     // Umverteilen: höchstens drei Wechsel pro Runde
     const have = { farmer: 0, lumberjack: 0, miner: 0, builder: 0, soldier: 0 };
     for (const u of workers) have[u.role]++;
@@ -358,7 +380,7 @@
     const r = territoryRadius(city) + 1;
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const ringed = !!city.wall.plan;
-    const minD = ringed ? 0 : WW.CONFIG.WALL_MARGIN + 2.5;
+    const minD = ringed ? 0 : WW.CONFIG.WALL_RESERVE + WW.CONFIG.WALL_MARGIN + 1.2;
     let best = -1, bs = -1e9;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
@@ -413,7 +435,7 @@
       area: (i, inner) => (owner[i] === id || owner[i] === -1) && inRing[i] === -1 && !(inner && LUT[res][st.terrain[i]]),
       fieldOk: false, race: city.race, cityId: id, needWalkBorder: false
     };
-    const minD = WW.CONFIG.WALL_MARGIN + 3.5;
+    const minD = (city.wall.plan ? 0 : WW.CONFIG.WALL_RESERVE) + WW.CONFIG.WALL_MARGIN + 2;
     let best = -1, bs = -1e9;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2 - inf.h, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2 - inf.w, Math.ceil(px + r)); x++) {
@@ -623,7 +645,7 @@
     if (g.goldMul > 0) {
       let gold = 0;
       if (g.taxes > 0) gold += city.pop * g.taxes;
-      if (city.hasMarket) gold += 0.08;
+      if (city.hasMarket) gold += 0.05 + city.pop * 0.006;
       gold *= g.goldMul;
       if (k && k.policy && k.policy.bonus === 'trade') gold *= 1.5;
       sk.gold += gold;

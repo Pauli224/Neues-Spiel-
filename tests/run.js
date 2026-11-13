@@ -82,6 +82,12 @@ function meadowWorld(W, H, opt) {
     if (e < 2) t = T.WATER; else if (e < 3) t = T.SAND;
     else if ((x * 7 + y * 13) % 97 < 3 && e > 6) t = T.FOREST;
     if (e >= 3 && e < 7 && ((x + y) % 5 < 3)) t = T.FOREST;
+    // Wald- und Hügelflecken um jeden Startplatz (wie bei echten Startplätzen: Holz und Stein in Reichweite)
+    for (const sp of (opt.spots || [{ x: W >> 1, y: H >> 1 }])) {
+      const fx = x - sp.x + 14, fy = y - sp.y - 6; if (fx * fx + fy * fy < 16 + ((x * 13 + y * 7) % 5)) t = T.FOREST;
+      const gx = x - sp.x - 4, gy = y - sp.y + 15; if (gx * gx + gy * gy < 12) t = T.FOREST;
+      const hx = x - sp.x - 13, hy = y - sp.y + 7; if (hx * hx + hy * hy < 10) t = T.HILL;
+    }
     if (opt.hills && e >= 3 && e < 6 && x > W * 0.6) t = T.HILL;
     if (opt.river && x === Math.floor(W * 0.5) + (y % 7 < 3 ? 1 : 0) && e >= 2) t = T.RIVER;
     terrain[i] = t; variant[i] = (x * 31 + y * 17) & 255; height[i] = 130;
