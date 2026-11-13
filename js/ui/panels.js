@@ -229,7 +229,7 @@
     const role = (u.female ? WW.ROLE_NAMES_F : WW.ROLE_NAMES)[u.role] || u.role;
     const key = game.renderer.unitKey(u, k ? k.gov : 'tribe', 0);
     const isLeader = k && k.leaderId === u.id;
-    this.title(icon(key, 30, k ? k.colorIndex : 10), (isLeader && k.leaderName) ? (k.leaderTitle + ' ' + k.leaderName) : u.name, role + (race ? ' · ' + race.singular : ''));
+    this.title(icon(key, 40, k ? k.colorIndex : 10), (isLeader && k.leaderName) ? (k.leaderTitle + ' ' + k.leaderName) : u.name, role + (race ? ' · ' + race.singular : ''));
     const age = Math.floor(u.age);
     body.appendChild(h('div.sec', [
       h('dl.kv', [h('dt', 'Alter'), h('dd', age + (age === 1 ? ' Jahr' : ' Jahre')), h('dt', 'Zustand'), h('dd', u.sick ? 'krank' : (u.hp < u.maxHp * 0.5 ? 'verletzt' : 'munter')),

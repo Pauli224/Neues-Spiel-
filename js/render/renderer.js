@@ -708,7 +708,7 @@
   // Stadtnamen: Banner + Name auf dunkler Tafel, Größe nach Stadtstufe
   Renderer.prototype.drawCityLabels = function (ctx, cam, opts) {
     const st = this.st;
-    if (cam.zoom < 0.7) return;
+    if (cam.zoom < 0.45) return;
     const dpr = cam.dpr;
     const kings = this._kings;
     const small = cam.zoom < 1.4;

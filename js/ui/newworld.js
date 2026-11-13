@@ -131,7 +131,7 @@
     const tpl = WW.WorldGen.TEMPLATES.find(t => t.key === this.o.template);
     D().clear(this.nameEl);
     this.nameEl.appendChild(document.createTextNode(p.world.name || 'Namenlose Welt'));
-    this.nameEl.appendChild(D().h('small', (tpl ? tpl.desc : '') + ' · ' + p.world.W + ' × ' + p.world.H));
+    this.nameEl.appendChild(D().h('small', (tpl ? tpl.desc : '') + ' · ' + p.world.W + '\u00a0×\u00a0' + p.world.H));
   };
 
   // Mini-Vorschau je Vorlage, eine pro Bild (kleine Welt, gleiche Regler)
