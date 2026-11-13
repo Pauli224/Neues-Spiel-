@@ -199,7 +199,7 @@
         const w = G.generate(j.o);
         ms += performance.now() - t0;
         drawWorld(j.c, w, w.W * 2, w.H * 2, true);
-        j.cap.textContent = (j.o.themeName ? j.o.themeName + ' · ' : '') + w.name + ' · ' + w.startSpots.length + ' Plätze';
+        j.cap.textContent = (j.o.themeName ? j.o.themeName + ' (' + (G.TEMPLATES.find(t => t.key === w.template) || {}).name + ') · ' : '') + w.name + ' · ' + w.startSpots.length + ' Plätze';
         j.c.title = 'Seed ' + j.o.seed;
       }
       $('gridInfo').textContent = i + ' / ' + jobs.length + ' Welten · Ø ' + (ms / Math.max(1, i)).toFixed(0) + ' ms';

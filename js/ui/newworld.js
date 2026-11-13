@@ -178,7 +178,9 @@
     const tpl = WW.WorldGen.TEMPLATES.find(t => t.key === this.o.template);
     D().clear(this.nameEl);
     const theme = this.o.themeName;
-    if (theme || tpl) this.nameEl.appendChild(D().h('span.nw-theme', (theme ? theme + ' · ' : '') + (tpl ? tpl.name : '')));
+    const tn = tpl ? tpl.name : '';
+    const head = theme && theme !== tn ? theme + (tn ? ' · ' + tn : '') : tn;
+    if (head) this.nameEl.appendChild(D().h('span.nw-theme', head));
     this.nameEl.appendChild(document.createTextNode(p.world.name || 'Namenlose Welt'));
     this.nameEl.appendChild(D().h('small', (tpl ? tpl.desc : '') + ' · ' + p.world.W + '\u00a0×\u00a0' + p.world.H));
   };

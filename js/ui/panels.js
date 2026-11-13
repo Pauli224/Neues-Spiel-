@@ -352,7 +352,7 @@
       item('i_inspect', 'Kurzanleitung', 'Die drei wichtigsten Tipps', () => this.showWelcome())
     ]);
     const keys = h('p.muted', { style: { marginTop: '12px', marginBottom: '0' } },
-      'Tasten: WASD/Pfeile verschieben · Mausrad zoomt · Leertaste+Ziehen oder rechte Maustaste verschiebt · 0–3 Tempo · Esc = Schauen · C Chronik · M Minikarte');
+      'Tasten: WASD/Pfeile verschieben · Mausrad zoomt · Leertaste+Ziehen oder rechte Maustaste verschiebt · 0 Pause, 1–5 Tempo, Leertaste Pause · Esc = Schauen · C Chronik · M Minikarte');
     this.openModal('Menü', [grid, window.matchMedia('(pointer: fine)').matches ? keys : null], { icon: 'i_menu' });
   };
 

@@ -22,7 +22,9 @@
     game.hud.toolChanged();
   };
 
+  game.togglePause = function () { game.setSpeed(game.speed ? 0 : (game._lastSpeed || 1)); };
   game.setSpeed = function (v) {
+    if (v) game._lastSpeed = v;
     game.speed = v;
     game.hud.speedChanged(v);
     D().store.set(SPEED_KEY, String(v));
@@ -242,9 +244,9 @@
   game.onKey = function (k, e) {
     if (game.ui.modalOpen()) { if (k === 'Escape') { if (!document.getElementById('newworld').hidden) game.newWorldScreen.close(); else game.ui.closeModal(); } return; }
     if (k === 'Escape') { if (game.toolId !== 'inspect') game.hud.pickCat('look'); else game.ui.closeInfo(); return; }
-    const sp = { 0: 0, 1: 1, 2: 3, 3: 8 };
+    const sp = { 0: 0, 1: 1, 2: 2, 3: 4, 4: 5, 5: 10 };
     if (k in sp) { game.setSpeed(sp[k]); return; }
-    if (k === 'p' || k === 'P') { game.setSpeed(game.speed ? 0 : 1); return; }
+    if (k === 'p' || k === 'P' || k === 'Pause') { game.togglePause(); return; }
     if (k === 'c' || k === 'C') { game.ui.openChronicle(); return; }
     if (k === 'm' || k === 'M') { game.ui.toggleMinimap(); return; }
     if (k === '+' || k === '=') { game.cam.animateZoom(game.cam.crispZoom(game.cam.zoom * 1.6)); return; }
@@ -387,7 +389,7 @@
     const running = game.speed > 0 && !game.paused && !document.hidden;
     if (running) {
       game.acc += dt * game.speed / TICK;
-      const maxN = Math.ceil(game.speed * 2) + 2;
+      const maxN = Math.ceil(game.speed * 2) + 2;   // Zeitbudget unten: höchstens ~10 ms Simulation pro Bild
       let n = 0;
       const t0 = performance.now();
       while (game.acc >= 1 && n < maxN) {
@@ -395,9 +397,9 @@
         try { sim.tick(); } catch (e) { simFailed(e); break; }
         n++; game.acc -= 1;
         if ((sim.state.tick & 1) === 0) game.renderer.trample(sim.state.units);
-        if (performance.now() - t0 > 14) { game.acc = Math.min(game.acc, 1); break; }
+        if (performance.now() - t0 > 10) break;
       }
-      if (game.acc > 4) game.acc = 1;   // nicht hinterherhetzen
+      if (game.acc > 2) game.acc = Math.min(game.acc, 1);   // keine Zeitschuld: lieber etwas langsamer als ruckeln
       if (n) {
         const ms = (performance.now() - t0) / n;
         game.perf.tickMs = game.perf.tickMs * 0.95 + ms * 0.05;
@@ -484,8 +486,9 @@
     game.ui.build();
     game.hud.build();
     resize();
+    // gespeichertes Tempo auf die Stufen 1/2/4/5/10 abbilden (alte Werte 3 und 8)
     const sp = +D().store.get(SPEED_KEY);
-    game.setSpeed([0, 1, 3, 8].indexOf(sp) >= 0 && sp > 0 ? sp : 1);
+    game.setSpeed(({ 1: 1, 2: 2, 3: 4, 4: 4, 5: 5, 8: 10, 10: 10 })[sp] || 1);
     game.setTool('inspect');
     game._first = 3;
 

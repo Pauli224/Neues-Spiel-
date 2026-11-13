@@ -584,6 +584,137 @@ test('8 Wachstum (Stufen, Stadterweiterung, Tochterstädte, 40 000 Ticks)', func
 });
 
 // --------------------------------------------------------------------------
+// 9. Fluren (Landnahme)
+// --------------------------------------------------------------------------
+test('9 Fluren: Landnahme, Besitz-Raster, Häuser je Flur, Verfall', function () {
+  const sim = makeSim({ seed: 'fluren-1', size: 'medium', populate: 3 });
+  const G = WW.Growth, st = sim.state;
+  const first = {};
+  for (const c of st.cities) first[c.id] = G.countFlurs(sim, c);
+  run(sim, 8000, 1000, () => checkInvariants(sim, 'Fluren'));
+  let grew = 0;
+  const d = G.dims(st);
+  for (const c of st.cities) {
+    const n = G.countFlurs(sim, c);
+    if (first[c.id] != null && n > first[c.id]) grew++;
+    assert(c.houses <= 2 + Math.floor(n * WW.CONFIG.HOUSES_PER_FLUR) + 1, c.name + ': mehr Häuser (' + c.houses + ') als Fluren erlauben (' + n + ')');
+    log(c.name.padEnd(16), 'Fluren', String(first[c.id] == null ? '–' : first[c.id]).padStart(2), '→', String(n).padStart(2), '· Häuser', c.houses, '· Einw.', c.pop, '· Reichweite', G.reach(sim, c).toFixed(1));
+  }
+  assert(grew >= 1, 'keine Stadt hat Land genommen');
+  // Besitz-Raster folgt den Fluren
+  let bad = 0;
+  for (let i = 0; i < st.W * st.H; i++) {
+    const o = st.owner[i];
+    if (o < 0) continue;
+    const x = i % st.W, y = (i - x) / st.W;
+    if (st.flur[Math.floor(y / 6) * d.fw + Math.floor(x / 6)] !== o) bad++;
+  }
+  assert(bad === 0, bad + ' Kacheln gehören einer Stadt, deren Flur ihr nicht gehört');
+  // abgeschnittene Flur verfällt
+  const c = st.cities[0];
+  let lonely = -1;
+  for (let fi = 0; fi < st.flur.length && lonely < 0; fi++) {
+    if (st.flur[fi] !== -1) continue;
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    let near = false;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const n = (fy + dy) * d.fw + fx + dx; if (fx + dx >= 0 && fy + dy >= 0 && fx + dx < d.fw && fy + dy < d.fh && st.flur[n] !== -1) near = true; }
+    if (!near) lonely = fi;
+  }
+  assert(lonely >= 0, 'keine freie Flur zum Testen');
+  G.setFlur(sim, lonely, c.id);
+  G.cutOff(sim, c);
+  assert(st.flur[lonely] === -1, 'abgeschnittene Flur verfällt nicht');
+  log('Abgeschnittene Flur', lonely, 'verfällt wieder · Besitz-Raster stimmt mit Fluren überein');
+});
+
+// --------------------------------------------------------------------------
+// 10. Loyalität und Abspaltung, Tochterstadt-Regeln
+// --------------------------------------------------------------------------
+test('10 Loyalität, Abspaltung, Statthalter, Tochterstadt-Regeln', function () {
+  const sim = makeSim({ seed: 'treue-3', size: 'medium', populate: 3 });
+  const st = sim.state;
+  // Tochterstadt-Regel: Abstand bei jeder Gründung mitschneiden
+  const origFound = WW.Cities.found;
+  const dists = [];
+  WW.Cities.found = function (sim2, x, y) {
+    let md = 1e9;
+    for (const c of sim2.state.cities) md = Math.min(md, Math.hypot(c.cx - x, c.cy - y));
+    const r = origFound.apply(this, arguments);
+    if (r) dists.push(md);
+    return r;
+  };
+  let k = null;
+  try {
+    run(sim, 30000, 500, () => { k = st.kingdoms.find(kk => kk.cityIds.length >= 2); return !!k && st.tick > 12000; });
+  } finally { WW.Cities.found = origFound; }
+  log('Gründungen mit Abstand zur nächsten Stadt:', dists.map(d => d > 1e8 ? '–' : d.toFixed(0)).join(', '));
+  for (const d of dists) assert(d > 1e8 || d >= 16, 'Stadt zu nah an einer anderen gegründet (' + d.toFixed(1) + ')');
+  assert(k, 'kein Reich mit zwei Städten');
+  // Statthalter und Herrscherwerte
+  for (const c of st.cities) assert(c.governor && c.governor.admin >= 1 && c.governor.admin <= 5 && c.governor.quirk, c.name + ' ohne Statthalter');
+  const cap = sim._cities.get(k.capitalId);
+  assert(WW.Growth.loyaltyTarget(sim, cap, k) === 100, 'Hauptstadt nicht voll loyal');
+  const c = sim._cities.get(k.cityIds.find(id => id !== k.capitalId));
+  log('Reich', k.name, 'Städte', k.cityIds.length, 'Limit', WW.Growth.cityLimit(sim, k), '· Herrscher', JSON.stringify(k.ruler), '· Statthalter von', c.name + ':', c.governor.name, '(' + c.governor.quirk + ')');
+  log('Loyalität', c.name, Math.round(c.loyalty), 'Ziel', Math.round(WW.Growth.loyaltyTarget(sim, c, k)));
+  // Fremdes Volk senkt die Loyalität
+  const own = WW.Growth.loyaltyTarget(sim, c, k);
+  const race0 = c.race; c.race = WW.RACE_KEYS.find(r => r !== k.race);
+  assert(WW.Growth.loyaltyTarget(sim, c, k) < own, 'fremdes Volk ohne Malus');
+  c.race = race0;
+  // Abspaltung: Loyalität unter null -> Vorhaben -> eigenes Reich
+  const kn = st.kingdoms.length, oldK = k.id;
+  let seen = false;
+  run(sim, 6 * WW.CONFIG.TPY, 20, () => {
+    if (c.kingdomId === oldK) { c.loyalty = -60; c.happiness = 10; }
+    if (st.plots.some(p => p.type === 'secession' && p.cityId === c.id)) seen = true;
+    return c.kingdomId !== oldK;
+  });
+  assert(seen, 'Abspaltung kündigte sich nicht als Vorhaben an');
+  assert(c.kingdomId !== oldK, 'Stadt hat sich trotz Loyalität < 0 nicht abgespalten');
+  const nk = sim._kingdoms.get(c.kingdomId);
+  const ev = st.events.filter(e => e.type === 'secedeLoyalty').pop();
+  log('Abspaltung:', ev && ev.text, '· neues Reich', nk.name, '(' + nk.gov + ')', '· Reiche', kn, '→', st.kingdoms.length);
+  assert(ev, 'keine Chronik zur Abspaltung');
+  run(sim, 2000, 500, (i) => checkInvariants(sim, 'nach Abspaltung ' + i));
+});
+
+// --------------------------------------------------------------------------
+// 11. Vorhaben
+// --------------------------------------------------------------------------
+test('11 Vorhaben: Krieg kündigt sich an und kann abgesagt werden', function () {
+  const world = meadowWorld(120, 70, { hills: true, spots: [{ x: 32, y: 35 }, { x: 88, y: 35 }] });
+  const sim = makeSim({ seed: 'vorhaben', world: world, populate: 2, govs: ['fascism', 'democracy'], races: ['orc', 'human'], animals: false });
+  const [a, b] = sim.state.kingdoms;
+  a.govLocked = b.govLocked = true;
+  run(sim, 2 * WW.CONFIG.TPY);
+  a.relations[b.id].opinion = b.relations[a.id].opinion = -90;
+  const p = WW.Growth.planWar(sim, a, b, false);
+  assert(sim.state.plots.indexOf(p) >= 0, 'Vorhaben nicht im Zustand');
+  const prog = [];
+  run(sim, 8 * WW.CONFIG.TPY, 40, () => {
+    a.relations[b.id].opinion = b.relations[a.id].opinion = -90;
+    if (sim.state.plots.indexOf(p) >= 0) prog.push(p.progress);
+    return a.relations[b.id].status === 'war';
+  });
+  log('Fortschritt:', prog.filter((v, i) => i % 3 === 0).map(v => Math.round(v * 100) + ' %').join(' → '));
+  assert(prog.length >= 3 && prog[prog.length - 1] > prog[0], 'Fortschritt steigt nicht');
+  assert(a.relations[b.id].status === 'war', 'Vorhaben führte nicht zum Krieg');
+  const evs = sim.state.events.filter(e => e.type === 'plotWar' || e.type === 'war');
+  assert(evs.length >= 2 && evs[0].type === 'plotWar', 'Ankündigung fehlt vor der Kriegserklärung');
+  log(evs[0].text, '→', evs[evs.length - 1].text);
+  // Absagen: Meinung steigt -> Vorhaben schrumpft und verschwindet
+  sim.actions.setRelation(a.id, b.id, 'peace');
+  const p2 = WW.Growth.planWar(sim, a, b, false);
+  p2.progress = 0.5;
+  run(sim, 4 * WW.CONFIG.TPY, 40, () => { a.relations[b.id].opinion = 40; return sim.state.plots.indexOf(p2) < 0; });
+  assert(sim.state.plots.indexOf(p2) < 0 && a.relations[b.id].status !== 'war', 'Kriegsvorhaben wurde nicht abgesagt');
+  log('Abgesagt:', (sim.state.events.filter(e => e.type === 'plotWarOff').pop() || {}).text);
+  const D = WW.Sim.load(sim.serialize());
+  assert(D && Array.isArray(D.state.plots), 'Vorhaben werden nicht gespeichert');
+});
+
+// --------------------------------------------------------------------------
 // 7. Leistung
 // --------------------------------------------------------------------------
 test('7 Leistung (~800 Einheiten auf 144×96)', function () {
@@ -611,6 +742,18 @@ test('7 Leistung (~800 Einheiten auf 144×96)', function () {
   log('Einheiten', n0, '→', sim.state.units.length, '· Städte', sim.state.cities.length, '·', ms.toFixed(3), 'ms/Tick im Mittel · schlechtester Tick', worst.toFixed(2), 'ms');
   globalThis.__perf = ms;
   assert(ms < 1.5, 'zu langsam: ' + ms.toFixed(3) + ' ms/Tick');
+  // zusätzlich: 1500 Einheiten (nur messen)
+  guard = 0;
+  while (sim.state.units.length < 1500 && guard++ < 600) {
+    const c = sim.state.cities[guard % sim.state.cities.length];
+    if (!c) break;
+    sim.actions.spawnSettlers(c.cx + 0.5, c.cy + 0.5, 12, null, c.race);
+  }
+  const n1 = sim.state.units.length;
+  const t1 = process.hrtime.bigint();
+  for (let i = 0; i < 1000; i++) sim.tick();
+  const ms2 = Number(process.hrtime.bigint() - t1) / 1e6 / 1000;
+  log('Einheiten', n1, '→', sim.state.units.length, '·', ms2.toFixed(3), 'ms/Tick im Mittel (1500er-Messung)');
 });
 
 // --------------------------------------------------------------------------

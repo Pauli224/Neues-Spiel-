@@ -286,9 +286,6 @@
       const th = r.pick(THEMES);
       o.theme = th.key; o.themeName = th.name; o.template = r.pick(th.tpl);
       for (const k in th.s) o[k] = r.range(th.s[k][0], th.s[k][1]);
-    } else {
-      const tp = TEMPLATES.find(t => t.key === o.template);
-      o.themeName = tp ? tp.name : o.template;
     }
     for (const k of SLIDERS) o[k] = Math.round(o[k] * 100) / 100;
     return o;
@@ -1440,11 +1437,19 @@
 
   // Werte unter mask durch ihren Rang (0..1) ersetzen.
   function rankNorm(vals, mask) {
-    const idx = [];
-    for (let i = 0; i < vals.length; i++) if (mask[i]) idx.push(i);
-    idx.sort((a, b) => vals[a] - vals[b] || a - b);
-    const n = idx.length - 1 || 1;
-    for (let k = 0; k < idx.length; k++) vals[idx[k]] = k / n;
+    let n = 0;
+    for (let i = 0; i < vals.length; i++) if (mask[i]) n++;
+    if (!n) return;
+    const sorted = new Float64Array(n);
+    for (let i = 0, k = 0; i < vals.length; i++) if (mask[i]) sorted[k++] = vals[i];
+    sorted.sort();
+    const d = n - 1 || 1;
+    for (let i = 0; i < vals.length; i++) {
+      if (!mask[i]) continue;
+      const v = vals[i]; let lo = 0, hi = n - 1; // untere Grenze per Binärsuche (gleiche Werte → gleicher Rang)
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < v) lo = mid + 1; else hi = mid; }
+      vals[i] = lo / d;
+    }
   }
 
   // Einzelne Biom-Kacheln an die Mehrheit der Nachbarn angleichen.

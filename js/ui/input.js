@@ -49,7 +49,7 @@
       this.cam.anim = null;
       this.samples = [{ t: performance.now(), x: p.x, y: p.y }];
       const tool = this.game.tool;
-      if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || this.space)) { this.mode = 'pan'; }
+      if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || this.space)) { this.mode = 'pan'; if (this.space) this.spaceUsed = true; }
       else if (e.pointerType === 'mouse' && e.button !== 0) { this.mode = 'ignore'; }
       else if (tool.kind === 'tap' && tool.drag) { this.mode = 'drag'; this.game.dragStart(p.x, p.y); }
       else if (tool.kind === 'grab') { this.mode = this.game.grabAt(p.x, p.y) ? 'grab' : 'pendTap'; }
@@ -192,7 +192,14 @@
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     const k = e.key;
-    if (k === ' ') { this.space = down; if (down) e.preventDefault(); return; }
+    // Leertaste: gehalten + Ziehen = verschieben; kurz getippt = Pause an/aus
+    if (k === ' ') {
+      e.preventDefault();
+      if (down) { if (!this.space) { this.space = true; this.spaceUsed = false; } return; }
+      this.space = false;
+      if (!this.spaceUsed && !this.game.ui.modalOpen()) this.game.togglePause();
+      return;
+    }
     const panKeys = { w: 1, a: 1, s: 1, d: 1, W: 1, A: 1, S: 1, D: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1 };
     if (panKeys[k]) {
       if (this.game.ui.modalOpen() && k.startsWith('Arrow')) return;

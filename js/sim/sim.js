@@ -7,7 +7,9 @@
 //   js/core/terrain.js, js/core/rng.js, js/core/config.js, js/data/names.js, js/data/texts.js,
 //   js/sim/util.js, js/sim/world.js, js/sim/worldgen.js (Agent D, optional), js/sim/path.js,
 //   js/sim/structs.js, js/sim/walls.js, js/sim/cities.js, js/sim/units.js, js/sim/gov.js,
-//   js/sim/diplo.js, js/sim/creatures.js, js/sim/env.js, js/sim/powers.js, js/sim/sim.js
+//   js/sim/diplo.js, js/sim/growth.js, js/sim/creatures.js, js/sim/env.js, js/sim/powers.js, js/sim/sim.js
+//   (Wildnis-Teil, eigener Agent: js/core/config-wild.js nach config.js, js/data/texts-wild.js nach texts.js,
+//    js/sim/wild.js vor env.js – siehe tests/load.js)
 //
 // ERZEUGEN
 //   const sim = WW.Sim.create(opts)          opts (alle optional):
@@ -44,7 +46,7 @@
 //   setGovLocked(kingdomId, bool) -> bool
 //   setRelation(kingdomA, kingdomB, 'war'|'peace'|'alliance') -> bool   (Chronik: godWar/godPeace/godAlliance)
 //   strike(x, y, kind) -> bool    kind aus WW.POWERS: lightning, fire, rain, meteor, plague, bless
-//   setLaw(key, bool) -> bool     Schlüssel aus WW.LAW_INFO: govChanges, wars, hunger, aging, disasters (alle Standard an)
+//   setLaw(key, bool) -> bool     Schlüssel aus WW.LAW_INFO: govChanges, wars, hunger, aging, newRealms, disasters (alle Standard an)
 //
 // ABFRAGEN (sim.query.*; null bei nichts)
 //   cityAt(x,y) (Mauerinneres, Gebiet oder Bauwerk), kingdomAt(x,y), unitNear(x,y,r=1.5), animalNear(x,y,r=1.5),
@@ -109,6 +111,33 @@
 //   Gebäude werden zu Häusern umgewidmet (Markt/Kaserne), Türme ohne Turmrecht zu Mauern. Mauern bleiben dabei dicht.
 // VÖLKER: WW.RACES[key] (speed, hp, strength, lifespan, fertility, yields, wallMul, housingBonus, favTerrain, govPrefs, …)
 // KREATUREN: WW.CREATURES[kind] + Verhalten WW.CreatureAI[ai]; KRÄFTE: WW.POWERS[kind].apply(sim, x, y)
+//
+// ERGÄNZUNGEN STUFE 3a (Wachstum, Belagerung) – nur hinzugefügt, nichts umbenannt
+//   Fluren: Gebiet besteht aus 6×6-Blöcken. state.flur Int32Array(fw*fh), fw = ceil(W/6), fh = ceil(H/6),
+//     Index fy*fw+fx = Stadt-ID | -1. owner-Raster folgt den Fluren (offenes Meer bleibt -1) und bleibt die Wahrheit
+//     für die Darstellung. Hilfen: WW.Growth.dims(state), flurAt(state,x,y), flurCenter(state,fi), countFlurs(sim,city),
+//     reach(sim,city) (Reichweite der Landnahme in Kacheln), cityLimit(sim,kingdom), loyaltyTarget(sim,city,kingdom).
+//   state.plots[] Vorhaben: { id, type 'war'|'alliance'|'revolt'|'secession', kingdomId, targetId (Reich bzw. Stadt),
+//     cityId, progress 0..1, x, y, since, announced, holy? }. 'war' -> Kriegserklärung bei 1, sinkt bei besserer Meinung/
+//     Gesetz aus/Frieden durch Spieler; 'revolt' -> Aufstand; 'secession' -> Abspaltung (Loyalität < 10).
+//   city: loyalty -100..100 (Hauptstadt 100; < 0 -> Abspaltung als eigenes Reich, Nachbarn mit Loyalität ≤ 22 gehen mit),
+//     flurs (Anzahl Fluren), needLand, landFull, joinedYear, conqueredYear, besieged (Tick bis wann belagert; Bauern
+//     bleiben drinnen = Aushungern), siegeYear, lastClaim,
+//     governor { name, female, war 1..5, diplo 1..5, admin 1..5, quirk (Text), since } (Statthalter, keine Einheit)
+//   kingdom: ruler { leaderId, war, diplo, admin, quirk } (Werte des Herrschers; Heergröße/Kriegslust/Stadtlimit)
+//   units: neue Rollen 'ram' (Rammbock, stark gegen Tore) und 'catapult' (schießt aus 6,5 Kacheln auf Mauern/Türme);
+//     beide nur mit order march, ohne Auftrag werden sie wieder 'soldier'. Felder homeK, homeC (Auswanderer), noFishUntil.
+//   Häuser je Stadt: höchstens 2 + Fluren × WW.CONFIG.HOUSES_PER_FLUR; mehr Land holt sich die Stadt selbst.
+//   Tochterstadt: ≥ WW.CONFIG.DAUGHTER_ADULTS (30) Erwachsene, Reich im Frieden, Anführer lebt, 6–10 Siedler,
+//     Abstand ≥ DAUGHTER_MIN_DIST (18) zu jeder Stadt, dieselbe Landmasse, Reich unter Stadtlimit + 2.
+//   Zuzug: Dörfer < 30 Einw. mit Nahrung bekommen jährlich 1–3 Zuwanderer. MAX_UNITS jetzt 2200.
+//   Neue Reiche von selbst (Gesetz newRealms): Auswanderer (exodus), Verbannte (exiles), Flüchtlinge (refugees) ziehen
+//     als Siedler eines neuen Stammes los und gründen ihn (newRealm).
+//   Neues Gesetz: newRealms (Standard an).
+//   Neue Ereignisse: flurLost, migrants, secedeLoyalty, plotWar, plotWarOff, plotAlliance, plotRevolt, plotSecession,
+//     exodus, exiles, refugees, newRealm, siegeEngines, siege.
+//   Neue Fx: claim { x, y, cityId } (Flur genommen), rock { x2, y2 } (Katapultstein), ram (Rammstoß am Tor).
+//   Neue Werte: WW.GOVERNMENTS[k].cityLimit, .landReach; WW.RACES[r].cityLimit, .landReach; CONFIG FLUR_*, RAM_*, CATAPULT_*.
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -269,7 +298,8 @@
   // Speichern / Laden
   // ---------------------------------------------------------------------------
   const RASTERS = [['terrain', Uint8Array], ['variant', Uint8Array], ['height', Uint8Array], ['owner', Int32Array],
-    ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array]];
+    ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array],
+    ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array]];   // [wild] Raster der Wildnis
 
   function replacer(key, value) {
     if (key && key.charCodeAt(0) === 95) return undefined;   // '_' = Laufzeit
@@ -328,6 +358,7 @@
     st.eventSeq = st.eventSeq | 0;
     st.plots = st.plots || [];
     st.worldName = st.worldName || 'Wuselwelt';
+    if (WW.Wild) WW.Wild.defaults(st);   // [wild]
   }
 
   // ---------------------------------------------------------------------------
@@ -366,6 +397,7 @@
       st.height[i] = world.height ? world.height[i] : heightFor(st.terrain[i]);
     }
     for (const k in st.laws) if (!(k in WW.LAW_DEFAULTS)) delete st.laws[k];
+    if (WW.Wild) WW.Wild.defaults(st);   // [wild]
     const sim = new Sim(st, null);
     WW.Growth.ensure(sim);
     sim._startSpots = (world.startSpots || []).slice();
@@ -594,9 +626,9 @@
       return WW.Diplo.makeAlliance(sim, ka, kb, 'godAlliance');
     }
 
-    function strike(x, y, kind) {
+    function strike(x, y, kind, o) {   // [wild] o = { dx, dy } Ziehrichtung
       if (!inMap(x, y)) return false;
-      return WW.Powers.strike(sim, x, y, kind, false);
+      return WW.Powers.strike(sim, x, y, kind, false, o);   // [wild]
     }
 
     function setLaw(key, value) {
@@ -605,11 +637,13 @@
       return true;
     }
 
-    return {
+    const acts = {   // [wild]
       paintTerrain: safe(paintTerrain), spawnSettlers: safe(spawnSettlers), spawnAnimal: safe(spawnAnimal),
       setGovernment: safe(setGovernment), setGovLocked: safe(setGovLocked), setRelation: safe(setRelation),
       strike: safe(strike), setLaw: safe(setLaw)
     };
+    if (WW.Wild) Object.assign(acts, WW.Wild.actions(sim, safe));   // [wild] grab, drop, held, aimAircraft, placeLair, spawnBandits
+    return acts;   // [wild]
   }
 
   // ---------------------------------------------------------------------------

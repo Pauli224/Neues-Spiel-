@@ -14,7 +14,7 @@ Ein kleiner Gott-Sandkasten im Browser. Völker gründen Städte, bauen selbst M
 | Werkzeug benutzen | Linksklick bzw. Ziehen | ein Finger |
 | Karte verschieben | Ziehen mit „Schauen“, rechte Maustaste oder Leertaste + Ziehen, WASD/Pfeile | Ziehen mit „Schauen“ |
 | Zoomen | Mausrad, `+`/`-` | zwei Finger |
-| Tempo | `0` Pause, `1` 1×, `2` 3×, `3` 8× | Knöpfe oben |
+| Tempo | `0` Pause, `1`–`5` = 1×, 2×, 4×, 5×, 10×, Leertaste kurz = Pause an/aus | Knöpfe oben (am Handy: Tempo-Knopf klappt die Stufen auf) |
 | Sonstiges | `Esc` = Schauen, `C` = Chronik, `M` = Minikarte | |
 
 Antippen zeigt Bewohner, Stadt oder Reich. Tippst du eine Stadt ein zweites Mal an, öffnet sich ihr Reich. Im Reich-Fenster schaltest du die Regierung um und erklärst Krieg, Frieden oder ein Bündnis.

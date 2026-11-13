@@ -147,7 +147,8 @@
   function cutOff(sim, city) {
     const st = sim.state, d = dims(st);
     const start = flurAt(st, city.cx, city.cy);
-    if (st.flur[start] !== city.id) setFlur(sim, start, city.id);
+    if (st.flur[start] === -1) setFlur(sim, start, city.id);
+    if (st.flur[start] !== city.id) return 0;
     const seen = new Uint8Array(st.flur.length);
     const q = [start]; seen[start] = 1;
     while (q.length) {

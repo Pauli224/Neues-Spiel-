@@ -90,6 +90,7 @@ i[data-icon] { display: inline-block; font-style: normal; line-height: 0; }
 
 /* ---------------------------------------------------------------- Kopfleiste */
 #topbar {
+  z-index: 16;
   top: var(--gt); left: var(--gx); right: var(--gxr);
   display: flex; align-items: flex-start; gap: 8px;
   pointer-events: none;
@@ -104,7 +105,13 @@ i[data-icon] { display: inline-block; font-style: normal; line-height: 0; }
 .tb-right { margin-left: auto; display: flex; gap: 8px; align-items: flex-start; }
 .seg { display: flex; padding: 3px; gap: 3px; }
 .seg .btn { box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), 0 2px 0 var(--kante); min-width: 40px; min-height: 36px; padding: 2px 6px; }
-.seg .btn .lbl { font-size: 13px; }
+.seg { position: relative; }
+.seg .btn .lbl { font: 600 14px/1 var(--font-pixel); }
+.seg .sp-lvl { min-width: 44px; }
+.sp-cur { display: none !important; }
+.sp-pop { position: absolute; top: calc(100% + 8px); right: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px; z-index: 15; }
+.sp-pop .btn { min-width: 64px; min-height: 48px; }
+.sp-pop .btn .lbl { font-size: 17px; }
 .panel-btn { background: var(--pult); }
 
 /* ---------------------------------------------------------------- Meldungen */
@@ -128,7 +135,7 @@ i[data-icon] { display: inline-block; font-style: normal; line-height: 0; }
 
 /* Hinweis auf leerer Welt */
 .empty-hint {
-  left: 50%; top: calc(var(--gt) + var(--topbar-h) + 16px); transform: translateX(-50%); width: min(420px, calc(100% - 32px));
+  left: 50%; bottom: calc(var(--toolbar-h) + var(--gb) + 12px); transform: translateX(-50%); width: min(420px, calc(100% - 32px));
   appearance: none; cursor: pointer; text-align: left; color: var(--papier);
   background: rgba(29, 59, 71, 0.94); border: 2px solid var(--kante); border-radius: 3px; box-shadow: 0 3px 0 var(--kante);
   padding: 12px 14px; display: flex; gap: 12px; align-items: center; font: 600 15px/1.35 var(--font-text);
@@ -351,12 +358,13 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 22px; background: v
   .tb-brand { display: none; }
   .tb-stats { gap: 10px; padding: 0 9px; }
   .stat { font-size: 15px; }
-  .stat small { display: none; }
+  .stat small { font-size: 9.5px; letter-spacing: 0.2px; }
   .stat.year::before { content: ""; }
   .tb-right { gap: 5px; }
   .seg { padding: 2px; gap: 2px; }
-  .seg .btn { min-width: 38px; min-height: 36px; padding: 2px; }
-  .seg .btn .lbl { display: none; }
+  .seg .btn { min-width: 44px; min-height: 36px; padding: 2px 6px; }
+  .seg .sp-lvl { display: none; }
+  .sp-cur { display: inline-flex !important; min-width: 52px !important; }
   #topbar .btn.icon { min-width: 44px; }
   #btnMap { display: none; }
   #toolbar { left: 0; right: 0; bottom: 0; gap: 0; }
@@ -398,7 +406,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 22px; background: v
   .nw-foot .muted { display: none; }
   .nw-foot .btn { flex: 1; }
 }
-@media (max-width: 420px) {
+@media (max-width: 340px) {
   .tb-stats .st-k { display: none; }
 }
 @media (max-height: 520px) and (orientation: landscape) {

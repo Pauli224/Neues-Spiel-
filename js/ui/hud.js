@@ -5,8 +5,10 @@
   const SPEEDS = [
     { v: 0, icon: 'i_pause', label: 'Pause', key: '0' },
     { v: 1, icon: 'i_play', label: '1×', key: '1' },
-    { v: 3, icon: 'i_fast', label: '3×', key: '2' },
-    { v: 8, icon: 'i_faster', label: '8×', key: '3' }
+    { v: 2, label: '2×', key: '2' },
+    { v: 4, label: '4×', key: '3' },
+    { v: 5, label: '5×', key: '4' },
+    { v: 10, label: '10×', key: '5' }
   ];
 
   function Hud(game) {
@@ -24,12 +26,24 @@
     fillIcons(document);
     // Tempo
     const seg = this.$('speedSeg');
+    // Desktop: alle Stufen; Handy: Pause + ein Knopf mit der aktuellen Stufe, der eine Leiste aufklappt
     this.speedBtns = SPEEDS.map(s => {
-      const b = h('button.btn', { type: 'button', title: s.label + ' (Taste ' + s.key + ')', 'aria-label': s.label, 'aria-pressed': 'false',
-        on: { click: () => game.setSpeed(s.v) } }, [icon(s.icon, 22), s.v ? h('span.lbl', s.label) : null]);
+      const b = h('button.btn' + (s.v ? '.sp-lvl' : '.sp-pause'), { type: 'button', title: s.label + ' (Taste ' + s.key + ')', 'aria-label': s.label, 'aria-pressed': 'false',
+        on: { click: () => game.setSpeed(s.v) } }, s.v ? h('span.lbl', s.label) : icon(s.icon, 22));
       seg.appendChild(b);
       return b;
     });
+    this.spCur = h('button.btn.sp-cur', { type: 'button', 'aria-label': 'Tempo wählen', 'aria-expanded': 'false',
+      on: { click: () => this.toggleSpeedPop() } }, h('span.lbl', '1×'));
+    seg.appendChild(this.spCur);
+    this.spPop = h('div.sp-pop.panel', { hidden: true, role: 'group', 'aria-label': 'Tempo' });
+    this.popBtns = SPEEDS.filter(s => s.v).map(s => {
+      const b = h('button.btn', { type: 'button', 'aria-pressed': 'false', on: { click: () => { game.setSpeed(s.v); this.toggleSpeedPop(false); } } }, h('span.lbl', s.label));
+      this.spPop.appendChild(b);
+      return { v: s.v, b: b };
+    });
+    seg.appendChild(this.spPop);
+    document.addEventListener('pointerdown', (e) => { if (!this.spPop.hidden && !seg.contains(e.target)) this.toggleSpeedPop(false); });
     this.$('btnChron').addEventListener('click', () => game.ui.openChronicle());
     this.$('btnMenu').addEventListener('click', () => game.ui.openMenu());
     this.$('btnMap').addEventListener('click', () => game.ui.toggleMinimap());
@@ -166,8 +180,18 @@
     if (text && !keep) this.hintTimer = setTimeout(() => el.classList.add('fade'), 4200);
   };
 
+  Hud.prototype.toggleSpeedPop = function (show) {
+    if (show == null) show = this.spPop.hidden;
+    this.spPop.hidden = !show;
+    this.spCur.setAttribute('aria-expanded', show ? 'true' : 'false');
+  };
   Hud.prototype.speedChanged = function (v) {
     SPEEDS.forEach((s, i) => this.speedBtns[i].setAttribute('aria-pressed', s.v === v ? 'true' : 'false'));
+    this.lastSpeed = v || this.lastSpeed || 1;
+    const cur = SPEEDS.find(s => s.v === this.lastSpeed) || SPEEDS[1];
+    this.spCur.firstChild.textContent = cur.label;
+    this.spCur.setAttribute('aria-pressed', v ? 'true' : 'false');
+    for (const p of this.popBtns) p.b.setAttribute('aria-pressed', p.v === v ? 'true' : 'false');
   };
 
   // leere Welt: dezenter Hinweis, antippen wählt das Siedler-Werkzeug
