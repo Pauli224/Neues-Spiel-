@@ -162,6 +162,93 @@
   gallery('ground', 'Boden-Sprites einzeln', function (k) { return /^t_/.test(k) && !/^t_foam/.test(k); }, function (k) { return { bg: 'none', scale: 4 }; });
   gallery('foam', 'Uferschaum (Zusatz, auf Wasser)', function (k) { return /^t_foam/.test(k); }, { bg: 'water', scale: 3 });
 
+  // ---------------------------------------------------------------- Karten-Zeichner für Mauertests und Szene
+  // terrainRows: Zeichen -> Gelände; structs: Liste { key, x, y, team, flip } bzw. Mauerzeichen im Raster
+  var TCH = { '~': 'water', '=': 'deep', ',': 'shallow', 'r': 'river', '.': 'grass', ':': 'sand', 'f': 'forest', 'h': 'hill', 'm': 'mountain', '*': 'flowers', 'd': 'desert', 'p': 'taiga', 's': 'swamp' };
+  function drawMap(ctx, terr, wallRows, extra, level, team) {
+    var H = terr.length, W = terr[0].length, items = [];
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var tk = TCH[terr[y][x]] || 'grass';
+      S.draw(ctx, S.terrainKey(WW.TERRAIN_BY_KEY[tk].id, (x * 7 + y * 13) ^ (x * y)), x * 8, y * 8);
+    }
+    function wallish(x, y) { var c = wallRows && wallRows[y] && wallRows[y][x]; return c === '#' || c === 'T' || c === 'G' || c === 'B'; }
+    if (wallRows) for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var c = wallRows[y][x];
+      if (!c || c === ' ' || c === '.') continue;
+      var m = (wallish(x, y - 1) ? 1 : 0) | (wallish(x + 1, y) ? 2 : 0) | (wallish(x, y + 1) ? 4 : 0) | (wallish(x - 1, y) ? 8 : 0);
+      var horiz = wallish(x - 1, y) || wallish(x + 1, y);
+      var key = null, onRiver = terr[y][x] === 'r';
+      if (c === '#') key = onRiver ? 's_wall_' + level + '_water_' + (horiz ? 'h' : 'v') : 's_wall_' + level + '_' + m;
+      if (c === 'B') key = 's_barricade_' + m;
+      if (c === 'T') key = 's_tower_' + Math.max(2, level);
+      if (c === 'G') key = 's_gate_' + level + '_' + (horiz ? 'h' : 'v');
+      if (key) items.push({ key: key, x: x, y: y, team: team });
+    }
+    (extra || []).forEach(function (it) { items.push(it); });
+    items.sort(function (a, b) { return (a.y + (a.fh || 1)) - (b.y + (b.fh || 1)) || a.x - b.x; });
+    items.forEach(function (it) {
+      var inf = S.info(it.key);
+      if (!inf) { console.warn('fehlt', it.key); return; }
+      S.draw(ctx, it.key, Math.round(it.x * 8), Math.round(it.y * 8), { team: it.team || 0, flip: it.flip });
+    });
+  }
+
+  r = section('walls', 'Mauern: alle 16 Masken je Stufe (Bit0 N, Bit1 O, Bit2 S, Bit3 W)');
+  [1, 2, 3].forEach(function (lv) {
+    for (var m = 0; m < 16; m++) showSprite(r, 's_wall_' + lv + '_' + m, { scale: 4, label: lv + '/' + m });
+  });
+  r = section('barricades', 'Barrikaden (Anarchie), 16 Masken');
+  for (var bm = 0; bm < 16; bm++) showSprite(r, 's_barricade_' + bm, { scale: 4, label: '' + bm });
+
+  r = section('wallring', 'Mauerring-Test je Stufe: Ecken, T-Stücke, Kreuz, Tore h/v, Türme, Wassertor', 'Masken werden wie im Spiel aus den Nachbarn berechnet (Mauer, Turm, Tor zählen als verbunden).');
+  [1, 2, 3].forEach(function (lv) {
+    var terr = [
+      '..............',
+      '..............',
+      '..............',
+      '..........r...',
+      '..........r...',
+      '..............',
+      '..............',
+      '..............',
+      '..............',
+      '..............',
+      '..............'];
+    var walls = [
+      '              ',
+      ' T###G###T    ',
+      ' #       #    ',
+      ' #  #    ###T ',
+      ' G  ##   #  # ',
+      ' #  #    G  # ',
+      ' #       #  # ',
+      ' T##G##T##### ',
+      '        #     ',
+      '      ###     ',
+      '              '];
+    if (lv === 1) walls = walls.map(function (row) { return row.replace(/T/g, '#'); });
+    var W = terr[0].length * 8, H = terr.length * 8;
+    var k = canvas(W, H, 3);
+    drawMap(k.x, terr, walls, [], lv, 0);
+    cell(r, 'Stufe ' + lv, k.c);
+  });
+
+  gallery('builds', 'Bauwerke (Teamfarbe 0)', function (k) { return /^s_/.test(k) && !/^s_(wall|barricade|gate|tower)/.test(k); }, { scale: 4 });
+  // Völker × Berufe
+  r = section('races', 'Völker × Berufe (Frame 0 und 1, Teamfarbe wechselt je Zeile)', 'Spalten: ' + ROLES.join(', ') + ', punk, dann Anführer je Regierung.');
+  (function () {
+    var cols = ROLES.concat(['punk']).concat(GOVS.slice(0, 7).map(function (g) { return 'leader_' + g; }));
+    var cw = 14, ch = 18, W = cols.length * cw * 2 + 4, H = RACES.length * ch + 4;
+    var k = canvas(W, H, 4);
+    for (var y = -1; y * 8 < H; y++) for (var x = 0; x * 8 < W; x++) S.draw(k.x, S.terrainKey(3, x * 5 + y * 3), x * 8, y * 8);
+    RACES.forEach(function (race, j) {
+      cols.forEach(function (role, i) {
+        for (var f = 0; f < 2; f++) S.draw(k.x, 'u_' + race + '_' + role + '_' + f, 2 + (i * 2 + f) * cw, 2 + j * ch + ch - 8 - 1, { team: j * 2 % 12 });
+      });
+    });
+    cell(r, '', k.c);
+  })();
+
   window.__previewHelpers = { section: section, canvas: canvas, cell: cell, showSprite: showSprite, ground: ground, gallery: gallery, GOVS: GOVS, RACES: RACES, ROLES: ROLES };
 })();
 </script>

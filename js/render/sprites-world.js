@@ -272,15 +272,22 @@
     }
 
     // ---------------- Gebirge und Schneegipfel
+    // Gipfel: linke Flanke im Licht, rechte im Schatten, Grat leicht nach rechts geneigt
     function peak(g, cx, top, base, halfBase, cols, capRows) {
       for (var y = top; y <= base; y++) {
-        var t = (y - top) / (base - top + 0.001), half = Math.sqrt(t) * halfBase * (0.75 + 0.25 * t) + (hash(y, 3, cx * 10) < 0.3 ? 0.5 : 0);
+        var t = (y - top) / (base - top + 0.001);
+        var half = Math.pow(t, 0.8) * halfBase + 0.6;
+        var ridge = cx + t * 0.9;
         for (var x = 0; x < g.w; x++) {
-          var dx = x + 0.5 - cx;
-          if (Math.abs(dx) > half + 0.35) continue;
-          var c = dx < -0.6 ? cols[0] : (dx > 0.6 ? cols[2] : cols[1]);
-          if (dx > 0.6 && ((x + y) % 4 === 0)) c = cols[3] || cols[2];
-          if (y - top < capRows + (hash(x, y, 7) < 0.4 ? 1 : 0)) c = dx > 0.6 ? 'snowD' : 'white';
+          var xc = x + 0.5;
+          if (xc < cx - half || xc > cx + half) continue;
+          var right = xc > ridge;
+          var c = right ? cols[2] : cols[1];
+          if (!right && xc < cx - half + 1.2 + t) c = cols[0];
+          if (right && hash(x, y, 31) < 0.18) c = cols[3];
+          if (!right && hash(x, y, 37) < 0.12) c = cols[2];
+          var capLine = top + capRows + (hash(x, 1, cx * 7) < 0.5 ? 1 : 0);
+          if (capRows > 0 && y < capLine) c = right ? 'snowD' : 'white';
           g.set(x, y, c);
         }
       }
@@ -290,9 +297,9 @@
       g = tile(7);
       speckle(g, 7, 'rock', [['rockD', 0.2], ['rockL', 0.06]], 500 + v);
       var m = new Grid(8, 15);
-      if (v === 0) peak(m, 4, 2, 13, 4.4, ROCK, 2);
-      if (v === 1) { peak(m, 2.5, 5, 13, 3, ROCK, 1); peak(m, 5.2, 2, 13, 3.6, ROCK, 2); }
-      if (v === 2) { peak(m, 3.5, 3, 13, 4.2, ROCK, 1); peak(m, 6.5, 7, 13, 2.2, ROCK, 0); }
+      if (v === 0) peak(m, 4, 1, 14, 3.6, ROCK, 3);
+      if (v === 1) { peak(m, 5.2, 2, 14, 3.4, ROCK, 3); peak(m, 2.3, 5, 14, 2.6, ROCK, 2); }
+      if (v === 2) { peak(m, 3.2, 2, 14, 3.4, ROCK, 2); peak(m, 6.3, 6, 14, 2.2, ROCK, 0); }
       // Kontur nur entlang der Silhouette (Gipfellinie)
       var mask = new Grid(8, 15); for (var i = 0; i < m.d.length; i++) mask.d[i] = m.d[i] ? 1 : 0;
       g.blit(m, 0, 0);
@@ -305,10 +312,10 @@
       g = tile(7);
       speckle(g, 7, 'snowD', [['white', 0.3], ['snowDD', 0.1]], 520 + v);
       m = new Grid(8, 15);
-      var SN = ['white', 'snowD', 'snowDD', 'rockD'];
-      if (v === 0) peak(m, 4, 1, 13, 4.4, SN, 0);
-      if (v === 1) { peak(m, 2.5, 4, 13, 3, SN, 0); peak(m, 5.2, 1, 13, 3.6, SN, 0); }
-      if (v === 2) { peak(m, 4.5, 2, 13, 4.2, SN, 0); }
+      var SN = ['white', 'white', 'snowDD', 'snowD'];
+      if (v === 0) peak(m, 4, 0, 14, 3.6, SN, 0);
+      if (v === 1) { peak(m, 5.2, 1, 14, 3.4, SN, 0); peak(m, 2.3, 4, 14, 2.6, SN, 0); }
+      if (v === 2) { peak(m, 3.6, 1, 14, 3.6, SN, 0); }
       mask = new Grid(8, 15); for (i = 0; i < m.d.length; i++) mask.d[i] = m.d[i] ? 1 : 0;
       g.blit(m, 0, 0);
       for (yy2 = 0; yy2 < 15; yy2++) for (xx = 0; xx < 8; xx++) {
