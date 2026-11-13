@@ -154,7 +154,7 @@ test('2b Drache zündet, Zombie steckt an, Schleim teilt sich', function () {
   const sim = makeSim({ seed: 'monster', world: testWorld(96, 64), populate: 1, races: ['human'], govs: ['tribe'], animals: false });
   const st = sim.state;
   // Drache über dem Wald
-  const f = tileOf(sim, (t, i) => t === WW.T.FOREST && st.owner[i] === -1);
+  const f = tileOf(sim, (t, i) => t === WW.T.FOREST && st.owner[i] === -1 && (i % st.W) > 8 && Math.floor(i / st.W) > 8);
   const did = sim.actions.spawnAnimal(f.x, f.y, 'dragon');
   const d = sim.query.animal(did);
   d.state = 2; d.t = 4; d.cd = 0;
@@ -412,6 +412,28 @@ test('8 Völker: Alarm, Räuber, Ausräumen, Hand', function () {
   const id = sim.actions.drop(c.cx + 8.5, c.cy + 0.5);
   assert(id === u.id && sim.query.unit(id), 'drop');
   checkInvariants(sim, 'Hand');
+});
+
+test('8b Junge Siedlungen überleben die Wildnis (10 Seeds, je 4 Gruppen, 6000 Ticks)', function () {
+  let okSeeds = 0;
+  const rows = [];
+  for (let k = 0; k < 10; k++) {
+    const sim = makeSim({ seed: 'jung-' + k, size: 'medium', populate: 0 });
+    const spots = (sim._startSpots || []).slice();
+    const founded = [];
+    for (const sp of spots) {
+      if (founded.length >= 4) break;
+      const r = sim.actions.spawnSettlers(sp.x + 0.5, sp.y + 0.5, 6, null, 'human');
+      if (r && founded.indexOf(r.cityId) < 0) founded.push(r.cityId);
+    }
+    run(sim, 6000, 1000, (i) => checkInvariants(sim, 'Seed ' + k + ' Tick ' + i));
+    const alive = founded.filter((id) => { const c = sim.query.city(id); return c && c.pop > 0; }).length;
+    if (alive === founded.length && founded.length >= 3) okSeeds++;
+    rows.push('jung-' + k + ': ' + alive + '/' + founded.length + ' Siedlungen, ' + sim.state.animals.length + ' Tiere, ' + sim.state.units.length + ' Einheiten, Tode ' + JSON.stringify(sim._deaths || {}));
+  }
+  for (const r of rows) log(r);
+  log('Seeds, in denen alle Siedlungen leben:', okSeeds, 'von 10');
+  assert(okSeeds >= 9, 'junge Siedlungen gehen unter');
 });
 
 test('9 ms/Tick-Aufschlag der Wildnis (mittlere Karte, ~800 Einheiten)', function () {

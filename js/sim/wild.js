@@ -203,7 +203,9 @@
   // ---------------------------------------------------------------------------
   function habitat(sim) {
     const st = sim.state;
-    if (sim._hab && sim._habTick === Math.floor(st.tick / 240)) return sim._hab;
+    // gespeichert (st.wild.hab), damit ein geladener Stand dieselben Obergrenzen nutzt; neu gezählt alle 240 Ticks
+    if (!st.wild) defaults(st);
+    if (st.wild.hab && st.wild.habTick === Math.floor(st.tick / 240)) return st.wild.hab;
     const n = new Int32Array(WW.TERRAIN.length);
     for (let i = 0; i < st.terrain.length; i++) n[st.terrain[i]]++;
     const hab = {};
@@ -212,7 +214,7 @@
       for (const key of WW.CREATURES[k].habitat || []) if (WW.TERRAIN_BY_KEY[key]) s += n[WW.TERRAIN_BY_KEY[key].id];
       hab[k] = s;
     }
-    sim._hab = hab; sim._habTick = Math.floor(st.tick / 240);
+    st.wild.hab = hab; st.wild.habTick = Math.floor(st.tick / 240);
     return hab;
   }
   function capOf(sim, kind) {

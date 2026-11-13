@@ -414,7 +414,7 @@
         } else if (a.state === 1) {                // fliegt hin
           if (a.tx < 0) { a.state = 2; a.t = 4; }
         } else if (a.state === 2) {                // speit Feuer
-          if (a.cd <= 0) breathe(sim, a, a.x + sim.rng.range(-3, 3), a.y + sim.rng.range(-3, 3));
+          if (a.cd <= 0) breathe(sim, a, a.x + sim.rng.range(-1.5, 1.5), a.y + 1 + sim.rng.range(-1, 1));
           if (--a.t <= 0) {
             a.state = 3;
             if (home) a.tx = home.y * st.W + home.x; else wanderTarget(sim, a, cr, 20);
