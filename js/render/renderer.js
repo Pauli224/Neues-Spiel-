@@ -89,6 +89,8 @@
       y > 0 ? t[i - W] : -1, x < W - 1 ? t[i + 1] : -1, y < H - 1 ? t[i + W] : -1, x > 0 ? t[i - 1] : -1);
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
     if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
+    if (st.murk && st.murk[i] > 0 && this.S.has('t_murk')) { g.globalAlpha = Math.min(1, 0.4 + st.murk[i] / 200); this.S.drawFast(g, 't_murk', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
+    if (st.barren && st.barren[i] > 0 && this.S.has('t_barren')) this.S.drawFast(g, 't_barren', x * 8, y * 8, 0, false);
     if (st.crack && st.crack[i]) { const ck = this.S.has('t_crack') ? 't_crack' : (this.S.has('fx_crack') ? 'fx_crack' : null); if (ck) { g.globalAlpha = Math.min(1, st.crack[i] / 120); this.S.drawFast(g, ck, x * 8, y * 8, 0, false); g.globalAlpha = 1; } }
     if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) { g.globalAlpha = Math.min(1, 0.35 + st.fallout[i] / 160); this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
     const m = st.mark ? st.mark[i] : 0;
@@ -349,7 +351,7 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
@@ -359,6 +361,7 @@
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
+      if (f.type === 'smokeplume') { this.addPlume(f.x * 8, f.y * 8, !!f.clean); continue; }
       if (f.type === 'muzzle' && this.st) { (this.muzzleT || (this.muzzleT = new Map())).set((f.y | 0) * this.st.W + (f.x | 0), this.time); }
       if (f.type === 'flash') this.flash = Math.max(this.flash || 0, 0.9);
       let sh = f.type === 'meteor' ? 0.35 : 0;
@@ -366,6 +369,93 @@
       if (f.type === 'explosion') sh = Math.min(0.6, 0.12 * (f.r || 1));
       if (sh && !this.reduced) this.shake = Math.max(this.shake || 0, sh);
     }
+  };
+
+  // ---------------------------------------------------------------- Industrie: Rauch und Dunst
+  Renderer.prototype.wind = function () {
+    const w = this.st.wind;
+    if (w == null) return { x: 0.6, y: -0.2 };
+    if (typeof w === 'number') return { x: Math.cos(w), y: Math.sin(w) };
+    const x = w.x != null ? w.x : (w.dx != null ? w.dx : 0), y = w.y != null ? w.y : (w.dy != null ? w.dy : 0);
+    if (w.angle != null) { const s = w.speed != null ? w.speed : 1; return { x: Math.cos(w.angle) * s, y: Math.sin(w.angle) * s }; }
+    return { x: x, y: y };
+  };
+  Renderer.prototype.addPlume = function (px, py, clean) {
+    const P = this.plumes || (this.plumes = []);
+    if (P.length >= 48) return;
+    P.push({ x: px + (Math.random() - 0.5) * 2, y: py, t: 0, life: 2.6 + Math.random(), clean: clean, f: (Math.random() * 4) | 0 });
+  };
+  Renderer.prototype.updatePlumes = function (g, vt, dt) {
+    const S = this.S, st = this.st;
+    this._plumeT = (this._plumeT || 0) + dt;
+    // Schornsteine aktiver Fabriken im Bild speisen Wolken nach
+    if (this._plumeT > 0.35) {
+      this._plumeT = 0;
+      for (const s of st.structs) {
+        if (s.type !== 'factory' || s.active === false || s.dead || !s.built) continue;
+        if (s.x + s.w < vt.x0 - 2 || s.x > vt.x1 + 2 || s.y + s.h < vt.y0 || s.y > vt.y1 + 4) continue;
+        const lv = Math.max(1, Math.min(2, s.level | 0 || 1));
+        let stacks = null;
+        if (typeof S.factoryStacks === 'function') { try { stacks = S.factoryStacks(s.kind, lv); } catch (e) { stacks = null; } }
+        if (!Array.isArray(stacks) || !stacks.length) stacks = [{ x: s.w * 8 - 5, y: -10 }];
+        for (const m of stacks) this.addPlume(s.x * 8 + (m.x != null ? m.x : m[0]), s.y * 8 + (m.y != null ? m.y : m[1]), !!s.filtered);
+      }
+    }
+    const P = this.plumes;
+    if (!P || !P.length) return;
+    const w = this.wind(), out = [];
+    for (const p of P) {
+      p.t += dt;
+      if (p.t >= p.life) continue;
+      out.push(p);
+      const k = p.t / p.life;
+      p.y -= dt * 7 * (1 - k * 0.5);
+      p.x += dt * w.x * 6 * (0.3 + k); p.y += dt * w.y * 6 * k;
+      const base = p.clean ? 'fx_smokeplume_clean_' : 'fx_smokeplume_';
+      const key = S.has(base + '0') ? base + Math.min(3, (k * 4) | 0) : 'fx_smoke_' + (p.f & 1);
+      g.globalAlpha = (p.clean ? 0.6 : 0.85) * (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85);
+      S.drawFast(g, key, Math.round(p.x - 4), Math.round(p.y - 4), 0, false);
+    }
+    g.globalAlpha = 1;
+    this.plumes = out;
+  };
+  // Dunst aus dem groben Raster state.pollution: weich gezeichnet, mit dem Wind verschoben; Ansicht „Luft" färbt stärker
+  Renderer.prototype.drawSmog = function (g, cam, airView) {
+    const st = this.st, pol = st.pollution;
+    let cell = st.pollutionCell;
+    if (!(cell > 0)) cell = Math.max(1, Math.round(Math.sqrt((st.W * st.H) / pol.length)));
+    const cw = Math.ceil(st.W / cell), chh = Math.ceil(st.H / cell);
+    if (this.time - (this._smogT || -9) > 1 || !this._smog || this._smogAir !== airView) {
+      this._smogT = this.time; this._smogAir = airView;
+      const cv = this._smog || (this._smog = document.createElement('canvas'));
+      if (cv.width !== cw || cv.height !== chh) { cv.width = cw; cv.height = chh; }
+      const c = cv.getContext('2d'), img = c.createImageData(cw, chh), d = img.data;
+      const mx = st.pollutionMax || (pol instanceof Uint8Array || pol instanceof Uint8ClampedArray ? 255 : 100);
+      for (let i = 0; i < cw * chh && i < pol.length; i++) {
+        const v = Math.max(0, Math.min(1, pol[i] / mx)), o = i * 4;
+        if (airView) { d[o] = 90 + v * 70; d[o + 1] = 200 - v * 140; d[o + 2] = 90 - v * 50; d[o + 3] = 150; }
+        else { d[o] = 92; d[o + 1] = 84; d[o + 2] = 70; d[o + 3] = v < 0.06 ? 0 : Math.round(Math.min(0.55, v * 0.7) * 255); }
+      }
+      c.putImageData(img, 0, 0);
+    }
+    const w = this.wind(), sh = airView ? 0 : 4 * Math.sin(this.time * 0.2);
+    g.save();
+    g.imageSmoothingEnabled = true;
+    g.drawImage(this._smog, sh * w.x, sh * w.y, cw * cell * 8, chh * cell * 8);
+    g.restore();
+  };
+
+  Renderer.prototype.drawWindArrow = function (g, cam) {
+    const d = cam.dpr, w = this.wind(), a = Math.atan2(w.y, w.x);
+    const cx = (cam.viewW - 56) * d, cy = (cam.insetTop || 150) * d;
+    g.fillStyle = 'rgba(10,26,33,0.85)'; g.fillRect(cx - 26 * d, cy - 26 * d, 52 * d, 52 * d);
+    g.save(); g.translate(cx, cy); g.rotate(a);
+    g.fillStyle = '#f3ead2'; g.fillRect(-14 * d, -2 * d, 20 * d, 4 * d);
+    g.beginPath(); g.moveTo(14 * d, 0); g.lineTo(4 * d, -8 * d); g.lineTo(4 * d, 8 * d); g.fill();
+    g.restore();
+    g.fillStyle = '#b9c4b8'; g.font = '600 ' + Math.round(10 * d) + 'px ' + FONT_PIXEL; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.fillText('Wind', cx, cy + 22 * d);
+    g.textAlign = 'start';
   };
 
   // große Narben (Krater 3×3/5×5, Risse), verblassen mit ttl
@@ -621,6 +711,17 @@
       case 'field': return 's_field_' + Math.max(0, Math.min(3, s.growth | 0));
       case 'monument': return 's_monument_' + style;
       case 'wall': case 'gate': case 'tower': return this.wallishKey(s, style);
+      case 'factory': {
+        const lv = Math.max(1, Math.min(2, s.level | 0 || (s.w >= 3 ? 2 : 1)));
+        if (s.active === false && S.has('s_factory_ruin_' + lv)) return 's_factory_ruin_' + lv;
+        let k = null;
+        if (typeof S.factoryKey === 'function') { try { k = S.factoryKey(s.kind, lv, !!s.filtered); } catch (e) { k = null; } }
+        if (k && S.has(k)) return k;
+        k = 's_factory_' + s.kind + '_' + lv + (s.filtered ? '_filter' : '');
+        if (S.has(k)) return k;
+        if (S.has('s_factory_' + s.kind + '_' + lv)) return 's_factory_' + s.kind + '_' + lv;
+        return s.w >= 3 ? 's_center_communism' : 's_barracks';   // Platzhalter, bis die Grafik da ist
+      }
       case 'lair': return this.S.has('s_lair_' + s.kind) ? 's_lair_' + s.kind : 's_ruin';
       case 'ruin': return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
       default: return this.S.has('s_' + s.type) ? 's_' + s.type : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
@@ -811,6 +912,9 @@
       }
     }
 
+    // Rauch aus Fabriken, Dunst
+    if (st.structs) this.updatePlumes(ctx, vt, dt);
+    if (st.pollution && st.pollution.length) this.drawSmog(ctx, cam, opts.view === 'air');
     // (4) Effekte, Flugzeuge
     this.drawFx(ctx, dt);
     if (st.wild && st.wild.effects && st.wild.effects.length) this.drawEffects(ctx, st.wild.effects, vt);
@@ -825,6 +929,7 @@
     // Stadtnamen in Bildschirmpixeln
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (st.cities && opts.showNames !== false) this.drawCityLabels(ctx, cam, opts);
+    if (opts.view === 'air') this.drawWindArrow(ctx, cam);
     if (this.flash > 0) {
       ctx.fillStyle = 'rgba(255,250,230,' + Math.min(0.6, this.flash) + ')';
       ctx.fillRect(0, 0, cv.width, cv.height);

@@ -268,6 +268,8 @@ i[data-icon] { display: inline-block; font-style: normal; line-height: 0; }
 
 /* ---------------------------------------------------------------- Minikarte */
 #minimap { left: var(--gx); top: calc(var(--gt) + var(--topbar-h) + 8px); padding: 3px; line-height: 0; z-index: 11; }
+#minimap { position: absolute; }
+.mini-air { position: absolute; right: 6px; bottom: 6px; }
 #miniCanvas { display: block; image-rendering: pixelated; cursor: pointer; touch-action: none; }
 
 /* ---------------------------------------------------------------- Dialoge */

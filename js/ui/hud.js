@@ -100,7 +100,7 @@
     this.toolBtns = {};
     let prevSep = true;
     for (const t of WW.UI.Tools.inCat(this.cat)) {
-      if (t.requires && !(this.game.sim && this.game.sim.actions && this.game.sim.actions[t.requires])) continue;
+      if (t.requires && !(this.game.sim && ((this.game.sim.actions && this.game.sim.actions[t.requires]) || this.game.sim.state[t.requires]))) continue;
       if (t.kind === 'sep') { if (t.label) row.appendChild(h('span.tool-group', t.label)); else if (!prevSep) row.appendChild(h('span.tool-sep')); prevSep = true; continue; }
       prevSep = false;
       const b = h('button.tool', { type: 'button', title: t.name, 'aria-pressed': this.game.toolId === t.id ? 'true' : 'false',

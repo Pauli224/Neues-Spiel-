@@ -14,6 +14,8 @@
     sim.markDirty(i);
   }
 
+  // [walls] Stein brennt nicht; Holzstufen (Stamm) und Barrikaden schon
+  function stoneWall(s) { return s.level >= 2 && s.mat !== 'palisade' && s.mat !== 'barricade'; }
   function burnable(sim, i) {
     const st = sim.state;
     const t = st.terrain[i];
@@ -21,7 +23,7 @@
     const s = sim._structs.get(st.structAt[i]);
     if (s) {
       let sb = WW.Structs.info(s.type).burn || 0;
-      if (WW.Structs.isWallish(s) && s.level >= 2) sb = 0;
+      if (WW.Structs.isWallish(s) && stoneWall(s)) sb = 0;
       b = Math.max(b, sb);
     }
     return b;
@@ -58,7 +60,7 @@
       const s = sim._structs.get(st.structAt[i]);
       if (s) {
         let sb = WW.Structs.info(s.type).burn || 0;
-        if (WW.Structs.isWallish(s) && s.level >= 2) sb = 0;
+        if (WW.Structs.isWallish(s) && stoneWall(s)) sb = 0;
         if (sb > 0 && (s.built || s.progress > 0)) WW.Structs.damage(sim, s, 5 * sb, null);
       }
       // Einheiten auf der Kachel
@@ -310,6 +312,105 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // [walls] Verteidigungsgeräte auf Mauerstücken (WW.WALL_DEVICES). Nur bei Krieg, Aufstand oder Alarm.
+  // ---------------------------------------------------------------------------
+  function deviceTargets(sim, k, c, x, y, r) {
+    const st = sim.state;
+    const foes = [];
+    WW.Units.forNear(sim, x, y, r, false, (u, d2) => {
+      const enemy = (u.kingdomId !== k.id && WW.Path.hostileKingdoms(sim, k.id, u.kingdomId)) || (u.kingdomId === k.id && u.role === 'rebel') ||
+        u.role === 'bandit' || u.wMad > st.tick;
+      if (enemy && st.inRing[Math.floor(u.y) * st.W + Math.floor(u.x)] !== c.id) foes.push([u, d2]);
+    });
+    WW.Units.forNear(sim, x, y, r, true, (a, d2) => {
+      const cr = WW.CREATURES[a.kind];
+      if (cr && (cr.hostile || a.mad > st.tick) && !(cr.burrow && a.buried)) foes.push([a, d2]);
+    });
+    return foes;
+  }
+  function devHit(sim, k, t, dmg) {
+    if (t.role !== undefined) WW.Units.hitUnit(sim, { id: -1, kingdomId: k.id }, t, dmg);
+    else WW.Creatures.hit(sim, t, dmg, null);
+  }
+  function updateDevices(sim) {
+    const st = sim.state;
+    if (!WW.WALL_DEVICES) return;
+    for (const c of st.cities) {
+      const w = c.wall;
+      if (!w || !w.devices || !w.devices.length) continue;
+      const k = sim._kingdoms.get(c.kingdomId);
+      if (!k) continue;
+      let alert = c.revolt || c.wAlarm > st.tick;
+      if (!alert) for (const oid in k.relations) if (k.relations[oid].status === 'war') { alert = true; break; }
+      if (!alert) continue;
+      for (const id of w.devices) {
+        const s = sim._structs.get(id);
+        if (!s || s.dead || !s.built || !s.device) continue;
+        if (s.devCd > 0) { s.devCd -= 3; continue; }
+        const D = WW.WALL_DEVICES[s.device];
+        if (!D) continue;
+        const x = s.x + 0.5, y = s.y + 0.5;
+        let foes = deviceTargets(sim, k, c, x, y, D.range);
+        if (D.minRange) foes = foes.filter((f) => f[1] >= D.minRange * D.minRange);
+        if (!foes.length) continue;
+        s.devCd = D.reload;
+        sim.fx({ type: 'muzzle', x: x, y: y - 0.4 });
+        if (s.device === 'spikes') { for (const f of foes) devHit(sim, k, f[0], D.dmg); sim.fx({ type: 'spikes', x: x, y: y }); continue; }
+        if (s.device === 'ward') {
+          for (const f of foes) { const t = f[0]; t.cd = Math.max(t.cd || 0, D.slow); devHit(sim, k, t, D.dmg); }
+          sim.fx({ type: 'ward', x: x, y: y, r: D.range });
+          continue;
+        }
+        // Ziel: nächstes (Balliste bevorzugt Belagerungsgerät)
+        foes.sort((a, b) => a[1] - b[1]);
+        let t = foes[0][0];
+        if (s.device === 'ballista') { const e = foes.find((f) => f[0].role === 'ram' || f[0].role === 'catapult'); if (e) t = e[0]; }
+        if (s.device === 'post') {
+          // Bewohner in der Nähe schießen mit
+          let people = 0;
+          WW.Units.forNear(sim, x, y, 3, false, (u) => { if (u.cityId === c.id && u.role !== 'child' && u.role !== 'soldier') people++; });
+          if (!people) { s.devCd = 6; continue; }
+        }
+        if (s.device === 'selfshot' && sim.rng.chance(D.stray)) {
+          // trifft gelegentlich ein Schaf in der Nähe
+          let sheep = null;
+          WW.Units.forNear(sim, x, y, D.range + 1, true, (a) => { if (!sheep && (a.kind === 'sheep' || a.kind === 'cow' || a.kind === 'rabbit')) sheep = a; });
+          if (sheep) {
+            sim.fx({ type: 'tracer', x: x, y: y - 0.4, x2: sheep.x, y2: sheep.y });
+            WW.Creatures.hit(sim, sheep, 999, null);
+            if (WW.Wild) WW.Wild.chron(sim, 'selfshotSheep', { city: c.name }, WW.Cities.atCity(c), c.id, WW.CONFIG.TPY * 2);
+            continue;
+          }
+        }
+        if (s.device === 'trap') {
+          const r = sim.rng.next();
+          if (r < D.dud) { sim.fx({ type: 'dud', x: x, y: y }); continue; }
+          if (r < D.dud + D.oops) {
+            let own = null;
+            WW.Units.forNear(sim, x, y, D.range, false, (u) => { if (!own && u.cityId === c.id) own = u; });
+            if (own) {
+              sim.fx({ type: 'tracer', x: x, y: y - 0.4, x2: own.x, y2: own.y });
+              WW.Units.hitUnit(sim, { id: -1, kingdomId: -1 }, own, 5);
+              if (WW.Wild) WW.Wild.chron(sim, 'trapOops', { city: c.name }, WW.Cities.atCity(c), c.id, WW.CONFIG.TPY * 2);
+              continue;
+            }
+          }
+        }
+        const fxType = D.fx || 'tracer';
+        sim.fx({ type: fxType, x: x, y: y - 0.4, x2: t.x, y2: t.y - 0.3 });
+        if (D.area) {
+          sim.fx({ type: 'explosion', x: t.x, y: t.y, r: D.area });
+          for (const f of deviceTargets(sim, k, c, t.x, t.y, D.area)) devHit(sim, k, f[0], D.dmg);
+        } else {
+          const eng = t.role === 'ram' || t.role === 'catapult';
+          devHit(sim, k, t, D.dmg * (eng && D.engineMul ? D.engineMul : 1));
+        }
+        s.devShots = (s.devShots || 0) + 1;
+      }
+    }
+  }
+
   function yearlyRuins(sim) {
     for (const s of sim.state.structs.slice()) {
       if (s.dead || s.type !== 'ruin') continue;
@@ -349,6 +450,7 @@
     if (t % 10 === 3) updateFields(sim);
     if (t % 5 === 1) updateFire(sim);
     if (t % 7 === 2) updateTowers(sim);
+    if (t % 3 === 1) updateDevices(sim);   // [walls]
     if (t % 40 === 5) updateMarks(sim);
     regrow(sim, 2, false);
     natureSlice(sim);
@@ -361,7 +463,7 @@
   }
 
   WW.Env = {
-    ensureRasters: ensureRasters, update: update, yearly: yearly, ignite: ignite, igniteForce: igniteForce, extinguish: extinguish, setMark: setMark,
+    ensureRasters: ensureRasters, update: update, updateDevices: updateDevices, yearly: yearly, ignite: ignite, igniteForce: igniteForce, extinguish: extinguish, setMark: setMark,
     regrow: regrow, regrowAt: regrowAt, burnable: burnable, coolLava: coolLava, FL_BERRY: FL_BERRY, FL_BUSH: FL_BUSH, FL_ASH: FL_ASH, FL_LAVA: FL_LAVA
   };
 

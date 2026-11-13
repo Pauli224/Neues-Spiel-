@@ -813,6 +813,44 @@
         if (d <= rr) g.set(x, y, d < 2.2 ? 'white' : (d < 3.6 ? 'goldL' : (d < rr - 1 ? 'fireY' : 'fireO')));
       }
     });
+    // ================================================================== Industrie-Icons
+    icon('i_pollution', [
+      '....ddd.......',
+      '..dddOdd.dd...',
+      '.dOddddddddd..',
+      '..ddOdddOdd...',
+      '....GG..dd....',
+      '....GG........',
+      '....GG...GG...',
+      '..gggggg.GG...',
+      '..gGgGgggggg..',
+      '..gggggggggg..',
+      '..gbgbgbgbgg..',
+      '..gggggggggg..',
+      '..GGGGGGGGGG..']);
+    icon('i_nature', function (g) {
+      g.ellipse(7, 6, 6, 5.5, function (x, y, nx, ny) { return nx + ny < -0.6 ? 'leafL' : (nx + ny > 0.5 ? 'leafD' : 'leaf'); });
+      g.line(3, 10, 10, 3, 'leafD'); g.line(6, 7, 6, 4, 'leafD'); g.line(8, 5, 10, 6, 'leafD');
+      g.line(2, 11, 0, 13, 'woodD');
+    });
+    icon('i_view_air', function (g) {
+      g.rect(0, 2, 14, 11, 'leaf'); g.rect(0, 9, 14, 4, 'leafD'); g.hline(0, 2, 14, 'leafL');
+      g.ellipse(4, 4, 4, 2.5, 'stone'); g.ellipse(10, 5, 4, 2.5, 'stoneL'); g.ellipse(7, 8, 5, 2.4, 'sandD');
+      g.set(3, 4, 'stoneD'); g.set(11, 5, 'white');
+    });
+    icon('i_filter', [
+      '.ffffffffffff.',
+      '.feeeeeeeeeeE.',
+      '..eEeEeEeEeE..',
+      '...eeeeeeee...',
+      '....eEeEeE....',
+      '.....eeee.....',
+      '.....gggG.....',
+      '.....gggG.....',
+      '.....gggG.....',
+      '.....gggG.....',
+      '....qggggG....',
+      '....GGGGGG....']);
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

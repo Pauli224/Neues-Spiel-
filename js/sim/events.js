@@ -391,7 +391,9 @@
       const v = num(sim.rng, e.opinion);
       const a = ctx.k.relations[ctx.o.id], b = ctx.o.relations[ctx.k.id];
       if (!a || !b) return '';
+      const o0 = a.opinion;
       a.opinion = WW.SimUtil.clamp(a.opinion + v, -100, 100); b.opinion = WW.SimUtil.clamp(b.opinion + v, -100, 100);
+      if (a.opinion === o0) return '';
       return 'Meinung zu ' + ctx.vars.other + ' ' + signed(v);
     },
     relation: function (sim, ctx, e) {

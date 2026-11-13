@@ -31,6 +31,7 @@
     if (WALLISH[s.type]) {
       const g = cityGov(sim, s.cityId);
       hp *= g.wallHpMul * cityRace(sim, s.cityId).wallMul;
+      if (WW.wallLevelHpMul) hp *= WW.wallLevelHpMul(cityGovKey(sim, s.cityId), lv);   // [walls] Stufen je Regierung
       if (s.mat === 'barricade') hp *= 0.7;
     }
     return Math.max(1, Math.round(hp));
@@ -38,7 +39,7 @@
 
   function costFor(sim, type, level, cityId) {
     const inf = info(type);
-    const c = inf.cost[Math.max(0, Math.min(inf.cost.length - 1, (level || 1) - 1))] || {};
+    const c = (WALLISH[type] && WW.wallLevelCost && WW.wallLevelCost(cityGovKey(sim, cityId), type, level)) || inf.cost[Math.max(0, Math.min(inf.cost.length - 1, (level || 1) - 1))] || {};   // [walls]
     const out = { food: 0, wood: c.wood || 0, stone: c.stone || 0, gold: c.gold || 0 };
     // ohne Goldwirtschaft wird Gold durch Stein ersetzt
     if (out.gold && cityGov(sim, cityId).goldMul <= 0) { out.stone += out.gold; out.gold = 0; }

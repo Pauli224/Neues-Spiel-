@@ -381,5 +381,51 @@
     ctx.drawImage(top, 0, 0, canvas.width, canvas.height);
   }
 
-  WW.SpriteScene = { renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Industrie: verschmutzte und saubere Stadt nebeneinander
+  function renderIndustry(canvas, scale) {
+    S.init();
+    var TW = 22, TH = 16, W2 = TW * 2, H2 = TH;
+    var ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2);
+    for (var i = 0; i < ter.length; i++) { var x = i % W2, y = Math.floor(i / W2); ter[i] = T.GRASS; vari[i] = Math.floor(h2(x, y, 81) * 256);
+      if (x % TW === 17) ter[i] = T.RIVER; if (x % TW >= 18 && y < 7) ter[i] = T.FOREST; }
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d');
+    S.drawGroundMap(tx, ter, vari, W2, H2);
+    // links: ausgelaugter Boden, trüber Fluss
+    for (var yy = 0; yy < H2; yy++) for (var xx = 0; xx < TW; xx++) {
+      var d = Math.hypot(xx - 7, yy - 6);
+      if (ter[yy * W2 + xx] === T.RIVER) S.draw(tx, 't_murk', xx * 8, yy * 8);
+      else if (d < 9 || xx >= 18) S.draw(tx, 't_barren', xx * 8, yy * 8);
+    }
+    var items = [], team = 0;
+    function b(key, x, y, t) { items.push({ key: key, x: x, y: y, team: t == null ? team : t }); }
+    // linke Stadt: Kombinat, Rüstung, Fabrik, Plattenbauten
+    b(S.factoryKey('kombinat', 2), 2, 3); b(S.factoryKey('ruestung', 1), 7, 3); b(S.factoryKey('fabrik', 1), 10, 7); b(S.factoryKey('ruin', 1), 13, 3);
+    [[2, 9, 1], [5, 9, 3], [2, 12, 2], [5, 12, 1], [13, 11, 2]].forEach(function (h) { b(S.houseKey('communism', h[2], h[0] + h[1]), h[0], h[1]); });
+    for (var fy = 13; fy < 16; fy++) for (var fx = 9; fx < 12; fx++) b('s_field_0', fx, fy);
+    // toter Wald am Fluss
+    for (var ty = 0; ty < 7; ty++) for (var tx2 = 18; tx2 < 22; tx2++) items.push({ key: ['d_deadtree_0', 'd_deadtree_1', 'd_deadtree_2', 'd_stump_1', 'd_sickbush_0', 'd_stump_2', 'd_sickbush_1'][(tx2 * 3 + ty * 5) % 7], x: tx2, y: ty, decor: true });
+    // rechte Stadt: Fabrik mit Filter, Fachwerk, Hain
+    var o = TW; team = 4;
+    b(S.factoryKey('fabrik', 2, true), o + 2, 3); b(S.factoryKey('schmiede', 1), o + 7, 4); b(S.factoryKey('manufaktur', 1), o + 11, 3);
+    [[2, 9, 2], [5, 9, 1], [2, 12, 3], [5, 12, 2], [11, 8, 2], [13, 11, 1]].forEach(function (h) { b(S.houseKey('democracy', h[2], h[0] + h[1]), o + h[0], h[1]); });
+    for (fy = 13; fy < 16; fy++) for (fx = 9; fx < 12; fx++) b('s_field_3', o + fx, fy);
+    for (ty = 0; ty < 7; ty++) for (tx2 = 18; tx2 < 22; tx2++) items.push({ key: 'd_tree_' + ((tx2 + ty) % 4), x: o + tx2, y: ty, decor: true });
+    items.forEach(function (it) { it._s = sortY(it); });
+    items.sort(function (a, c) { return a._s - c._s || a.x - c.x; });
+    items.forEach(function (it) { if (S.has(it.key)) S.draw(tx, it.key, it.x * 8, it.y * 8, { team: it.team || 0 }); else console.warn('fehlt', it.key); });
+    // Rauch aus allen Schloten
+    items.forEach(function (it) {
+      var m = /^s_factory_([a-z]+)_(\d)(_filter)?$/.exec(it.key); if (!m || m[1] === 'ruin') return;
+      S.factoryStacks(m[1], +m[2], !!m[3]).forEach(function (st, k) { S.draw(tx, (m[3] ? 'fx_smokeplume_clean_' : 'fx_smokeplume_') + ((k + it.x) % 4), it.x * 8 + st.dx, it.y * 8 + st.dy); });
+    });
+    // Dunstglocke über der linken Stadt
+    for (yy = 0; yy < H2; yy++) for (xx = 0; xx < TW; xx++) { var dd = Math.hypot(xx - 7, (yy - 6) * 1.3); if (dd < 11) S.draw(tx, 't_smog_' + (dd < 4 ? 3 : (dd < 7.5 ? 2 : 1)), xx * 8, yy * 8); }
+    canvas.width = W2 * 8 * scale; canvas.height = H2 * 8 * scale;
+    var ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(top, 0, 0, canvas.width, canvas.height);
+  }
+
+  WW.SpriteScene = { renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

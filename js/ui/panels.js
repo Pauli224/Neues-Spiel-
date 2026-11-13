@@ -71,12 +71,12 @@
     if (kind === 'kingdom') {
       const st = this.game.sim.query.kingdomStats(o.id) || {};
       const rel = Object.keys(o.relations).map(k => k + ':' + o.relations[k].status + ':' + Math.round(o.relations[k].opinion / 5)).join(',');
-      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, Math.round(o.nature || 0), JSON.stringify(o.laws || null), modSig(o, this.game.sim), JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
+      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, Math.round(o.nature || 0), Math.round(o.pollution || 0), JSON.stringify(o.laws || null), modSig(o, this.game.sim), JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'city') {
       const w = o.wall || {};
       return [o.name, o.kingdomId, o.tier, o.pop, o.housing, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
-        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), modSig(o, this.game.sim), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
+        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), Math.round(o.pollution || 0), modSig(o, this.game.sim), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name].join('|');
     return [o.kind, Math.round(o.hp)].join('|');
@@ -115,6 +115,29 @@
     if (typeof v !== 'number') return null;
     const p = Math.max(0, Math.min(100, v));
     return h('div.sec', [h('h3', 'Natur'), h('div.barline', [h('span', p >= 70 ? 'unberührt' : p >= 40 ? 'genutzt' : p >= 20 ? 'gerupft' : 'kahl geschlagen'), h('b', Math.round(p) + ' %')]), happyBar(p)]);
+  }
+  function airBlock(v) {
+    const { h, icon } = D();
+    if (typeof v !== 'number') return null;
+    const p = Math.max(0, Math.min(100, v));
+    return h('div.sec', [h('h3', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [WW.Sprites.has('i_pollution') ? icon('i_pollution', 18) : null, 'Luft']),
+      h('div.barline', [h('span', p < 15 ? 'frisch' : p < 40 ? 'etwas dunstig' : p < 70 ? 'dicke Luft' : 'man sieht die Hand nicht'), h('b', Math.round(p) + ' % verschmutzt')]),
+      h('div.bar' + (p >= 60 ? '.bad' : p >= 30 ? '.warn' : ''), [h('b', { style: { width: Math.max(2, p) + '%' } })])]);
+  }
+  function factoryList(sim, pred) {
+    const { h } = D();
+    const by = {};
+    let n = 0, filt = 0;
+    for (const s of sim.state.structs) {
+      if (s.type !== 'factory' || s.dead || !pred(s)) continue;
+      n++; if (s.filtered) filt++;
+      by[s.kind || '?'] = (by[s.kind || '?'] || 0) + 1;
+    }
+    if (!n) return null;
+    const FN = WW.FACTORY_KINDS || WW.FACTORIES || {};
+    const nm = (k) => { const v = FN[k]; return (v && (v.name || v)) || k; };
+    return h('div.sec', [h('h3', 'Fabriken'), h('div', Object.keys(by).map(k => nm(k) + ' ×' + by[k]).join(' · ')),
+      h('div.muted', { style: { marginTop: '4px' } }, filt === n ? 'Alle mit Filter' : filt ? filt + ' von ' + n + ' mit Filter' : 'Ohne Filter')]);
   }
   const NATURE_WAY = { exploit: 'rücksichtslos', use: 'nutzt sie', care: 'schont sie' };
   function plotSig(sim) { const p = sim.state.plots; return Array.isArray(p) ? p.map(x => x && Math.round((x.progress || 0) * 20)).join(',') : ''; }
@@ -222,6 +245,8 @@
     body.appendChild(h('div.sec', [h('h3', 'Regierung'), card, grid, lock]));
     { const nb = natureBlock(k.nature); if (nb) body.appendChild(nb); }
     { const lb = this.realmLaws(k); if (lb) body.appendChild(lb); }
+    { const ab = airBlock(k.pollution); if (ab) body.appendChild(ab); }
+    { const fb = factoryList(sim, s => k.cityIds.indexOf(s.cityId) >= 0); if (fb) body.appendChild(fb); }
     { const mb = this.modsBlock(k); if (mb) body.appendChild(mb); }
     // Städte
     const cl = h('div.citylist');
@@ -324,6 +349,8 @@
     if (cp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(sim, cp)]));
     body.appendChild(h('div.sec', [h('h3', 'Stimmung'), h('div.barline', [h('span', moodWord(c.happiness)), h('b', Math.round(c.happiness) + ' %')]), happyBar(c.happiness)]));
     { const nb = natureBlock(c.nature); if (nb) body.appendChild(nb); }
+    { const ab = airBlock(c.pollution); if (ab) body.appendChild(ab); }
+    { const fb = factoryList(sim, s => s.cityId === c.id); if (fb) body.appendChild(fb); }
     { const mb = this.modsBlock(c); if (mb) body.appendChild(mb); }
     // Mauer
     const w = c.wall || {};
@@ -426,6 +453,7 @@
       item('i_laws', 'Weltgesetze', 'Kriege, Hunger, Altern …', () => this.openLaws()),
       item('i_chronicle', 'Chronik', 'Alles, was geschah', () => this.openChronicle()),
       item('i_map', 'Minikarte', 'Ein- oder ausblenden', () => { this.toggleMinimap(); this.closeModal(); }),
+      game.sim && game.sim.state.pollution ? item(WW.Sprites.has('i_view_air') ? 'i_view_air' : 'i_map', 'Luftkarte', 'Verschmutzung und Wind zeigen', () => { game.toggleAirView(); this.closeModal(); }) : null,
       item('i_inspect', 'Kurzanleitung', 'Die drei wichtigsten Tipps', () => this.showWelcome())
     ]);
     const keys = h('p.muted', { style: { marginTop: '12px', marginBottom: '0' } },

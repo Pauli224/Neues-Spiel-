@@ -253,6 +253,12 @@
     if (k === '-' || k === '_') { game.cam.animateZoom(game.cam.crispZoom(game.cam.zoom / 1.6)); return; }
     void e;
   };
+  // Kartenansicht „Luft" (nur wenn die Simulation Verschmutzung kennt)
+  game.toggleAirView = function () {
+    if (!game.sim || !game.sim.state.pollution) { game.hud.hint('Hier ist die Luft noch rein: Ohne Fabriken gibt es keine Luftkarte.'); game.view = null; return; }
+    game.view = game.view === 'air' ? null : 'air';
+    game.hud.hint(game.view === 'air' ? 'Luftkarte: grün = sauber, braun = dicke Luft. Nochmal tippen schaltet zurück.' : '');
+  };
   game.onUserActivity = function () { game.followId = null; };
 
   // ------------------------------------------------------------------ Chronik-Meldungen
@@ -425,7 +431,7 @@
       else brush = { x: p.x, y: p.y, kind: 'tile' };
     }
     const sel = game.select && game.select.obj && !game.select.obj.dead ? game.select : null;
-    game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
+    game.renderer.render(game.cam, { dt: dt, alpha: running ? Math.min(1, game.acc) : 1, prev: game.prev, select: sel, brush: brush, held: game.held, view: game.view, scale: game.cam.scale() / game.cam.dpr, firstFrames: game._first-- > 0 });
 
     statT -= dt; infoT -= dt;
     if (statT <= 0) { statT = 0.25; game.hud.updateStats(); }

@@ -121,6 +121,26 @@
       '{name} landet aus heiterem Himmel in {city}. Die Frisur ist hin.'
     ],
 
+    // ------------------------------------------------------------- Mauerstufen und Geräte
+    wallLevel: [
+      '{city} baut die Mauer aus: Bald steht hier eine {name}. Die Steinmetze reiben sich die Hände.',
+      'In {city} beginnt der Ausbau zur {name}. Der Bürgermeister hat schon das Einweihungsband gekauft.',
+      '{city} findet, die alte Mauer sei zu niedrig. Jetzt wird eine {name} daraus.'
+    ],
+    wallLevelDone: [
+      'Die {name} von {city} ist fertig! Die Nachbarn schauen jetzt etwas kleinlauter herüber.',
+      '{city} feiert die neue {name}. Sie ist dick, hoch und ein bisschen angeberisch.'
+    ],
+    selfshotSheep: [
+      'Die Selbstschussanlage von {city} hat ein Schaf erwischt. Der Bericht nennt es „vorbildliche Grenzsicherung".',
+      'In {city} löst die Selbstschussanlage aus – getroffen: ein Schaf. Das Planziel für Hammelbraten ist übererfüllt.',
+      'Ein Schaf kam der Mauer von {city} zu nahe. Die Selbstschussanlage kennt keine Ausnahmen.'
+    ],
+    trapOops: [
+      'Eine selbstgebastelte Falle an der Barrikade von {city} schnappt zu – leider beim Erfinder selbst.',
+      'In {city} trifft die Falle die eigenen Leute. Das Plenum diskutiert, ob das Absicht war.'
+    ],
+
     // ------------------------------------------------------------- Kräfte
     godRaise: ['Bei {city} hebt sich das Land. Die Bauern müssen jetzt bergauf ernten.', 'Der Boden unter {city} wölbt sich nach oben. Gute Aussicht, schlechte Knie.'],
     godLower: ['Das Land bei {city} sinkt. Die Frösche freuen sich schon.', 'Bei {city} gibt der Boden nach. Die Uferpromenade kommt näher.'],

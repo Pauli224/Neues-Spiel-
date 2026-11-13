@@ -140,6 +140,8 @@
     addTool({ id: 'w_load', cat: 'world', icon: 'i_load', name: 'Laden', kind: 'action', run(game) { game.ui.openLoad(); } });
     addTool({ id: 'w_laws', cat: 'world', icon: 'i_laws', name: 'Gesetze', kind: 'action', run(game) { game.ui.openLaws(); } });
     addTool({ id: 'w_chron', cat: 'world', icon: 'i_chronicle', name: 'Chronik', kind: 'action', run(game) { game.ui.openChronicle(); } });
+    addTool({ id: 'w_air', cat: 'world', icon: pickIcon(['i_view_air', 'i_pollution', 'i_map']), name: 'Luft', kind: 'action', requires: 'pollution',
+      run(game) { game.toggleAirView(); } });
     addTool({ id: 'w_map', cat: 'world', icon: 'i_map', name: 'Karte', kind: 'action', run(game) { game.ui.toggleMinimap(); } });
   }
 

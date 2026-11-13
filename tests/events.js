@@ -215,6 +215,136 @@ test('Weltgesetz events aus = keine Ereignisse', function () {
   assert(!a.state.events.some(e => e.group), 'keine Ereignis-Einträge');
 });
 
+// --------------------------------------------------------------------------
+// Mods wirken in der laufenden Simulation (Aufrufstellen in cities/units/diplo/growth)
+// --------------------------------------------------------------------------
+let gameBase = null;
+function gameSave() {
+  if (gameBase) return gameBase;
+  const s = makeSim({ seed: 9001, size: 'small', populate: 4, govs: ['monarchy', 'democracy', 'republic', 'tribe'] });
+  s.actions.setLaw('events', false);   // keine Zufallsereignisse im Vergleich
+  s.actions.setLaw('disasters', false);
+  run(s, 1500);
+  gameBase = s.serialize();
+  return gameBase;
+}
+function clone() { const s = WW.Sim.load(gameSave()); s._throwErrors = true; return s; }
+function modAll(sim, key, m) { for (const k of sim.state.kingdoms) WW.Mods.add(k, Object.assign({ key: key, until: 0, source: 'test' }, m)); }
+const sumC = (sim, f) => sim.state.cities.reduce((a, c) => a + f(c, WW.Cities.stock(sim, c)), 0);
+function progress(sim, filter) { let p = 0; for (const s of sim.state.structs) if (!s.dead && (!filter || filter(s))) p += s.built ? 1 + (s.upgradeTo ? s.progress || 0 : 0) : (s.progress || 0); return p; }
+// Aufrufe von WW.SimUtil.mod mitschneiden: key -> { calls, changed }
+function record(sim, ticks, fn) {
+  const orig = WW.SimUtil.mod, seen = {};
+  WW.SimUtil.mod = function (s, k, c, key, base) {
+    const v = orig(s, k, c, key, base);
+    const e = seen[key] || (seen[key] = { calls: 0, changed: 0, kids: new Set() });
+    e.calls++; if (v !== base) { e.changed++; if (k) e.kids.add(k.id); }
+    return v;
+  };
+  try { if (fn) fn(); run(sim, ticks); } finally { WW.SimUtil.mod = orig; }
+  return seen;
+}
+
+test('Mods wirken in der laufenden Simulation', function () {
+  // gemessene Größen: Mod stark setzen, Klon ohne Mod als Vergleich
+  const M = [
+    ['happiness', { add: 40 }, 300, s => sumC(s, c => c.happiness) / s.state.cities.length, +1],
+    ['work', { mul: 0.15 }, 700, s => sumC(s, (c, k) => k.food + k.wood + k.stone) + progress(s) * 50, -1],
+    ['food', { mul: 4 }, 700, s => sumC(s, (c, k) => k.food), +1],
+    ['wood', { mul: 4 }, 700, s => sumC(s, (c, k) => k.wood), +1],
+    ['stone', { mul: 4 }, 700, s => sumC(s, (c, k) => k.stone), +1],
+    ['gold', { mul: 4 }, 700, s => sumC(s, (c, k) => k.gold), +1],
+    ['taxes', { add: 0.2 }, 700, s => sumC(s, (c, k) => k.gold), +1],
+    ['growth', { mul: 8 }, 1400, s => s.state.units.filter(u => !u.dead).length, +1],
+    ['soldiers', { add: 0.4 }, 200, s => sumC(s, c => c.jobs.soldier || 0), +1],
+    ['build', { mul: 0.05 }, 900, s => progress(s), -1]
+  ];
+  for (const [key, m, ticks, measure, dir] of M) {
+    const a = clone(), b = clone();
+    modAll(b, key, m);
+    run(a, ticks); run(b, ticks);
+    const va = measure(a), vb = measure(b);
+    log(key.padEnd(10) + ' ohne ' + va.toFixed(1) + '  mit ' + vb.toFixed(1));
+    if (dir > 0 ? vb > va * 1.05 + 0.5 : vb < va * 0.95) continue;
+    // keine Änderung: nur zulässig, wenn die Rechenstelle im Testfenster gar nicht erreicht wird (z. B. kein Stein in Reichweite)
+    const r = clone(); modAll(r, key, m);
+    const e = record(r, ticks)[key];
+    log('  ' + key + ': Aufrufe im Fenster ' + (e ? e.calls : 0) + ', mit Mod ' + (e ? e.changed : 0));
+    assert(!e || !e.calls, key + ' wirkt nicht im Spiel (' + va + ' -> ' + vb + ')');
+  }
+  // loyalty: Zielwert einer Nicht-Hauptstadt (direkt) bzw. Rohwert
+  {
+    const s = clone();
+    const k = s.state.kingdoms[0], c = s._cities.get(k.cityIds[0]);
+    const v0 = WW.Growth.loyaltyRaw(s, c, k);
+    WW.Mods.add(k, { key: 'loyalty', add: 25, until: 0, source: 'test' });
+    const v1 = WW.Growth.loyaltyRaw(s, c, k);
+    log('loyalty    Rohwert ' + v0.toFixed(1) + ' -> ' + v1.toFixed(1));
+    assert(Math.abs(v1 - v0 - 25) < 1e-6, 'loyalty wirkt nicht');
+  }
+  // strength: Schaden einer Einheit
+  {
+    const s = clone();
+    const u = s.state.units.find(x => !x.dead && x.kingdomId >= 0);
+    const d0 = WW.Units.damageOf(s, u);
+    WW.Mods.add(s._kingdoms.get(u.kingdomId), { key: 'strength', mul: 2, until: 0, source: 'test' });
+    assert(Math.abs(WW.Units.damageOf(s, u) - 2 * d0) < 1e-6, 'strength wirkt nicht');
+  }
+  // Schlüssel, die nur selten/abhängig gerechnet werden: Aufrufstelle wird im Lauf getroffen und liefert den Mod-Wert
+  {
+    const s = clone();
+    s.actions.setLaw('wars', true);
+    const seen = record(s, 2400, () => {
+      modAll(s, 'aggression', { add: 0.3 }); modAll(s, 'immigration', { mul: 2 }); modAll(s, 'wallSpeed', { mul: 2 }); modAll(s, 'loyalty', { add: 5 });
+    });
+    for (const key of ['happiness', 'work', 'build', 'food', 'wood', 'stone', 'gold', 'taxes', 'growth', 'soldiers', 'strength', 'aggression', 'immigration', 'wallSpeed', 'loyalty']) {
+      const e = seen[key];
+      log(key.padEnd(11) + ' Aufrufe ' + (e ? e.calls : 0) + ', mit Mod ' + (e ? e.changed : 0));
+      if (['happiness', 'work', 'food', 'gold', 'growth', 'soldiers', 'aggression', 'loyalty'].indexOf(key) >= 0) assert(e && e.calls > 0, key + ': Aufrufstelle wird nie erreicht');
+      if (['aggression', 'immigration', 'wallSpeed', 'loyalty'].indexOf(key) >= 0 && e && e.calls) assert(e.changed > 0, key + ': Mod kommt an der Aufrufstelle nicht an');
+    }
+  }
+  // nature-Schalter hat Vorrang
+  {
+    const s = clone();
+    const k = s.state.kingdoms[0];
+    WW.Mods.add(k, { key: 'nature', flag: 'exploit', until: 0, source: 'test' });
+    assert(WW.Growth.natureMode(s, k) === 'exploit', 'nature-Schalter ohne Vorrang');
+  }
+});
+
+test('Jedes Reichsgesetz wirkt in der laufenden Simulation', function () {
+  for (const l of WW.REALM_LAWS) {
+    const s = clone();
+    const k = s.state.kingdoms.find(x => x.cityIds.length && WW.Events.lawAllowed(x, l.key));
+    if (!k) { log(l.key + ': kein passendes Reich im Testlauf'); continue; }
+    s.actions.setLaw('wars', true);
+    const seen = record(s, 1200, () => s.actions.setRealmLaw(k.id, l.key, true));
+    const out = [];
+    for (const e of l.effects) {
+      if (e.flag) { assert(WW.Growth.natureMode(s, k) === e.flag, l.key + ': Naturmodus ' + WW.Growth.natureMode(s, k)); out.push('nature=' + e.flag); continue; }
+      const r = seen[e.key];
+      const hit = r && r.kids.has(k.id);
+      out.push(e.key + (hit ? ' ok' : ' –'));
+      const rare = ['immigration', 'wallSpeed', 'aggression'].indexOf(e.key) >= 0 || (e.key === 'loyalty' && k.cityIds.length < 2) || (e.key === 'stone' || e.key === 'wood') && !(r && r.calls);
+      if (!rare) assert(hit, l.key + ': ' + e.key + ' kommt im Spiel nicht an');
+    }
+    log(l.key.padEnd(17) + out.join(', '));
+  }
+  // Naturschutz: gerodete Kacheln nehmen nicht weiter zu; Kahlschlag rodet mehr
+  const count = (s, k) => { let n = 0; const cl = s.state.cleared; if (!cl) return 0; for (let i = 0; i < cl.length; i++) if (cl[i]) { const c = s._cities.get(s.state.owner[i]); if (c && c.kingdomId === k.id) n++; } return n; };
+  const tribe = clone().state.kingdoms.find(x => x.cityIds.length).id;
+  const sc = clone(), sx = clone();
+  const kc = sc._kingdoms.get(tribe), kx = sx._kingdoms.get(tribe);
+  sc.actions.setRealmLaw(tribe, 'naturschutz', kc.gov !== 'fascism');
+  sx.actions.setRealmLaw(tribe, 'kahlschlagplan', true);
+  const c0 = count(sc, kc);
+  run(sc, 2400); run(sx, 2400);
+  const c1 = count(sc, kc), x1 = count(sx, kx);
+  log('Rodungsmarken im Reich: vorher ' + c0 + ', Naturschutz nach 10 Jahren ' + c1 + ', Kahlschlagplan ' + x1);
+  if (sc.state.cleared) { assert(c1 <= c0, 'Naturschutz: Rodungen nehmen zu'); assert(x1 >= c1, 'Kahlschlag rodet nicht mehr als Naturschutz'); }
+});
+
 const bad = results.filter(r => !r.ok);
 console.log('\n' + (results.length - bad.length) + '/' + results.length + ' bestanden' + (bad.length ? ' – FEHLER: ' + bad.map(r => r.name).join(', ') : ''));
 process.exitCode = bad.length ? 1 : 0;

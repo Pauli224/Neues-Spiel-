@@ -15,6 +15,11 @@
       this.game.cam.x = x; this.game.cam.y = y; this.game.cam.vx = this.game.cam.vy = 0; this.game.cam.anim = null; this.game.cam.clamp();
       this.game.followId = null;
     };
+    this.air = document.getElementById('btnAir');
+    if (this.air) {
+      this.air.appendChild(WW.UI.dom.icon(WW.Sprites.has('i_view_air') ? 'i_view_air' : 'i_pollution', 22, null, 'Luft'));
+      this.air.addEventListener('click', () => { this.game.toggleAirView(); this.t = 0; });
+    }
     let down = false;
     this.cv.addEventListener('pointerdown', (e) => { down = true; try { this.cv.setPointerCapture(e.pointerId); } catch (er) { /* egal */ } go(e); e.preventDefault(); });
     this.cv.addEventListener('pointermove', (e) => { if (down) go(e); });
@@ -72,6 +77,7 @@
         c.fillStyle = '#f3ead2'; c.fillRect(city.cx * 2 - 1, city.cy * 2 - 1, 4, 4);
       }
     }
+    if (this.air) { const has = !!st.pollution; if (this.air.hidden === has) this.air.hidden = !has; this.air.setAttribute('aria-pressed', g.view === 'air' ? 'true' : 'false'); }
     const c = this.ctx, cam = g.cam;
     if (this.baseCv) c.drawImage(this.baseCv, 0, 0);
     // Sichtrahmen

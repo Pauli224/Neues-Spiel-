@@ -1,5 +1,21 @@
 // Mauerring: Planung (Abstandsfläche, morphologisches Schließen, Löcher füllen, Rand),
 // Tore, Türme, Bau-Fortschritt, Ausbau auf Stein/Festung, Stadterweiterung.
+//
+// [walls] STUFEN 1–6 UND GERÄTE (Daten: js/core/config-walls.js, lädt nach config.js)
+//   Mauerstücke (wall/gate/tower) haben level 1..6; wie weit eine Stadt ausbaut, steht in
+//   WW.GOVERNMENTS[gov].wallMax (Stamm, Anarchie 4; sonst 6) und wallLevels[level-1] = { name, hpMul, cost, req, device, spacing }
+//   (auch WW.WALL_LEVELS[gov]). Ausbau wie bisher Stück für Stück (upgradeTo), der Ring bleibt dabei dicht.
+//   city.wall.level = fertige Stufe, city.wall.name = Name der Stufe (deutsch), wall.devices = IDs der Stücke mit Gerät.
+//   mat bleibt 'palisade'|'stone'|'fortress'|'barricade' (Stamm immer 'palisade', Anarchie 'barricade', ab Stufe 3 'fortress').
+//   Regierungswechsel: Stufe über dem neuen wallMax wird auf wallMax gesenkt, Geräte werden auf das Gerät der neuen
+//   Regierung umgestellt (bzw. entfernt), Aussehen wie bisher über restyle.
+//   Geräte: struct.device ∈ WW.WALL_DEVICE_KEYS (selfshot, mgnest, ballista, cannon, ward, post, spikes, trap) auf jedem
+//   spacing-ten Mauerstück (keine Tore), ab der Stufe mit device; struct.devCd = Nachladezeit (Ticks). Sprite s_walldev_<device>.
+//   Feuern: js/sim/env.js (nur bei Krieg, Aufstand oder Alarm der Stadt; alle 3 Ticks).
+//   Fx: muzzle {x,y} (Kachel des Geräts), tracer {x,y,x2,y2}, bolt_shot {x,y,x2,y2} (Balliste), rock {x,y,x2,y2} +
+//   explosion {x,y,r} (Kanone), arrow {x,y,x2,y2} (Bürgerposten), ward {x,y,r} (Bannkreis), spikes {x,y}, dud {x,y} (Falle).
+//   Ereignisse: wallLevel / wallLevelDone { city, name } (Ausbau auf Stufe 4–6 bzw. Holzstufen von Stamm/Anarchie),
+//   selfshotSheep { city } (Selbstschussanlage trifft ein Schaf), trapOops { city } (Falle trifft die eigenen Leute).
 (function (WW) { 'use strict';
 
   // Kerngebäude kommen aus der Tabelle (STRUCT_INFO[type].core)
@@ -281,7 +297,46 @@
 
   function wallStyle(gov, level) {
     if (gov.barricades) return 'barricade';
+    if (gov.key === 'tribe') return 'palisade';   // [walls] Holzstufen
     return level >= 3 ? 'fortress' : (level === 2 ? 'stone' : 'palisade');
+  }
+  function levelInfo(gov, level) {
+    const lv = gov.wallLevels || (WW.WALL_LEVELS && WW.WALL_LEVELS[gov.key]);
+    return lv ? lv[Math.max(1, Math.min(lv.length, level)) - 1] : null;
+  }
+  function levelName(gov, level) { const i = levelInfo(gov, level); return i ? i.name : (WW.WALL_STYLE_NAMES[wallStyle(gov, level)] || 'Mauer'); }
+
+  // Geräte auf die Mauerstücke verteilen (Gerät der höchsten erreichten Stufe mit Gerät)
+  function assignDevices(sim, city, gov) {
+    const st = sim.state, w = city.wall;
+    let dev = null, sp = 0;
+    for (let l = 1; l <= (w.level || 0); l++) { const i = levelInfo(gov, l); if (i && i.device) { dev = i.device; sp = i.spacing || 5; } }
+    const ids = [];
+    let idx = 0;
+    for (const t of w.plan || []) {
+      const p = sim._structs.get(st.structAt[t]);
+      if (!p || p.cityId !== city.id || !WW.Structs.isWallish(p)) continue;
+      if (p.type === 'gate') { if (p.device) { delete p.device; sim.markDirty(t); } continue; }
+      idx++;
+      const want = dev && idx % sp === 0 ? dev : null;
+      if ((p.device || null) !== want) { if (want) p.device = want; else delete p.device; sim.markDirty(t); }
+      if (want) ids.push(p.id);
+    }
+    w.devices = ids; w.devGov = gov.key; w.devLevel = w.level || 0;
+  }
+  // Stufe über dem Maximum der Regierung senken (Regierungswechsel)
+  function clampLevel(sim, city, gov) {
+    const st = sim.state, w = city.wall, max = gov.wallMax || 3;
+    if ((w.level || 0) <= max && (w.target || 0) <= max) return;
+    w.level = Math.min(w.level || 0, max); w.target = Math.min(w.target || 0, max);
+    for (const t of w.plan || []) {
+      const p = sim._structs.get(st.structAt[t]);
+      if (!p || p.cityId !== city.id || !WW.Structs.isWallish(p)) continue;
+      if (p.upgradeTo > max) p.upgradeTo = 0;
+      if (p.level > max) { p.level = max; p.mat = wallStyle(gov, max); p.maxHp = WW.Structs.maxHpFor(sim, p); p.hp = Math.min(p.hp, p.maxHp); sim.markDirty(t); }
+    }
+    if (w.state === 'upgrading') w.state = 'done';
+    w.style = wallStyle(gov, Math.max(1, w.level));
   }
 
   // Ring planen und Baustellen anlegen
@@ -492,30 +547,40 @@
       }
       return;
     }
+    // [walls] Regierungswechsel: Stufe begrenzen, Geräte umstellen
+    clampLevel(sim, city, gov);
+    if (w.devGov !== gov.key || w.devLevel !== (w.level || 0)) assignDevices(sim, city, gov);
+    w.name = levelName(gov, Math.max(1, w.level || 1));
+    const classic = !gov.barricades && gov.key !== 'tribe';
     if (w.state === 'upgrading') {
       if (w.built >= w.total) {
         w.level = w.target; w.style = wallStyle(gov, w.level); w.state = 'done';
-        sim.event(w.level >= 3 ? 'wallFortressDone' : 'wallStoneDone', vars, at);
+        w.name = levelName(gov, w.level);
+        if (classic && w.level <= 3) sim.event(w.level >= 3 ? 'wallFortressDone' : 'wallStoneDone', vars, at);
+        else sim.event('wallLevelDone', Object.assign({ name: w.name }, vars), at);
+        assignDevices(sim, city, gov);
       }
       return;
     }
     // fertig: Ausbau oder Erweiterung?
     const stock = WW.Cities.stock(sim, city);
-    const maxLv = Math.min(gov.wallMax, 3);
-    if (w.built >= w.total && !gov.barricades && w.level < maxLv && !sim._noWallUpgrade) {
-      if (w.level === 1 && city.pop >= Math.max(15, gov.wallThreshold + 5) && stock.stone >= 12) {
-        startUpgrade(sim, city, 2); w.style = 'stone';
-        sim.event('wallStone', vars, at);
-        return;
-      }
-      if (w.level === 2 && city.pop >= 32 && city.tier >= 2 && stock.stone >= 30) {
-        startUpgrade(sim, city, 3);
-        sim.event('wallFortress', vars, at);
+    const maxLv = gov.wallMax || 3;
+    if (w.built >= w.total && w.level < maxLv && !sim._noWallUpgrade) {
+      const next = w.level + 1;
+      const info = levelInfo(gov, next);
+      const req = (info && info.req) || {};
+      const popReq = next === 2 && classic ? Math.max(15, gov.wallThreshold + 5) : (req.pop || 0);
+      const goldOk = !req.gold || gov.goldMul <= 0 || stock.gold >= req.gold;
+      if (city.pop >= popReq && city.tier >= (req.tier || 0) && stock.stone >= (req.stone || 0) && stock.wood >= (req.wood || 0) && goldOk) {
+        startUpgrade(sim, city, next);
+        w.style = wallStyle(gov, next);
+        if (classic && next <= 3) sim.event(next === 2 ? 'wallStone' : 'wallFortress', vars, at);
+        else sim.event('wallLevel', Object.assign({ name: levelName(gov, next) }, vars), at);
         return;
       }
     }
     if (city.noSpace && st.year - (w.plannedYear || 0) >= WW.CONFIG.WALL_EXPAND_YEARS && city.pop >= city.housing - 3) {
-      const lv = gov.barricades ? 1 : Math.max(1, w.level);
+      const lv = Math.max(1, w.level);   // [walls]
       const before = w.plan ? w.plan.length : 0;
       if (!plan(sim, city, WW.CONFIG.WALL_MARGIN, lv, true)) { w.plannedYear = st.year; w.maxed = true; }
       else {
@@ -546,7 +611,8 @@
   WW.Walls = {
     computeRing: computeRing, plan: plan, update: update, refreshCounts: refreshCounts,
     startUpgrade: startUpgrade, demolishAll: demolishAll, emptyWall: emptyWall, wallStyle: wallStyle,
-    deforested: deforested, CORE: CORE, maxReserve: maxReserve
+    deforested: deforested, CORE: CORE, maxReserve: maxReserve,
+    levelInfo: levelInfo, levelName: levelName, assignDevices: assignDevices, clampLevel: clampLevel   // [walls]
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

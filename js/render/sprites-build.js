@@ -2175,6 +2175,171 @@
       var sp = Math.floor((P.a + P.b) / 2);
       return (sp - (P.h + (m.dh || 0)) + 1) - 8;
     };
+    // ======================================================================
+    // Fabriken (Stufe 1 = 2×2, Stufe 2 = 3×3) je Art, stillgelegte Fabrik, Schornstein-Mündungen für den Rauch
+    var FST = {};   // key -> [[x, y], ...] Mündungen im Innenraster
+    var BRK2 = [AC(null, '#d9785a'), AC(null, '#b8553e'), AC(null, '#8a3a2e'), AC(null, '#7a3228')];
+    var DCON = [AC(null, '#7c7c82'), AC(null, '#5c5c64'), AC(null, '#44444c'), AC(null, '#3a3a42')];
+    var HALL = [AC(null, '#f2f0e8'), AC(null, '#dcd8cc'), AC(null, '#b8b4a6'), AC(null, '#a8a496')];
+    var RUST = [AC(null, '#c07a4a'), AC(null, '#9a5a36'), AC(null, '#6e3e26'), AC(null, '#5a3220')];
+    var FILT = [AC(null, '#9fe08a'), AC(null, '#5fb05a')];
+    function stackAt(g, x, top, bot, w, cols, bands, list) {
+      g.rect(x, top, w, bot - top + 1, cols[1]); g.vline(x, top, bot - top + 1, cols[0]); g.vline(x + w - 1, top, bot - top + 1, cols[2]);
+      if (bands) for (var y = top + 3; y < bot; y += 5) g.hline(x, y, w, bands);
+      g.hline(x - 1, top, w + 2, cols[2]); g.hline(x, top, w, 'ink');
+      if (list) list.push([x + Math.floor(w / 2), top - 1]);
+    }
+    function sawRoof(g, x, y, w, h, c, glassC) {
+      for (var t = 0; t * 5 < w; t++) for (var j = 0; j < h; j++) {
+        var x0 = x + t * 5, hw = Math.round((j + 1) / h * 4);
+        for (var i = 0; i < hw && x0 + i < x + w; i++) g.set(x0 + i, y + j, i === hw - 1 ? glassC : (i === 0 ? c[0] : c[1]));
+        if (x0 + 4 < x + w) g.set(x0 + 4, y + j, c[2]);
+      }
+      g.hline(x, y + h, w, c[2]);
+    }
+    function factory(kind, lv, filtered) {
+      var big = lv >= 2, W = big ? 22 : 14, st = [], g;
+      if (kind === 'kombinat') {
+        g = new Grid(W, big ? 34 : 28);
+        var n = big ? 3 : 2;
+        for (var k = 0; k < n; k++) stackAt(g, 2 + k * 6, 0 + k * 2, 18, 3, ['redL', 'red', 'redD'], C.white, st);
+        roofSide(g, 0, 14, W, 7, ['stoneL', 'stone', 'stoneD'], 2);
+        wallBrick(g, 0, 21, W, g.h - 21, BRK2, 0); eaveShadow(g, 0, 21, W, BRK2[2]);
+        for (var x = 1; x < W - 2; x += 3) { g.rect(x, 23, 2, 3, 'glass'); g.set(x, 25, 'waterD'); }
+        var bx = big ? 7 : 4; g.rect(bx, g.h - 7, big ? 8 : 6, 4, 'T'); g.hline(bx, g.h - 7, big ? 8 : 6, 'Tl');            // Planziel-Tafel
+        for (var b = 0; b < (big ? 3 : 2); b++) g.hline(bx + 1, g.h - 6 + b, 2 + b * 2, C.white);
+        g.rect(W - 4, g.h - 5, 3, 5, 'woodD');
+      } else if (kind === 'ruestung') {
+        g = new Grid(W, big ? 32 : 26);
+        stackAt(g, W - (big ? 8 : 6), 0, 16, big ? 5 : 4, DCON, DCON[3], st);
+        sawRoof(g, 0, 12, W, 5, DCON, AC(null, '#6a8090'));
+        g.rect(0, 18, W, g.h - 18, DCON[1]); g.vline(0, 18, g.h - 18, DCON[0]); g.vline(W - 1, 18, g.h - 18, DCON[2]); g.hline(0, 18, W, DCON[3]);
+        for (x = 2; x < W - 2; x += 4) g.vline(x, 20, 3, 'ink');
+        g.rect(Math.floor(W / 2) - 2, g.h - 6, 5, 6, 'ink'); g.hline(Math.floor(W / 2) - 2, g.h - 6, 5, 'metalD');
+        g.hline(0, g.h - 1, W, 'Td'); g.set(1, 19, 'fireY');
+      } else if (kind === 'manufaktur') {
+        g = new Grid(W, big ? 30 : 26);
+        stackAt(g, W - 5, 0, 14, 3, BRK2, null, st);
+        roofSide(g, 3, 10, W - 3, 8, ['stoneL', 'stone', 'stoneD'], 2);
+        wallBrick(g, 3, 18, W - 3, g.h - 18, BRK2, 0); eaveShadow(g, 3, 18, W - 3, BRK2[2]);
+        for (x = 5; x < W - 2; x += 4) win(g, x, 20);
+        g.rect(Math.floor(W / 2) + 1, g.h - 6, 3, 6, 'woodD');
+        // Wasserrad links
+        g.ellipse(3, g.h - 6, 3.6, 3.6, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.6 ? 'woodD' : (d < 0.15 ? 'woodL' : ((px + py) & 1 ? 'wood' : null)); });
+        g.hline(0, g.h - 1, 4, 'glass'); g.hline(0, g.h - 2, 3, 'water' in C ? 'water' : 'glass');
+        // Kran rechts oben
+        g.vline(W - 2, 6, 12, 'woodD'); g.hline(W - 8, 6, 7, 'woodD'); g.vline(W - 8, 7, 4, 'stoneD'); g.paint(W - 9, 11, ['vw', 'wW']);
+      } else if (kind === 'fabrik') {
+        g = new Grid(W, big ? 30 : 26);
+        stackAt(g, 2, filtered ? 3 : 0, 14, 3, HALL, AC(null, '#d05a4a'), st);
+        if (filtered) { g.rect(1, 0, 5, 3, FILT[0]); g.hline(1, 2, 5, FILT[1]); g.vline(5, 0, 3, FILT[1]); st[0][1] = -1; }
+        sawRoof(g, 0, 11, W, 5, HALL, 'glass');
+        paint(g, 0, 17, W, g.h - 17, HALL[0], HALL[2], C.white); g.hline(0, 17, W, HALL[2]);
+        for (x = 1; x < W - 1; x += 3) { g.rect(x, 19, 2, 3, 'glass'); g.set(x, 21, 'waterD'); }
+        g.rect(Math.floor(W / 2) - 1, g.h - 6, 4, 6, 'T'); g.hline(Math.floor(W / 2) - 1, g.h - 6, 4, 'Td'); for (var yy = g.h - 5; yy < g.h; yy += 2) g.hline(Math.floor(W / 2) - 1, yy, 4, 'Td');
+        if (big) { g.rect(W - 6, 13, 5, 3, 'stoneD'); g.set(W - 4, 12, 'metalL'); }
+      } else if (kind === 'schmiede') {
+        g = new Grid(W, big ? 24 : 21);
+        var bw = big ? 16 : 10;
+        stackAt(g, bw - 3, 0, 12, 4, ['stoneL', 'stone', 'stoneD'], null, st);
+        roofSide(g, 0, 7, bw + 1, 7, ['stoneL', 'stone', 'stoneD'], 2);
+        wallBrick(g, 1, 14, bw - 1, g.h - 14, null, 1); eaveShadow(g, 1, 14, bw - 1, 'stoneD');
+        g.rect(3, g.h - 5, 3, 4, 'ink'); g.set(4, g.h - 3, 'fireO'); g.set(4, g.h - 2, 'fireY'); g.set(5, g.h - 3, 'fireY');   // Glut im Tor
+        g.paint(bw + 1, g.h - 4, ['mmm', '.M.', 'WWW']);          // Amboss
+        if (big) { g.paint(bw + 1, g.h - 9, ['vw', 'wW']); win(g, 8, 16); }
+      } else if (kind === 'ruin') {
+        g = new Grid(W, big ? 28 : 24);
+        g.rect(1, 6, 3, 8, RUST[1]); g.vline(1, 6, 8, RUST[0]); g.set(2, 5, RUST[1]); g.set(3, 4, RUST[2]);                     // abgebrochener Schlot
+        for (x = 0; x < W; x++) { var hh = 6 + Math.floor(hash(x >> 1, lv, 77) * 6); for (yy = g.h - hh; yy < g.h; yy++) g.set(x, yy, ((x + yy) % 5 === 0) ? RUST[3] : (x === 0 ? RUST[0] : RUST[1])); }
+        for (x = 2; x < W - 2; x += 4) { g.rect(x, g.h - 6, 2, 2, 'ink'); }
+        g.paint(W - 6, g.h - 3, ['.gG..', 'GgGgG']); g.paint(3, g.h - 2, ['ee', 'E.']); g.set(W - 3, g.h - 8, 'leaf');
+        g.line(6, g.h - 12, 10, g.h - 9, RUST[2]);
+      }
+      return { g: g, stacks: st };
+    }
+    var FKINDS = ['kombinat', 'ruestung', 'manufaktur', 'fabrik', 'schmiede', 'ruin'];
+    var STACKS = {};
+    FKINDS.forEach(function (kind) {
+      [1, 2].forEach(function (lv) {
+        [false, true].forEach(function (fl) {
+          if (fl && kind !== 'fabrik') return;
+          var r = factory(kind, lv, fl), n = lv >= 2 ? 3 : 2;
+          var key = 's_factory_' + kind + '_' + lv + (fl ? '_filter' : '');
+          defB(key, finishB(r.g), n);
+          // Mündung in Logikpixeln relativ zur linken oberen Grundflächen-Kachel (Raster +1 Kontur, unten 1 Schatten)
+          var H = r.g.h + 3, oy = n * 8 - H + 1;
+          STACKS[key] = r.stacks.map(function (p) { var x = p[0] + 1, y = oy + p[1] + 1; return { x: x, y: y, dx: x - 6, dy: y - 14 }; });
+        });
+      });
+    });
+    S.factoryKey = function (kind, level, filtered) {
+      var k = FKINDS.indexOf(kind) >= 0 ? kind : 'fabrik', lv = (level | 0) >= 2 ? 2 : 1;
+      return 's_factory_' + k + '_' + lv + (filtered && k === 'fabrik' ? '_filter' : '');
+    };
+    // Liste der Mündungen: { x, y } = Mündung in Logikpixeln ab linker oberer Grundflächen-Ecke;
+    // { dx, dy } = Zeichenversatz für fx_smokeplume_* (draw(ctx, 'fx_smokeplume_n', px + dx, py + dy)).
+    S.factoryStacks = function (kind, level, filtered) { return (STACKS[S.factoryKey(kind, level, filtered)] || []).slice(); };
+    // ---------------------------------------------------------------- Rauch, Dunst, krankes Land
+    // Qualmwolke 12×14, Unterkante Mitte (6, 14) sitzt auf der Schornstein-Mündung (siehe factoryStacks)
+    var SMK = [AC(null, '#5a5660', 235), AC(null, '#46424c', 225), AC(null, '#77727c', 210)];
+    var SMC = [AC(null, '#f4f6f8', 200), AC(null, '#d8dee4', 190), AC(null, '#ffffff', 170)];
+    function plume(f, P) {
+      var g = new Grid(12, 14);
+      for (var k = 0; k < 5; k++) {
+        var t = k / 4, cy = 13 - (k * 3 + f * 0.8), r = 1.4 + t * 2.6 + f * 0.25, cx = 6 + Math.sin(k * 1.3 + f) * (0.5 + t * 1.5);
+        if (cy - r < -1) continue;
+        g.ellipse(cx, cy, r, r * 0.9, function (x, y, nx, ny) { return nx + ny < -0.5 ? P[2] : (ny > 0.3 ? P[1] : P[0]); });
+      }
+      return g;
+    }
+    for (var pf = 0; pf < 4; pf++) {
+      def('fx_smokeplume_' + pf, plume(pf, SMK), { group: 'fx', anchor: 'icon' });
+      def('fx_smokeplume_clean_' + pf, plume(pf, SMC), { group: 'fx', anchor: 'icon' });
+    }
+    // Dunst in drei Dichten (kachelbar, gelbgrau, halbdurchsichtig)
+    [70, 115, 160].forEach(function (a, i) {
+      var g = new Grid(8, 8), c1 = AC(null, '#b8b08a', a), c2 = AC(null, '#a49c7a', Math.min(255, a + 25));
+      for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) g.set(x, y, hash(x, y, 400 + i) < 0.25 ? c2 : c1);
+      def('t_smog_' + (i + 1), g, { group: 'ground' });
+    });
+    (function () {
+      var g = new Grid(8, 8), m1 = AC(null, '#7a6a3e', 120), m2 = AC(null, '#5e5030', 150), m3 = AC(null, '#9a8a5a', 110);
+      for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) { var h = hash(x, y, 410); g.set(x, y, h < 0.15 ? m2 : (h > 0.9 ? m3 : m1)); }
+      def('t_murk', g, { group: 'ground' });
+      var b = new Grid(8, 8), b1 = AC(null, '#9a9484', 150), b2 = AC(null, '#7c7666', 175), b3 = AC(null, '#b0aa98', 140);
+      for (y = 0; y < 8; y++) for (x = 0; x < 8; x++) { var hb = hash(x, y, 420); b.set(x, y, hb < 0.12 ? b2 : (hb > 0.88 ? b3 : b1)); }
+      b.line(1, 2, 3, 4, b2); b.line(3, 4, 6, 3, b2);
+      def('t_barren', b, { group: 'ground' });
+    })();
+    // krankes Land: kahle Bäume, kranke Büsche, Stümpfe
+    function deco2(key, rows, edge, sh) {
+      var gr = new Grid(rows[0].length, rows.length); gr.paint(0, 0, rows);
+      var o = gr.pad(1, 1, 1, 0).outline(edge).pad(0, 0, 0, 1).footShade();
+      def(key, o, { group: 'decor' });
+    }
+    deco2('d_deadtree_1', [
+      'G...G.g.',
+      '.G.G.g..',
+      '..GGg...',
+      'g..Gg..G',
+      '.g.GgGG.',
+      '..gGg...',
+      '...Gg...',
+      '...Gg...',
+      '...Gg...',
+      '..GGgg..'], 'dusk');
+    deco2('d_deadtree_2', [
+      '.G.....',
+      '..G..g.',
+      '...GgG.',
+      '.g.Gg..',
+      '..gGg..',
+      '...Gg..',
+      '..GGgg.'], 'dusk');
+    deco2('d_sickbush_0', ['.YyY..', 'YyHyYy', 'yHHyHY', '.YHHY.'], 'woodD');
+    deco2('d_sickbush_1', ['..yY..', '.yHHy.', 'YHyyHY', 'HYHHYH'], 'woodD');
+    deco2('d_stump_1', ['.wvw.', 'wWWWw', 'WwWwW'], 'ink');
+    deco2('d_stump_2', ['vwv....', 'wWWw.vw', 'WwWW.WW'], 'ink');
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

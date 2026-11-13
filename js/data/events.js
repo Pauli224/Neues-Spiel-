@@ -387,7 +387,7 @@
       'Freundschaftsbesuch: {otherLeader} reist nach {capital} und bringt {@essen} mit. {Kingdom_nom} ist gerührt.',
       '{Kingdom_nom} und {other} feiern gemeinsam {@anlass}. Die Beziehungen sind herzlich.'] });
   ev('beleidigung', 'war', 'pair', 'Diplomatischer Eklat', { weight: 1, prio: 1.5, cooldown: 8, rel: ['peace'],
-    effects: [{ opinion: [-35, -20] }, { relation: 'war', if: c => c.rel && c.rel.opinion < -60 && c.sim.rng.next() < 0.5 }],
+    effects: [{ opinion: [-35, -20] }, { mod: 'aggression', add: 0.06, years: 3 }, { relation: 'war', if: c => c.rel && c.rel.opinion < -60 && c.sim.rng.next() < 0.5 }],
     texts: ['Eklat: Der Gesandte {kingdom_dat} nennt die Suppe {other_dat} „gewöhnungsbedürftig“. Die Stimmung ist eisig.',
       '{OtherLeader} schickt {leader} zum Geburtstag {@ding}. Das wird als tödliche Beleidigung aufgefasst.',
       'Beim Treffen mit {other} niest {leader} auf die Landkarte. Seither herrscht Grabesstille zwischen den Reichen.'] });
