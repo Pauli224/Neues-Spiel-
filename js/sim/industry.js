@@ -104,6 +104,8 @@
     if (st.laws && !('industry' in st.laws) && WW.LAW_DEFAULTS && 'industry' in WW.LAW_DEFAULTS) st.laws.industry = WW.LAW_DEFAULTS.industry;
     for (const c of st.cities || []) { if (c.pollution == null) c.pollution = 0; if (c.indActive == null) c.indActive = 0; }
     for (const k of st.kingdoms || []) { if (k.pollution == null) k.pollution = 0; }
+    if (WW.Rail) WW.Rail.defaults(st);
+    if (WW.Camps) WW.Camps.defaults(st);
   }
   function save(st, o) {
     delete o.pollution;
@@ -370,7 +372,8 @@
     const st = sim.state, C = CF(), d = dims(st), pw = d.pw, ph = d.ph, N = pw * ph;
     const pol = st.pollution;
     const fl = activeList(sim);
-    if (!fl.length && !(st.industry.any > 0)) return;
+    const trains = WW.Rail ? WW.Rail.emitters(sim) : [];
+    if (!fl.length && !trains.length && !(st.industry.any > 0)) return;
     let a = sim._indA, b = sim._indB;
     if (!a || a.length !== N) { a = sim._indA = new Float32Array(N); b = sim._indB = new Float32Array(N); }
     for (let i = 0; i < N; i++) a[i] = pol[i];
@@ -378,6 +381,10 @@
       if (s.dead || !s.active) continue;
       const cx = Math.min(pw - 1, Math.floor((s.x + s.w - 1) / C.CELL)), cy = Math.min(ph - 1, Math.floor(s.y / C.CELL));
       a[cy * pw + cx] += emission(s);
+    }
+    for (const t of trains) {
+      const cx = Math.min(pw - 1, Math.max(0, Math.floor(t.x / C.CELL))), cy = Math.min(ph - 1, Math.max(0, Math.floor(t.y / C.CELL)));
+      a[cy * pw + cx] += WW.RAIL.EMIT;
     }
     const w = st.wind, sh = C.WIND_SHARE * w.str, ad = Math.abs(w.dx) + Math.abs(w.dy) || 1;
     const ax = sh * Math.abs(w.dx) / ad, ay = sh * Math.abs(w.dy) / ad, sx = w.dx > 0.01 ? 1 : (w.dx < -0.01 ? -1 : 0), sy = w.dy > 0.01 ? 1 : (w.dy < -0.01 ? -1 : 0);
@@ -762,6 +769,8 @@
       sim._indDirtyCities = ind.any > 0 || ind.murk > 0 || ind.barren > 0;
     }
     if (t % TPY() === 131) neighbours(sim);
+    if (WW.Rail) WW.Rail.tick(sim);
+    if (WW.Camps) WW.Camps.tick(sim);
     if (t % 30 === 11) {
       for (const s of activeList(sim)) {
         if (s.dead || !s.active) continue;
@@ -772,7 +781,13 @@
 
   WW.Industry = {
     tick: tick, defaults: defaults, save: save, load: load, dims: dims, at: at, specFor: specFor, tryBuild: tryBuild,
-    clean: clean, factories: factories, emission: emission, kindVars: kindVars, hookPowers: hookPowers
+    clean: clean, factories: factories, emission: emission, kindVars: kindVars, hookPowers: hookPowers, findSpot: findSpot,
+    // Haken aus js/sim/units.js (markiert): Einheiten mit u.ind ('train' | 'camp') bewegen Bahn bzw. Lager selbst
+    unit: function (sim, u) {
+      if (u.ind === 'train') return WW.Rail ? WW.Rail.ride(sim, u) : (u.ind = null, false);
+      if (u.ind === 'camp') return WW.Camps ? WW.Camps.unit(sim, u) : (u.ind = null, false);
+      return false;
+    }
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

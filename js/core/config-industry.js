@@ -54,6 +54,28 @@
       bigW: 3, bigH: 3 };
   }
 
+  // Eisenbahn (js/sim/rail.js). GOVS: Regierungen mit Bahn (weitere einfach ergänzen)
+  WW.RAIL = {
+    GOVS: { communism: { name: 'Volksbahn' }, fascism: { name: 'Gleichschrittbahn' } },
+    MIN_TIER: 2,        // Städte ab „Stadt"
+    MAX_DIST: 90,       // Bahnhöfe weiter auseinander (Kacheln, Manhattan) werden nicht verbunden
+    MAX_LEN: 160,       // längste Trasse
+    PATH_NODES: 40000,  // Grenze der Wegsuche
+    SITES: 5,           // gleichzeitige Gleis-Baustellen je Strecke
+    PLAN_EVERY: 120,    // Ticks je Planung
+    SPEED: 0.3,         // Kacheln je Tick
+    WAIT: 40,           // Ticks Aufenthalt am Bahnhof
+    CARS: 4, CAR_CAP: 25, BALANCE_MIN: 30,   // Güterwagen, Ladung je Wagen, ab diesem Unterschied wird ausgeglichen
+    FUEL: 2,            // Holz (oder Kohle) je Abfahrt
+    TROOPS: 12,         // Soldaten je Truppenzug
+    EMIT: 4             // Qualm je Verschmutzungsschritt in der Zelle eines fahrenden Zugs
+  };
+
+  if (WW.STRUCT_INFO && !WW.STRUCT_INFO.station) {
+    WW.STRUCT_INFO.station = { name: 'Bahnhof', w: 2, h: 2, work: 140, hp: [200], cost: [{ wood: 12, stone: 8 }], burn: 0.5 };
+    WW.STRUCT_INFO.rail = { name: 'Gleis', w: 1, h: 1, work: 7, hp: [60], cost: [{ wood: 1, stone: 1 }], burn: 0.2 };
+  }
+
   // Weltgesetz „Industrie" (an/aus)
   if (Array.isArray(WW.LAW_INFO) && WW.LAW_DEFAULTS && !('industry' in WW.LAW_DEFAULTS)) {
     WW.LAW_INFO.push({ key: 'industry', name: 'Industrie', desc: 'Manche Regierungen bauen Fabriken. Die qualmen.', def: true });

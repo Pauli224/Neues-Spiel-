@@ -88,6 +88,7 @@
     const st = this.st, W = st.W, H = st.H, i = y * W + x, t = st.terrain;
     this.S.drawGround(g, x * 8, y * 8, t[i], st.variant ? st.variant[i] : 0,
       y > 0 ? t[i - W] : -1, x < W - 1 ? t[i + 1] : -1, y < H - 1 ? t[i + W] : -1, x > 0 ? t[i - 1] : -1);
+    this.blendEdges(g, x, y);
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
     if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
     if (st.murk && st.murk[i] > 0 && this.S.has('t_murk')) { g.globalAlpha = Math.min(1, 0.4 + st.murk[i] / 200); this.S.drawFast(g, 't_murk', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
@@ -107,6 +108,36 @@
     if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) { g.globalAlpha = Math.min(1, 0.35 + st.fallout[i] / 160); this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
     const m = st.mark ? st.mark[i] : 0;
     if (m) this.S.drawFast(g, m >= 100 ? 't_crater' : 't_scorched', x * 8, y * 8, 0, false);
+  };
+
+  // weiche Biom-Übergänge (gestreute Pixel des Nachbarn auf gleicher Höhe) und Schlagschatten von höherem Land im Westen
+  const LUT_RANK = () => WW.TERRAIN_LUT.rank;
+  Renderer.prototype.blendEdges = function (g, x, y) {
+    if (this.gfx && this.gfx.blend === false) return;
+    const st = this.st, W = st.W, H = st.H, t = st.terrain, i = y * W + x, id = t[i], R = LUT_RANK();
+    const r0 = R[id], wk0 = waterKind(id);
+    const nb = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    for (let d = 0; d < 4; d++) {
+      const nx = x + nb[d][0], ny = y + nb[d][1];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const nid = t[ny * W + nx];
+      if (nid === id || R[nid] !== r0 || waterKind(nid) || wk0) continue;
+      g.fillStyle = this.S.groundColor(nid);
+      for (let k = 0; k < 8; k++) for (let depth = 0; depth < 3; depth++) {
+        if (hash2(x * 8 + k, y * 8 + depth * 3 + d, 77 + id * 31 + nid) > [0.55, 0.3, 0.12][depth]) continue;
+        const px = d === 1 ? 7 - depth : d === 3 ? depth : k, py = d === 0 ? depth : d === 2 ? 7 - depth : k;
+        g.fillRect(x * 8 + px, y * 8 + py, 1, 1);
+      }
+    }
+    // Schatten: Land im Westen liegt höher -> weicher dunkler Streifen am linken Rand
+    if (x > 0) {
+      const wr = R[t[i - 1]];
+      if (wr > r0 && r0 >= 1) {
+        const k = Math.min(3, wr - r0);
+        g.fillStyle = 'rgba(14,24,44,' + (0.16 + 0.05 * k) + ')'; g.fillRect(x * 8, y * 8, 1, 8);
+        g.fillStyle = 'rgba(14,24,44,' + (0.08 + 0.03 * k) + ')'; g.fillRect(x * 8 + 1, y * 8, 1 + (k > 1 ? 1 : 0), 8);
+      }
+    }
   };
 
   Renderer.prototype.drawRailTile = function (g, s, x, y) {
@@ -199,6 +230,8 @@
     }
     return this.S.decorFor(st.terrain[i], st.variant ? st.variant[i] : 0);
   };
+
+  const SWAY_RE = /^d_(tree|pine|jtree|palm|acacia|mangrove|shroom|reed|deadtree)/;
 
   // Fahnen je Regierung (rein optisch, deterministisch); Liste alle 2 s neu
   Renderer.prototype.flagList = function () {
@@ -1136,6 +1169,8 @@
     if (st.animals) for (const an of st.animals) if (!an.dead && !an.buried) addU(an, true);
 
     const time = this.time;
+    const devS = ctx.getTransform ? ctx.getTransform().a : 1;
+    const sway = devS >= 2 && this.gfx.quality !== 'low';
     const bubbles = [];
     const bars = [];
     const flyers = [];
@@ -1171,7 +1206,11 @@
       if (!low) {
         for (let x = vt.x0; x <= vt.x1; x++) {
           const d = this.decorAt(y * W + x);
-          if (d) { S.drawFast(ctx, d.key, x * 8 + d.dx, y * 8 + d.dy, 0, false); drawn++; }
+          if (d) {
+            let sw = 0;
+            if (sway && SWAY_RE.test(d.key)) { sw = Math.sin(time * 1.6 + x * 0.42 + y * 0.27) + 0.5 * Math.sin(time * 0.6 + x * 0.11); sw = Math.round(sw * 0.45 * devS) / devS; }
+            S.drawFast(ctx, d.key, x * 8 + d.dx + sw, y * 8 + d.dy, 0, false); drawn++;
+          }
         }
       }
       for (const s of ls) if (s.type !== 'field') { this.drawStruct(ctx, s, cityK, zoomBig, bars); drawn++; }
@@ -1251,6 +1290,11 @@
     const fh = inf ? inf.fh : s.h;
     const px = s.x * 8, py = (s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
+    // Kornwogen auf reifenden Feldern: helle Welle läuft über das Feld
+    if (s.type === 'field' && s.built !== false && (s.growth | 0) >= 2 && zoomBig) {
+      const row = ((this.time * 7 + s.x * 2.3 + s.y * 1.7) | 0) % 12;
+      if (row < 8) { ctx.fillStyle = 'rgba(255,240,170,0.28)'; ctx.fillRect(px, py + row, 8, 1); }
+    }
     // Verteidigungsgerät auf dem Mauerstück (Stacheln stehen davor und werden eine Zeile tiefer gezeichnet)
     if (s.device && s.device !== 'spikes' && s.device !== 'trap' && s.built !== false) this.drawDevice(ctx, s);
     // Lagerfeuer: Feuer-Frames der Lager-Sprites, sonst fx_fire in der Mitte
