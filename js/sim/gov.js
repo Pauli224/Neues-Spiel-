@@ -31,11 +31,11 @@
   function createKingdom(sim, o) {
     const st = sim.state;
     const race = WW.RACES[o.race] ? o.race : 'human';
-    const gov = WW.GOVERNMENTS[o.gov] ? o.gov : pickGovForRace(sim, race);
+    const gov = WW.GOVERNMENTS[o.gov] ? o.gov : (o.gov === 'random' ? pickGovForRace(sim, race) : 'tribe');
     const k = {
       id: st.nextId++, baseName: o.baseName || 'Niemandsland', name: '', race: race,
       colorIndex: o.colorIndex != null ? o.colorIndex : freeColor(sim), bannerPattern: sim.rng.int(8),
-      gov: gov, govLocked: !!o.locked, leaderId: -1, leaderName: '', leaderTitle: '',
+      gov: gov, govLocked: !!o.locked, leaderId: -1, leaderName: '', leaderTitle: '', leaderTrait: null,
       cityIds: [], capitalId: -1, relations: {},
       policy: { bonus: null, party: null, until: 0, plan: null, unrest: 0 },
       deity: null, stock: null, dynasty: {}, founded: st.year,

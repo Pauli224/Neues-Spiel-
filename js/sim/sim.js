@@ -308,12 +308,13 @@
         race = sim.rng.weighted(w);
       }
       let gov = govs && WW.GOVERNMENTS[govs[i % govs.length]] ? govs[i % govs.length] : null;
-      if (!gov) {
+      if (!gov && opts.govs === 'mixed') {
         // verschiedene Regierungen, nach Volks-Vorlieben gewichtet
         const pref = Object.assign({}, WW.RACES[race].govPrefs);
         for (const g in usedGov) if (Object.keys(usedGov).length < 8) pref[g] = 0;
         gov = sim.rng.weighted(pref);
       }
+      if (!gov) gov = 'tribe';   // Standard: Stamm, wählt ab Dorfgröße selbst
       usedGov[gov] = 1;
       foundKingdom(sim, spots[i].x, spots[i].y, 6, gov, race, false);
     }
