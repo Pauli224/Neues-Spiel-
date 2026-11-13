@@ -1726,6 +1726,243 @@
     // Neutrale Spielermauer (Werkzeug „Mauer malen"): schlichter heller Stein ohne Zinnen
     MAT.player = { top: AC(null, '#bdb8b0'), topL: AC(null, '#d6d2ca'), face: AC(null, '#aaa59c'), faceL: AC(null, '#c6c2ba'), joint: AC(null, '#8a857c'), base: AC(null, '#76716a'), pat: 'ashlar', merlon: 0 };
     for (var pmk = 0; pmk < 16; pmk++) def('s_wall_player_' + pmk, styledWall('player', 2, pmk), { group: 'wall' });
+    // ======================================================================
+    // Vom Lager zur Stadt: Lager, Dorfhalle, Zelte, Gerüste, viele Hausvarianten, Stadt-Deko
+    function roofHip(gr, x, y, w, h, t, back) {
+      roofSide(gr, x, y, w, h, t, back);
+      var k = Math.min(Math.floor(w / 3), h - 2);
+      for (var j = 0; j < k; j++) {
+        var ins = k - j;
+        for (var i = 0; i < ins; i++) { clr(gr, x + i, y + j); clr(gr, x + w - 1 - i, y + j); }
+        gr.set(x + ins, y + j, t[0]); gr.set(x + w - 1 - ins, y + j, t[2]);
+      }
+    }
+    function roofShed(gr, x, y, w, h, t) {   // Pultdach, hohe Seite links
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        if (j < Math.floor(i * (h - 3) / w)) continue;
+        gr.set(x + i, y + j, j === h - 1 ? t[2] : ((j % 3 === 2) ? t[2] : (i === 0 ? t[0] : t[1])));
+      }
+    }
+    function wallOf(kind, gr, x, y, w, h, col, seed) {
+      if (kind === 'planks') wallPlanks(gr, x, y, w, h);
+      else if (kind === 'plaster') wallPlaster(gr, x, y, w, h);
+      else if (kind === 'brick') wallBrick(gr, x, y, w, h, col, 0);
+      else if (kind === 'stone') wallBrick(gr, x, y, w, h, null, 1);
+      else if (kind === 'patch') patchWall(gr, x, y, w, h, seed || 1);
+      else paint(gr, x, y, w, h, col[0], col[1], col[2]);
+    }
+    // Generischer Hausbau: o = { x, w, stories, wall, col, roof, rt, roofH, chimney, annex, tower, shop, balcony, barn, dormer, seed }
+    function genHouse(o) {
+      var stories = o.stories || 1, sh = o.storyH || 5, wallH = 2 + stories * sh, roofH = o.roofH || 9;
+      var x = o.x == null ? 1 : o.x, w = o.w || 12, top = o.tower ? 9 : 3;
+      var H = top + roofH + wallH, gr = new Grid(14, H), wy = top + roofH, rt = o.rt || TR;
+      if (o.chimney != null) chimney(gr, x + o.chimney, top - 3, 5);
+      if (o.roof === 'side') roofSide(gr, x - 1, top, w + 2, roofH, rt, 3);
+      else if (o.roof === 'hip') roofHip(gr, x - 1, top, w + 2, roofH, rt, 3);
+      else if (o.roof === 'front') roofFront(gr, x - 1, top, w + 2, roofH, rt, Math.min(6, roofH - 2), function (px, py) { return o.wall === 'plaster' ? ((px === x + Math.floor(w / 2) || py % 3 === 0) ? 'woodD' : 'cream') : (o.wall === 'planks' ? 'woodL' : o.col[0]); });
+      else if (o.roof === 'thatch') roofThatch(gr, x - 1, top, w + 2, roofH);
+      else if (o.roof === 'shed') roofShed(gr, x - 1, top, w + 2, roofH, rt);
+      else if (o.roof === 'flat') { roofFlat(gr, x, top + roofH - 5, w, 5, RF[0], RF[1], RF[2]); if (o.vent) gr.rect(x + 2, top + roofH - 4, 2, 2, RF[1]); }
+      else if (o.roof === 'patch') patchRoof(gr, x - 1, top + 1, w + 2, roofH - 1, o.seed || 2);
+      wallOf(o.wall, gr, x, wy, w, wallH, o.col, o.seed);
+      eaveShadow(gr, x, wy, w, o.wall === 'planks' || o.wall === 'plaster' || o.wall === 'patch' ? 'woodD' : (o.col ? o.col[1] : 'stoneD'));
+      // Fenster je Geschoss, Tür unten
+      for (var s2 = 0; s2 < stories; s2++) {
+        var yy = wy + 2 + s2 * sh;
+        var last = s2 === stories - 1;
+        for (var k = x + 1; k < x + w - 2; k += o.winStep || 4) {
+          if (last && Math.abs(k - (x + Math.floor(w / 2) - 1)) < 2) continue;
+          if (o.wall === 'concrete') gr.vline(k + 1, yy, 3, 'ink'); else win(gr, k, yy);
+          if (o.balcony && !last) { gr.hline(k - 1, yy + 3, 4, 'metalD'); gr.set(k - 1, yy + 2, 'metalD'); }
+        }
+      }
+      var dx = x + Math.floor(w / 2) - 1;
+      if (o.barn) { gr.rect(dx - 1, wy + wallH - 6, 4, 6, 'woodD'); gr.line(dx - 1, wy + wallH - 6, dx + 2, wy + wallH - 1, 'wood'); gr.line(dx + 2, wy + wallH - 6, dx - 1, wy + wallH - 1, 'wood'); }
+      else door(gr, dx, wy + wallH - 5, 5, o.doorCol);
+      if (o.shop) { gr.hline(x, wy + wallH - 7, w, 'T'); for (var q = x; q < x + w; q += 2) gr.set(q, wy + wallH - 7, 'white'); gr.hline(x, wy + wallH - 6, w, 'Td'); }
+      if (o.annex) {   // niedriger Anbau mit Pultdach auf der freien Seite
+        var ax = o.annex > 0 ? x + w : 0, aw = o.annex > 0 ? 14 - (x + w) : x;
+        if (aw >= 3) { roofShed(gr, ax, H - 9, aw, 4, o.annexRoof || WOODR); wallPlanks(gr, ax, H - 5, aw, 5); gr.set(ax + Math.floor(aw / 2), H - 3, 'plum'); gr.set(ax + Math.floor(aw / 2), H - 2, 'plum'); }
+      }
+      if (o.tower) {   // schmaler Turm mit Spitzdach am Rand
+        var tx = o.tower > 0 ? 9 : 0;
+        for (var j = 0; j < 8; j++) { var hw = 0.5 + j * 0.42; for (var i = 0; i < 5; i++) { var ddx = i - 2; if (Math.abs(ddx) <= hw) gr.set(tx + i, j, ddx < 0 ? rt[0] : (ddx === 0 ? rt[1] : rt[2])); } }
+        gr.hline(tx, 8, 5, rt[2]);
+        wallOf(o.wall === 'concrete' || o.wall === 'panel' ? 'stone' : (o.wall === 'paint' ? 'stone' : o.wall), gr, tx, 9, 5, H - 9, o.col, o.seed);
+        gr.set(tx + 2, 11, 'glass'); gr.set(tx + 2, 12, 'waterD');
+      }
+      if (o.dormer) { var dd = x + Math.floor(w / 2) - 1; gr.rect(dd, top + 2, 3, 2, 'glass'); gr.hline(dd - 1, top + 1, 5, rt[2]); gr.set(dd, top + 2, 'white'); }
+      return gr;
+    }
+    function P(i) { return PASTEL[i % PASTEL.length]; }
+    var BRK = ['redL', 'red', 'redD', 'redD'];
+    // Variantentabellen: je Familie Funktion(level) -> Liste von Hausbeschreibungen (Schlüssel ab a)
+    var VAR = {
+      rustic: function (lv) { var R = lv + 7; return [
+        null, null, null, null,    // a/b Stroh, c/d Flicken (vorhanden)
+        { roof: 'thatch', wall: 'planks', x: 1, w: 8, roofH: R, annex: 1, annexRoof: THATCH },                        // e: Hütte mit Anbau
+        { roof: 'thatch', wall: 'stone', x: 2, w: 10, roofH: R + 1, chimney: 7, stories: lv >= 3 ? 2 : 1 },          // f: Steinkate
+        { roof: 'patch', wall: 'patch', x: 3, w: 9, roofH: 6, annex: -1, seed: lv + 3 },                               // g: Flickenhaus mit Verschlag
+        { roof: 'shed', wall: 'patch', x: 1, w: 12, roofH: 7, rt: ['pink', 'purple', 'plum'], seed: lv + 5, stories: lv >= 2 ? 2 : 1 } // h: Pultdach-Kommune
+      ]; },
+      timber: function (lv) { var st = lv >= 3 ? 2 : 1; return [
+        null, null,
+        { roof: 'hip', wall: 'plaster', x: 1, w: 12, roofH: 9, chimney: 9, stories: st },                             // c: Walmdach
+        { roof: 'side', wall: 'plaster', x: 1, w: 9, roofH: 9, annex: 1, stories: st, dormer: lv >= 2 },              // d: mit Anbau
+        { roof: 'front', wall: 'plaster', x: 3, w: 10, roofH: 10, tower: -1, stories: st },                           // e: Turmhaus
+        { roof: 'side', wall: 'planks', x: 1, w: 12, roofH: 8, barn: true, rt: WOODR, chimney: 2, stories: 1 }        // f: Scheune/Werkstatt
+      ]; },
+      town: function (lv) { var st = lv; return [
+        null, null,
+        { roof: 'hip', wall: 'paint', col: P(1), x: 1, w: 12, roofH: 8, stories: st, dormer: lv >= 2 },              // c: Walmdach-Bürgerhaus
+        { roof: 'front', wall: 'paint', col: P(4), x: 2, w: 10, roofH: 10, stories: st, shop: true },                // d: Giebelhaus mit Laden
+        { roof: 'side', wall: 'brick', col: BRK, x: 1, w: 9, roofH: 8, stories: st, annex: 1, chimney: 2 },          // e: Backstein mit Anbau
+        { roof: 'front', wall: 'paint', col: P(2), x: 4, w: 9, roofH: 10, stories: st, tower: -1 }                   // f: Eckturmhaus
+      ]; },
+      block: function (lv) { var st = lv + 1; return [
+        null, null,
+        { roof: 'flat', wall: 'concrete', col: CONC, x: 2, w: 10, roofH: 5, stories: st, storyH: 4, vent: 1 },        // c: schmaler Block (grau)
+        { roof: 'flat', wall: 'panel', col: PANEL, x: 0, w: 14, roofH: 5, stories: st, storyH: 4, balcony: true, winStep: 3 }, // d: langer Plattenbau mit Balkonen
+        { roof: 'flat', wall: 'concrete', col: CONC, x: 0, w: 14, roofH: 5, stories: Math.max(1, st - 1), storyH: 5, winStep: 3 }, // e: niedriger langer Block
+        { roof: 'flat', wall: 'panel', col: PANEL, x: 3, w: 8, roofH: 5, stories: st + 1, storyH: 4, balcony: true },   // f: Punkthochhaus
+        { roof: 'flat', wall: 'concrete', col: CONC, x: 1, w: 12, roofH: 5, stories: st, storyH: 5, shop: true },        // g: Block mit Laden
+        { roof: 'side', wall: 'panel', col: PANEL, x: 1, w: 12, roofH: 7, rt: SLATE, stories: st, storyH: 4, winStep: 3 } // h: Plattenbau mit Satteldach
+      ]; }
+    };
+    var LETTERS = 'abcdefgh';
+    Object.keys(VAR).forEach(function (fam) {
+      for (var lv = 1; lv <= 3; lv++) VAR[fam](lv).forEach(function (o, i) {
+        if (!o) return;
+        defB(hname(fam, lv, LETTERS[i]), finishB(genHouse(o)), 2);
+      });
+    });
+    // Varianten je Regierung (Familie + Buchstaben)
+    var HV = {
+      tribe: ['rustic', 'abef'], anarchy: ['rustic', 'cdgh'], monarchy: ['timber', 'abcdef'], theocracy: ['timber', 'abcdef'],
+      democracy: ['town', 'abcdef'], republic: ['town', 'bdefac'], fascism: ['block', 'aceg'], communism: ['block', 'bdfh']
+    };
+    S.houseVariantCount = function (gov, level) { return (HV[gov] || HV.monarchy)[1].length; };
+    S.houseKey = function (gov, level, variant) {
+      var f = HV[gov] || HV.monarchy, lv = Math.max(1, Math.min(3, level | 0));
+      if ((level | 0) <= 0) return S.tentKey(variant);
+      var v = f[1].charAt(((variant | 0) % f[1].length + f[1].length) % f[1].length);
+      return 's_house_' + f[0] + '_' + lv + '_' + v;
+    };
+
+    // ---------------------------------------------------------------- Zelte (Haus-Stufe 0, 2×2)
+    var HIDE = [AC(null, '#d8b88a'), AC(null, '#b08a5a'), AC(null, '#86643e')];
+    var FELT = [AC(null, '#f2ead8'), AC(null, '#d8ccb0'), AC(null, '#b0a284')];
+    g = new Grid(14, 16);   // a: Spitzzelt mit Stangen
+    for (var j = 0; j < 13; j++) { var hw = 0.5 + j * 0.48; for (var i = 0; i < 14; i++) { var dx = i + 0.5 - 7; if (Math.abs(dx) <= hw) g.set(i, j + 3, dx < -hw * 0.3 ? HIDE[0] : (dx > hw * 0.4 ? HIDE[2] : HIDE[1])); } }
+    g.hline(2, 10, 10, 'T'); g.hline(1, 11, 12, 'Td');
+    g.line(7, 0, 7, 3, 'woodD'); g.line(5, 0, 6, 3, 'woodD'); g.line(9, 0, 8, 3, 'woodD');
+    g.rect(6, 12, 2, 4, 'plum'); g.set(7, 12, 'ink');
+    defB('s_tent_a', finishB(g), 2);
+    g = new Grid(14, 13);   // b: Firstzelt
+    roofSide(g, 0, 2, 14, 8, ['strawL', 'cream', 'sandD'], 3);
+    fillTriB(g, 7, 3, 2, 12, 12, 12, 'cream'); g.rect(6, 7, 2, 5, 'plum'); g.set(5, 11, 'sandD'); g.set(8, 11, 'sandD');
+    g.hline(0, 6, 14, 'T'); g.vline(7, 0, 3, 'woodD'); g.set(8, 0, 'T');
+    defB('s_tent_b', finishB(g), 2);
+    g = new Grid(14, 14);   // c: Jurte
+    g.ellipse(7, 5, 7, 4.5, function (x, y, nx, ny) { return y > 5 ? null : (nx + ny < -0.6 ? FELT[0] : (nx > 0.4 ? FELT[2] : FELT[1])); });
+    g.rect(1, 5, 12, 8, FELT[1]); g.vline(1, 5, 8, FELT[0]); g.vline(12, 5, 8, FELT[2]);
+    g.hline(1, 6, 12, 'T'); g.hline(1, 7, 12, 'Td'); g.rect(6, 9, 2, 4, 'woodD'); g.set(7, 0, 'woodD'); g.hline(6, 1, 3, 'woodD');
+    defB('s_tent_c', finishB(g), 2);
+    g = new Grid(14, 12);   // d: Fellzelt, unregelmäßig
+    g.ellipse(7, 7, 6.5, 5, function (x, y, nx, ny) { var h = hash(x, y, 77); return y > 10 ? null : (h < 0.15 ? HIDE[2] : (nx + ny < -0.4 ? HIDE[0] : HIDE[1])); });
+    g.line(3, 1, 5, 4, 'woodD'); g.line(11, 1, 9, 4, 'woodD'); g.rect(5, 8, 3, 3, 'plum'); g.set(10, 6, 'cream'); g.set(3, 7, 'cream');
+    g.vline(12, 2, 9, 'woodD'); g.paint(13, 2, ['T', 'T']);
+    defB('s_tent_d', finishB(g), 2);
+    function fillTriB(gr, ax, ay, bx, by, cx, cy, col) {
+      for (var yy = 0; yy < gr.h; yy++) for (var xx = 0; xx < gr.w; xx++) {
+        var px = xx + 0.5, py = yy + 0.5;
+        var d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by), d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy), d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+        if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) gr.set(xx, yy, col);
+      }
+    }
+    S.tentKey = function (v) { return 's_tent_' + 'abcd'.charAt(((v | 0) % 4 + 4) % 4); };
+
+    // ---------------------------------------------------------------- Lager (Zentrum Stufe 0, 3×3, viel durchsichtiger Boden)
+    function campBase(variant, frame) {
+      var gr = new Grid(24, 30), G = 6;   // Zeile G = Oberkante der Grundfläche
+      function shadowUnder(x0, x1, y) { for (var x = x0; x <= x1; x++) if (!gr.get(x, y)) gr.set(x, y, 'shade'); }
+      // Feuerstelle in der Mitte
+      gr.paint(9, G + 11, ['.gqgqg.', 'gWQFQWg', '.gGgGg.']);
+      var fl = frame ? ['..j..', '.jFQ.', '.QFFj', 'QFjFQ'] : ['...j.', '.jF..', 'jFFQ.', 'QFjFQ'];
+      gr.paint(10, G + 7, fl);
+      // Sitzstämme
+      [[3, G + 12, 5], [16, G + 12, 5], [9, G + 16, 6]].forEach(function (l) {
+        gr.hline(l[0], l[1], l[2], 'wood'); gr.hline(l[0], l[1] + 1, l[2], 'woodD'); gr.set(l[0], l[1], 'woodL'); gr.set(l[0] + l[2] - 1, l[1], 'strawL'); shadowUnder(l[0], l[0] + l[2], l[1] + 2);
+      });
+      // Fahnenstange mit Banner
+      var fx = variant ? 19 : 3;
+      gr.vline(fx, 0, G + 8, 'woodD'); gr.set(fx, 0, 'gold'); gr.paint(fx + 1, 1, ['TTTu', 'TTTT', 'TtTT', 't..t']); shadowUnder(fx, fx + 1, G + 8);
+      // Vorräte
+      if (!variant) { gr.paint(16, G + 1, ['.vvw..', 'vwwWcY', 'wWWWYY', '.oo.Yy']); shadowUnder(16, 22, G + 5); gr.paint(5, G + 18, ['yY', 'YY']); }
+      else {
+        gr.paint(2, G + 2, ['cYcY..', 'YYYYvw', '.vwwWW', '.wWWW.']); shadowUnder(2, 8, G + 6);
+        gr.line(16, G + 14, 18, G + 9, 'woodD'); gr.line(20, G + 14, 18, G + 9, 'woodD'); gr.paint(17, G + 11, ['MMM', 'MoM']);   // Kochtopf am Dreibein
+      }
+      return gr.outline();
+    }
+    ['a', 'b'].forEach(function (v, vi) {
+      [0, 1].forEach(function (f) { def('s_camp_' + v + '_' + f, campBase(vi, f), { group: 'build', fw: 3, fh: 3, ox: 0 }); });
+      def('s_camp_' + v, campBase(vi, 0), { group: 'build', fw: 3, fh: 3, ox: 0 });
+    });
+    S.campKey = function (v, frame) { return 's_camp_' + ((v | 0) & 1 ? 'b' : 'a') + (frame == null ? '' : '_' + ((frame | 0) & 1)); };
+
+    // ---------------------------------------------------------------- Dorfhalle (Zentrum Stufe 1): bescheidene Holzhalle mit Vorplatz
+    function hall(variant) {
+      var gr = new Grid(22, 24);
+      if (!variant) {
+        roofSide(gr, 2, 3, 18, 10, TR, 3); chimney(gr, 15, 0, 5); roofSide(gr, 2, 3, 18, 10, TR, 3);
+        wallPlanks(gr, 3, 13, 16, 7); eaveShadow(gr, 3, 13, 16, 'woodD');
+        door(gr, 10, 15, 5, 'woodD'); win(gr, 5, 15); win(gr, 15, 15);
+        gr.hline(3, 19, 16, 'woodD'); gr.paint(1, 20, ['vwwW']);   // Bank
+      } else {
+        roofFront(gr, 4, 1, 14, 13, TR, 7, function (x, y) { return (x === 10 || x === 11 || y === 13) ? 'woodD' : 'woodL'; });
+        wallPlanks(gr, 5, 14, 12, 7); eaveShadow(gr, 5, 14, 12, 'woodD');
+        gr.rect(9, 16, 4, 5, 'woodD'); gr.vline(10, 16, 5, 'wood'); win(gr, 6, 16); win(gr, 14, 16);
+        gr.vline(4, 14, 7, 'woodD'); gr.vline(17, 14, 7, 'woodD');   // Vordach-Pfosten
+        gr.paint(18, 18, ['vw', 'wW']);
+      }
+      return gr;
+    }
+    defB('s_hall_a', finishB(hall(0)), 3);
+    defB('s_hall_b', finishB(hall(1)), 3);
+    S.hallKey = function (v) { return 's_hall_' + ((v | 0) & 1 ? 'b' : 'a'); };
+
+    // ---------------------------------------------------------------- Gerüste (Überlagerung, durchsichtig)
+    function scaffold(n) {
+      var w = n * 8, h = n * 8 + (n === 3 ? 16 : 12), gr = new Grid(w, h);
+      for (var x = 1; x < w; x += 5) gr.vline(x, 3, h - 3, 'woodD');
+      gr.vline(w - 1, 3, h - 3, 'woodD');
+      for (var y = 5; y < h; y += 6) { gr.hline(0, y, w, 'woodL'); gr.hline(0, y + 1, w, 'woodD'); }
+      for (x = 1; x + 5 < w; x += 10) { gr.line(x, h - 2, x + 5, h - 8, 'wood'); gr.line(x + 5, 10, x + 10 > w - 1 ? w - 1 : x + 10, 4, 'wood'); }
+      gr.hline(w - 6, 0, 6, 'woodD'); gr.vline(w - 6, 0, 4, 'woodD'); gr.set(w - 1, 1, 'stoneD'); gr.paint(w - 2, 2, ['q', 'g']);
+      return gr;
+    }
+    def('s_scaffold_2', scaffold(2), { group: 'build', fw: 2, fh: 2, ox: 0 });
+    def('s_scaffold_3', scaffold(3), { group: 'build', fw: 3, fh: 3, ox: 0 });
+
+    // ---------------------------------------------------------------- Kleine Stadt-Deko (1×1)
+    function deco(key, rows, post) {
+      var gr = new Grid(rows[0].length, rows.length); gr.paint(0, 0, rows); if (post) post(gr);
+      def(key, gr.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 1).footShade(), { group: 'deco' });
+    }
+    deco('s_deco_well', ['.WWWW.', '.W..W.', 'tTTTTt', '.W..W.', 'qgggqG', 'gBDDBG', 'qggggG']);
+    deco('s_deco_stall', ['TlTlTl', 'tttttt', 'W....W', 'rkfbrW', 'vvvvvW', 'W....W']);
+    deco('s_deco_hay', ['..zz..', '.zyyz.', 'zyzyyY', 'yzyyYY', 'YYYYYY']);
+    deco('s_deco_cart', ['.......', 'vwwwwW.', 'wyzyyW.', 'WWWWWWW', '.oWo...', '.oo....']);
+    ['f', 'r', 'P'].forEach(function (c, i) {
+      var rows = ['w.w.w.w', 'heheheh', 'h' + c + 'h' + c + 'h' + c + 'h', 'heheheh', 'w.w.w.w'];
+      deco('s_deco_garden_' + i, i === 2 ? ['w.w.w.w', 'hpheheh', 'hPhkhph', 'hehphPh', 'w.w.w.w'] : rows);
+    });
+    deco('s_deco_woodpile', ['.zyzyz', 'zyzyzy', 'yzyzyz', 'WWWWWW']);
+    deco('s_deco_barrels', ['.oo.oo', 'owwowW', 'oMMoMM', 'owwowW', '.oo.oo']);
+    deco('s_deco_laundry', ['W.....W', 'WWWWWWW', 'W.r.T.W', 'Wlrbutw', 'W.l.b.W', 'W.....W']);
+    S.DECO_KEYS = ['s_deco_well', 's_deco_stall', 's_deco_hay', 's_deco_cart', 's_deco_garden_0', 's_deco_garden_1', 's_deco_garden_2', 's_deco_woodpile', 's_deco_barrels', 's_deco_laundry'];
+
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

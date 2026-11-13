@@ -357,6 +357,11 @@
     st.pathVersion = st.pathVersion | 0; st.fireCount = st.fireCount | 0; st.markCount = st.markCount | 0;
     st.eventSeq = st.eventSeq | 0;
     st.plots = st.plots || [];
+    // ältere Spielstände: Zentrum ohne Ausbaustufe = Regierungssitz, Häuser ohne Formvariante
+    for (const s of st.structs) {
+      if (s.type === 'center' && s.stage == null) { s.stage = 2; s.upgrading = false; }
+      if (s.type === 'house' && s.variant == null) s.variant = (s.id * 2654435761 >>> 24) & 255;
+    }
     st.worldName = st.worldName || 'Wuselwelt';
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
   }

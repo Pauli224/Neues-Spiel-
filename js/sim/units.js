@@ -567,7 +567,7 @@
         if (!c || c.dead || !WW.Structs.needsWork(c)) continue;
         if (c.skipUntil && c.skipUntil > st.tick) continue;
         if (!c.paid) {
-          const cost = WW.Structs.costFor(sim, c.type, c.upgradeTo || c.level, city.id);
+          const cost = WW.Structs.siteCost(sim, c, city.id);
           if (sk.wood < cost.wood || sk.stone < cost.stone || sk.gold < cost.gold) continue;
         }
         const sc = siteScore(sim, u, c);
@@ -580,7 +580,7 @@
         return;
       }
       if (!best.paid) {
-        const cost = WW.Structs.costFor(sim, best.type, best.upgradeTo || best.level, city.id);
+        const cost = WW.Structs.siteCost(sim, best, city.id);
         if (!WW.Cities.pay(sim, city, cost)) return;
         best.paid = true;
       }
@@ -619,7 +619,7 @@
     let rate = workMul(sim, u) * g.buildMul;
     if (WW.Structs.isWallish(s)) { rate *= g.wallSpeedMul; if (k && k.policy && k.policy.bonus === 'walls') rate *= 1.3; }
     if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'build') rate *= 1.5;
-    const work = WW.Structs.info(s.type).work * (s.upgradeTo ? 1.2 : (s.built && s.restyle ? 0.5 : 1));
+    const work = WW.Structs.siteWork(s);
     s.progress = Math.min(1, s.progress + THINK * rate / work);
     if (!s.built) s.hp = Math.max(s.hp, Math.round(s.maxHp * s.progress));
     if (sim.rng.chance(0.08)) bubble(u, 'hammer', 18);

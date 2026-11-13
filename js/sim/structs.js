@@ -24,6 +24,8 @@
 
   function maxHpFor(sim, s, level) {
     const inf = info(s.type);
+    if (s.type === 'house' && (level != null ? level : s.level) === 0 && inf.tent) return inf.tent.hp;
+    if (s.type === 'center' && inf.stageHp && s.stage != null) return inf.stageHp[Math.max(0, Math.min(2, s.stage))];
     const lv = Math.max(1, Math.min(inf.hp.length, level || s.level || 1));
     let hp = inf.hp[lv - 1];
     if (WALLISH[s.type]) {
@@ -41,6 +43,25 @@
     // ohne Goldwirtschaft wird Gold durch Stein ersetzt
     if (out.gold && cityGov(sim, cityId).goldMul <= 0) { out.stone += out.gold; out.gold = 0; }
     return out;
+  }
+
+  // Kosten einer Baustelle (Zentrums-Ausbau, Zelt, Neubau/Ausbau)
+  function siteCost(sim, s, cityId) {
+    const inf = info(s.type);
+    const cid = cityId == null ? s.cityId : cityId;
+    if (s.type === 'center' && s.upgrading && inf.stageCost) {
+      const c = inf.stageCost[Math.max(0, Math.min(inf.stageCost.length - 1, s.stage || 0))];
+      return { food: 0, wood: c.wood || 0, stone: c.stone || 0, gold: c.gold || 0 };
+    }
+    if (s.type === 'house' && s.level === 0 && !s.upgradeTo && inf.tent) return { food: 0, wood: inf.tent.cost.wood || 0, stone: 0, gold: 0 };
+    return costFor(sim, s.type, s.upgradeTo || s.level || 1, cid);
+  }
+  // Arbeitsmenge einer Baustelle
+  function siteWork(s) {
+    const inf = info(s.type);
+    if (s.type === 'center' && s.upgrading && inf.stageWork) return inf.stageWork[Math.max(0, Math.min(inf.stageWork.length - 1, s.stage || 0))];
+    if (s.type === 'house' && s.level === 0 && !s.upgradeTo && inf.tent) return inf.tent.work;
+    return inf.work * (s.upgradeTo ? 1.2 : (s.built && s.restyle ? 0.5 : 1));
   }
 
   function setBlockAt(sim, s) {
@@ -112,6 +133,8 @@
     };
     if (type === 'field') { s.growth = 0; s.gprog = 0; }
     s.style = WW.GOVERNMENTS[o.style] ? o.style : cityGovKey(sim, s.cityId);
+    if (type === 'center') { s.stage = o.stage != null ? o.stage : 2; s.upgrading = false; }
+    if (type === 'house') { s.variant = sim.rng.int(256); if (o.level === 0) s.level = 0; }
     s.restyle = null;
     if (WALLISH[type]) s.mat = o.mat || 'palisade';
     if (type === 'gate') s.orient = o.orient || 'h';
@@ -147,6 +170,17 @@
 
   // Bau abgeschlossen (oder Ausbau)
   function complete(sim, s) {
+    if (s.type === 'center' && s.upgrading) {
+      // Zentrum steigt eine Stufe auf (Lager -> Dorfhalle -> Regierungssitz)
+      s.upgrading = false; s.stage = Math.min(2, (s.stage || 0) + 1);
+      s.built = true; s.progress = 1; s.paid = true;
+      s.maxHp = maxHpFor(sim, s); s.hp = s.maxHp;
+      forTiles(sim, s, (i) => sim.markDirty(i));
+      sim.fx({ type: 'centerStage', x: s.x + s.w / 2, y: s.y + s.h / 2, stage: s.stage });
+      const c = sim._cities.get(s.cityId);
+      if (c) sim.event(s.stage === 1 ? 'hallDone' : 'seatDone', { city: c.name, kingdom: (sim._kingdoms.get(c.kingdomId) || {}).name || '', center: (WW.GOVERNMENTS[s.style] || {}).centerName || '' }, WW.Cities.atCity(c));
+      return;
+    }
     if (s.upgradeTo) {
       s.level = s.upgradeTo;
       s.upgradeTo = 0;
@@ -187,7 +221,7 @@
     sim.fx({ type: 'smoke', x: s.x + s.w / 2, y: s.y + s.h / 2 });
     if (WALLISH[s.type] || s.type === 'center') {
       // wird wieder Baustelle (Bresche), Baumeister reparieren
-      s.built = false; s.progress = 0; s.paid = false; s.hp = 1; s.upgradeTo = 0; s.towerOnUpgrade = false;
+      s.built = false; s.progress = 0; s.paid = false; s.hp = 1; s.upgradeTo = 0; s.towerOnUpgrade = false; s.upgrading = false;
       if (s.type === 'tower' && s.level < 2) s.type = 'wall';
       for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) sim.markDirty((s.y + dy) * st.W + s.x + dx);
       setBlockAt(sim, s);
@@ -222,7 +256,7 @@
 
   function isWallish(s) { return !!(s && WALLISH[s.type]); }
   // Braucht das Bauwerk Baumeister? (Neubau, Ausbau oder Umbau im neuen Stil)
-  function needsWork(s) { return !s.built || !!s.upgradeTo || !!s.restyle; }
+  function needsWork(s) { return !s.built || !!s.upgradeTo || !!s.restyle || !!s.upgrading; }
 
   // Sperr-Raster nach dem Laden neu aufbauen
   function rebuildBlock(sim) {
@@ -253,7 +287,7 @@
     maxHpFor: maxHpFor, costFor: costFor, isWallish: isWallish, rebuildBlock: rebuildBlock,
     updateMasksAround: updateMasksAround, updateMaskAt: updateMaskAt, pushUnitsOff: pushUnitsOff,
     canBuildTile: canBuildTile, blockValue: blockValue, info: info, setBlockAt: setBlockAt,
-    ruinize: ruinize, needsWork: needsWork, cityGovKey: cityGovKey, terrainBuildable: terrainBuildable, forTiles: forTiles, WALLISH: WALLISH
+    ruinize: ruinize, needsWork: needsWork, siteCost: siteCost, siteWork: siteWork, cityGovKey: cityGovKey, terrainBuildable: terrainBuildable, forTiles: forTiles, WALLISH: WALLISH
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

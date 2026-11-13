@@ -71,12 +71,12 @@
     if (kind === 'kingdom') {
       const st = this.game.sim.query.kingdomStats(o.id) || {};
       const rel = Object.keys(o.relations).map(k => k + ':' + o.relations[k].status + ':' + Math.round(o.relations[k].opinion / 5)).join(',');
-      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
+      return [o.name, o.gov, o.govLocked, o.leaderName, o.cityIds.join(','), st.pop, st.soldiers, Math.round(st.happiness), rel, this.game.sim.state.kingdoms.length, Math.round(o.nature || 0), JSON.stringify(o.ruler || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'city') {
       const w = o.wall || {};
       return [o.name, o.kingdomId, o.tier, o.pop, o.housing, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
-        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
+        Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
     }
     if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name].join('|');
     return [o.kind, Math.round(o.hp)].join('|');
@@ -100,6 +100,19 @@
     body.appendChild(h('p.muted', s.kind === 'unit' ? 'Diese Figur weilt nicht mehr unter uns. Die Chronik weiß vielleicht mehr.' : 'Davon ist nur noch eine Erinnerung übrig.'));
   };
 
+  function stageName(cs, k) {
+    if (cs.stage === 0) return 'Lager';
+    if (cs.stage === 1) return 'Dorfhalle';
+    const g = k ? WW.GOVERNMENTS[k.gov] : null;
+    return (g && g.centerName) || 'Regierungssitz';
+  }
+  function natureBlock(v) {
+    const { h } = D();
+    if (typeof v !== 'number') return null;
+    const p = Math.max(0, Math.min(100, v));
+    return h('div.sec', [h('h3', 'Natur'), h('div.barline', [h('span', p >= 70 ? 'unberührt' : p >= 40 ? 'genutzt' : p >= 20 ? 'gerupft' : 'kahl geschlagen'), h('b', Math.round(p) + ' %')]), happyBar(p)]);
+  }
+  const NATURE_WAY = { exploit: 'rücksichtslos', use: 'nutzt sie', care: 'schont sie' };
   function plotSig(sim) { const p = sim.state.plots; return Array.isArray(p) ? p.map(x => x && Math.round((x.progress || 0) * 20)).join(',') : ''; }
   function happyBar(v) {
     const { h } = D();
@@ -187,7 +200,8 @@
     const card = h('div.govcard', [
       h('div.gh', [icon('i_gov_' + k.gov, 44), h('div', [h('div.gn', g.name), h('div.gt', (g.titleM ? g.titleM + ' / ' + g.titleF : 'ohne Anführer') + ' · ' + (g.centerName || ''))])]),
       h('p', '„' + g.desc + '"'),
-      h('ul.pc', (g.pros || []).map(t => h('li.p', t)).concat((g.cons || []).map(t => h('li.c', t))))
+      h('ul.pc', (g.pros || []).map(t => h('li.p', t)).concat((g.cons || []).map(t => h('li.c', t)))),
+      g.nature && NATURE_WAY[g.nature] ? h('div.muted', { style: { marginTop: '6px' } }, 'Umgang mit der Natur: ' + NATURE_WAY[g.nature]) : null
     ]);
     const grid = h('div.govgrid');
     for (const gk of WW.GOV_KEYS) {
@@ -202,6 +216,7 @@
       h('span', k.govLocked ? 'Bleibt so, bis du es änderst.' : (sim.state.laws.govChanges ? 'Darf sich von selbst ändern.' : 'Ändert sich nicht (Weltgesetz aus).'))
     ]);
     body.appendChild(h('div.sec', [h('h3', 'Regierung'), card, grid, lock]));
+    { const nb = natureBlock(k.nature); if (nb) body.appendChild(nb); }
     // Städte
     const cl = h('div.citylist');
     for (const cid of k.cityIds) {
@@ -236,6 +251,7 @@
     const { h, icon } = D();
     const game = this.game, sim = game.sim, body = this.$('infoBody');
     const k = sim.query.kingdom(c.kingdomId);
+    const cs = sim.query.struct ? sim.query.struct(c.centerId) : null;
     const tier = WW.CITY_TIERS[c.tier] || WW.CITY_TIERS[0];
     const race = WW.RACES[c.race];
     this.title(k ? icon('banner_' + (k.bannerPattern % 8), 30, k.colorIndex) : null, c.name, tier.name + (race ? ' · ' + race.name : '') + (k && k.capitalId === c.id ? ' · Hauptstadt' : ''));
@@ -244,7 +260,10 @@
     if (c.revolt) body.appendChild(h('div.sec', h('div.hint-box', 'Aufruhr! Rebellen ziehen durch die Gassen.')));
     else if (c.hungry) body.appendChild(h('div.sec', h('div.hint-box', 'Hunger: Die Vorräte sind leer.')));
     body.appendChild(h('div.sec', [
-      h('dl.kv', [h('dt', 'Einwohner'), h('dd', c.pop + ' / ' + c.housing + ' Plätze'), h('dt', 'Kinder'), h('dd', String(c.children | 0)), h('dt', 'Gegründet'), h('dd', 'Jahr ' + (c.founded | 0))])
+      h('dl.kv', [h('dt', 'Einwohner'), h('dd', c.pop + ' / ' + c.housing + ' Plätze'), h('dt', 'Kinder'), h('dd', String(c.children | 0)), h('dt', 'Gegründet'), h('dd', 'Jahr ' + (c.founded | 0)),
+        cs && cs.stage != null ? h('dt', 'Mittelpunkt') : null, cs && cs.stage != null ? h('dd', stageName(cs, k)) : null]),
+      cs && cs.upgrading ? h('div', [h('div.barline', [h('span', 'Ausbau zu: ' + stageName({ stage: (cs.stage | 0) + 1 }, k)), h('b', Math.round(100 * (cs.progress || 0)) + ' %')]),
+        h('div.bar.warn', [h('b', { style: { width: Math.round(100 * (cs.progress || 0)) + '%' } })])]) : null
     ]));
     // Lager (bei Kommunismus gemeinsames Lager)
     const stock = (k && k.stock && WW.GOVERNMENTS[k.gov].sharedStock) ? k.stock : c.stock;
@@ -258,6 +277,7 @@
     const cp = plotsFor(sim, p => (p.type === 'revolt' || p.type === 'secession') && (p.cityId === c.id || p.targetId === c.id));
     if (cp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(sim, cp)]));
     body.appendChild(h('div.sec', [h('h3', 'Stimmung'), h('div.barline', [h('span', moodWord(c.happiness)), h('b', Math.round(c.happiness) + ' %')]), happyBar(c.happiness)]));
+    { const nb = natureBlock(c.nature); if (nb) body.appendChild(nb); }
     // Mauer
     const w = c.wall || {};
     const wName = w.level > 0 || w.total > 0 ? (WW.WALL_STYLE_NAMES[w.style] || 'Mauer') : 'keine';

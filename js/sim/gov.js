@@ -197,7 +197,8 @@
       if (s.type === 'tower' && !g.build.towerSpacing) { s.type = 'wall'; s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp); WW.Structs.updateMasksAround(sim, s.x, s.y); }
       if (s.type === 'monument' && ++monuments > allowedMon) { WW.Structs.remove(sim, s); continue; }
       if (s.style === gov && !s.restyle) continue;
-      if (!RESTYLE[s.type] || !s.built) { s.style = gov; s.restyle = null; }
+      // Lager und Dorfhalle sehen bei allen Regierungen gleich aus: dort nur den Stil merken
+      if (!RESTYLE[s.type] || !s.built || (s.type === 'center' && ((s.stage || 0) < 2 || s.upgrading))) { s.style = gov; s.restyle = null; }
       else { s.restyle = gov; if (!s.upgradeTo) { s.progress = 0; s.paid = true; } }
       changed++;
       WW.Structs.forTiles(sim, s, (i) => sim.markDirty(i));

@@ -88,7 +88,9 @@
     this.S.drawGround(g, x * 8, y * 8, t[i], st.variant ? st.variant[i] : 0,
       y > 0 ? t[i - W] : -1, x < W - 1 ? t[i + 1] : -1, y < H - 1 ? t[i + W] : -1, x > 0 ? t[i - 1] : -1);
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
-    if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false);
+    if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
+    if (st.crack && st.crack[i]) { const ck = this.S.has('t_crack') ? 't_crack' : (this.S.has('fx_crack') ? 'fx_crack' : null); if (ck) { g.globalAlpha = Math.min(1, st.crack[i] / 120); this.S.drawFast(g, ck, x * 8, y * 8, 0, false); g.globalAlpha = 1; } }
+    if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) { g.globalAlpha = Math.min(1, 0.35 + st.fallout[i] / 160); this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
     const m = st.mark ? st.mark[i] : 0;
     if (m) this.S.drawFast(g, m >= 100 ? 't_crater' : 't_scorched', x * 8, y * 8, 0, false);
   };
@@ -157,7 +159,42 @@
     const st = this.st;
     if (st.structAt && st.structAt[i] >= 0) return null;
     if (this.path[i]) return null;
+    // gerodet: Baumstumpf statt Wald
+    if (st.cleared && st.cleared[i] > 0 && !(WW.TERRAIN_LUT.wood[st.terrain[i]])) {
+      const h = (Math.imul(i, 2654435761) >>> 24);
+      const k = h % 5 === 0 && this.S.has('d_deadtree_0') ? 'd_deadtree_0' : 'd_stump_0';
+      return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : null;
+    }
+    if (st.owner && st.owner[i] >= 0) { const d = this.cityDeco(i); if (d) return d; }
     return this.S.decorFor(st.terrain[i], st.variant ? st.variant[i] : 0);
+  };
+
+  // Stadt-Deko (rein optisch): auf freien, bebaubaren Kacheln neben Häusern, deterministisch nach Kachel-Hash
+  const CITY_DECO = ['s_deco_well', 's_deco_stall', 's_deco_hay', 's_deco_cart', 's_deco_garden_0', 's_deco_garden_1', 's_deco_garden_2',
+    's_deco_woodpile', 's_deco_barrels', 's_deco_laundry'];
+  Renderer.prototype.cityDeco = function (i) {
+    const S = this.S;
+    let list = this._cityDecoList;
+    if (!list) list = this._cityDecoList = CITY_DECO.filter(k => S.has(k));
+    if (!list.length) return null;
+    const st = this.st, W = st.W, H = st.H, x = i % W, y = (i / W) | 0;
+    if (!WW.TERRAIN_LUT.build[st.terrain[i]]) return null;
+    const h = Math.imul(i ^ 0x5bd1e995, 2654435761) >>> 0;
+    const c = this._cityById ? this._cityById.get(st.owner[i]) : null;
+    const tier = c ? c.tier | 0 : 0;
+    const every = tier <= 0 ? 24 : tier === 1 ? 9 : 6;
+    if (h % every) return null;
+    let house = false;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const s = this.structById ? this.structById(st.structAt[yy * W + xx]) : null;
+      if (!s) continue;
+      if (s.type === 'gate' || s.type === 'wall' || s.type === 'tower' || !s.built) { if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return null; continue; }
+      if (s.type === 'house' && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) house = true;
+    }
+    if (!house) return null;
+    return { key: list[(h >>> 8) % list.length], dx: 0, dy: 0 };
   };
 
   // Gebietstönung: Reich je Kachel aus owner → Stadt → Reich
@@ -323,6 +360,53 @@
     }
   };
 
+  // große Narben (Krater 3×3/5×5, Risse), verblassen mit ttl
+  Renderer.prototype.drawScars = function (g, vt) {
+    const S = this.S;
+    for (const sc of this.st.scars) {
+      if (!sc || sc.x < vt.x0 - 3 || sc.x > vt.x1 + 3 || sc.y < vt.y0 - 3 || sc.y > vt.y1 + 3) continue;
+      const key = sc.kind === 'crack' ? (S.has('fx_crack') ? 'fx_crack' : 't_crack') : 't_' + sc.kind;
+      if (!S.has(key)) continue;
+      const half = sc.kind === 'crater_l' ? 2 : sc.kind === 'crater_m' ? 1 : 0;
+      g.globalAlpha = sc.ttl != null ? Math.max(0, Math.min(1, sc.ttl / 600)) : 1;
+      S.drawFast(g, key, (Math.floor(sc.x) - half) * 8, (Math.floor(sc.y) - half) * 8, 0, false);
+    }
+    g.globalAlpha = 1;
+  };
+
+  // laufende Kräfte (Wirbelsturm, Flut, Frost, Säureregen, Vulkan, Schwarzes Loch …)
+  Renderer.prototype.drawEffects = function (g, list, vt) {
+    const S = this.S, t = this.time;
+    for (const e of list) {
+      if (!e || !(e.x >= 0)) continue;
+      const r = (e.r || 3) * 8, px = e.x * 8, py = e.y * 8;
+      if (e.x < vt.x0 - 12 || e.x > vt.x1 + 12 || e.y < vt.y0 - 12 || e.y > vt.y1 + 12) continue;
+      const fr = this.fxFrames(e.type);
+      if (fr.length) {
+        const key = fr[((t * 8) | 0) % fr.length], inf = S.info(key);
+        S.drawFast(g, key, px - (inf ? (inf.w / 2 | 0) + inf.ox : 4), py - (inf ? inf.h + inf.oy : 8) + 4, 0, false);
+        continue;
+      }
+      switch (e.type) {
+        case 'flood': g.fillStyle = 'rgba(79,159,230,0.28)'; g.beginPath(); g.ellipse(px, py, r, r * 0.8, 0, 0, Math.PI * 2); g.fill(); break;
+        case 'frost': g.fillStyle = 'rgba(230,244,252,0.3)'; g.beginPath(); g.ellipse(px, py, r, r * 0.8, 0, 0, Math.PI * 2); g.fill(); break;
+        case 'acidrain':
+          for (let j = 0; j < 30; j++) { const ox = (rnd(e.id | 0, j) - 0.5) * 2 * r, ph = (rnd(e.id | 0, j + 50) + t * 2) % 1; g.fillStyle = 'rgba(156,194,58,0.8)'; g.fillRect(px + ox, py + (rnd(e.id | 0, j + 9) - 0.5) * r - 24 + ph * 24, 1, 3); }
+          break;
+        case 'tornado':
+          g.fillStyle = 'rgba(200,205,215,0.75)';
+          for (let j = 0; j < 9; j++) { const w = 3 + j * 1.6, yy = py - j * 3, xo = Math.sin(t * 8 + j) * 2; g.fillRect(px - w / 2 + xo, yy, w, 2); }
+          break;
+        case 'blackhole':
+          g.fillStyle = 'rgba(20,8,32,0.9)'; g.beginPath(); g.arc(px, py, r * 0.4, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = 'rgba(189,138,240,0.8)'; g.lineWidth = 2;
+          for (let j = 0; j < 3; j++) { g.beginPath(); g.arc(px, py, r * (0.5 + j * 0.15), t * (3 - j) + j, t * (3 - j) + j + 2.2); g.stroke(); }
+          break;
+        case 'volcano': g.fillStyle = 'rgba(240,100,42,' + (0.25 + 0.15 * Math.sin(t * 5)) + ')'; g.beginPath(); g.arc(px, py, r * 0.5, 0, Math.PI * 2); g.fill(); break;
+      }
+    }
+  };
+
   // Flugzeuge über allem: Schatten am Boden, Rumpf um angle gedreht (oder Richtungs-Frame)
   Renderer.prototype.drawAircraft = function (g, list) {
     const S = this.S;
@@ -330,7 +414,7 @@
       if (!a || !(a.x >= 0)) continue;
       const kind = a.kind || 'bomber', px = a.x * 8, py = a.y * 8, alt = a.alt != null ? a.alt * 8 : 22;
       const ang = +a.angle || 0;
-      const sk = 'fx_' + kind + '_shadow';
+      const sk = S.has('a_' + kind + '_shadow') ? 'a_' + kind + '_shadow' : 'fx_' + kind + '_shadow';
       const draw = (key, x, y) => {
         const inf = S.info(key);
         if (!inf) return false;
@@ -340,7 +424,8 @@
       };
       if (!draw(sk, px + 4, py + 4)) { g.fillStyle = 'rgba(10,26,33,0.3)'; g.beginPath(); g.ellipse(px + 4, py + 4, 6, 3, ang, 0, Math.PI * 2); g.fill(); }
       const frames = this.fxFrames(kind);
-      const key = S.has('fx_' + kind) ? 'fx_' + kind : (frames.length ? frames[((this.time * 10) | 0) % frames.length] : null);
+      const af = 'a_' + kind + '_' + (((this.time * 10) | 0) & 1);
+      const key = S.has(af) ? af : S.has('fx_' + kind) ? 'fx_' + kind : (frames.length ? frames[((this.time * 10) | 0) % frames.length] : null);
       if (!key || !draw(key, px, py - alt)) { g.fillStyle = '#58637a'; g.save(); g.translate(px, py - alt); g.rotate(ang); g.fillRect(-6, -2, 12, 4); g.fillRect(-2, -7, 4, 14); g.restore(); }
     }
   };
@@ -576,6 +661,7 @@
       const c = this.buildQueue.shift();
       if (!c.built) this.buildChunk(c);
     }
+    if (st.cities) { const m = this._cityById || (this._cityById = new Map()); m.clear(); for (const c of st.cities) m.set(c.id, c); }
     this.terrScanT -= dt;
     if (st.owner && this.terrScanT <= 0) { this.scanTerritory(); this.terrScanT = 0.3; }
 
@@ -642,6 +728,7 @@
       }
     }
     ctx.setTransform(s, 0, 0, s, ox, oy);
+    if (st.scars && st.scars.length) this.drawScars(ctx, vt);
     let drawn = low && (opts.scale || 1) < 0.9 ? this.drawDots(ctx, vt, opts) : this.drawObjects(ctx, vt, low, opts);
 
     // Feuer auf Kacheln
@@ -655,6 +742,7 @@
 
     // (4) Effekte, Flugzeuge
     this.drawFx(ctx, dt);
+    if (st.wild && st.wild.effects && st.wild.effects.length) this.drawEffects(ctx, st.wild.effects, vt);
     if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
 
     // (5) Auswahl und Pinsel
@@ -714,7 +802,7 @@
       rowU[r].push({ u: u, x: x, y: y, animal: isAnimal });
     };
     if (st.units) for (const u of st.units) if (!u.dead) addU(u, false);
-    if (st.animals) for (const an of st.animals) if (!an.dead) addU(an, true);
+    if (st.animals) for (const an of st.animals) if (!an.dead && !an.buried) addU(an, true);
 
     const time = this.time;
     const bubbles = [];

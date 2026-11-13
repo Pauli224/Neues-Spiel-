@@ -469,7 +469,9 @@
     const vars = { city: city.name, kingdom: k.name };
     const at = { kingdomId: k.id, cityId: city.id, x: city.cx + 0.5, y: city.cy + 0.5 };
     if (!w.state || w.state === 'none') {
-      if (city.pop >= gov.wallThreshold && city.centerOk && (city.builtHouses || 0) >= 3) {
+      const ctr = sim._structs.get(city.centerId);
+      // ein Zeltlager zieht noch keine Palisade: erst ab Dorfhalle
+      if (city.pop >= gov.wallThreshold && city.centerOk && ctr && (ctr.stage || 0) >= 1 && (city.builtHouses || 0) >= 3) {
         if (plan(sim, city, WW.CONFIG.WALL_MARGIN, 1, false)) {
           sim.event(gov.barricades ? 'barricadePlan' : 'wallPlan', vars, at);
         }

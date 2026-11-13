@@ -90,7 +90,7 @@
     sim._usedNames.add(city.name);
     st.cities.push(city);
     sim._cities.set(city.id, city);
-    const c = WW.Structs.create(sim, 'center', x - o.ox, y - o.oy, city.id, { built: true, style: k.gov });
+    const c = WW.Structs.create(sim, 'center', x - o.ox, y - o.oy, city.id, { built: true, style: k.gov, stage: 0 });
     city.centerId = c ? c.id : -1;
     k.cityIds.push(city.id);
     if (k.capitalId < 0) k.capitalId = city.id;
@@ -143,7 +143,7 @@
     else if (s.type === 'house') {
       c._houses++;
       if (s.built) c._bh++;
-      if (s.built) c._cap += HOUSE_CAP[Math.max(0, Math.min(2, s.level - 1))] + (WW.RACES[c.race] || WW.RACES.human).housingBonus;
+      if (s.built) c._cap += (s.level === 0 ? WW.STRUCT_INFO.house.tent.cap : HOUSE_CAP[Math.max(0, Math.min(2, s.level - 1))]) + (WW.RACES[c.race] || WW.RACES.human).housingBonus;
     } else if (s.type === 'barracks') c._barr = true;
     else if (s.type === 'market') { c._mark = true; if (s.built) c._markets = (c._markets || 0) + 1; }
     else if (s.type === 'monument') c._mon = true;
@@ -214,7 +214,7 @@
     for (const id of city.sites) {
       const s = sim._structs.get(id);
       if (!s || s.paid) continue;
-      const c = WW.Structs.costFor(sim, s.type, s.upgradeTo || s.level, city.id);
+      const c = WW.Structs.siteCost(sim, s, city.id);
       needWood += c.wood; needStone += c.stone;
     }
     needWood = Math.max(0, needWood - st.wood);
@@ -495,12 +495,23 @@
     if (city.centerId < 0) {
       const o = centerOff();
       if (canFoundAtOwn(sim, city, city.cx - o.ox, city.cy - o.oy)) {
-        const s = WW.Structs.create(sim, 'center', city.cx - o.ox, city.cy - o.oy, city.id, { built: false, style: k ? k.gov : 'tribe' });
+        const s = WW.Structs.create(sim, 'center', city.cx - o.ox, city.cy - o.oy, city.id, { built: false, style: k ? k.gov : 'tribe', stage: 0 });
         if (s) { city.centerId = s.id; city.sites.push(s.id); }
       }
       return;
     }
     if (!city.centerOk) return;
+    // Zentrum ausbauen: Lager -> Dorfhalle (ab Dorf) -> Regierungssitz (ab Stadt)
+    const ctr0 = sim._structs.get(city.centerId);
+    if (ctr0 && ctr0.built && !ctr0.upgrading && !ctr0.restyle && (ctr0.stage || 0) < 2) {
+      const need = WW.STRUCT_INFO.center.stageTier[ctr0.stage || 0];
+      if (city.tier >= need) {
+        ctr0.upgrading = true; ctr0.progress = 0; ctr0.paid = false;
+        city.sites.push(ctr0.id);
+        sim.event((ctr0.stage || 0) === 0 ? 'hallStart' : 'seatStart', { city: city.name }, atCity(city));
+      }
+    }
+    const ctrStage = ctr0 ? (ctr0.stage || 0) : 0;
     // hängende Ausbauten (seit Jahren unbezahlt) aufgeben
     for (const id of city.sites) {
       const o = sim._structs.get(id);
@@ -521,7 +532,8 @@
       if (sk.wood >= cost.wood || open === 0) {
         const i = findCoreSpot(sim, city, 'house');
         if (i >= 0) {
-          const s = placeStruct(sim, city, 'house', i % W, Math.floor(i / W), { built: false });
+          // im Lager entstehen Zelte (Haus-Stufe 0), ab Dorfhalle richtige Häuser
+          const s = placeStruct(sim, city, 'house', i % W, Math.floor(i / W), { built: false, level: ctrStage === 0 ? 0 : 1 });
           if (s) { city.sites.push(s.id); city.houses++; }
           city.noSpace = false;
         } else {
@@ -532,6 +544,11 @@
       }
     } else if (city.tier >= 1 && city.pop + 1 >= city.housing && sk.stone >= 8 && open < maxOpen) {
       upgradeHouse(sim, city, sk);
+    } else if (ctrStage >= 1 && open < maxOpen && sim.rng.chance(0.3)) {
+      // Zelte nach und nach zu Hütten aufwerten
+      let tent = null;
+      for (const s of st.structs) if (!s.dead && s.cityId === city.id && s.type === 'house' && s.built && s.level === 0 && !s.upgradeTo) { tent = s; break; }
+      if (tent) upgradeHouse(sim, city, sk);
     }
     // Felder
     const plan = k && k.policy && k.policy.plan;
@@ -587,10 +604,13 @@
   }
 
   function upgradeHouse(sim, city, sk) {
-    if (city.tier < 1) return false;
+    const ctr = sim._structs.get(city.centerId);
+    const stage = ctr ? (ctr.stage || 0) : 0;
     let best = null;
     for (const s of sim.state.structs) {
       if (s.dead || s.cityId !== city.id || s.type !== 'house' || !s.built || s.upgradeTo || s.level >= 3) continue;
+      if (s.level === 0 && stage < 1) continue;          // Zelte erst mit der Dorfhalle aufwerten
+      if (s.level >= 1 && city.tier < 1) continue;
       if (s.level === 2 && city.tier < 2) continue;
       if (!best || s.level < best.level) best = s;
     }

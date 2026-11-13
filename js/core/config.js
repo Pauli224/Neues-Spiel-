@@ -263,8 +263,12 @@
   // w/h: Grundfläche in Kacheln (einzige Quelle; Platzsuche, Belegung, Abriss, Feuer lesen nur diese Werte)
   // core: zählt als Kerngebäude für den Mauerring; inside: wird innerhalb der Mauer gebaut
   WW.STRUCT_INFO = {
-    center:   { name: 'Zentrum', w: 3, h: 3, core: true, inside: true, work: 200, hp: [360, 360, 360], cost: [{ wood: 12 }], burn: 0.3 },
-    house:    { name: 'Haus', w: 2, h: 2, core: true, inside: true, work: 70, hp: [50, 90, 140], cost: [{ wood: 5 }, { wood: 4, stone: 5 }, { wood: 4, stone: 8 }], burn: 1 },
+    // Zentrum mit Ausbaustufen (stage): 0 Lager (sofort da), 1 Dorfhalle (ab Dorf), 2 Regierungssitz (ab Stadt)
+    center:   { name: 'Zentrum', w: 3, h: 3, core: true, inside: true, work: 200, hp: [360, 360, 360], cost: [{ wood: 12 }], burn: 0.3,
+                stageNames: ['Lager', 'Dorfhalle', 'Regierungssitz'], stageHp: [160, 260, 360],
+                stageCost: [{ wood: 14 }, { wood: 18, stone: 14 }], stageWork: [110, 260], stageTier: [1, 2] },
+    house:    { name: 'Haus', w: 2, h: 2, core: true, inside: true, work: 70, hp: [50, 90, 140], cost: [{ wood: 5 }, { wood: 4, stone: 5 }, { wood: 4, stone: 8 }], burn: 1,
+                tent: { name: 'Zelt', hp: 25, cost: { wood: 2 }, work: 26, cap: 2 } },   // Haus-Stufe 0
     field:    { name: 'Feld', w: 1, h: 1, work: 22, hp: [20], cost: [{}], burn: 1 },
     lumber:   { name: 'Holzfällerhütte', w: 2, h: 2, work: 60, hp: [60], cost: [{ wood: 4 }], burn: 1 },
     quarry:   { name: 'Steinbruch', w: 2, h: 2, work: 60, hp: [80], cost: [{ wood: 4 }], burn: 0.4 },

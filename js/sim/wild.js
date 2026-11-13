@@ -730,7 +730,8 @@
     const st = sim.state, d2 = d * d;
     for (const c of st.cities) { const dx = c.cx - x, dy = c.cy - y; if (dx * dx + dy * dy < d2) return false; }
     // ohne Städte: die ersten Startplätze des Weltgenerators freihalten (dort siedelt der Spieler zuerst)
-    if (!st.cities.length) for (const s of (sim._startSpots || []).slice(0, 4)) { const dx = s.x - x, dy = s.y - y; if (dx * dx + dy * dy < d2) return false; }
+    if (!st.wild.spots && sim._startSpots) st.wild.spots = sim._startSpots.slice(0, 4).map((p) => ({ x: p.x, y: p.y }));
+    if (!st.cities.length) for (const s of st.wild.spots || []) { const dx = s.x - x, dy = s.y - y; if (dx * dx + dy * dy < d2) return false; }
     return true;
   }
   function randomHabitatTile(sim, cr, minDist, tries) {
