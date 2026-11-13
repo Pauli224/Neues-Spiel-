@@ -25,7 +25,7 @@
     fireY: '#ffd23f', fireO: '#ff8a2a',
     plague: '#9cc23a', purple: '#8a5cc0', pink: '#f29db6', glass: '#7ccbe9',
     // Biome
-    shallowL: '#9adcf0', shallow: '#5bb4dc', riverL: '#b4e8f7', river: '#56aee8',
+    shallowL: '#9fe3ea', shallow: '#5cc0d4', riverL: '#c4ecfa', river: '#4f9fe6',
     desertL: '#f4cd80', desert: '#e3b062', desertD: '#c48a45',
     savL: '#d8d077', sav: '#bab456', savD: '#918d3e',
     jungleL: '#46b05e', jungle: '#23804a', jungleD: '#135332',
@@ -299,7 +299,22 @@
         ox: d.ox, oy: d.oy, fox: d.fw * 8 - w - d.ox
       };
     });
+    // Gelände-Varianten zählen (für terrainKey)
+    var TT = WW.TERRAIN || [];
+    for (var ti = 0; ti < TT.length; ti++) {
+      var tk = TT[ti].key, n = 0, list = [];
+      while (ENT['t_' + tk + '_' + n]) { list.push('t_' + tk + '_' + n); n++; }
+      TKEYS[ti] = list.length ? list : ['t_grass_0'];
+    }
     return S;
+  }
+  var TKEYS = [];
+  // Gelände-ID + Variantenwert (beliebige ganze Zahl, z. B. state.variant) -> Sprite-Schlüssel
+  function terrainKey(id, variant) {
+    if (!ready) init();
+    var list = TKEYS[id] || TKEYS[3] || ['t_grass_0'];
+    variant = variant | 0; if (variant < 0) variant = -variant;
+    return list[variant % list.length];
   }
 
   function teamAtlas(t) {
@@ -358,6 +373,7 @@
     has: function (k) { if (!ready) init(); return !!ENT[k]; },
     keys: function () { if (!ready) init(); return ORDER.slice(); },
     iconCanvas: iconCanvas,
+    terrainKey: terrainKey,
     TEAM_COLORS: TEAM_COLORS,
     PALETTE: PALETTE,
     // Werkzeuge für die Motiv-Dateien

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wuselwelt – Sprite-Vorschau</title>
+<style>
+  :root { color-scheme: dark; --tiefsee: #0f2a35; --pult: #1d3b47; --pult-hell: #2a5261; --kante: #0a1a21;
+    --papier: #f3ead2; --papier-matt: #b9c4b8; --bernstein: #f2b541; }
+  html, body { margin: 0; background: var(--tiefsee); color: var(--papier); font: 14px/1.4 system-ui, sans-serif; }
+  body { padding: 12px 16px 40px; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  h2 { font-size: 16px; margin: 0 0 8px; color: var(--bernstein); }
+  section { margin: 0 0 18px; padding: 10px; background: #12313d; border: 2px solid var(--kante); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+  .cell { background: var(--pult); border: 2px solid var(--kante); padding: 3px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .cell span { font-size: 10px; color: var(--papier-matt); max-width: 130px; overflow-wrap: anywhere; text-align: center; }
+  .cell.sel { background: var(--bernstein); }
+  .cell.sel span { color: #1d3b47; }
+  canvas { image-rendering: pixelated; display: block; }
+  .note { font-size: 12px; color: var(--papier-matt); margin: 0 0 6px; }
+</style>
+</head>
+<body>
+<h1>Wuselwelt – Sprite-Vorschau</h1>
+<div id="out"></div>
+<script src="../js/core/terrain.js"></script>
+<script src="../js/render/sprites.js"></script>
+<script src="../js/render/sprites-world.js"></script>
+<script src="../js/render/sprites-build.js"></script>
+<script src="../js/render/sprites-units.js"></script>
+<script src="../js/render/sprites-icons.js"></script>
+<script>
+(function () { 'use strict';
+  var S = WW.Sprites; S.init();
+  var out = document.getElementById('out');
+  var KEYS = S.keys();
+  var GOVS = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
+  var RACES = ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'];
+  var ROLES = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'child', 'trader', 'rebel', 'settler'];
+
+  function section(id, title, note) {
+    var s = document.createElement('section'); s.id = id;
+    var h = document.createElement('h2'); h.textContent = title; s.appendChild(h);
+    if (note) { var p = document.createElement('p'); p.className = 'note'; p.textContent = note; s.appendChild(p); }
+    var r = document.createElement('div'); r.className = 'row'; s.appendChild(r);
+    out.appendChild(s);
+    return r;
+  }
+  function canvas(w, h, scale) {
+    var c = document.createElement('canvas'); c.width = w * scale; c.height = h * scale;
+    var x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(scale, scale);
+    return { c: c, x: x };
+  }
+  function cell(row, label, cv, sel) {
+    var d = document.createElement('div'); d.className = 'cell' + (sel ? ' sel' : '');
+    d.appendChild(cv);
+    if (label) { var s = document.createElement('span'); s.textContent = label; d.appendChild(s); }
+    row.appendChild(d);
+  }
+  function ground(ctx, key, x0, y0, w, h, seed) {
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var k = key.indexOf('t_') === 0 ? key : S.terrainKey(WW.TERRAIN_BY_KEY[key].id, ((x * 7 + y * 13 + (seed || 0)) * 2654435761) >>> 3);
+      S.draw(ctx, k, x0 + x * 8, y0 + y * 8);
+    }
+  }
+  // Einzelnes Sprite auf Untergrund
+  function showSprite(row, key, opts) {
+    opts = opts || {};
+    var inf = S.info(key); if (!inf) return;
+    var bw = inf.fw * 8, bh = inf.fh * 8;
+    var top = Math.max(0, -inf.oy) + 2, side = Math.max(0, -inf.ox, inf.w - bw) + 2;
+    var W = bw + side * 2, H = bh + top + 2;
+    var sc = opts.scale || 4;
+    var k = canvas(W, H, sc);
+    if (opts.bg === 'pult') { k.x.fillStyle = '#1d3b47'; k.x.fillRect(0, 0, W, H); }
+    else if (opts.bg !== 'none') {
+      var bgk = opts.bg || 'grass', bid = WW.TERRAIN_BY_KEY[bgk].id, n = 0;
+      for (var y = top % 8 - 8; y < H; y += 8) for (var x = side % 8 - 8; x < W; x += 8) S.draw(k.x, S.terrainKey(bid, n++ * 7), x, y);
+    }
+    S.draw(k.x, key, side, top, { team: opts.team || 0, flip: opts.flip });
+    cell(row, opts.label === undefined ? key : opts.label, k.c, opts.sel);
+  }
+
+  // Lupe: ?keys=a,b,c&scale=8&bg=grass&team=0
+  var Q = new URLSearchParams(location.search);
+  if (Q.get('keys')) {
+    var rz = section('zoom', 'Lupe');
+    var want = Q.get('keys').split(',');
+    KEYS.filter(function (k) { return want.some(function (w) { return w.slice(-1) === '*' ? k.indexOf(w.slice(0, -1)) === 0 : k === w; }); })
+      .forEach(function (k) { showSprite(rz, k, { scale: +Q.get('scale') || 8, bg: Q.get('bg') || 'grass', team: +Q.get('team') || 0 }); });
+    return;
+  }
+
+  // ---------------------------------------------------------------- Biome
+  var r = section('biomes', 'Biom-Übersicht (alle 22 Geländetypen)', 'Je Biom eine 6×4-Fläche mit gemischten Varianten, darunter dieselbe Karte stark verkleinert (1 Pixel je Kachel aus dem Mittelwert).');
+  (function () {
+    var T = WW.TERRAIN, cols = 11, bw = 6, bh = 4, gap = 1;
+    var W = cols * (bw + gap) * 8, H = 2 * (bh + gap) * 8 + 8;
+    var k = canvas(W, H, 2);
+    k.x.fillStyle = '#0f2a35'; k.x.fillRect(0, 0, W, H);
+    T.forEach(function (t, i) {
+      var cx = (i % cols) * (bw + gap) * 8, cy = Math.floor(i / cols) * (bh + gap) * 8 + 8;
+      // Reihenweise von oben nach unten, damit Überhänge stimmen
+      for (var y = 0; y < bh; y++) for (var x = 0; x < bw; x++)
+        S.draw(k.x, S.terrainKey(t.id, x * 7 + y * 11 + i), cx + x * 8, cy + y * 8);
+    });
+    cell(r, '', k.c);
+    // verkleinert: Mittelwert-Farbe jedes Bodensprites
+    var avg = {};
+    var probe = document.createElement('canvas'); probe.width = 8; probe.height = 32;
+    var px = probe.getContext('2d');
+    function mean(key) {
+      if (avg[key]) return avg[key];
+      px.clearRect(0, 0, 8, 32); S.draw(px, key, 0, 16);
+      var d = px.getImageData(0, 16 - 8, 8, 16).data, rr = 0, gg = 0, bb = 0, n = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i + 3] > 200) { rr += d[i]; gg += d[i + 1]; bb += d[i + 2]; n++; }
+      return (avg[key] = 'rgb(' + (rr / n | 0) + ',' + (gg / n | 0) + ',' + (bb / n | 0) + ')');
+    }
+    var k2 = canvas(cols * 7, 2 * 5, 8);
+    k2.x.fillStyle = '#0f2a35'; k2.x.fillRect(0, 0, cols * 7, 10);
+    T.forEach(function (t, i) {
+      var cx = (i % cols) * 7, cy = Math.floor(i / cols) * 5;
+      for (var y = 0; y < 4; y++) for (var x = 0; x < 6; x++) { k2.x.fillStyle = mean(S.terrainKey(t.id, x * 7 + y * 11 + i)); k2.x.fillRect(cx + x, cy + y, 1, 1); }
+    });
+    cell(r, 'Minikarte (Mittelwerte)', k2.c);
+    var names = document.createElement('p'); names.className = 'note';
+    names.textContent = T.map(function (t, i) { return i + ' ' + t.name; }).join(' · ');
+    r.parentNode.appendChild(names);
+  })();
+
+  // Übergänge: Bänder nebeneinander
+  r = section('transitions', 'Übergänge', 'Meer → Flachwasser → Strand → Wiese → Savanne → Wüste; Wiese → Wald → Nadelwald → Tundra → Schneefeld; Hügel → Gebirge → Schneegipfel; Sumpf, Fluss, Blumen, Pilze, Kristall, Asche, Lava.');
+  (function () {
+    var bands = [
+      ['deep', 'water', 'shallow', 'sand', 'grass', 'savanna', 'desert'],
+      ['flowers', 'grass', 'forest', 'taiga', 'tundra', 'snowfield', 'snow'],
+      ['jungle', 'swamp', 'river', 'grass', 'hill', 'mountain', 'snow'],
+      ['mushroom', 'flowers', 'crystal', 'ash', 'lava', 'ash', 'desert']
+    ];
+    var bw = 4, W = bands[0].length * bw * 8, H = bands.length * 5 * 8 + 8;
+    var k = canvas(W, H, 2);
+    bands.forEach(function (b, j) {
+      for (var y = 0; y < 5; y++) b.forEach(function (key, i) {
+        for (var x = 0; x < bw; x++) {
+          // ausgefranste Kanten
+          var kk = key; var h = ((x * 13 + y * 7 + i * 3) * 2654435761 >>> 0) % 7;
+          if (x === 0 && i > 0 && h < 2) kk = b[i - 1];
+          if (x === bw - 1 && i < b.length - 1 && h < 2) kk = b[i + 1];
+          S.draw(k.x, S.terrainKey(WW.TERRAIN_BY_KEY[kk].id, x * 5 + y * 3 + i), (i * bw + x) * 8, 8 + (j * 5 + y) * 8);
+        }
+      });
+    });
+    cell(r, '', k.c);
+  })();
+
+  // ---------------------------------------------------------------- Galerie nach Gruppen
+  function gallery(id, title, filter, opts) {
+    var rr = section(id, title);
+    KEYS.filter(filter).forEach(function (key) { showSprite(rr, key, typeof opts === 'function' ? opts(key) : opts); });
+  }
+  gallery('ground', 'Boden-Sprites einzeln', function (k) { return /^t_/.test(k) && !/^t_foam/.test(k); }, function (k) { return { bg: 'none', scale: 4 }; });
+  gallery('foam', 'Uferschaum (Zusatz, auf Wasser)', function (k) { return /^t_foam/.test(k); }, { bg: 'water', scale: 3 });
+
+  window.__previewHelpers = { section: section, canvas: canvas, cell: cell, showSprite: showSprite, ground: ground, gallery: gallery, GOVS: GOVS, RACES: RACES, ROLES: ROLES };
+})();
+</script>
+</body>
+</html>
