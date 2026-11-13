@@ -23,7 +23,20 @@
     rockL: '#bab3c0', rock: '#8a8296', rockD: '#625a71',
     snowD: '#cfdcec', snowDD: '#a5badb',
     fireY: '#ffd23f', fireO: '#ff8a2a',
-    plague: '#9cc23a', purple: '#8a5cc0', pink: '#f29db6', glass: '#7ccbe9'
+    plague: '#9cc23a', purple: '#8a5cc0', pink: '#f29db6', glass: '#7ccbe9',
+    // Biome
+    shallowL: '#9adcf0', shallow: '#5bb4dc', riverL: '#b4e8f7', river: '#56aee8',
+    desertL: '#f4cd80', desert: '#e3b062', desertD: '#c48a45',
+    savL: '#d8d077', sav: '#bab456', savD: '#918d3e',
+    jungleL: '#46b05e', jungle: '#23804a', jungleD: '#135332',
+    swampL: '#839d68', swamp: '#5d7b52', swampD: '#405c44', murk: '#3e5f5a',
+    tundraL: '#c5cdb4', tundra: '#a9b59a', tundraD: '#87927d',
+    pineL: '#57a378', pine: '#2f7158', pineD: '#1d4a41',
+    mushL: '#c690c8', mush: '#9f5ba6', mushD: '#683a78',
+    crysL: '#cbf7f1', crys: '#7fd8d1', crysD: '#3c97a8',
+    ashL: '#76717b', ash: '#524e58', ashD: '#37343d', lavaD: '#7c2a22',
+    // Völker
+    orcL: '#adbe68', orc: '#869a4a', orcD: '#5a6b31'
   };
   var NAMES = Object.keys(PALETTE);
   var C = {};
@@ -55,7 +68,8 @@
     j: 'goldL', k: 'gold', K: 'goldD', r: 'red', R: 'redD',
     f: 'leafL', e: 'leaf', E: 'leafD', x: 'leafDD', i: 'grassL', I: 'grass',
     a: 'sand', A: 'sandD', h: 'soil', b: 'glass', B: 'waterD', F: 'fireY', Q: 'fireO',
-    p: 'pink', P: 'purple', X: 'plague', N: 'snowD', H: 'hillD'
+    p: 'pink', P: 'purple', X: 'plague', N: 'snowD', H: 'hillD',
+    U: 'orc', V: 'orcD', Z: 'orcL'
   };
   var CHAR = {};
   Object.keys(LEGEND).forEach(function (ch) { CHAR[ch] = C[LEGEND[ch]]; });

@@ -1,0 +1,255 @@
+// Datengetriebene Spielwerte: Tempo, Regierungen, Völker, Bauwerke, Rollen, Gesetze.
+// Gelände steht ausschließlich in js/core/terrain.js (WW.TERRAIN, WW.T, WW.TERRAIN_LUT).
+(function (WW) { 'use strict';
+
+  // ---------------------------------------------------------------------------
+  // Allgemeine Tempo- und Balancewerte
+  // ---------------------------------------------------------------------------
+  WW.CONFIG = {
+    VERSION: 1,
+    TPS: 10,                  // Ticks pro Sekunde bei 1×
+    TPY: 240,                 // Ticks pro Jahr (24 s bei 1×)
+    MAX_UNITS: 1500,
+    MAX_ANIMALS: 240,
+    MAX_EVENTS: 400,
+    UNIT_SPEED: 0.075,        // Kacheln pro Tick bei walk = 1
+    ADULT_AGE: 6,             // Jahre
+    LIFESPAN: 62,             // Jahre (± 14, mal Volksfaktor)
+    FOOD_PER_YEAR: 2.4,       // Nahrung je Kopf und Jahr
+    BIRTH_RATE: 0.0075,       // Geburtschance je Erwachsenem und Sekunde (bei Platz + Essen)
+    START_STOCK: { food: 36, wood: 26, stone: 4, gold: 0 },
+    HARVEST: 6,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
+    CHOP: 3, MINE: 2,         // Holz/Stein je Gang
+    FISH: 3,
+    FIELD_STAGE_TICKS: 90,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
+    BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
+    BASE_DMG: 4, SOLDIER_DMG: 9,
+    WALL_MARGIN: 2.6,         // Abstand Ring zu Kerngebäuden
+    WALL_EXPAND_MARGIN: 4.6,
+    WALL_EXPAND_YEARS: 4,     // frühestens alle n Jahre erweitern
+    TOWER_RANGE: 5.5, TOWER_DMG: 7, TOWER_COOLDOWN: 14,
+    PATH_BUDGET: 26000,       // A*-Knoten pro Tick weltweit
+    PATH_LIMIT: 2500,         // Knotenlimit je Suche (normal)
+    PATH_LIMIT_LONG: 14000,   // Siedler, Heere, Händler
+    TERRITORY_BASE: 6,
+    SETTLER_DIST_MIN: 15, SETTLER_DIST_MAX: 34
+  };
+
+  // ---------------------------------------------------------------------------
+  // Stadtstufen
+  // ---------------------------------------------------------------------------
+  WW.CITY_TIERS = [
+    { key: 'camp', name: 'Lager', minPop: 0 },
+    { key: 'village', name: 'Dorf', minPop: 8 },
+    { key: 'town', name: 'Stadt', minPop: 20 },
+    { key: 'city', name: 'Großstadt', minPop: 40 }
+  ];
+
+  // ---------------------------------------------------------------------------
+  // Regierungen
+  // ---------------------------------------------------------------------------
+  WW.GOV_KEYS = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
+
+  // Standardwerte, die jede Regierung überschreiben kann
+  const GOV_BASE = {
+    wallThreshold: 10, wallMax: 3, wallHpMul: 1, wallSpeedMul: 1, buildMul: 1, workMul: 1,
+    happiness: 0, growthMul: 1, soldierShare: 0.1, goldMul: 1, taxes: 0, aggression: 0.35,
+    militia: false, noLeader: false, sharedStock: false, noMarket: false, barricades: false,
+    neverWar: false, traders: false, mercenaries: false, buysPeace: false
+  };
+
+  const G = {
+    tribe: {
+      name: 'Stammesrat', titleM: 'Häuptling', titleF: 'Häuptlingin', realm: 'Stamm',
+      centerName: 'Langhaus mit Lagerfeuer', monumentName: 'Totempfahl',
+      desc: 'Man sitzt ums Feuer, bis jemand eine Entscheidung trifft oder das Holz ausgeht.',
+      pros: ['Zufriedenheit +5', 'Entwickelt sich ab Stadtgröße weiter'],
+      cons: ['Nur Palisaden (Stufe 1)', 'Mauer erst ab 14 Einwohnern'],
+      wallThreshold: 14, wallMax: 1, happiness: 5, soldierShare: 0.08, aggression: 0.35
+    },
+    monarchy: {
+      name: 'Monarchie', titleM: 'König', titleF: 'Königin', realm: 'Königreich',
+      centerName: 'Burg', monumentName: 'Reiterstandbild',
+      desc: 'Einer trägt die Krone, alle anderen tragen die Steuern.',
+      pros: ['Mauern früh (ab 8 Einw.)', 'Mauern +30 % stabiler', 'Steuern bringen Gold'],
+      cons: ['Erbfolge mit Thronstreit-Gefahr', 'Steuern drücken die Laune'],
+      wallThreshold: 8, wallHpMul: 1.3, taxes: 0.02, happiness: -3, soldierShare: 0.13, aggression: 0.5
+    },
+    democracy: {
+      name: 'Demokratie', titleM: 'Kanzler', titleF: 'Kanzlerin', realm: 'Freistaat',
+      centerName: 'Rathaus', monumentName: 'Wahlurnen-Brunnen',
+      desc: 'Alle sechs Jahre darf jeder mitreden, dazwischen redet jeder trotzdem mit.',
+      pros: ['Zufriedenheit +15', 'Wachstum +15 %', 'Wahlen mit Bonus der Siegerpartei'],
+      cons: ['Wenige Soldaten', 'Erklärt selten Krieg'],
+      happiness: 15, growthMul: 1.15, soldierShare: 0.05, aggression: 0.12
+    },
+    fascism: {
+      name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Strammstaat',
+      centerName: 'Kommandantur', monumentName: 'Propagandaturm',
+      desc: 'Alles ist geregelt, sogar die Freude, und die ist leider gestrichen.',
+      pros: ['Sehr viele Soldaten', 'Mauern ab 6 Einw. und +50 % schneller', 'Arbeit +15 % (Zwang)'],
+      cons: ['Zufriedenheit −25', 'Widerstand und Aufstände', 'Keiner mag das Regime'],
+      wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9
+    },
+    communism: {
+      name: 'Kommunismus', titleM: 'Generalsekretär', titleF: 'Generalsekretärin', realm: 'Volksrepublik',
+      centerName: 'Volkshaus', monumentName: 'Planerfüllungsdenkmal',
+      desc: 'Alles gehört allen, nur der Schlüssel zum Lager gehört dem Ausschuss.',
+      pros: ['Gemeinsames Lager aller Städte', 'Bauen +25 %', 'Fünfjahresplan +50 % auf Schwerpunkt'],
+      cons: ['Arbeitstempo −10 % (Schlendrian)', 'Kein Markt, kein Gold'],
+      buildMul: 1.25, workMul: 0.9, sharedStock: true, noMarket: true, goldMul: 0, soldierShare: 0.12, aggression: 0.45
+    },
+    theocracy: {
+      name: 'Theokratie', titleM: 'Hohepriester', titleF: 'Hohepriesterin', realm: 'Gottesstaat',
+      centerName: 'Tempel', monumentName: 'Schrein',
+      desc: 'Die Gottheit hat zu allem eine Meinung, ausgerichtet von der Priesterschaft.',
+      pros: ['Schrein hebt die Laune', 'Gelegentliche Wunder', 'Zufriedenheit +5'],
+      cons: ['Arbeit −10 % (Beten)', 'Heilige Kriege gegen Andersgläubige'],
+      happiness: 5, workMul: 0.9, soldierShare: 0.1, aggression: 0.55
+    },
+    republic: {
+      name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsrepublik',
+      centerName: 'Kontor', monumentName: 'Goldene Waage',
+      desc: 'Jedes Problem hat einen Preis, und der Rat kennt ihn auswendig.',
+      pros: ['Gold ×2', 'Händler zwischen den Städten', 'Söldner und Freikauf aus Kriegen'],
+      cons: ['Kaum eigene Soldaten', 'Abhängig vom Geldbeutel'],
+      goldMul: 2, happiness: 3, soldierShare: 0.04, aggression: 0.2, traders: true, mercenaries: true, buysPeace: true
+    },
+    anarchy: {
+      name: 'Anarchie', titleM: '', titleF: '', realm: 'Freie Kommune',
+      centerName: 'Kommune', monumentName: 'Plenumslinde',
+      desc: 'Niemand hat das Sagen, dafür sagen alle sehr viel.',
+      pros: ['Zufriedenheit +10', 'Alle verteidigen als Miliz', 'Erklärt nie Krieg'],
+      cons: ['Kein Anführer, keine Armee', 'Nur Barrikaden mit Lücken'],
+      wallThreshold: 12, wallMax: 1, wallHpMul: 0.55, happiness: 10, soldierShare: 0, aggression: 0,
+      militia: true, noLeader: true, barricades: true, neverWar: true
+    }
+  };
+  WW.GOVERNMENTS = {};
+  for (const k of WW.GOV_KEYS) WW.GOVERNMENTS[k] = Object.freeze(Object.assign({ key: k }, GOV_BASE, G[k]));
+
+  // Meinungsdrift pro Jahr zwischen zwei Regierungsformen
+  const COMPAT = {
+    'democracy|democracy': 5, 'democracy|republic': 3, 'democracy|fascism': -6, 'democracy|anarchy': 1,
+    'democracy|monarchy': 0, 'democracy|communism': -1,
+    'fascism|fascism': -2, 'fascism|communism': -6, 'fascism|anarchy': -7, 'fascism|monarchy': -2,
+    'fascism|theocracy': -3, 'fascism|republic': -4, 'fascism|tribe': -3,
+    'communism|communism': 4, 'communism|republic': -5, 'communism|monarchy': -3, 'communism|anarchy': 1,
+    'theocracy|theocracy': 1, 'theocracy|anarchy': -2,
+    'monarchy|monarchy': 1, 'monarchy|anarchy': -3, 'monarchy|republic': 1,
+    'republic|republic': 3, 'anarchy|anarchy': 4, 'tribe|tribe': 0
+  };
+  WW.govCompat = function (a, b) {
+    const k1 = a + '|' + b, k2 = b + '|' + a;
+    if (k1 in COMPAT) return COMPAT[k1];
+    if (k2 in COMPAT) return COMPAT[k2];
+    return -0.5;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Völker
+  // ---------------------------------------------------------------------------
+  WW.RACE_KEYS = ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'];
+  const RACE_BASE = {
+    speed: 1, hp: 1, strength: 1, lifespan: 1, fertility: 1,
+    yields: { food: 1, wood: 1, stone: 1 }, wallMul: 1, housingBonus: 0, aggression: 0,
+    favTerrain: ['grass'], walkOverride: null, buildOn: null, noDeforest: false, ranged: false, fishing: false
+  };
+  const R = {
+    human: {
+      name: 'Menschen', singular: 'Mensch', adjective: 'menschlich',
+      desc: 'Können alles ein bisschen und nichts so richtig, sind damit aber sehr zufrieden.',
+      favTerrain: ['grass', 'flowers', 'savanna'],
+      govPrefs: { tribe: 3, monarchy: 3, democracy: 2, fascism: 0.8, communism: 1, theocracy: 1, republic: 2, anarchy: 0.8 }
+    },
+    elf: {
+      name: 'Elfen', singular: 'Elf', adjective: 'elfisch',
+      desc: 'Schlank, schnell, uralt und ein wenig hochnäsig gegenüber Bäumefällern.',
+      speed: 1.15, hp: 0.9, strength: 0.95, lifespan: 2.2, fertility: 0.5,
+      yields: { food: 0.9, wood: 1.1, stone: 0.8 }, noDeforest: true, ranged: true,
+      favTerrain: ['forest', 'jungle', 'mushroom', 'taiga'],
+      govPrefs: { tribe: 1, monarchy: 2, democracy: 2, fascism: 0.2, communism: 0.5, theocracy: 3, republic: 2, anarchy: 1 }
+    },
+    dwarf: {
+      name: 'Zwerge', singular: 'Zwerg', adjective: 'zwergisch',
+      desc: 'Klein, zäh, langsam, und sie hören das Gestein flüstern. Meistens sagt es „Stein".',
+      speed: 0.85, hp: 1.3, strength: 1.2, lifespan: 1.5, fertility: 0.8,
+      yields: { food: 0.9, wood: 0.9, stone: 2 }, wallMul: 1.3,
+      favTerrain: ['hill', 'tundra', 'crystal'],
+      govPrefs: { tribe: 2, monarchy: 4, democracy: 1, fascism: 0.5, communism: 1, theocracy: 1, republic: 3, anarchy: 0.4 }
+    },
+    orc: {
+      name: 'Orks', singular: 'Ork', adjective: 'orkisch',
+      desc: 'Stark, laut, kinderreich und überzeugt, dass jeder Streit eine Einladung ist.',
+      hp: 1.5, strength: 1.4, lifespan: 0.8, fertility: 1.4, aggression: 0.3,
+      yields: { food: 0.7, wood: 1, stone: 1.1 },
+      favTerrain: ['savanna', 'desert', 'ash'],
+      govPrefs: { tribe: 4, monarchy: 2, democracy: 0.4, fascism: 1.6, communism: 1, theocracy: 1, republic: 0.5, anarchy: 1 }
+    },
+    gnome: {
+      name: 'Wichtel', singular: 'Wichtel', adjective: 'wichtelig',
+      desc: 'Winzig, flink und so zahlreich, dass keiner sie je vollständig gezählt hat.',
+      speed: 1.15, hp: 0.6, strength: 0.6, lifespan: 0.9, fertility: 1.9, housingBonus: 2,
+      favTerrain: ['flowers', 'mushroom', 'grass'],
+      govPrefs: { tribe: 1, monarchy: 0.5, democracy: 3, fascism: 0.2, communism: 2, theocracy: 1, republic: 1, anarchy: 4 }
+    },
+    frog: {
+      name: 'Froschlinge', singular: 'Froschling', adjective: 'froschig',
+      desc: 'Quakfreudige Sumpfbewohner, die in jedem Fluss eine Abkürzung sehen.',
+      walkOverride: { river: 1.1, swamp: 1.1 }, buildOn: ['swamp'], fishing: true,
+      favTerrain: ['swamp', 'grass', 'jungle'],
+      govPrefs: { tribe: 2, monarchy: 1, democracy: 2, fascism: 0.3, communism: 1, theocracy: 3, republic: 1, anarchy: 2 }
+    }
+  };
+  WW.RACES = {};
+  for (const k of WW.RACE_KEYS) WW.RACES[k] = Object.freeze(Object.assign({ key: k }, RACE_BASE, R[k]));
+
+  // ---------------------------------------------------------------------------
+  // Bauwerke
+  // ---------------------------------------------------------------------------
+  // work: Arbeitsmenge in Baumeister-Ticks; hp/cost je Stufe (Index 0 = Stufe 1)
+  WW.STRUCT_INFO = {
+    center:   { name: 'Zentrum', w: 2, h: 2, core: true, work: 160, hp: [320, 320, 320], cost: [{ wood: 10 }], burn: 0.3 },
+    house:    { name: 'Haus', core: true, work: 70, hp: [40, 70, 110], cost: [{ wood: 5 }, { wood: 4, stone: 4 }, { stone: 6, gold: 3 }], burn: 1 },
+    field:    { name: 'Feld', work: 22, hp: [20], cost: [{}], burn: 1 },
+    lumber:   { name: 'Holzfällerhütte', work: 60, hp: [50], cost: [{ wood: 4 }], burn: 1 },
+    quarry:   { name: 'Steinbruch', work: 60, hp: [60], cost: [{ wood: 4 }], burn: 0.4 },
+    barracks: { name: 'Kaserne', core: true, work: 130, hp: [140], cost: [{ wood: 8, stone: 4 }], burn: 0.6 },
+    market:   { name: 'Markt', core: true, work: 120, hp: [100], cost: [{ wood: 8, stone: 2 }], burn: 1 },
+    monument: { name: 'Denkmal', core: true, work: 180, hp: [160], cost: [{ stone: 10, gold: 4 }], burn: 0 },
+    wall:     { name: 'Mauer', work: 40, hp: [60, 220, 420], cost: [{ wood: 2 }, { stone: 2 }, { stone: 3 }], burn: 1 },
+    gate:     { name: 'Tor', work: 70, hp: [55, 190, 380], cost: [{ wood: 4 }, { stone: 4 }, { stone: 6 }], burn: 1 },
+    tower:    { name: 'Turm', work: 90, hp: [80, 300, 520], cost: [{ wood: 3 }, { stone: 5 }, { stone: 7 }], burn: 0.5 },
+    ruin:     { name: 'Ruine', work: 1, hp: [1], cost: [{}], burn: 0 }
+  };
+  WW.WALL_STYLES = ['palisade', 'stone', 'fortress'];
+  WW.WALL_STYLE_NAMES = { palisade: 'Palisade', stone: 'Steinmauer', fortress: 'Festungsmauer', barricade: 'Barrikade' };
+
+  // ---------------------------------------------------------------------------
+  // Rollen, Sprechblasen, Tiere
+  // ---------------------------------------------------------------------------
+  WW.ROLE_KEYS = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'leader', 'child', 'trader', 'rebel', 'settler'];
+  WW.ROLE_NAMES = {
+    farmer: 'Bauer', lumberjack: 'Holzfäller', miner: 'Steinmetz', builder: 'Baumeister', soldier: 'Soldat',
+    leader: 'Anführer', child: 'Kind', trader: 'Händler', rebel: 'Rebell', settler: 'Siedler'
+  };
+  WW.ROLE_NAMES_F = {
+    farmer: 'Bäuerin', lumberjack: 'Holzfällerin', miner: 'Steinmetzin', builder: 'Baumeisterin', soldier: 'Soldatin',
+    leader: 'Anführerin', child: 'Kind', trader: 'Händlerin', rebel: 'Rebellin', settler: 'Siedlerin'
+  };
+  WW.BUBBLES = ['heart', 'bread', 'skull', 'exclaim', 'zzz', 'ballot', 'crown', 'angry', 'note', 'hammer', 'question'];
+
+  // ---------------------------------------------------------------------------
+  // Weltgesetze
+  // ---------------------------------------------------------------------------
+  WW.LAW_INFO = [
+    { key: 'govChanges', name: 'Regierungen ändern sich von selbst', desc: 'Revolutionen, Putsche und Stämme, die erwachsen werden.', def: true },
+    { key: 'wars', name: 'Kriege erlaubt', desc: 'Reiche dürfen sich von selbst den Krieg erklären.', def: true },
+    { key: 'hunger', name: 'Hunger', desc: 'Ohne Essen wird man grantig und irgendwann gar nichts mehr.', def: true },
+    { key: 'aging', name: 'Altern', desc: 'Bewohner werden alt und sterben irgendwann friedlich.', def: true },
+    { key: 'disasters', name: 'Zufallskatastrophen', desc: 'Ab und zu schlägt ein Blitz ein oder eine Seuche geht um.', def: true }
+  ];
+  WW.LAW_DEFAULTS = {};
+  for (const l of WW.LAW_INFO) WW.LAW_DEFAULTS[l.key] = l.def;
+
+})(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
