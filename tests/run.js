@@ -669,9 +669,9 @@ test('10 Loyalität, Abspaltung, Statthalter, Tochterstadt-Regeln', function () 
   log('Loyalität', c.name, Math.round(c.loyalty), 'Ziel', Math.round(WW.Growth.loyaltyTarget(sim, c, k)));
   // Fremdes Volk senkt die Loyalität
   const hap0 = c.happiness; c.happiness = 30;   // unter der Obergrenze vergleichen
-  const own = WW.Growth.loyaltyTarget(sim, c, k);
-  const race0 = c.race; c.race = WW.RACE_KEYS.find(r => r !== k.race);
-  assert(WW.Growth.loyaltyTarget(sim, c, k) < own, 'fremdes Volk ohne Malus');
+  const own = WW.Growth.loyaltyRaw(sim, c, k);
+  const race0 = c.race; c.race = WW.RACE_KEYS.filter(r => r !== k.race).sort((x, y) => (WW.RACES[x].govPrefs[k.gov] || 1) - (WW.RACES[y].govPrefs[k.gov] || 1))[0];
+  assert(WW.Growth.loyaltyRaw(sim, c, k) < own, 'fremdes Volk ohne Malus');
   c.race = race0; c.happiness = hap0;
   // Abspaltung: Loyalität unter null -> Vorhaben -> eigenes Reich
   const kn = st.kingdoms.length, oldK = k.id;
@@ -779,6 +779,7 @@ test('7 Leistung (~800 Einheiten auf 144×96)', function () {
   }
   run(sim, 200);
   const n0 = sim.state.units.length;
+  const cpu0 = process.cpuUsage();
   const t0 = process.hrtime.bigint();
   const T = 2000;
   let worst = 0;
@@ -788,7 +789,10 @@ test('7 Leistung (~800 Einheiten auf 144×96)', function () {
     const d = Number(process.hrtime.bigint() - a) / 1e6;
     if (d > worst) worst = d;
   }
-  const ms = Number(process.hrtime.bigint() - t0) / 1e6 / T;
+  const wall = Number(process.hrtime.bigint() - t0) / 1e6 / T;
+  const cu = process.cpuUsage(cpu0);
+  const ms = wall;
+  log('Wanduhr', wall.toFixed(3), 'ms/Tick · CPU-Zeit des Prozesses (inkl. GC-Threads)', ((cu.user + cu.system) / 1000 / T).toFixed(3), 'ms/Tick');
   log('Einheiten', n0, '→', sim.state.units.length, '· Städte', sim.state.cities.length, '·', ms.toFixed(3), 'ms/Tick im Mittel · schlechtester Tick', worst.toFixed(2), 'ms');
   globalThis.__perf = ms;
   assert(ms < 1.5, 'zu langsam: ' + ms.toFixed(3) + ' ms/Tick');

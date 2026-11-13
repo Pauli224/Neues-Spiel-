@@ -660,7 +660,7 @@
       chron(sim, type, { city: c.name, foe: foe }, WW.Cities.atCity(c), c.id, WW.CONFIG.TPY * 2);
     }
     let n = 0;
-    const fr = type === 'alarmBeasts' ? 0 : 6;
+    const fr = type === 'alarmBeasts' ? 0 : 4;
     for (const u of c._members || []) {
       if (n >= 14) break;
       const dx = u.x - threat.x, dy = u.y - threat.y;
@@ -713,7 +713,7 @@
     const px = home ? home.x + 0.5 : a.x, py = home ? home.y + 0.5 : a.y;
     if (sim.rng.chance(home ? 0.35 : 0.3)) {
       let best = null, bd = (home ? 40 : 30) ** 2;
-      for (const c of st.cities) { if (!sturdy(sim, c) || c.pop < 25) continue; const dx = c.cx - px, dy = c.cy - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
+      for (const c of st.cities) { if (c.pop < 40 || st.year - (c.founded || 0) < 15) continue; const dx = c.cx - px, dy = c.cy - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; } }
       if (best) {
         const x = Math.max(0, Math.min(st.W - 1, best.cx + sim.rng.irange(-4, 4))), y = Math.max(0, Math.min(st.H - 1, best.cy + sim.rng.irange(-4, 4)));
         chron(sim, 'dragonRaid', { city: best.name }, WW.Cities.atCity(best), best.id, WW.CONFIG.TPY);
@@ -722,6 +722,7 @@
     }
     const x = Math.floor(px + sim.rng.range(-20, 20)), y = Math.floor(py + sim.rng.range(-20, 20));
     if (x < 0 || y < 0 || x >= st.W || y >= st.H) return null;
+    if (cityDist2(sim, x, y) < 16 * 16) return null;   // Streifzüge nur fern von Siedlungen
     return { i: y * st.W + x, cityId: -1 };
   }
 

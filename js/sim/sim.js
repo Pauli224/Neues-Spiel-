@@ -301,6 +301,8 @@
     WW.Units.updateAll(this);
     WW.Creatures.updateAll(this);
     WW.Env.update(this);
+    if (WW.Mods && st.tick % 10 === 3) WW.Mods.tick(this);   // [events]
+    if (WW.Events) WW.Events.tick(this);   // [events]
     if (st.tick % 10 === 0) WW.Cities.updateAll(this);
     if (st.tick % 20 === 5) WW.Gov.update(this);
     if (st.tick % 40 === 15) { WW.Cities.stats(this); WW.Diplo.update(this); }
@@ -390,6 +392,7 @@
     }
     st.worldName = st.worldName || 'Wuselwelt';
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
+    if (WW.Events) WW.Events.defaults(st);   // [events] mods, laws, Ereignis-Zustand
   }
 
   // ---------------------------------------------------------------------------
@@ -445,6 +448,7 @@
     // ein Schritt Statistik, damit Abfragen sofort stimmen
     WW.Cities.stats(sim);
     WW.Cities.refreshAllLists(sim);
+    if (WW.Events) WW.Events.defaults(st);   // [events]
     return sim;
   }
 
@@ -674,6 +678,10 @@
       setGovernment: safe(setGovernment), setGovLocked: safe(setGovLocked), setRelation: safe(setRelation),
       strike: safe(strike), setLaw: safe(setLaw)
     };
+    if (WW.Events) {   // [events] Reichsgesetze
+      acts.setRealmLaw = safe(function (kid, key, v, o) { return WW.Events.setRealmLaw(sim, kid, key, v, o); });   // [events]
+      acts.setRealmLawLocked = safe(function (kid, key, v) { return WW.Events.setRealmLawLocked(sim, kid, key, v); });   // [events]
+    }   // [events]
     if (WW.Wild) Object.assign(acts, WW.Wild.actions(sim, safe));   // [wild] grab, drop, held, aimAircraft, placeLair, spawnBandits
     return acts;   // [wild]
   }

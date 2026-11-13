@@ -75,14 +75,15 @@
     const st = sim.state, d = dims(st);
     const cf = flurAt(st, city.cx, city.cy);
     const cfx = cf % d.fw, cfy = (cf - cfx) / d.fw;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    // Anfangsgebiet groß genug für Felder vor der künftigen Mauer
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const fx = cfx + dx, fy = cfy + dy;
       if (fx < 0 || fy < 0 || fx >= d.fw || fy >= d.fh) continue;
       const fi = fy * d.fw + fx;
       if (st.flur[fi] !== -1 && st.flur[fi] !== city.id) continue;
       const c = flurCenter(st, fi);
       const dd = Math.hypot(c.x - city.cx - 0.5, c.y - city.cy - 0.5);
-      if (dd > 9.5 && !(dx === 0 && dy === 0)) continue;
+      if (dd > C().FLUR_START_RADIUS && !(dx === 0 && dy === 0)) continue;
       if (flurLand(sim, fi, city.race).walk < 4 && !(dx === 0 && dy === 0)) continue;
       setFlur(sim, fi, city.id);
     }
@@ -269,8 +270,12 @@
   }
 
   function loyaltyTarget(sim, city, k) {
-    const st = sim.state;
     if (k.capitalId === city.id) return 100;
+    return WW.SimUtil.clamp(loyaltyRaw(sim, city, k), -100, 100);
+  }
+  // Loyalität ohne Begrenzung (für Vergleiche)
+  function loyaltyRaw(sim, city, k) {
+    const st = sim.state;
     const cap = sim._cities.get(k.capitalId);
     let l = 55;
     l += (city.happiness - 50) * 0.5;
@@ -290,7 +295,7 @@
     if (city.hungry) l -= 10;
     if (k.policy && k.policy.unrest && st.year < k.policy.unrest) l -= 20;
     if (city.agitated && st.year - city.agitated < 4) l -= 10;
-    return WW.SimUtil.clamp(WW.SimUtil.mod(sim, k, city, 'loyalty', l), -100, 100);
+    return WW.SimUtil.mod(sim, k, city, 'loyalty', l);
   }
 
   // Stadt spaltet sich ab; Nachbarn mit schwacher Bindung gehen mit
@@ -509,7 +514,7 @@
     FLUR: F, dims: dims, ensure: ensure, flurAt: flurAt, flurCenter: flurCenter, setFlur: setFlur, countFlurs: countFlurs,
     reach: reach, claimInitial: claimInitial, claimNext: claimNext, claimTiles: claimTiles, releaseCity: releaseCity,
     cutOff: cutOff, warFlips: warFlips, makeGovernor: makeGovernor, ensureRuler: ensureRuler, cityLimit: cityLimit,
-    loyaltyTarget: loyaltyTarget, secedeByLoyalty: secedeByLoyalty, planWar: planWar, planAlliance: planAlliance,
+    loyaltyTarget: loyaltyTarget, loyaltyRaw: loyaltyRaw, secedeByLoyalty: secedeByLoyalty, planWar: planWar, planAlliance: planAlliance,
     addPlot: addPlot, removePlot: removePlot, updatePlots: updatePlots, emigrate: emigrate, freeSite: freeSite,
     update: update, yearly: yearly, QUIRKS: QUIRKS
   };

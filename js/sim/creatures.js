@@ -414,13 +414,14 @@
         } else if (a.state === 1) {                // fliegt hin
           if (a.tx < 0) { a.state = 2; a.t = 4; }
         } else if (a.state === 2) {                // speit Feuer
-          if (a.cd <= 0) breathe(sim, a, a.x + sim.rng.range(-1.5, 1.5), a.y + 1 + sim.rng.range(-1, 1));
+          // ohne Raubzug-Befehl kein Feuer nahe Siedlungen
+          if (a.cd <= 0 && (a.raidCity >= 0 || !WW.Wild || WW.Wild.cityDist2(sim, a.x, a.y) > 16 * 16)) breathe(sim, a, a.x + sim.rng.range(-1.5, 1.5), a.y + 1 + sim.rng.range(-1, 1));
           if (--a.t <= 0) {
             a.state = 3;
             if (home) a.tx = home.y * st.W + home.x; else wanderTarget(sim, a, cr, 20);
           }
         } else if (a.tx < 0) {                     // zurück
-          a.state = 0; a.t = home ? 900 + sim.rng.int(1500) : 300 + sim.rng.int(400);
+          a.state = 0; a.raidCity = -1; a.t = home ? 900 + sim.rng.int(1500) : 300 + sim.rng.int(400);
         }
       }
       moveOn(sim, a, cr, a.state === 0 ? 0.5 : 1);

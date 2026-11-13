@@ -341,6 +341,8 @@
         ox: d.ox, oy: d.oy, fox: d.fw * 8 - w - d.ox
       };
     });
+    // Umleitungen alter Schlüssel (z. B. Figuren auf das feine Raster)
+    Object.keys(ALIAS).forEach(function (k) { ENT[k] = { alias: ALIAS[k] }; });
     // Gelände-Varianten zählen (für terrainKey)
     var TT = WW.TERRAIN || [];
     for (var ti = 0; ti < TT.length; ti++) {
@@ -368,9 +370,58 @@
   function normTeam(t) { t = t | 0; return t >= 0 && t < 12 ? t : ((t % 12) + 12) % 12; }
 
   // Schnellweg ohne Optionsobjekt (für den Renderer).
+  // ---------------------------------------------------------------------------
+  // Träge Sprites: Generatoren für sehr viele Kombinationen (z. B. Figuren je Volk × Tracht × Rolle).
+  // Ein Generator liefert { grid, scale, anchor } und wird erst beim ersten Zeichnen aufgerufen;
+  // das Ergebnis wird je Teamfarbe (und gespiegelt) als eigenes kleines Canvas gecacht.
+  var LAZY = [];      // [{ prefix, fn }]
+  var ALIAS = {};     // alter Schlüssel -> neuer Schlüssel
+  function lazyDef(prefix, fn) { LAZY.push({ prefix: prefix, fn: fn }); }
+  function makeLazy(key) {
+    for (var i = 0; i < LAZY.length; i++) {
+      if (key.indexOf(LAZY[i].prefix) !== 0) continue;
+      var r = LAZY[i].fn(key);
+      if (!r) return null;
+      var g = r.grid, sc = r.scale || 1, w = g.w, h = g.h;
+      var dw = w * sc, dh = h * sc, fw = r.fw || 1, fh = r.fh || 1;
+      var ox = r.ox != null ? r.ox : (fw * 8 - dw) / 2, oy = r.oy != null ? r.oy : fh * 8 - dh;
+      var e = { lazy: true, grid: g, team: g.hasTeam(), w: w, h: h, dw: dw, dh: dh, fw: fw, fh: fh, scale: sc,
+        ox: ox, oy: oy, fox: fw * 8 - dw - ox, cv: [], cvF: [] };
+      ENT[key] = e;
+      return e;
+    }
+    return null;
+  }
+  function bakeOne(e, t, flip) {
+    var cv = makeCanvas(e.w, e.h);
+    if (!cv) return null;
+    var ctx = cv.getContext('2d'), img = ctx.createImageData(e.w, e.h), px = new Uint32Array(img.data.buffer);
+    var tab = e.team ? (TEAMTAB[t] || (TEAMTAB[t] = teamTable(t))) : NEUTRAL, g = e.grid;
+    for (var y = 0; y < e.h; y++) for (var x = 0; x < e.w; x++) {
+      var c = g.d[y * e.w + x];
+      if (c) px[y * e.w + (flip ? e.w - 1 - x : x)] = tab[c];
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+  var TEAMTAB = [];
+  function entry(key) {
+    var e = ENT[key];
+    if (e) return e.alias ? entry(e.alias) : e;
+    if (!ready) { init(); e = ENT[key]; if (e) return e.alias ? entry(e.alias) : e; }
+    if (ALIAS[key]) return entry(ALIAS[key]);
+    return makeLazy(key);
+  }
+
   function drawFast(ctx, key, x, y, team, flip) {
     var e = ENT[key];
-    if (!e) { if (!ready) { init(); e = ENT[key]; } if (!e) return; }
+    if (!e || e.alias) { e = entry(e && e.alias ? e.alias : key); if (!e) return; }
+    if (e.lazy) {
+      var t = e.team ? normTeam(team) : 0, arr = flip ? e.cvF : e.cv;
+      var c = arr[t] || (arr[t] = bakeOne(e, t, flip));
+      if (c) ctx.drawImage(c, 0, 0, e.w, e.h, x + (flip ? e.fox : e.ox), y + e.oy, e.dw, e.dh);
+      return;
+    }
     var src = e.team ? (teamCanvas[team] || teamAtlas(normTeam(team))) : baseCanvas;
     if (flip) ctx.drawImage(src, e.fx, e.fy, e.w, e.h, x + e.fox, y + e.oy, e.w, e.h);
     else ctx.drawImage(src, e.x, e.y, e.w, e.h, x + e.ox, y + e.oy, e.w, e.h);
@@ -387,17 +438,23 @@
     } else drawFast(ctx, key, x, y, opts.team | 0, !!opts.flip);
   }
 
+  // w/h = Pixel des Rasters; scale = Darstellungsmaßstab (0,5 = doppelt feines Raster), dw/dh = Logikpixel
   function info(key) {
-    if (!ready) init();
-    var e = ENT[key];
+    var e = entry(key);
     if (!e) return null;
-    return { w: e.w, h: e.h, fw: e.fw, fh: e.fh, ox: e.ox, oy: e.oy, team: e.team };
+    var sc = e.scale || 1;
+    return { w: e.w, h: e.h, fw: e.fw, fh: e.fh, ox: e.ox, oy: e.oy, team: e.team, scale: sc, dw: e.w * sc, dh: e.h * sc };
   }
 
   function iconCanvas(key, scale, team) {
     if (!ready) init();
     scale = Math.max(1, scale | 0 || 1);
-    var e = ENT[key];
+    var e = entry(key);
+    if (e && e.lazy) {
+      var cl = makeCanvas(Math.ceil(e.dw * scale), Math.ceil(e.dh * scale));
+      if (cl) { var cx = cl.getContext('2d'); cx.imageSmoothingEnabled = false; cx.scale(scale, scale); drawFast(cx, key, -e.ox, -e.oy, team || 0, false); }
+      return cl;
+    }
     var cv = makeCanvas(e ? e.w * scale : scale, e ? e.h * scale : scale);
     if (!cv || !e) return cv;
     var ctx = cv.getContext('2d');
@@ -412,14 +469,14 @@
     draw: draw,
     drawFast: drawFast,
     info: info,
-    has: function (k) { if (!ready) init(); return !!ENT[k]; },
+    has: function (k) { return !!entry(k); },
     keys: function () { if (!ready) init(); return ORDER.slice(); },
     iconCanvas: iconCanvas,
     terrainKey: terrainKey,
     TEAM_COLORS: TEAM_COLORS,
     PALETTE: PALETTE,
     // Werkzeuge für die Motiv-Dateien
-    lib: { Grid: Grid, C: C, CHAR: CHAR, PALETTE: PALETTE, def: def, hash: hash, DEFS: DEFS, addColor: addColor, hexOf: hexOf, RGBA: RGBA },
+    lib: { lazyDef: lazyDef, ALIAS: ALIAS, Grid: Grid, C: C, CHAR: CHAR, PALETTE: PALETTE, def: def, hash: hash, DEFS: DEFS, addColor: addColor, hexOf: hexOf, RGBA: RGBA },
     // Hilfe für Werkzeuge/Vorschau
     _atlas: function () { return { base: baseCanvas, team: teamAtlas(0) }; }
   };

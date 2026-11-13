@@ -38,6 +38,7 @@
     SETTLER_DIST_MIN: 24, SETTLER_DIST_MAX: 40,
     CITY_MIN_DIST: 20,
     FLUR_REACH: 12,           // Grundreichweite der Landnahme (Kacheln ums Zentrum), + 3 je Stadtstufe
+    FLUR_START_RADIUS: 13.5,  // Anfangsgebiet: Fluren mit Mittelpunkt in diesem Abstand
     FLUR_CLAIM_TICKS: 120,    // frühestens alle n Ticks eine neue Flur je Stadt
     HOUSES_PER_FLUR: 1.6,     // Häuser je Flur (plus 2 Grundstock)
     NEW_REALM_MIN_DIST: 18,   // Mindestabstand für Auswanderer-Stämme

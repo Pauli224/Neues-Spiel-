@@ -36,7 +36,7 @@
     const dpr = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));
     const big = inf ? Math.max(inf.w, inf.h) : 16;
     const scale = Math.max(1, Math.round(px * dpr / big));
-    const trim = /^(u_|a_)/.test(key);   // Figuren: auf das Motiv zuschneiden, damit sie nicht klein wirken
+    const trim = /^(u_|a_|h_)/.test(key);   // Figuren: auf das Motiv zuschneiden, damit sie nicht klein wirken
     const ck = key + '|' + scale + '|' + (team == null ? '' : team) + (trim ? '|t' : '');
     let src = cache.get(ck);
     if (!src) {

@@ -159,7 +159,7 @@
         if (v >= 255) { coolLava(sim, i); } else graze[i] = v;
         continue;
       }
-      if (t === T.LAVA) { if (hash2(i, tk) < 0.05) igniteNear(sim, i, tk); continue; }
+      if (t === T.LAVA) { if (hash2(i, tk) < 0.004) igniteNear(sim, i, tk); continue; }
       if (graze[i]) {
         const v = graze[i] > C.GRAZE_REGROW ? graze[i] - C.GRAZE_REGROW : 0;
         if (graze[i] >= C.GRAZE_SHOW && v < C.GRAZE_SHOW) sim.markDirty(i);

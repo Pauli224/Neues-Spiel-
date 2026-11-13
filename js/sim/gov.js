@@ -190,7 +190,7 @@
       if (s.dead || s.cityId !== city.id) continue;
       // Gebäude, die die neue Regierung nicht kennt
       if ((s.type === 'market' && !g.build.market.max) || (s.type === 'barracks' && !g.build.barracks.max)) {
-        s.type = 'house'; s.level = 1; s.upgradeTo = 0;
+        s.type = 'house'; s.level = 1; s.upgradeTo = 0; if (s.variant == null) s.variant = sim.rng.int(256);
         s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp);
         converted++;
       }
