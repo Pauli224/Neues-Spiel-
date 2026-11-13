@@ -388,7 +388,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 22px; background: v
   .seg .sp-lvl { display: none; }
   .sp-cur { display: inline-flex !important; min-width: 52px !important; }
   #topbar .btn.icon { min-width: 44px; }
-  #btnMap { display: none; }
+  #btnMap, #btnSound { display: none !important; }
   #toolbar { left: 0; right: 0; bottom: 0; gap: 0; }
   #toolbar > .panel { width: 100%; border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
   .tool-hint { margin-bottom: 6px; }

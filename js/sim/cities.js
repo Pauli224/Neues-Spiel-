@@ -101,7 +101,8 @@
   }
 
   // Kann hier ein Zentrum stehen? (x, y) = Mitte; minDist = Mindestabstand zu anderen Städten
-  function canFoundAt(sim, x, y, race, minDist) {
+  // ownKingdom: Land von Städten dieses Reichs darf überbaut werden (Tochterstadt auf eigenem Reichsland)
+  function canFoundAt(sim, x, y, race, minDist, ownKingdom) {
     const st = sim.state, W = st.W, H = st.H;
     const o = centerOff();
     const x0 = x - o.ox, y0 = y - o.oy;
@@ -113,7 +114,8 @@
     }
     for (let dy = -1; dy <= o.h; dy++) for (let dx = -1; dx <= o.w; dx++) {
       const i = (y0 + dy) * W + x0 + dx;
-      if (st.owner[i] !== -1 || st.inRing[i] !== -1) return false;
+      if (st.inRing[i] !== -1) return false;
+      if (st.owner[i] !== -1) { const oc = ownKingdom == null ? null : sim._cities.get(st.owner[i]); if (!oc || oc.kingdomId !== ownKingdom) return false; }
       const s = sim._structs.get(st.structAt[i]);
       if (s && s.type !== 'ruin' && s.type !== 'field') return false;
       if (dx < 0 || dy < 0 || dx >= o.w || dy >= o.h) continue;
@@ -772,13 +774,13 @@
       const dist = WW.CONFIG.SETTLER_DIST_MIN + sim.rng.next() * (WW.CONFIG.SETTLER_DIST_MAX - WW.CONFIG.SETTLER_DIST_MIN);
       const x = Math.round(px + dir[0] * dist), y = Math.round(py + dir[1] * dist);
       if (x < 3 || y < 3 || x >= W - 4 || y >= H - 4) continue;
-      if (!canFoundAt(sim, x, y, city.race, WW.CONFIG.DAUGHTER_MIN_DIST)) continue;
+      if (!canFoundAt(sim, x, y, city.race, WW.CONFIG.DAUGHTER_MIN_DIST, city.kingdomId)) continue;
       if (sim.comp[y * W + x] !== myComp) continue;
       let free = 0, owned = 0, fav = 0;
       for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
         const i = (y + dy) * W + x + dx;
         if (x + dx < 0 || y + dy < 0 || x + dx >= W || y + dy >= H) continue;
-        if (st.owner[i] !== -1) { owned++; const oc = sim._cities.get(st.owner[i]); if (oc && oc.kingdomId !== city.kingdomId) owned += 2; }
+        if (st.owner[i] !== -1) { const oc = sim._cities.get(st.owner[i]); if (oc && oc.kingdomId !== city.kingdomId) owned += 3; }
         if (WW.TERRAIN_LUT.build[st.terrain[i]]) free++;
         if (race.favTerrain.indexOf(WW.TERRAIN[st.terrain[i]].key) >= 0) fav++;
       }
@@ -907,7 +909,7 @@
       const k = kingdomOf(sim, city);
       const leaderOk = k && (g.noLeader || (sim._units.get(k.leaderId) && !sim._units.get(k.leaderId).dead));
       // Tochterstädte erst, wenn die Mutterstadt Stadt ist und ihre Reichweite ausgeschöpft hat (das Reich wächst zuerst flächig)
-      const landDone = city.landFull || (city.flurs || 0) >= WW.Growth.flurTarget(sim, city) * 0.9 && city.tier >= 3;
+      const landDone = city.landFull || (city.flurs || 0) >= WW.Growth.flurTarget(sim, city) * 0.75;
       if (city.tier >= 2 && landDone && city.adults >= WW.CONFIG.DAUGHTER_ADULTS && leaderOk && !WW.Diplo.atWar(sim, k.id) && st.year - city.lastSettlers >= 4 && city.centerOk) sendSettlers(sim, city);
     }
   }

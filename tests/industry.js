@@ -35,6 +35,7 @@ function factoryCity(gov, o) {
   const c = sim.state.cities[0];
   sim.actions.spawnSettlers(c.cx + 2, c.cy + 2, o.settlers || 30, null, o.race || 'human');
   run(sim, 41);
+  if (o.waitWall) for (let i = 0; i < 3000 && !(c.wall.plan && c.wall.plan.length); i++) sim.tick();
   const list = [];
   for (let i = 0; i < (o.n == null ? 1 : o.n); i++) {
     const s = WW.Industry.tryBuild(sim, c, true);
@@ -258,6 +259,71 @@ test('7 Speichern/Laden, Determinismus, alte Spielstände', function () {
   WW.Structs.rebuildBlock && WW.Structs.rebuildBlock(O);
   run(O, 600);
   assert(O.state.laws.industry === true && O.state.pollution instanceof Uint8Array && O.state.cities.every((c) => typeof c.pollution === 'number'), 'Felder nicht ergänzt');
+});
+
+// -----------------------------------------------------------------------------
+test('9 Dunstglocke, ausgelaugter Boden, Heilung; Filter klar weniger', function () {
+  const T = WW.T;
+  const A = factoryCity('communism', { seed: 23, n: 3, waitWall: true });
+  const st = A.sim.state;
+  const ash0 = st.terrain.filter((t) => t === T.ASH).length;
+  let maxP = 0;
+  const ps = [];
+  for (let y = 0; y < 10; y++) { run(A.sim, 240); ps.push(A.c.pollution); maxP = Math.max(maxP, A.c.pollution); }
+  const barrenSum = () => { let n = 0; for (const v of st.barren) n += v; return n; };
+  let grey = 0; for (const v of st.barren) if (v >= 64) grey++;
+  const ash1 = st.terrain.filter((t) => t === T.ASH).length;
+  const b1 = barrenSum();
+  log('city.pollution je Jahr', ps.join(','), '| graue Kacheln', grey, '| Aschefeld', ash0, '->', ash1);
+  assert(maxP >= 40 && maxP <= 90 && ps[9] >= 35, 'keine deutliche Dunstglocke');
+  assert(grey >= 30, 'Boden wird nicht grau');
+  assert(ash1 > ash0, 'kein kahles Land');
+  assert(st.events.some((e) => e.type === 'indHaze'), 'keine Chronik zur Dunstglocke');
+  // Stilllegen: Luft und Boden heilen
+  A.sim.actions.setLaw('industry', false);
+  run(A.sim, 240 * 10);
+  const b2 = barrenSum();
+  log('Boden-Summe', b1, '-> nach 10 sauberen Jahren', b2, '| city.pollution', A.c.pollution);
+  assert(A.c.pollution < 10 && b2 < b1 * 0.5, 'Boden/Luft heilen nicht');
+  // Filter: klar weniger Dunst
+  const mk = (f) => { const o = factoryCity('republic', { seed: 23, n: 3, waitWall: true }); for (const s of o.list) s.filtered = f; let sum = 0; for (let y = 0; y < 8; y++) { run(o.sim, 240); sum += o.c.pollution; } return sum / 8; };
+  const pu = mk(false), pf = mk(true);
+  log('mittlere city.pollution ohne Filter', pu.toFixed(1), 'mit Filter', pf.toFixed(1));
+  assert(pu >= 35 && pf < pu * 0.65, 'Filter wirken nicht klar');
+});
+
+// -----------------------------------------------------------------------------
+test('10 Flusstrübung nur stromabwärts, ein Stück ins Meer', function () {
+  const W = 64, H = 80, N = W * H, T = WW.T;
+  const terrain = new Uint8Array(N).fill(T.GRASS), height = new Uint8Array(N).fill(130);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (y >= 56) { terrain[i] = T.WATER; height[i] = 80; }
+    else if (x === 30) { terrain[i] = T.RIVER; height[i] = 150 - y; }   // fließt nach Süden ins Meer
+    else height[i] = 160 - y;
+  }
+  const sim = WW.Sim.create({ seed: 2, world: { W, H, terrain, height }, populate: 0, animals: false });
+  sim._throwErrors = true;
+  const st = sim.state, d = WW.Industry.dims(st);
+  for (let t = 0; t < 900; t++) {
+    for (let cy = 5; cy <= 6; cy++) for (let cx = 6; cx <= 8; cx++) st.pollution[cy * d.pw + cx] = 150;   // Wolke über y 20..27
+    st.industry.any = 1000;
+    sim.tick();
+  }
+  const m = (y) => st.murk[y * W + 30];
+  let up = 0, downN = 0, sea = 0, far = 0;
+  for (let y = 0; y < 18; y++) up += m(y);
+  for (let y = 30; y < 56; y++) if (m(y) > 0) downN++;
+  for (let y = 56; y < 60; y++) for (let x = 28; x <= 32; x++) if (st.murk[y * W + x]) sea++;
+  for (let y = 70; y < H; y++) for (let x = 0; x < W; x++) far += st.murk[y * W + x];
+  log('oberhalb', up, '| trübe Kacheln unterhalb', downN, '/ 26 | Meer an der Mündung', sea, '| fernes Meer', far, '| murk-Zähler', st.industry.murk);
+  assert(up === 0, 'Trübung fließt bergauf');
+  assert(downN >= 20, 'Trübung kommt nicht stromabwärts an');
+  assert(sea > 0 && far === 0, 'Meer an der Mündung nicht/zu weit trüb');
+  // ohne Wolke klingt sie ab
+  st.pollution.fill(0);
+  run(sim, 2400);
+  assert(st.industry.murk === 0, 'Trübung klingt nicht ab');
 });
 
 // -----------------------------------------------------------------------------

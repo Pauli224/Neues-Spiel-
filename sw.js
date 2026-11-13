@@ -1,6 +1,6 @@
 // Service Worker: alle Spieldateien zwischenspeichern, damit Wuselwelt offline läuft.
 // Bei Änderungen VERSION hochzählen.
-const VERSION = 'wuselwelt-wgzv2e';
+const VERSION = 'wuselwelt-1l6a8wa';
 const FILES = [
   './',
   'index.html',
@@ -48,10 +48,10 @@ const FILES = [
   'js/render/camera.js',
   'js/render/renderer.js',
   'js/audio/audio-core.js',
-  'js/audio/audio.js',
+  'js/audio/audio-sfx.js',
   'js/audio/audio-ambient.js',
   'js/audio/audio-music.js',
-  'js/audio/audio-sfx.js',
+  'js/audio/audio.js',
   'js/ui/dom.js',
   'js/ui/tools.js',
   'js/ui/input.js',

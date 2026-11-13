@@ -894,9 +894,9 @@
     const sx = u.site % W, sy = Math.floor(u.site / W);
     if (distTo(u, sx + 0.5, sy + 0.5) <= 2) {
       const md = WW.CONFIG.CITY_MIN_DIST - 4;
-      let x = sx, y = sy, ok = WW.Cities.canFoundAt(sim, x, y, u.race, md);
+      let x = sx, y = sy, ok = WW.Cities.canFoundAt(sim, x, y, u.race, md, k.id);
       for (let r = 1; r <= 3 && !ok; r++) for (let dy = -r; dy <= r && !ok; dy++) for (let dx = -r; dx <= r && !ok; dx++) {
-        if (WW.Cities.canFoundAt(sim, sx + dx, sy + dy, u.race, md)) { x = sx + dx; y = sy + dy; ok = true; }
+        if (WW.Cities.canFoundAt(sim, sx + dx, sy + dy, u.race, md, k.id)) { x = sx + dx; y = sy + dy; ok = true; }
       }
       if (!ok) { giveUp(); return; }
       const c = WW.Cities.found(sim, x, y, k.id, u.race);

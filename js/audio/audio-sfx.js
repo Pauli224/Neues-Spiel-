@@ -21,40 +21,41 @@
 
   function boomCore(R, out, t, s) {
     const dur = boomDur(s);
+    const o0 = R.g(0.55 + 0.8 * s); o0.connect(out); out = o0;   // größere Knalle lauter
     // 1) Knall: helles Rauschen, sehr kurz
     {
       const n = R.noise('white', t, t + 0.6), lp = R.f('lowpass', 9000 - 5000 * s, 0.7), g = R.g(0);
-      R.c(n, lp, g, out); R.env(g.gain, t, 0.001, 0.55 - 0.2 * s, 0.05 + 0.25 * s);
+      R.c(n, lp, g, out); R.env(g.gain, t, 0.001, 0.6 - 0.3 * s, 0.05 + 0.25 * s);
     }
     // 2) Körper: braunes Rauschen, Tiefpass fällt
     {
       const n = R.noise('brown', t, t + dur + 0.2), lp = R.f('lowpass', 2000, 0.6), g = R.g(0);
       R.c(n, lp, g, out);
-      R.xpts(lp.frequency, [[t, 3200 - 1800 * s], [t + 0.08 + 0.4 * s, 900 - 500 * s], [t + dur * 0.7, 90 + 40 * (1 - s)]]);
-      R.env(g.gain, t, 0.004 + 0.06 * s, 0.95, dur * 0.55);
+      R.xpts(lp.frequency, [[t, 3600 - 2200 * s], [t + 0.08 + 0.4 * s, 1100 - 700 * s], [t + dur * 0.7, 90 + 60 * (1 - s)]]);
+      R.env(g.gain, t, 0.004 + 0.06 * s, 0.45 + 0.5 * s, dur * 0.55);
     }
-    // 3) Mittenstoß (Textur für kleine Knalle)
+    // 3) Mittenstoß (Textur, vor allem bei kleinen Knallen)
     {
-      const n = R.noise('pink', t, t + 1), bp = R.f('bandpass', 700 - 300 * s, 0.8), g = R.g(0);
-      R.c(n, bp, g, out); R.env(g.gain, t, 0.002, 0.5 * (1 - s * 0.6), 0.12 + 0.4 * s);
+      const n = R.noise('pink', t, t + 1), bp = R.f('bandpass', 900 - 500 * s, 0.8), g = R.g(0);
+      R.c(n, bp, g, out); R.env(g.gain, t, 0.002, 0.75 * (1 - s * 0.8), 0.12 + 0.4 * s);
     }
     // 4) Tiefer Schlag: Sinus mit Tonhöhenabfall
     {
       const o = R.osc('sine', 100, t, t + dur + 0.2), g = R.g(0);
       R.c(o, g, out);
-      R.xpts(o.frequency, [[t, 115 - 55 * s], [t + 0.25 + 1.4 * s, 34 - 12 * s]]);
-      R.env(g.gain, t, 0.004 + 0.02 * s, 0.75, 0.25 + 2.6 * s);
+      R.xpts(o.frequency, [[t, 125 - 65 * s], [t + 0.25 + 1.4 * s, 34 - 12 * s]]);
+      R.env(g.gain, t, 0.004 + 0.02 * s, Math.min(0.85, 0.15 + 1.1 * s), 0.2 + 2.6 * s);
     }
     // 5) Grollen (rollende Wellen), ab mittlerer Größe
     if (s > 0.2) {
-      const n = R.noise('brown', t, t + dur + 0.3), lp = R.f('lowpass', 110 + 120 * (1 - s), 0.9), g = R.g(0);
+      const n = R.noise('brown', t, t + dur + 0.3), lp = R.f('lowpass', 90 + 80 * (1 - s), 0.9), g = R.g(0);
       R.c(n, lp, g, out);
-      const L = [[t, 0], [t + 0.15 + 0.4 * s, 0.9 * s + 0.2]];
-      let tt = t + 0.15 + 0.4 * s, lvl = 0.9 * s + 0.2;
+      const L = [[t, 0], [t + 0.15 + 0.4 * s, 1.3 * s + 0.1]];
+      let tt = t + 0.15 + 0.4 * s, lvl = 1.3 * s + 0.1;
       const steps = 3 + Math.floor(s * 8);
       for (let i = 0; i < steps; i++) {
         tt += (dur * 0.85 - (tt - t)) / (steps - i) * R.rr(0.7, 1.3);
-        lvl *= R.rr(0.55, 0.85);
+        lvl *= R.rr(0.6, 0.85);
         L.push([Math.min(tt, t + dur * 0.92), lvl * (i % 2 ? 0.7 : 1.15)]);
       }
       L.push([t + dur, 0]);

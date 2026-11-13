@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wuselwelt Klangprobe</title>
+<style>
+  :root { --bg: #1d1b26; --panel: #2a2736; --line: #3d3950; --text: #ece8f4; --dim: #a59fb8; --acc: #f2b84b; --ok: #7fd18b; --bad: #ef6b6b; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow-y: auto; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 0 0 8px; color: var(--acc); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 12px 0; }
+  button { background: #3a3550; color: var(--text); border: 1px solid #514a6e; border-radius: 7px; padding: 5px 10px; cursor: pointer; font: inherit; }
+  button:hover { background: #4a4466; } button.big { background: var(--acc); color: #222; border-color: var(--acc); font-weight: 600; }
+  label { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; }
+  .grid label { justify-content: space-between; } input[type=range] { width: 120px; }
+  .sub { color: var(--dim); font-size: 12px; margin: 8px 0 4px; }
+  #st { font-family: ui-monospace, monospace; font-size: 12px; color: var(--dim); }
+  table { border-collapse: collapse; font-size: 12px; width: 100%; } td, th { border-bottom: 1px solid var(--line); padding: 3px 6px; text-align: right; }
+  td:first-child, th:first-child { text-align: left; } .bad { color: var(--bad); } .ok { color: var(--ok); }
+  canvas { max-width: 100%; display: block; margin-top: 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wuselwelt Klangprobe</h1>
+  <div class="row"><button class="big" id="start">Ton starten</button><span id="st">Noch kein Ton (erst nach einem Klick).</span></div>
+
+  <section>
+    <h2>Lautstärke und Lage</h2>
+    <div class="grid" id="vols"></div>
+    <div class="row" style="margin-top:8px">
+      <label><input type="checkbox" id="mute"> Stumm</label>
+      <span class="sub" style="margin:0 0 0 12px">Lage (Musik):</span>
+      <label><input type="radio" name="mood" value="" checked> Automatisch</label>
+      <label><input type="radio" name="mood" value="peace"> Frieden</label>
+      <label><input type="radio" name="mood" value="war"> Krieg</label>
+      <label><input type="radio" name="mood" value="dark"> Dunkel</label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label>Klangort links/rechts <input type="range" id="px" min="-1" max="1" step="0.05" value="0"></label>
+      <label>Entfernung <input type="range" id="pd" min="0" max="3" step="0.05" value="0"></label>
+      <label>Zoom (halbe Sichtbreite) <input type="range" id="zoom" min="6" max="180" step="1" value="20"> <span id="zoomv">20</span></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Umgebung</h2>
+    <div class="row" id="presets"></div>
+    <div class="grid" id="mix" style="margin-top:8px"></div>
+  </section>
+
+  <section>
+    <h2>Klänge</h2>
+    <div id="sounds"></div>
+  </section>
+
+  <section>
+    <h2>Prüfung</h2>
+    <div class="row"><button id="soak">Dauerlauf (10 s, viele Effekte)</button><button id="measure">Messung (offline rendern)</button></div>
+    <div id="report" class="sub"></div>
+    <div id="table"></div>
+  </section>
+</main>
+
+<script src="../js/audio/audio-core.js"></script>
+<script src="../js/audio/audio-sfx.js"></script>
+<script src="../js/audio/audio-ambient.js"></script>
+<script src="../js/audio/audio-music.js"></script>
+<script src="../js/audio/audio.js"></script>
+<script>
+(function () { 'use strict';
+  const A = WW.Audio, $ = (id) => document.getElementById(id);
+  A.init();
+  $('start').onclick = () => { A.unlock(); };
+
+  // Kamera: Mitte (50, 50); Klangort über Regler
+  const cam = { x: 50, y: 50, dist: 20 };
+  function where() { const d = cam.dist; return { x: cam.x + (+$('px').value) * d, y: cam.y + (+$('pd').value) * d * 1.2 }; }
+  function pushCam() { A.update(null, cam, 0.016); }
+  $('zoom').oninput = () => { cam.dist = +$('zoom').value; $('zoomv').textContent = cam.dist; pushCam(); };
+  setInterval(() => {
+    pushCam();
+    const s = A.state() || {};
+    $('st').textContent = s.started ? `läuft: ${s.running ? 'ja' : 'nein'} · Stimmen ${s.voices}/${s.maxVoices} · Schichten ${s.beds} · Dauerklänge ${s.loops} · Lage ${s.mood}` : 'Noch kein Ton (erst nach einem Klick).';
+  }, 250);
+
+  // Lautstärke
+  const V = { master: ['Gesamt', 0.8], music: ['Musik', 0.3], ambient: ['Umgebung', 0.7], effects: ['Effekte', 0.8] };
+  for (const k in V) {
+    const l = document.createElement('label'); l.innerHTML = `${V[k][0]} <input type="range" min="0" max="1" step="0.01" value="${V[k][1]}">`;
+    l.querySelector('input').oninput = (e) => A.setVolume({ [k]: +e.target.value }); $('vols').appendChild(l);
+  }
+  $('mute').onchange = (e) => A.mute(e.target.checked);
+  for (const r of document.querySelectorAll('input[name=mood]')) r.onchange = () => A.setMood(r.value || null);
+
+  // Umgebungsmischung
+  const MIX = { near: 'Nähe (Zoom)', forest: 'Laubwald', taiga: 'Nadelwald', jungle: 'Dschungel', open: 'Wiese', dry: 'Savanne/Wüste', swamp: 'Sumpf',
+    cold: 'Gebirge/Schnee', sea: 'Meer', coast: 'Küste', river: 'Fluss', city: 'Stadt', sites: 'Baustellen', factory: 'Fabrik', fire: 'Feuer',
+    rain: 'Regen', battle: 'Schlacht', battleNear: 'Schlacht nah', hot: 'Lava' };
+  const mixVal = { near: 1 };
+  for (const k in MIX) {
+    const l = document.createElement('label'); l.innerHTML = `${MIX[k]} <input type="range" min="0" max="1" step="0.01" value="${mixVal[k] || 0}" data-k="${k}">`;
+    l.querySelector('input').oninput = (e) => { mixVal[k] = +e.target.value; sendMix(); }; $('mix').appendChild(l);
+  }
+  function sendMix() { const m = Object.assign({}, mixVal); m.far = 1 - (m.near || 0); m.war = (m.battle || 0) > 0.05; m.battleLp = 600 + 3000 * (m.battleNear || 0); A.debug.setMix(m); }
+  const PRE = { 'Stille': {}, 'Wald': { forest: 0.8, open: 0.2 }, 'Nadelwald': { taiga: 0.7, cold: 0.3 }, 'Dschungel': { jungle: 0.9, river: 0.1 },
+    'Küste': { sea: 0.5, coast: 0.8, open: 0.3 }, 'Fluss': { river: 0.25, open: 0.6, forest: 0.2 }, 'Savanne': { dry: 0.8, open: 0.2 },
+    'Sumpf': { swamp: 0.8, forest: 0.2 }, 'Gebirge': { cold: 0.9, near: 0.3 }, 'Stadt': { city: 0.9, sites: 0.5, open: 0.3 },
+    'Industrie': { city: 0.6, factory: 0.8 }, 'Brand': { fire: 0.9, forest: 0.4 }, 'Regen': { rain: 0.9, open: 0.5 },
+    'Schlacht': { battle: 0.9, battleNear: 0.8, open: 0.4 }, 'Ferne Schlacht': { battle: 0.5, open: 0.5, near: 0.3 }, 'Weite (weit weg)': { near: 0, sea: 0.4, open: 0.4 }, 'Vulkan': { hot: 0.8, fire: 0.4 } };
+  for (const n in PRE) {
+    const b = document.createElement('button'); b.textContent = n;
+    b.onclick = () => { for (const k in MIX) mixVal[k] = 0; mixVal.near = 1; Object.assign(mixVal, PRE[n]);
+      for (const i of $('mix').querySelectorAll('input')) i.value = mixVal[i.dataset.k] || 0; sendMix(); };
+    $('presets').appendChild(b);
+  }
+
+  // Klänge
+  function fx(type, extra) { return () => { const w = where(); A.onFx(Object.assign({ type, x: w.x, y: w.y, x2: w.x + 2, y2: w.y + 1 }, extra || {})); }; }
+  function snd(name, p) { return () => { const w = where(); A.debug.play(name, w.x, w.y, p || {}); }; }
+  const loopsOn = {};
+  let loopId = 1;
+  function loopBtn(kind, mk) { return () => { loopsOn[kind] = loopsOn[kind] ? null : mk(loopId++); }; }
+  const fakeState = () => {
+    const w = where(), ac = [], ef = [];
+    for (const k in loopsOn) { const o = loopsOn[k]; if (!o) continue; o.x = w.x + Math.sin(Date.now() / 1500 + o.id) * (o.air ? cam.dist * 1.5 : 1); o.y = w.y; (o.air ? ac : ef).push(o); }
+    return { aircraft: ac, wild: { effects: ef } };
+  };
+  setInterval(() => { if (Object.values(loopsOn).some(Boolean) || true) A.update(fakeState(), cam, 0.1); }, 100);
+  const GROUPS = {
+    'Explosionen': [['Kleiner Knall (r 1,4)', fx('explosion', { r: 1.4 })], ['Kanone-Einschlag (r 1,6)', fx('explosion', { r: 1.6 })], ['Bomber (r 1,9)', fx('explosion', { r: 1.9 })],
+      ['Bombe (r 2,5)', fx('explosion', { r: 2.5 })], ['Rakete (r 3)', fx('explosion', { r: 3 })], ['Groß (r 4)', fx('explosion', { r: 4 })], ['Meteor', fx('meteor')],
+      ['Atombombe', fx('mushroom')], ['Zar-Bombe', fx('mushroom', { big: true })], ['Schwarzes Loch (Ende)', fx('bang')], ['Napalm', fx('napalm', { r: 3.5 })], ['Bombe fällt', fx('bombfall')]],
+    'Naturgewalten': [['Blitz und Donner', fx('bolt')], ['Funke am Bauwerk', fx('spark')], ['Erdbeben', fx('quake')], ['Vulkanausbruch', fx('eruption')], ['Lava', fx('lava')], ['Dampf', fx('steam')],
+      ['Flut', fx('flood', { r: 7 })], ['Regenguss', fx('rain', { r: 5 })], ['Säureregen', fx('acidrain', { r: 5 })], ['Laser', fx('laser')], ['Frost', fx('frost', { r: 5 })], ['Dürre', fx('drought', { r: 6 })],
+      ['Brise', fx('breeze', { r: 7 })], ['Heben', fx('raise', { r: 3 })], ['Senken', fx('lower', { r: 3 })]],
+    'Waffen und Mauern': [['Pfeil', fx('arrow')], ['Pfeilsalve (5)', () => { for (let i = 0; i < 5; i++) fx('arrow')(); }], ['MG-Salve', fx('tracer')], ['Schwere Salve (Flieger)', fx('tracer', { heavy: true })],
+      ['Selbstschussanlage', () => { fx('muzzle')(); fx('tracer')(); }], ['Balliste', fx('bolt_shot')], ['Kanone', () => { const w = where(); A.onFx({ type: 'muzzle', x: w.x, y: w.y }); A.onFx({ type: 'rock', x: w.x, y: w.y, x2: w.x + 5, y2: w.y }); }],
+      ['Katapult', fx('rock')], ['Rammbock', fx('ram')], ['Mauer stürzt ein', fx('smoke')], ['Treffer', fx('hit')], ['Bannkreis', fx('ward', { r: 4 })], ['Spitze Pfähle', fx('spikes')], ['Falle (Blindgänger)', fx('dud')], ['Alarmglocke', fx('alarm')],
+      ['Abriss', fx('wreck')], ['Dach fliegt', fx('roof')], ['Trümmer', fx('debris')], ['Geschleudert', fx('fling')]],
+    'Bauen und Segen': [['Bau fertig', fx('dust')], ['Ausbau Zentrum', fx('centerStage', { stage: 1 })], ['Umbau fertig', fx('restyle')], ['Regierungswechsel', fx('govchange')],
+      ['Segen', fx('sparkle', { r: 5 })], ['Heilung', fx('heal', { r: 5 })], ['Liebe', fx('hearts', { r: 5 })], ['Goldregen', fx('goldrain', { r: 4 })], ['Saat', fx('seeds', { r: 3 })], ['Seuche', fx('plague', { r: 4 })]],
+    'Kleinkram': [['Tod (Puff)', fx('poof')], ['Platsch', fx('splash')], ['Fisch springt', fx('fishjump')], ['Packen', fx('grab')], ['Absetzen', fx('drop')], ['Wahnsinn', fx('scare')], ['Ei', fx('egg')]],
+    'Tiere': [['Schaf', snd('sheep')], ['Kuh', snd('cow')], ['Huhn', snd('chicken')], ['Wolf', snd('wolf')], ['Bär', snd('bear')]],
+    'Monster': [['Drache', snd('dragon')], ['Feueratem', fx('firebreath')], ['Zombie', snd('zombie')], ['Skelett', snd('skeleton')], ['Schleim', snd('slime')], ['Geist', snd('ghost')], ['Dämon', snd('demon')],
+      ['Riesenhuhn', snd('giantchicken')], ['Yeti', snd('yeti')], ['Schneeball', fx('snowball')], ['Sandwurm', snd('sandworm')], ['Sandausbruch', fx('sandburst')], ['Baumhirte', snd('treant')], ['Golem', snd('golem')]],
+    'Umgebung einzeln': [['Vogel: Zwitschern', snd('bird', { variant: 0 })], ['Vogel: Flöten', snd('bird', { variant: 1 })], ['Vogel: Zweiton', snd('bird', { variant: 2 })], ['Vogel: Triller', snd('bird', { variant: 3 })],
+      ['Vogel: Tschilpen', snd('bird', { variant: 4 })], ['Dschungelvogel', snd('jungleBird')], ['Möwe', snd('gull')], ['Specht', snd('woodpecker')], ['Grille', snd('cricket')], ['Frosch', snd('frog')], ['Welle', snd('wave')],
+      ['Hämmern Holz', snd('hammer')], ['Hämmern Metall', snd('hammer', { metal: true })], ['Knistern', snd('crackle')], ['Schwertklirren', snd('clang')], ['Kriegsgeschrei', snd('shout')], ['Kriegstrommel', snd('drum')], ['Ferner Knall', snd('boomFar')], ['Fabrik-Klonk', snd('clank')]],
+    'Dauerklänge (an/aus)': [['Kanonenflieger', loopBtn('gunship', (id) => ({ id, kind: 'gunship', air: true }))], ['Bomber', loopBtn('bomber', (id) => ({ id, kind: 'bomber', air: true }))],
+      ['Rakete', loopBtn('rocket', (id) => ({ id, kind: 'rocket', air: true }))], ['Wirbelsturm', loopBtn('tornado', (id) => ({ id, type: 'tornado' }))], ['Schwarzes Loch', loopBtn('blackhole', (id) => ({ id, type: 'blackhole' }))],
+      ['Vulkan', loopBtn('volcano', (id) => ({ id, type: 'volcano' }))], ['Flut (Dauer)', loopBtn('flood', (id) => ({ id, type: 'flood' }))]],
+    'Bedienung': ['click', 'select', 'tool', 'error', 'open', 'close'].map((n) => [n, () => A.ui(n)]),
+    'Chronik-Signale': [['Krieg', 'war'], ['Frieden', 'peace'], ['Bündnis', 'alliance'], ['Thronfolge', 'succession'], ['Umsturz', 'coup'], ['Stadt gegründet', 'found'], ['Reich untergegangen', 'kingdomGone']]
+      .map(([l, t]) => [l, () => A.onEvent({ type: t })])
+  };
+  for (const g in GROUPS) {
+    const h = document.createElement('div'); h.className = 'sub'; h.textContent = g; $('sounds').appendChild(h);
+    const r = document.createElement('div'); r.className = 'row';
+    for (const [l, f] of GROUPS[g]) { const b = document.createElement('button'); b.textContent = l; b.onclick = f; r.appendChild(b); }
+    $('sounds').appendChild(r);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dauerlauf: viele gleichzeitige Fx
+  // ---------------------------------------------------------------------------
+  const ALL_FX = ['explosion', 'bang', 'bolt', 'spark', 'meteor', 'bombfall', 'quake', 'eruption', 'lava', 'steam', 'flood', 'rain', 'acidrain', 'laser', 'smoke', 'hit', 'dust',
+    'wreck', 'roof', 'debris', 'fling', 'tracer', 'arrow', 'bolt_shot', 'ram', 'rock', 'muzzle', 'ward', 'spikes', 'dud', 'alarm', 'napalm', 'sparkle', 'heal', 'hearts', 'goldrain', 'seeds',
+    'breeze', 'frost', 'drought', 'raise', 'lower', 'plague', 'poof', 'splash', 'fishjump', 'grab', 'drop', 'scare', 'split', 'sandburst', 'snowball', 'firebreath', 'egg', 'zombify',
+    'govchange', 'restyle', 'centerStage', 'claim', 'smokeplume', 'flash', 'shockwave', 'mushroom', 'unbekannt'];
+  window.soak = function (secs) {
+    return new Promise((res) => {
+      let peak = 0, sent = 0, err = 0;
+      const t0 = performance.now();
+      const iv = setInterval(() => {
+        try {
+          for (let i = 0; i < 40; i++) {
+            const type = ALL_FX[(Math.random() * ALL_FX.length) | 0];
+            A.onFx({ type, x: cam.x + (Math.random() - 0.5) * 80, y: cam.y + (Math.random() - 0.5) * 80, r: 1 + Math.random() * 3, x2: cam.x, y2: cam.y, big: Math.random() < 0.5 });
+            sent++;
+          }
+          if (Math.random() < 0.2) A.onEvent({ type: ['war', 'peace', 'found', 'coup', 'kingdomGone', 'godNuke'][(Math.random() * 6) | 0] });
+          A.onFx(null); A.onFx({}); A.onEvent(null); A.update({ terrain: null }, { x: NaN, y: 'x', dist: -1 }, NaN);
+          A.update(fakeState(), cam, 0.05);
+        } catch (e) { err++; }
+        const s = A.state(); peak = Math.max(peak, s.voices);
+        if (performance.now() - t0 > secs * 1000) { clearInterval(iv); const st = A.debug.stats(); res({ sent, peakVoices: Math.max(peak, st.peakVoices), maxVoices: s.maxVoices, thrown: err, internalErrors: st.errors, played: st.played, dropped: st.dropped, stolen: st.stolen }); }
+      }, 50);
+    });
+  };
+  $('soak').onclick = async () => { A.unlock(); $('report').textContent = 'Dauerlauf läuft …'; const r = await window.soak(10); $('report').textContent = 'Dauerlauf: ' + JSON.stringify(r); };
+
+  // ---------------------------------------------------------------------------
+  // Offline-Messung (auch von Playwright genutzt)
+  // ---------------------------------------------------------------------------
+  const SR = 44100;
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+    for (let len = 2; len <= n; len <<= 1) {
+      const a = -2 * Math.PI / len, wr = Math.cos(a), wi = Math.sin(a);
+      for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < len / 2; k++) {
+        const ur = re[i + k], ui = im[i + k], vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k] = ur + vr; im[i + k] = ui + vi; re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi; const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr; } }
+    }
+  }
+  const DEF = { master: 0.64, effects: 0.64, ambient: 0.49, music: 0.081 };
+  // job: { name | music:mood | bed:name+waves, p, secs, raw }
+  async function renderJob(job) {
+    const secs = job.secs;
+    const oc = new OfflineAudioContext(2, Math.ceil(secs * SR), SR);
+    WW.AudioCore.setSeed(job.seed || 7);
+    let dest;
+    if (job.raw) { dest = oc.createGain(); dest.connect(oc.destination); }
+    else { const o = WW.AudioCore.makeOutput(oc); o.master.gain.value = DEF.master; o.effects.gain.value = DEF.effects; o.ambient.gain.value = DEF.ambient; o.music.gain.value = DEF.music; dest = job.bus === 'music' ? o.music : job.bus === 'ambient' ? o.ambient : o.effects; }
+    const T0 = 0.05;
+    if (job.music) {
+      let t = T0;
+      while (t < secs - 1) { const b = WW.AudioMusic.bar(job.music); const R = WW.AudioCore.makeR(oc, { srcs: [] }); WW.AudioMusic.playBar(R, dest, t, b); t += b.dur; }
+    } else if (job.bed) {
+      const R = WW.AudioCore.makeR(oc, { srcs: [] }), g = oc.createGain(); g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(0.45 * 0.35, T0 + 1.5); g.connect(dest);
+      WW.AudioAmbient.BEDS[job.bed](R, g, T0);
+      g.gain.setValueAtTime(0.45 * 0.35, secs - 1.6); g.gain.linearRampToValueAtTime(0, secs - 0.3);
+      if (job.waves) for (let t = 0.2; t < secs - 6.5; t += 3.5 + Math.random() * 2) { const v = { srcs: [] }, wg = oc.createGain(); wg.gain.value = 0.55; wg.connect(dest); WW.AudioSfx.play(oc, wg, 'wave', t, { amp: 1 }, v); }
+    } else {
+      const rc = WW.AudioSfx.RECIPES[job.name], g = oc.createGain(); g.gain.value = job.raw ? 1 : (rc.vol != null ? rc.vol : 1); g.connect(dest);
+      job.dur = WW.AudioSfx.play(oc, g, job.name, T0, job.p || {}, { srcs: [] });
+    }
+    const buf = await oc.startRendering();
+    return analyse(buf, T0, job);
+  }
+  function analyse(buf, T0, job) {
+    const L = buf.getChannelData(0), Rr = buf.getChannelData(1), n = L.length;
+    let peak = 0, nan = 0, sum = 0, first = -1;
+    for (let i = 0; i < n; i++) { const a = L[i], b = Rr[i]; if (a !== a || b !== b) { nan++; continue; } const m = Math.max(Math.abs(a), Math.abs(b)); if (m > peak) peak = m; sum += a * a + b * b; if (first < 0 && m > 1e-6) first = i; }
+    const rms = Math.sqrt(sum / (2 * n));
+    // Hüllkurve (10 ms) -> Dauer bis −50 dB unter Spitze
+    const win = Math.floor(SR * 0.01), env = [];
+    for (let i = 0; i < n; i += win) { let m = 0; for (let k = i; k < Math.min(n, i + win); k++) m = Math.max(m, Math.abs(L[k]), Math.abs(Rr[k])); env.push(m); }
+    let lastLoud = 0; for (let i = 0; i < env.length; i++) if (env[i] > peak * 0.00316) lastLoud = i;
+    const dur = (lastLoud + 1) * win / SR - T0;
+    let startAbs = 0; if (first >= 0) for (let i = first; i < Math.min(n, first + Math.floor(SR * 0.0005)); i++) startAbs = Math.max(startAbs, Math.abs(L[i]), Math.abs(Rr[i]));
+    let endAbs = 0; for (let i = n - Math.floor(SR * 0.005); i < n; i++) endAbs = Math.max(endAbs, Math.abs(L[i]), Math.abs(Rr[i]));
+    // Spektrum gesamt: Anteil < 150 Hz
+    const N = 4096, spec = new Float64Array(N / 2); let frames = 0;
+    for (let s = 0; s + N <= n; s += N) { const re = new Float64Array(N), im = new Float64Array(N); for (let i = 0; i < N; i++) re[i] = (L[s + i] + Rr[s + i]) * 0.5 * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N)); fft(re, im); for (let k = 0; k < N / 2; k++) spec[k] += re[k] * re[k] + im[k] * im[k]; frames++; }
+    let lo = 0, tot = 0, cen = 0; for (let k = 1; k < N / 2; k++) { const f = k * SR / N; tot += spec[k]; cen += spec[k] * f; if (f < 150) lo += spec[k]; }
+    return { name: job.label || job.name || job.music || job.bed, peak, rms, nan, dur, startAbs, endAbs, low: tot ? lo / tot : 0, centroid: tot ? cen / tot : 0, buf };
+  }
+  // Wellenform + Spektrogramm als PNG (data URL)
+  function draw(buf, title) {
+    const W = 1000, H = 460, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'); g.fillStyle = '#14121b'; g.fillRect(0, 0, W, H);
+    const L = buf.getChannelData(0), Rr = buf.getChannelData(1), n = L.length, secs = n / SR;
+    g.fillStyle = '#ece8f4'; g.font = '14px sans-serif'; g.fillText(title + '  (' + secs.toFixed(1) + ' s)', 10, 18);
+    const wy = 30, wh = 130; g.strokeStyle = '#3d3950'; g.strokeRect(40, wy, W - 50, wh);
+    g.fillStyle = '#f2b84b';
+    for (let x = 0; x < W - 50; x++) { const a = Math.floor(x / (W - 50) * n), b = Math.floor((x + 1) / (W - 50) * n); let mn = 0, mx = 0; for (let i = a; i < b; i++) { const v = (L[i] + Rr[i]) * 0.5; if (v < mn) mn = v; if (v > mx) mx = v; } g.fillRect(40 + x, wy + wh / 2 - mx * wh / 2, 1, Math.max(1, (mx - mn) * wh / 2)); }
+    g.fillStyle = '#a59fb8'; g.font = '11px sans-serif'; g.fillText('+1', 18, wy + 8); g.fillText('-1', 18, wy + wh); g.fillText('Wellenform', 44, wy + 12);
+    const sy = 180, sh = 250, N = 2048, hop = Math.max(256, Math.floor(n / (W - 50))), fmax = 8000, kmax = Math.floor(fmax * N / SR);
+    const cols = Math.floor((n - N) / hop);
+    const img = g.createImageData(W - 50, sh);
+    for (let c = 0; c < Math.min(cols, W - 50); c++) {
+      const s = c * hop, re = new Float64Array(N), im = new Float64Array(N);
+      for (let i = 0; i < N; i++) re[i] = (L[s + i] + Rr[s + i]) * 0.5 * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+      fft(re, im);
+      for (let y = 0; y < sh; y++) {
+        // logarithmische Frequenzachse 30 Hz … 8 kHz
+        const f = 30 * Math.pow(fmax / 30, 1 - y / sh), k = Math.min(kmax, Math.max(1, Math.round(f * N / SR)));
+        const db = 10 * Math.log10(re[k] * re[k] + im[k] * im[k] + 1e-12);
+        const v = Math.max(0, Math.min(1, (db + 40) / 70));
+        const o = (y * (W - 50) + c) * 4;
+        img.data[o] = 255 * Math.min(1, v * 1.8); img.data[o + 1] = 255 * Math.max(0, v * 1.6 - 0.5); img.data[o + 2] = 255 * Math.max(0, Math.min(1, v < 0.4 ? v * 2 : 1.6 - v * 1.5)); img.data[o + 3] = 255;
+      }
+    }
+    g.putImageData(img, 40, sy);
+    g.fillStyle = '#a59fb8';
+    for (const f of [50, 100, 250, 500, 1000, 2000, 4000, 8000]) { const y = sy + sh * (1 - Math.log(f / 30) / Math.log(fmax / 30)); g.fillText(f >= 1000 ? (f / 1000) + 'k' : f, 4, y + 4); }
+    for (let s = 0; s <= secs; s += secs > 12 ? 2 : 1) g.fillText(s + 's', 40 + s / secs * (W - 50) - 6, sy + sh + 14);
+    g.fillText('Spektrogramm (log. Frequenz, Hz)', 44, sy + 12);
+    return cv.toDataURL('image/png');
+  }
+  window.WWMeasure = { renderJob, draw, soak: window.soak };
+
+  const JOBS = [];
+  for (const [l, r] of [['Knall r1,4', 1.4], ['Kanone r1,6', 1.6], ['Bomber r1,9', 1.9], ['Bombe r2,5', 2.5], ['Rakete r3', 3], ['Groß r4', 4]]) JOBS.push({ name: 'explosion', label: 'Explosion ' + l, p: { r }, secs: 7 });
+  JOBS.push({ name: 'meteor', secs: 8 }, { name: 'nuke', label: 'Atombombe', p: {}, secs: 14 }, { name: 'nuke', label: 'Zar-Bombe', p: { big: true }, secs: 22 });
+  for (const n of Object.keys(WW.AudioSfx.RECIPES)) if (!/^(explosion|nuke|meteor)$/.test(n) && !WW.AudioSfx.RECIPES[n].loop) JOBS.push({ name: n, secs: 8 });
+  window.WWMeasure.JOBS = JOBS;
+  $('measure').onclick = async () => {
+    $('report').textContent = 'Rendere ' + JOBS.length + ' Klänge …';
+    const rows = [];
+    for (const j of JOBS) { const r = await renderJob(j); rows.push(r); }
+    $('table').innerHTML = '<table><tr><th>Klang</th><th>Spitze</th><th>RMS</th><th>Dauer s</th><th>Anfang</th><th>Ende</th><th>&lt;150 Hz</th><th>NaN</th></tr>' +
+      rows.map((r) => `<tr><td>${r.name}</td><td class="${r.peak < 1 && r.peak > 0.01 ? 'ok' : 'bad'}">${r.peak.toFixed(3)}</td><td>${r.rms.toFixed(4)}</td><td>${r.dur.toFixed(2)}</td><td>${r.startAbs.toExponential(1)}</td><td>${r.endAbs.toExponential(1)}</td><td>${(r.low * 100).toFixed(0)} %</td><td>${r.nan}</td></tr>`).join('') + '</table>';
+    $('report').textContent = 'Fertig.';
+  };
+})();
+</script>
+</body>
+</html>

@@ -54,10 +54,11 @@ function r3Files() {
     for (const f of ['units.js', 'fx.js']) if (r3.includes(f)) out.push('js/render3d/' + f);
     for (const f of r3) if (!out.includes('js/render3d/' + f)) out.push('js/render3d/' + f);
   }
+  // Ton: Kern zuerst, dann Effekte, Umgebung, Musik, sonstige, die Schnittstelle (audio.js) zuletzt
   const au = listDir('js/audio');
-  const FIRST = au.filter(f => /(^|-)core\.js$/.test(f)).concat(['audio.js', 'engine.js', 'synth.js']);
-  for (const f of FIRST) if (au.includes(f)) out.push('js/audio/' + f);
-  for (const f of au) if (!out.includes('js/audio/' + f)) out.push('js/audio/' + f);
+  const rank = (f) => /core/.test(f) ? 0 : /sfx/.test(f) ? 1 : /ambient/.test(f) ? 2 : /music/.test(f) ? 3 : f === 'audio.js' ? 9 : 5;
+  au.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  for (const f of au) out.push('js/audio/' + f);
   return out;
 }
 {

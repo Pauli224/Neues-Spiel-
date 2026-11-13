@@ -39,6 +39,14 @@
       if (nv >= 0 || st.owner[i] === old) { st.owner[i] = nv; sim.markDirty(i); }
     }
   }
+  function clearOwner(sim, fi, cid) {
+    const st = sim.state, d = dims(st);
+    const fx = fi % d.fw, fy = (fi - fx) / d.fw;
+    for (let y = fy * F; y < Math.min(st.H, fy * F + F); y++) for (let x = fx * F; x < Math.min(st.W, fx * F + F); x++) {
+      const i = y * st.W + x;
+      if (st.owner[i] === cid) { st.owner[i] = -1; sim.markDirty(i); }
+    }
+  }
   function countFlurs(sim, city) {
     const st = sim.state;
     let n = 0;
@@ -84,7 +92,15 @@
       const fx = cfx + dx, fy = cfy + dy;
       if (fx < 0 || fy < 0 || fx >= d.fw || fy >= d.fh) continue;
       const fi = fy * d.fw + fx;
-      if (st.flur[fi] !== -1 && st.flur[fi] !== city.id) continue;
+      if (st.flur[fi] !== -1 && st.flur[fi] !== city.id) {
+        // Tochterstadt auf Reichsland: Fluren der Schwesterstädte ohne deren Kerngebäude übernehmen
+        const oc = sim._cities.get(st.flur[fi]);
+        if (!oc || oc.kingdomId !== city.kingdomId || flurHasCore(sim, oc, fi)) continue;
+        removeFieldsIn(sim, oc, fi);
+        st.flur[fi] = -1;
+        clearOwner(sim, fi, oc.id);
+        oc.flurs = Math.max(0, (oc.flurs || 1) - 1);
+      }
       const c = flurCenter(st, fi);
       const dd = Math.hypot(c.x - city.cx - 0.5, c.y - city.cy - 0.5);
       if (dd > C().FLUR_START_RADIUS && !(dx === 0 && dy === 0)) continue;

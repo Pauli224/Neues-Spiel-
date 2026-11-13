@@ -298,6 +298,30 @@
   if (want('bubbles')) gallery('bubbles', 'Sprechblasen', function (k) { return /^b_/.test(k); }, { scale: 4 });
   if (want('banners')) gallery('banners', 'Banner (erfundene Heraldik, 8 Muster)', function (k) { return /^banner_/.test(k); }, function (k) { return { scale: 4, team: +k.slice(-1) * 3 % 12 }; });
 
+  // ---------------------------------------------------------------- Eisenbahn, Lager, Rohstoffe; Verschmutzungsstufen; Fahnen
+  [['railway', 'Eisenbahn, Lager, Rohstoffe: zwei Städte, Strecke mit Kurven und Brücke, Züge in vier Richtungen, Bahnhöfe, Mine, Fischerei, Weide, Arbeitslager, Vorkommen', 'renderRailway', 'railcv'],
+   ['pollution', 'Verschmutzungsstufen: dieselbe Landschaft sauber, belastet, verödet (weiche Ränder über Nachbarmaske)', 'renderPollutionStages', 'pollcv'],
+   ['flags', 'Fahnen: faschistische Musterstadt in drei Reichsfarben (Rot, Türkis, Schiefer) mit Masten, hängenden Bannern, Wimpelketten und Kommandantur im Reichsmuster', 'renderFlags', 'flagcv']].forEach(function (d) {
+    if (!(want(d[0]) || Q.get(d[0]))) return;
+    var rr = section(d[0], d[1]);
+    var cv = document.createElement('canvas'); cv.id = d[3]; WW.SpriteScene[d[2]](cv, +Q.get(d[0]) || 2); cell(rr, '', cv);
+  });
+  if (want('railparts')) (function () {
+    var r = section('railparts', 'Einzelteile: Gleismasken, Brücken, Züge (e, w, n, s), Bahnhöfe, Lager, Betriebe, Vorkommen, Icons');
+    var k = canvas(48 * 8, 12 * 8, 3);
+    groundRect(k.x, fill(WW.T.GRASS, 48, 12), 0, 0);
+    for (var m = 0; m < 16; m++) S.drawRail(k.x, 4 + m * 10, 4, m);
+    S.draw(k.x, 't_rail_bridge_h', 170, 4); S.draw(k.x, 't_rail_bridge_v', 180, 4);
+    var parts = [['loco', null], ['car', 'freight'], ['car', 'coal'], ['car', 'troop']];
+    parts.forEach(function (p, i) { ['e', 'w', 'n', 's'].forEach(function (dd, j) { S.draw(k.x, S.trainKey(p[0], p[1], dd), 8 + (i * 4 + j) * 20, 30, { team: 4 }); }); });
+    ['s_station', 's_station_communism', 's_station_fascism', 's_laborcamp', 's_laborcamp_ruin', 's_mine', 's_mine_iron', 's_mine_coal', 's_mine_gold', 's_smithy', 's_fishery', 's_pasture']
+      .forEach(function (b, i) { S.draw(k.x, b, 4 + i * 30, 72, { team: 0 }); });
+    cell(r, '', k.c);
+    var ic = document.createElement('div'); ic.style.display = 'flex'; ic.style.gap = '6px'; ic.style.background = '#1d3b47'; ic.style.padding = '4px';
+    ['i_iron', 'i_coal', 'i_fish', 'i_crystal', 'i_wool', 'i_train', 'i_prisoner'].forEach(function (k3) { ic.appendChild(S.iconCanvas(k3, 3)); });
+    r.appendChild(ic);
+  })();
+
   // ---------------------------------------------------------------- Armbinde (Faschismus: Diktator und Soldat)
   if (want('armband') || Q.get('armband')) (function () {
     var r = section('armband', 'Armbinde der Faschismus-Tracht: Diktator und Soldat, stehend, laufend, Angriff, in drei Teamfarben (Rot, Himmelblau, Schiefer), Maßstab 8');

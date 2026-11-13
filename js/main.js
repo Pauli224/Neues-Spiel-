@@ -589,7 +589,7 @@
     game.v3 = WW.CONFIG_UI.enable3d && WW.UI.View3D ? new WW.UI.View3D(game) : null;
     game.input = new WW.UI.Input(game.v3 ? [game.canvas, game.v3.canvas] : [game.canvas], game);
     // Ton erst nach der ersten Nutzeraktion; bei verdecktem Fenster pausieren
-    const unlock = () => { game.audioStart(); };
+    const unlock = () => { game.audioStart(); if (game.audioOn && WW.Audio.unlock) { try { WW.Audio.unlock(); } catch (e) { /* egal */ } } };
     window.addEventListener('pointerdown', unlock, { capture: true });
     window.addEventListener('keydown', unlock, { capture: true });
     document.addEventListener('visibilitychange', () => { if (!WW.Audio || !game.audioOn) return; try { if (document.hidden) WW.Audio.suspend(); else WW.Audio.resume(); } catch (e) { /* egal */ } });

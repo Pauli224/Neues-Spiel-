@@ -456,6 +456,7 @@
   Panels.prototype.closeModal = function () {
     if (this.$('modal').hidden) return;
     this.$('modal').hidden = true;
+    this.game.uiSound('close');
     const k = this.modalKind; this.modalKind = null;
     if (k === 'welcome') this.game.welcomeDone();
   };

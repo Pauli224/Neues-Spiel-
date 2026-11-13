@@ -184,7 +184,7 @@
         if (t === T.RIVER) river++;
         else if (WW.TERRAIN_LUT.wood[t]) wood++;
       }
-      const score = -Math.abs(d - want) * 0.5 + (river ? 6 + Math.min(3, river * 0.3) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === -1 ? 2 : 0);
+      const score = -Math.abs(d - want) - Math.max(0, d - want - 4) * 2 + (river ? 3 + Math.min(2, river * 0.2) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === -1 ? 2 : 0);
       if (score > bs) { bs = score; best = y * W + x; }
     }
     return best;
@@ -437,11 +437,13 @@
   // ---------------------------------------------------------------------------
   // Folgen (alle EFFECT_EVERY Ticks)
   // ---------------------------------------------------------------------------
-  // Luft über der Stadt samt Stadtrand (7×7 Zellen = 28×28 Kacheln): Mittel und Spitze gemischt
+  // Luft über der Stadt samt Stadtrand (Ringradius + 8 Kacheln, mind. 7×7 Zellen): Mittel und Spitze gemischt
   function cityPollution(st, city, d) {
     const C = d.cell, ccx = Math.floor(city.cx / C), ccy = Math.floor(city.cy / C);
+    const ins = (city.wall && city.wall.inside) | 0;
+    const R = Math.max(3, Math.min(7, Math.ceil((Math.sqrt(ins / 3.14) + 8) / C)));
     let sum = 0, wsum = 0, mx = 0;
-    for (let y = ccy - 3; y <= ccy + 3; y++) for (let x = ccx - 3; x <= ccx + 3; x++) {
+    for (let y = ccy - R; y <= ccy + R; y++) for (let x = ccx - R; x <= ccx + R; x++) {
       if (x < 0 || y < 0 || x >= d.pw || y >= d.ph) continue;
       const v = st.pollution[y * d.pw + x], wt = Math.max(Math.abs(x - ccx), Math.abs(y - ccy)) <= 1 ? 2 : 1;
       sum += v * wt; wsum += wt; if (v > mx) mx = v;
@@ -594,14 +596,16 @@
     const st = sim.state, W = st.W, N = W * st.H, m = st.murk, T = WW.T, LUT = WW.TERRAIN_LUT, hgt = st.height, ter = st.terrain;
     let snap = sim._murkTmp;
     if (!snap || snap.length !== N) snap = sim._murkTmp = new Uint8Array(N);
-    snap.set(m);
     const down = [0, 0, 0, 0];
+    // vier Teilschritte je Durchlauf: die Trübung wandert bis zu 4 Kacheln weit, abgeklungen wird einmal
+    for (let sub = 0; sub < 4; sub++) {
+    snap.set(m);
     for (let i = 0; i < N; i++) {
       const v = snap[i];
       if (!v) continue;
       const t = ter[i];
       if (!LUT.water[t]) { setMurk(sim, i, 0); continue; }
-      const loss = t === T.RIVER ? 8 : 30, nv = v - loss;
+      const loss = t === T.RIVER ? 3 : 30, nv = v - loss;
       if (nv > 0) {
         const x = i % W, h = hgt[i];
         let nl = 0, ne = 0;
@@ -611,7 +615,8 @@
         const k = nl || ne;
         for (let q = 0; q < k; q++) { const j = down[q]; if (m[j] < nv) setMurk(sim, j, nv); }
       }
-      setMurk(sim, i, Math.max(0, m[i] - 4));
+      if (sub === 0) setMurk(sim, i, Math.max(0, m[i] - 8));
+    }
     }
     let n = 0;
     for (let i = 0; i < N; i++) if (m[i]) n++;

@@ -427,5 +427,129 @@
     ctx.drawImage(top, 0, 0, canvas.width, canvas.height);
   }
 
-  WW.SpriteScene = { renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Hilfen: weiche Überlagerungen nach Stufenraster, Gleisnetz
+  function softLayer(ctx, lev, W2, H2, base) {
+    for (var y = 0; y < H2; y++) for (var x = 0; x < W2; x++) {
+      var L0 = lev[y * W2 + x]; if (!L0) continue;
+      function at(xx, yy) { return xx < 0 || yy < 0 || xx >= W2 || yy >= H2 ? L0 : lev[yy * W2 + xx]; }
+      var m = (at(x, y - 1) >= L0 ? 1 : 0) | (at(x + 1, y) >= L0 ? 2 : 0) | (at(x, y + 1) >= L0 ? 4 : 0) | (at(x - 1, y) >= L0 ? 8 : 0);
+      S.draw(ctx, S.softKey(base + (base === 't_soot' || base === 't_cleared' ? '' : '_' + L0), m), x * 8, y * 8);
+    }
+  }
+  function railLine(set, pts) {
+    for (var k = 1; k < pts.length; k++) { var x = pts[k - 1][0], y = pts[k - 1][1]; set[x + ',' + y] = 1; while (x !== pts[k][0] || y !== pts[k][1]) { if (x !== pts[k][0]) x += pts[k][0] > x ? 1 : -1; else y += pts[k][1] > y ? 1 : -1; set[x + ',' + y] = 1; } }
+  }
+  function drawRails(ctx, set, ter, W2) {
+    Object.keys(set).forEach(function (k) {
+      var p = k.split(','), x = +p[0], y = +p[1];
+      var m = (set[x + ',' + (y - 1)] ? 1 : 0) | (set[(x + 1) + ',' + y] ? 2 : 0) | (set[x + ',' + (y + 1)] ? 4 : 0) | (set[(x - 1) + ',' + y] ? 8 : 0);
+      var t = ter[y * W2 + x];
+      if (t === T.RIVER || t === T.WATER || t === T.SHALLOW) S.draw(ctx, (m & 10) ? 't_rail_bridge_h' : 't_rail_bridge_v', x * 8, y * 8);
+      else S.drawRail(ctx, x * 8, y * 8, m);
+    });
+  }
+  function finishItems(tx, items) {
+    items.forEach(function (it) { it._s = sortY(it); });
+    items.sort(function (a, c) { return a._s - c._s || a.x - c.x; });
+    items.forEach(function (it) { if (S.has(it.key)) S.draw(tx, it.key, Math.round(it.x * 8) + (it.dx || 0), Math.round(it.y * 8) + (it.dy || 0), { team: it.team || 0, flip: it.flip }); else console.warn('fehlt', it.key); });
+  }
+  function blit(canvas, top, scale) { canvas.width = top.width * scale; canvas.height = top.height * scale; var c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(top, 0, 0, canvas.width, canvas.height); }
+
+  // ------------------------------------------------------------------ Eisenbahn: zwei Städte, Strecke mit Kurven und Brücke, Zug, Lager, Rohstoffe
+  function renderRailway(canvas, scale) {
+    S.init();
+    var W2 = 40, H2 = 20, ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2), i;
+    for (i = 0; i < ter.length; i++) { var x = i % W2, y = Math.floor(i / W2); vari[i] = Math.floor(h2(x, y, 83) * 256);
+      ter[i] = x === 20 ? T.RIVER : (y < 5 && (x < 16 || x > 31) ? T.HILL : T.GRASS); if (x >= 21 && x <= 23 && y >= 15) ter[i] = T.SHALLOW; }
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d'); S.drawGroundMap(tx, ter, vari, W2, H2);
+    var rails = {}; railLine(rails, [[1, 11], [16, 11], [16, 6], [25, 6], [25, 11], [38, 11]]); railLine(rails, [[13, 11], [13, 5]]);
+    drawRails(tx, rails, ter, W2);
+    var items = [];
+    function b(key, x, y, t) { items.push({ key: key, x: x, y: y, team: t }); }
+    function u(key, x, y, t, f) { items.push({ key: key, x: x, y: y, team: t, unit: true, flip: f }); }
+    // links: Kommunismus
+    b(S.stationKey('communism'), 6, 9, 0); [[2, 13], [5, 14], [9, 14], [2, 6]].forEach(function (h, k) { b(S.houseKey('communism', 2, k), h[0], h[1], 0); });
+    b(S.mineKey('coal'), 12, 3, 0); b('d_deposit_coal_0', 15, 2); b('d_deposit_iron_1', 10, 1); b('d_deposit_iron_0', 8, 2);
+    b('s_pasture', 2, 16, 0); u('a_sheep_0', 2.6, 16.6, 0); u('a_sheep_2', 3.6, 17.2, 0, true); u('a_cow_0', 2.5, 17.4, 0);
+    b(S.laborcampKey('communism'), 9, 16, 0); u(S.unitKey('human', 'prisoner', 'communism', 0), 12.2, 16.8, 0); u(S.unitKey('dwarf', 'prisoner', 'communism', 2), 12.6, 15.2, 0, true); u(S.unitKey('human', 'soldier', 'communism', 4), 11.2, 18.6, 0);
+    // rechts: Faschismus
+    b(S.stationKey('fascism'), 30, 9, 3); [[34, 13], [37, 13], [30, 14], [37, 6]].forEach(function (h, k) { b(S.houseKey('fascism', 2, k), h[0], h[1], 3); });
+    b(S.mineKey('gold'), 33, 2, 3); b('d_deposit_gold_0', 36, 1); b('d_deposit_crystal_0', 37, 3); b('d_deposit_crystal_1', 30, 1);
+    b(S.laborcampKey('fascism'), 27, 15, 3); u(S.unitKey('human', 'prisoner', 'fascism', 1), 29.4, 17.4, 3); u(S.unitKey('orc', 'soldier', 'fascism', 4), 26.4, 17.6, 3);
+    b('s_fishery', 21, 13, 3); b(S.factoryKey('ruestung', 1), 34, 16, 3);
+    finishItems(tx, items);
+    // Züge: waagrecht nach Osten (Lok + drei Wagen), senkrecht nach Norden auf dem Abzweig
+    var tr = [[S.trainKey('car', 'troop', 'e'), 3], [S.trainKey('car', 'coal', 'e'), 5], [S.trainKey('car', 'freight', 'e'), 7], [S.trainKey('loco', null, 'e'), 9]];
+    tr.forEach(function (t) { S.draw(tx, t[0], t[1] * 8 + 4, 11 * 8, { team: 0 }); });
+    S.draw(tx, 'fx_smokeplume_3', 9 * 8 + 4 + 3, 11 * 8 - 16);
+    S.draw(tx, S.trainKey('car', 'coal', 'n'), 13 * 8, 8 * 8, { team: 0 }); S.draw(tx, S.trainKey('loco', null, 'n'), 13 * 8, 7 * 8 - 2, { team: 0 });
+    S.draw(tx, S.trainKey('loco', null, 'w'), 34 * 8, 11 * 8, { team: 3 }); S.draw(tx, S.trainKey('car', 'troop', 'w'), 36 * 8, 11 * 8, { team: 3 });
+    S.draw(tx, S.trainKey('loco', null, 's'), 25 * 8, 9 * 8, { team: 3 });
+    blit(canvas, top, scale);
+  }
+
+  // ------------------------------------------------------------------ Verschmutzungsstufen: dieselbe Landschaft sauber, belastet, verödet
+  function renderPollutionStages(canvas, scale) {
+    S.init();
+    var PW = 16, PH = 13, W2 = PW * 3, H2 = PH, ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2), i;
+    for (i = 0; i < ter.length; i++) { var x = i % W2, y = Math.floor(i / W2), lx = x % PW; vari[i] = Math.floor(h2(lx, y, 85) * 256); ter[i] = lx === 12 ? T.RIVER : (lx >= 13 || (lx < 4 && y < 5) ? T.FOREST : T.GRASS); }
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d'); S.drawGroundMap(tx, ter, vari, W2, H2);
+    var bar = new Uint8Array(W2 * H2), smog = new Uint8Array(W2 * H2), soot = new Uint8Array(W2 * H2), cleared = new Uint8Array(W2 * H2);
+    for (var st = 1; st <= 2; st++) for (y = 0; y < H2; y++) for (lx = 0; lx < PW; lx++) {
+      x = st * PW + lx;
+      var d = Math.hypot(lx - 7, (y - 5) * 1.2) + (h2(lx, y, 86) - 0.5) * 2.2;
+      if (st === 1) { bar[y * W2 + x] = d < 3.5 ? 2 : (d < 6.5 ? 1 : 0); smog[y * W2 + x] = d < 3 ? 2 : (d < 6 ? 1 : 0); soot[y * W2 + x] = d < 2.2 ? 1 : 0; }
+      else { bar[y * W2 + x] = d < 5 ? 3 : (d < 8.5 ? 2 : (d < 11 ? 1 : 0)); smog[y * W2 + x] = d < 4.5 ? 3 : (d < 8 ? 2 : (d < 10.5 ? 1 : 0)); soot[y * W2 + x] = d < 3.5 ? 1 : 0; }
+      if ((lx < 4 && y < 5) && (st === 2 || lx < 2)) cleared[y * W2 + x] = 1;
+    }
+    softLayer(tx, cleared, W2, H2, 't_cleared'); softLayer(tx, bar, W2, H2, 't_barren'); softLayer(tx, soot, W2, H2, 't_soot');
+    for (y = 0; y < H2; y++) for (st = 1; st <= 2; st++) S.draw(tx, 't_murk', (st * PW + 12) * 8, y * 8);
+    var items = [];
+    for (st = 0; st < 3; st++) {
+      var o = st * PW;
+      items.push({ key: S.factoryKey('kombinat', 1), x: o + 6, y: 3, team: 0 });
+      [[2, 8], [5, 9], [8, 9]].forEach(function (h, k) { items.push({ key: S.houseKey('communism', 1 + (k % 2), k), x: o + h[0], y: h[1], team: 0 }); });
+      for (y = 0; y < H2; y++) for (lx = 0; lx < PW; lx++) {
+        var tt = ter[y * W2 + o + lx]; if (tt !== T.FOREST) continue;
+        var dec;
+        if (cleared[y * W2 + o + lx]) dec = ((lx + y) % 3 === 0) ? 'd_log_' + ((lx + y) & 1) : 'd_stump_' + ((lx * 2 + y) % 3);
+        else if (st === 0) dec = 'd_tree_' + ((lx + y) % 4);
+        else if (st === 1) dec = ((lx + y) % 3 === 0) ? 'd_deadtree_' + ((lx + y) % 3) : 'd_tree_' + ((lx + y) % 4);
+        else dec = ((lx + y) % 4 === 0) ? 'd_sickbush_' + ((lx + y) & 1) : 'd_deadtree_' + ((lx * 3 + y) % 3);
+        items.push({ key: dec, x: o + lx, y: y, decor: true });
+      }
+    }
+    finishItems(tx, items);
+    for (st = 0; st < 3; st++) S.factoryStacks('kombinat', 1).forEach(function (sp, k) { S.draw(tx, (st === 0 ? 'fx_smokeplume_clean_' : 'fx_smokeplume_') + ((k + st) % 4), (st * PW + 6) * 8 + sp.dx, 3 * 8 + sp.dy); });
+    softLayer(tx, smog, W2, H2, 't_smog');
+    blit(canvas, top, scale);
+  }
+
+  // ------------------------------------------------------------------ Fahnen: faschistische Musterstadt in drei Reichsfarben
+  function renderFlags(canvas, scale) {
+    S.init();
+    var TW = 18, TH = 16, W2 = TW * 3, H2 = TH, ter = new Uint8Array(W2 * H2), vari = new Uint8Array(W2 * H2);
+    for (var i = 0; i < ter.length; i++) { ter[i] = T.GRASS; vari[i] = Math.floor(h2(i % W2, Math.floor(i / W2), 87) * 256); }
+    var top = document.createElement('canvas'); top.width = W2 * 8; top.height = H2 * 8;
+    var tx = top.getContext('2d'); S.drawGroundMap(tx, ter, vari, W2, H2);
+    var all = [], conf = [[0, 5], [3, 2], [11, 6]];   // [Teamfarbe, Banner-Muster]; Rot mit Kreis wird durch die Sicherheitsregel ersetzt
+    conf.forEach(function (c, n) {
+      var ox = n * TW, team = c[0], pat = c[1];
+      for (var y = 0; y <= 15; y++) S.drawPath(tx, (ox + 8) * 8, y * 8, 5);
+      var items = townItems('fascism', ox, 0, team).map(function (it) { if (it.key === 's_center_fascism') it.key = S.flagKey('center', pat, 0, team); return it; });
+      // Fahnenmasten entlang der Hauptstraße, hängende Banner an Türmen und Toren, Wimpelketten
+      [2.6, 5.6, 9.6, 12.6].forEach(function (yy, k) { items.push({ key: S.flagKey('pole', pat, k & 1, team), x: ox + 7, y: Math.floor(yy) + 0, team: team }); items.push({ key: S.flagKey('pole', pat, (k + 1) & 1, team), x: ox + 9, y: Math.floor(yy) + 1, team: team }); });
+      all = all.concat(items);
+      all.push({ late: 1, key: S.flagKey('row', pat, 0, team), x: ox + 3, y: 7.3, team: team }, { late: 1, key: S.flagKey('row', pat, 0, team), x: ox + 13, y: 7.3, team: team });
+      [[1, 2], [16, 2], [1, 12], [16, 12], [8, 2], [8, 12]].forEach(function (p) { all.push({ late: 2, key: S.flagKey('hang', pat, 0, team), x: ox + p[0], y: p[1], team: team }); });
+    });
+    finishItems(tx, all.filter(function (it) { return !it.late; }));
+    all.filter(function (it) { return it.late; }).forEach(function (it) { S.draw(tx, it.key, Math.round(it.x * 8) + 1, Math.round(it.y * 8) - (it.late === 2 ? 16 : 0), { team: it.team }); });
+    blit(canvas, top, scale);
+  }
+
+  WW.SpriteScene = { renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
