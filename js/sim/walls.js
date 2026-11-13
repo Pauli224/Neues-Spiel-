@@ -22,6 +22,8 @@
   const CORE = {};
   for (const k in WW.STRUCT_INFO) if (WW.STRUCT_INFO[k].core) CORE[k] = 1;
   const DX4 = [0, 1, 0, -1], DY4 = [-1, 0, 1, 0];
+  // [walls] Bauwerke der Industrie weichen dem Ring nicht (Gleise bleiben passierbar, Fabriken/Bahnhöfe werden nicht abgerissen)
+  const KEEP = { station: 1, rail: 1, laborcamp: 1, factory: 1 };
 
   function deforested(t) {
     const T = WW.T;
@@ -384,7 +386,7 @@
       } else if (s) {
         // Felder, Hütten, Ruinen weichen der Mauer (Kerngebäude kommen hier praktisch nie vor)
         if (s.cityId !== -1 && s.cityId !== city.id) continue;
-        if (CORE[s.type] && s.type !== 'house') continue;
+        if ((CORE[s.type] && s.type !== 'house') || KEEP[s.type]) continue;   // [walls] Industrie bleibt stehen
         WW.Structs.remove(sim, s);
       }
       const tt = st.terrain[t];
@@ -443,6 +445,7 @@
       if (!s || s.cityId !== city.id || !WW.Structs.isWallish(s)) {
         // fremde Bauwerke auf dem Ring (Nachbarmauer, fremdes Feld) zählen nicht: dort kann nicht gebaut werden
         if (s && s.cityId !== -1 && s.cityId !== city.id) continue;
+        if (s && KEEP[s.type]) continue;   // [walls] Gleis/Bahnhof/Fabrik im Ring: dort bleibt ein Durchlass
         if (WW.TERRAIN_LUT.walk[st.terrain[t]] > 0) total++;
         continue;
       }
@@ -467,7 +470,7 @@
       if (s && s.cityId === city.id && WW.Structs.isWallish(s)) continue;
       if (s) {
         if (s.cityId !== -1 && s.cityId !== city.id) continue;
-        if (CORE[s.type] && s.type !== 'house') continue;
+        if ((CORE[s.type] && s.type !== 'house') || KEEP[s.type]) continue;   // [walls] Industrie bleibt stehen
         WW.Structs.remove(sim, s);
       }
       const x = t % W, y = (t - x) / W;
@@ -549,7 +552,9 @@
     }
     // [walls] Regierungswechsel: Stufe begrenzen, Geräte umstellen
     clampLevel(sim, city, gov);
-    if (w.devGov !== gov.key || w.devLevel !== (w.level || 0)) assignDevices(sim, city, gov);
+    // Geräte neu verteilen, sobald sich Regierung, Stufe oder die Menge fertiger Stücke ändert (Erweiterung, Umbau, Bresche)
+    const sig = gov.key + ':' + (w.level || 0) + ':' + (w.built || 0) + ':' + (w.plan ? w.plan.length : 0);
+    if (w.devSig !== sig) { assignDevices(sim, city, gov); w.devSig = sig; }
     w.name = levelName(gov, Math.max(1, w.level || 1));
     const classic = !gov.barricades && gov.key !== 'tribe';
     if (w.state === 'upgrading') {

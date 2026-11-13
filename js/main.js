@@ -487,6 +487,7 @@
     if (!cami) cami = { x: game.cam.x / 8, y: game.cam.y / 8, dist: 60 / game.cam.zoom, yaw: 0, tilt: 1 };
     if (WW.Audio && game.audioOn) { try { WW.Audio.update(sim.state, cami, dt); } catch (e) { /* egal */ } }
 
+    autoQuality(dt);
     statT -= dt; infoT -= dt;
     if (statT <= 0) { statT = 0.25; game.hud.updateStats(); }
     if (infoT <= 0) { infoT = 0.5; game.ui.refreshInfo(false); }
@@ -494,6 +495,27 @@
     game._autoT = (game._autoT || 0) + dt;
     if (game._autoT > 60 || (game._autoDirty && game._autoT > 10)) { game._autoDirty = false; game.saveAuto(); }
   }
+
+  // automatische Qualitätsregelung: bei dauerhaft zu langer Bildzeit schrittweise Wolkenschatten,
+  // Wetterpartikel, Wiegen abschalten; läuft es lange wieder flüssig, eins zurückholen
+  const AUTO_ORDER = ['clouds', 'precip', 'sway'];
+  let aqEma = 1 / 60, aqBad = 0, aqGood = 0;
+  function autoQuality(dt) {
+    const R = game.renderer;
+    if (!R || document.hidden || dt <= 0 || dt > 0.25) return;
+    aqEma = aqEma * 0.95 + dt * 0.05;
+    if (aqEma > 1 / 42) { aqBad += dt; aqGood = 0; } else if (aqEma < 1 / 56) { aqGood += dt; aqBad = 0; } else { aqBad = Math.max(0, aqBad - dt); }
+    if (aqBad > 3) {
+      aqBad = 0;
+      const k = AUTO_ORDER.find(x => !R.autoOff[x]);
+      if (k) R.autoOff[k] = true;
+    } else if (aqGood > 25) {
+      aqGood = 0;
+      const k = AUTO_ORDER.slice().reverse().find(x => R.autoOff[x]);
+      if (k) delete R.autoOff[k];
+    }
+  }
+  game.autoQualityState = () => ({ ema: aqEma, off: Object.keys(game.renderer.autoOff) });
 
   // Fehler in der Simulation: einmal melden, anhalten statt Fehlerflut
   function simFailed(e) {

@@ -676,6 +676,9 @@
     shadowEll(g, r.sh[0] + 1, r.sh[1], r.sh[2], r.sh[3]);
     return g;
   }
+  // alle Farben der Generatoren vor dem Backen anmelden (Generatoren einmal je Zweig laufen lassen)
+  Object.keys(GEN).forEach(function (k) { for (var n0 = 0; n0 < 4; n0++) { GEN[k](n0, true); GEN[k](n0, false); } });
+  GEN.rock(0, SANDR); GEN.rock(0, SNOWR);
   S.lib.lazyDef('hd_', function (key) {
     var m = /^hd_([a-z_]+?)_(\d+)(?:_w(\d))?$/.exec(key); if (!m) return null;
     var g = decorHi(m[1], +m[2], m[3] != null ? +m[3] : null); if (!g) return null;

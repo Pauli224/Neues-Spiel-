@@ -599,5 +599,32 @@
     var c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(hi, 0, 0, canvas.width, canvas.height);
   }
 
-  WW.SpriteScene = { renderLandscapeHi: renderLandscapeHi, renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+
+  // ------------------------------------------------------------------ Etappe 4: Effekte und Licht (direkt im Zielmaßstab gezeichnet)
+  function renderEffects(canvas, scale) {
+    S.init();
+    var TW = 48, TH = 30, ter = new Uint8Array(TW * TH), vari = new Uint8Array(TW * TH);
+    for (var i = 0; i < ter.length; i++) { var x = i % TW, y = Math.floor(i / TW); ter[i] = x >= 30 ? T.GRASS : (y >= 20 ? T.ASH : T.GRASS); vari[i] = Math.floor(h2(x, y, 91) * 256); }
+    canvas.width = TW * 8 * scale; canvas.height = TH * 8 * scale;
+    var c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.scale(scale, scale);
+    S.drawGroundMap(c, ter, vari, TW, TH);
+    var f;
+    for (f = 0; f < 6; f++) S.draw(c, 'fx_fire_' + f, 8 + f * 12, 8);
+    for (f = 0; f < 4; f++) S.draw(c, 'fx_smoke_' + f, 84 + f * 12, 8);
+    for (f = 0; f < 2; f++) S.draw(c, 'fx_bolt_' + f, 140 + f * 16, 20);
+    ['s', 'm', 'l'].forEach(function (sz, j) { for (var k = 0; k < 8; k++) S.draw(c, 'fx_blast_' + sz + '_' + k, 6 + k * [14, 22, 30][j], [44, 62, 92][j] - 8); });
+    for (f = 0; f < 10; f++) S.draw(c, 'fx_nuke_' + f, 6 + f * 23, 24 * 8 + 6);
+    // Regen- und Schneefelder
+    for (var yy = 0; yy < 4; yy++) for (var xx = 0; xx < 4; xx++) { S.draw(c, 'fx_rain_' + (xx & 1), 196 + xx * 8, 8 + yy * 8); S.draw(c, 'fx_snow_' + (yy & 1), 196 + xx * 8, 48 + yy * 8); }
+    // Nachtstadt: Dunkelung, leuchtende Fenster, Lichtschein, Schornsteinrauch
+    c.fillStyle = 'rgba(16,20,48,0.62)'; c.fillRect(30 * 8, 10 * 8, 18 * 8, 20 * 8);
+    var houses = [[31, 12, 2, 'monarchy'], [34, 12, 3, 'monarchy'], [38, 12, 2, 'democracy'], [42, 12, 1, 'democracy'], [31, 16, 3, 'democracy'], [36, 16, 2, 'monarchy'], [40, 17, 2, 'theocracy']];
+    houses.forEach(function (h, k) { var key = S.litKey(S.houseKey(h[3], h[2], k)); S.draw(c, key, h[0] * 8, h[1] * 8, { team: 4 }); });
+    S.draw(c, S.litKey('s_center_monarchy'), 34 * 8, 21 * 8, { team: 4 });
+    [[33, 14], [37, 14], [41, 14], [33, 18], [38, 18], [35, 24], [44, 20]].forEach(function (p, k) { S.draw(c, k % 3 === 2 ? 'fx_glow_cold' : 'fx_glow_warm', p[0] * 8, p[1] * 8); });
+    houses.forEach(function (h, k) { S.draw(c, 'fx_chimney_' + (k % 4), h[0] * 8 + 10, h[1] * 8 - 12); });
+    S.draw(c, 'fx_fire_2', 45 * 8, 27 * 8); S.draw(c, 'fx_glow_warm', 45 * 8, 26 * 8);
+  }
+
+  WW.SpriteScene = { renderEffects: renderEffects, renderLandscapeHi: renderLandscapeHi, renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

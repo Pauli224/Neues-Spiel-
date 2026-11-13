@@ -592,11 +592,18 @@
       if (res === 'wood') {
         u.carrying = 'wood'; u.carryAmt = C().CHOP * WW.SimUtil.mod(sim, k, city, 'wood', race.yields.wood) * (plan && plan.focus === 'wood' ? 1.5 : 1);
         // Umgang mit der Natur (care | use | exploit): Kahlschlag-Regime roden alles, Schonende gar nicht
+        // Holzvorrat je Waldkachel: nach einigen Fällungen fällt der Wald (Lichtung mit Stümpfen).
+        // Elfen ernten, ohne zu fällen; Kahlschlag-Regime fällen schneller.
         const nm = WW.Growth.natureMode(sim, k, race);
-        const p = nm === 'care' ? 0 : (nm === 'exploit' ? 0.85 * WW.Growth.natureMul(sim, k, race) : 0.2);
-        if (p > 0 && sim.rng.chance(Math.min(1, p))) {
-          const t = st.terrain[u.target], nt = WW.Walls.deforested(t);
-          if (nt !== t) { st.terrain[u.target] = nt; sim.markDirty(u.target); st.cleared[u.target] = C().CLEARED_MAX; }
+        if (!race.noDeforest && st.chops) {
+          const ti = u.target;
+          const lim = Math.max(1, Math.round((C().WOOD_PER_TILE[nm] || 3) / (nm === 'exploit' ? WW.Growth.natureMul(sim, k, race) : 1)));
+          st.chops[ti] = Math.min(255, st.chops[ti] + 1);
+          if (st.chops[ti] >= lim) {
+            const t = st.terrain[ti], nt = WW.Walls.deforested(t);
+            if (nt !== t) { st.terrain[ti] = nt; sim.markDirty(ti); st.cleared[ti] = C().CLEARED_MAX; sim.fx({ type: 'treeFall', x: (ti % W) + 0.5, y: Math.floor(ti / W) + 0.5 }); }
+            st.chops[ti] = 0;
+          }
         }
       } else {
         u.carrying = 'stone'; u.carryAmt = C().MINE * WW.SimUtil.mod(sim, k, city, 'stone', race.yields.stone) * (plan && plan.focus === 'stone' ? 1.5 : 1);

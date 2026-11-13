@@ -23,7 +23,9 @@
     FISH: 3,
     FORAGE: 4, 
     FIELD_EXHAUST: 30,        // Ernten, nach denen ein Feld unter Kahlschlag-Regime ausgelaugt ist
-    CLEARED_MAX: 240,         // Rodungsmarke (state.cleared) beim Fällen               // Beeren/Pilze sammeln, wenn die Vorräte knapp sind
+    CLEARED_MAX: 240,         // Rodungsmarke (state.cleared) beim Fällen
+    WOOD_PER_TILE: { exploit: 1, use: 1, care: 2 },   // Fällungen, bis eine Waldkachel fällt (state.chops zählt mit)
+    REGROW_RATE: { exploit: 0, use: 10, care: 60 },   // Abbau der Rodungsmarke je Jahr; bei 0 wächst Wald nach               // Beeren/Pilze sammeln, wenn die Vorräte knapp sind
     FIELD_STAGE_TICKS: 60,    // Ticks je Wachstumsstufe (3 Stufen bis reif)
     BASE_HP: 30, CHILD_HP: 16, SOLDIER_HP: 55, LEADER_HP: 40,
     BASE_DMG: 4, SOLDIER_DMG: 9,

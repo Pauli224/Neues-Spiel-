@@ -123,7 +123,7 @@
     if (d > 0.3) {
       const sp = 0.03, nx = u.x + dx / d * sp, ny = u.y + dy / d * sp;
       const i = Math.floor(ny) * st.W + Math.floor(nx);
-      if (nx >= 0 && ny >= 0 && nx < st.W && ny < st.H && WW.TERRAIN_LUT.walk[st.terrain[i]] > 0) { u.x = nx; u.y = ny; u.dir = dx < 0 ? -1 : 1; }
+      if (nx >= 0 && ny >= 0 && nx < st.W && ny < st.H && WW.TERRAIN_LUT.walk[st.terrain[i]] > 0 && !sim.block[i]) { u.x = nx; u.y = ny; u.dir = dx < 0 ? -1 : 1; }
       u.moving = true;
     } else {
       u.moving = false;

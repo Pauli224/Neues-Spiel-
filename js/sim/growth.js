@@ -528,7 +528,18 @@
       if (st.cleared[i]) {
         // unter Kahlschlag bleibt gerodetes Land kahl (Stümpfe, nachgewachsener Wald wird wieder abgeräumt),
         // sonst verblassen die Spuren
-        if (m !== 'exploit') st.cleared[i] = Math.max(0, st.cleared[i] - 24);
+        // eine Lichtung bleibt Lichtung, bis ihre Marke abgelaufen ist (auch wenn ringsum Wald nachwächst)
+        if (st.cleared[i] && LUT.wood[st.terrain[i]] && m !== 'exploit') { const t0 = st.terrain[i], nt = WW.Walls.deforested(t0); if (nt !== t0 && st.cleared[i] > (C().REGROW_RATE[m || 'use'] || 10)) { st.terrain[i] = nt; sim.markDirty(i); } }
+        if (m !== 'exploit') {
+          // Nachwuchs je Umgang mit der Natur: care forstet nach wenigen Jahren auf, use nach längerer Zeit
+          const rate = C().REGROW_RATE[m || 'use'] || 10;
+          const v = Math.max(0, st.cleared[i] - rate);
+          st.cleared[i] = v;
+          if (v === 0 && st.structAt[i] === -1 && st.inRing[i] === -1 && !st.fire[i]) {
+            const to = REGROW_TO[st.terrain[i]];
+            if (to !== undefined) { st.terrain[i] = to; sim.markDirty(i); if (st.chops) st.chops[i] = 0; }
+          }
+        }
         else if (LUT.wood[st.terrain[i]]) { const t0 = st.terrain[i], nt = WW.Walls.deforested(t0); if (nt !== t0) { st.terrain[i] = nt; sim.markDirty(i); } }
       }
       if (o < 0) continue;
@@ -548,6 +559,8 @@
       }
       // Schonende pflanzen nach: Wiese neben Wald im eigenen Gebiet wird wieder Wald
       if (modeOf.get(c.id) === 'care') plantTrees(sim, c, 6);
+      // Bau- und Brennholz: jedes Jahr fallen um die Stadt Bäume (Lichtungen wachsen mit der Stadt)
+      fellForFirewood(sim, c, modeOf.get(c.id));
     }
     for (const k of st.kingdoms) {
       let s = 0, n = 0;
@@ -567,6 +580,29 @@
       }
     }
   }
+  function fellForFirewood(sim, c, mode) {
+    const race = WW.RACES[c.race];
+    if (race && race.noDeforest) return;
+    const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
+    let n = Math.round(c.pop / 8 * (mode === 'exploit' ? 2 : (mode === 'care' ? 0.4 : 1)));
+    for (let r = 4; r <= 22 && n > 0; r++) {
+      const test = (x, y) => {
+        if (n <= 0 || x < 0 || y < 0 || x >= W || y >= H) return;
+        const i = y * W + x;
+        if (!LUT.wood[st.terrain[i]] || st.structAt[i] !== -1 || st.inRing[i] !== -1) return;
+        const o = st.owner[i];
+        if (o !== -1 && o !== c.id) return;
+        if (((i * 2654435761) >>> 28) & 1) return;   // nicht jeder Baum: Lichtungen statt Kahlfläche
+        const nt = WW.Walls.deforested(st.terrain[i]);
+        if (nt === st.terrain[i]) return;
+        st.terrain[i] = nt; st.cleared[i] = C().CLEARED_MAX; sim.markDirty(i); n--;
+      };
+      for (let d = -r; d <= r; d++) { test(c.cx + d, c.cy - r); test(c.cx + d, c.cy + r); }
+      for (let d = -r + 1; d <= r - 1; d++) { test(c.cx - r, c.cy + d); test(c.cx + r, c.cy + d); }
+    }
+  }
+
+  const REGROW_TO = (function () { const T = WW.T, m = {}; m[T.GRASS] = T.FOREST; m[T.SAVANNA] = T.JUNGLE; m[T.TUNDRA] = T.TAIGA; m[T.FLOWERS] = T.MUSHROOM; return m; })();
   function plantTrees(sim, city, n) {
     const st = sim.state, W = st.W, H = st.H, T = WW.T;
     const map = {}; map[T.GRASS] = T.FOREST; map[T.SAVANNA] = T.JUNGLE; map[T.TUNDRA] = T.TAIGA; map[T.FLOWERS] = T.FOREST;
@@ -620,6 +656,7 @@
     ensure(sim);
     const st = sim.state;
     if (!st.cleared || st.cleared.length !== st.W * st.H) st.cleared = new Uint8Array(st.W * st.H);
+    if (!st.chops || st.chops.length !== st.W * st.H) st.chops = new Uint8Array(st.W * st.H);
     natureYearly(sim);
     // abgeschnittene Fluren, Grenzfluren im Krieg
     for (const city of st.cities) if (!city.dead) cutOff(sim, city);

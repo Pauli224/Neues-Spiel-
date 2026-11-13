@@ -361,7 +361,7 @@
   // Speichern / Laden
   // ---------------------------------------------------------------------------
   const RASTERS = [['terrain', Uint8Array], ['variant', Uint8Array], ['height', Uint8Array], ['owner', Int32Array],
-    ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array],
+    ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array], ['chops', Uint8Array],
     ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array]];   // [wild] Raster der Wildnis
   if (WW.Industry) RASTERS.push(['murk', Uint8Array], ['barren', Uint8Array]);   // [industry] Flusstrübung (pollution hat eigene Größe: WW.Industry.save/load)
 
@@ -457,7 +457,7 @@
       seed: seed, W: W, H: H, tick: 0, year: 0, nextId: 1, worldName: world.name || 'Wuselwelt',
       terrain: new Uint8Array(N), variant: new Uint8Array(N), height: new Uint8Array(N),
       owner: new Int32Array(N).fill(-1), structAt: new Int32Array(N).fill(-1), fire: new Uint8Array(N),
-      inRing: new Int32Array(N).fill(-1), mark: new Uint8Array(N), cleared: new Uint8Array(N),
+      inRing: new Int32Array(N).fill(-1), mark: new Uint8Array(N), cleared: new Uint8Array(N), chops: new Uint8Array(N),
       structs: [], units: [], animals: [], cities: [], kingdoms: [], events: [],
       laws: Object.assign({}, WW.LAW_DEFAULTS, opts.laws || {}),
       pathVersion: 0, fireCount: 0, markCount: 0, eventSeq: 0, plots: []

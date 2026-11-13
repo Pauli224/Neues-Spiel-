@@ -306,6 +306,12 @@
     [true, false].forEach(function (old) { var c = document.createElement('canvas'); WW.SpriteScene.renderTownCompare(c, sc, old, gv); box.appendChild(c); });
   })();
 
+  // ---------------------------------------------------------------- Etappe 4: Effekte und Licht (?topfx=3)
+  if (want('topfx') || Q.get('topfx')) (function () {
+    var r = section('topfx', 'Etappe 4: Feuer (6), Rauch (4), Blitz (2), Explosionen klein/mittel/groß (je 8), Pilzwolke (10), Regen/Schnee, Nachtstadt mit Lichtschein und Schornsteinrauch');
+    var c = document.createElement('canvas'); c.id = 'topfxcv'; WW.SpriteScene.renderEffects(c, +Q.get('topfx') || 3); cell(r, '', c);
+  })();
+
   // ---------------------------------------------------------------- Etappe 3: Landschaft fein (?toplandscape=2 bzw. 4)
   if (want('toplandscape') || Q.get('toplandscape')) (function () {
     var sc = +Q.get('toplandscape') || 2;

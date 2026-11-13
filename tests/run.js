@@ -893,6 +893,50 @@ test('15 Gebiet wächst Flur um Flur (Lager klein, nach 20/60 Jahren ×2/×4, 80
 });
 
 // --------------------------------------------------------------------------
+// 16. Sichtbares Baumfällen und Nachwuchs
+// --------------------------------------------------------------------------
+test('16 Bäume fallen (Lichtungen) und wachsen je nach Naturmodus nach', function () {
+  const spots = [{ x: 30, y: 40 }, { x: 90, y: 40 }, { x: 150, y: 40 }];
+  const sim = makeSim({ seed: 'faellen', world: forestWorld(180, 80, spots), populate: 3, govs: ['democracy', 'theocracy', 'fascism'], races: ['human', 'human', 'human'], animals: false });
+  const ks = sim.state.kingdoms;
+  for (const k of ks) k.govLocked = true;
+  sim.actions.setLaw('wars', false); sim.actions.setLaw('disasters', false);
+  const st = sim.state, W = st.W;
+  const cities = ks.map(k => sim._cities.get(k.cityIds[0]));
+  const strip = (k) => { if (Array.isArray(k.mods) && k.mods.some(m => m.key === 'nature')) { k.mods = k.mods.filter(m => m.key !== 'nature'); k._modc = null; } };
+  const woodNear = (c, r) => { let n = 0; for (let y = c.cy - r; y <= c.cy + r; y++) for (let x = c.cx - r; x <= c.cx + r; x++) { if (x < 0 || y < 0 || x >= W || y >= st.H) continue; if (Math.hypot(x - c.cx, y - c.cy) <= r && WW.TERRAIN_LUT.wood[st.terrain[y * W + x]]) n++; } return n; };
+  // gemessen am ursprünglichen Wald um die Stadt (neuer Wildwuchs anderswo zählt nicht)
+  const orig = cities.map(c => { const l = []; for (let y = c.cy - 22; y <= c.cy + 22; y++) for (let x = c.cx - 22; x <= c.cx + 22; x++) { if (x < 0 || y < 0 || x >= W || y >= st.H) continue; const i = y * W + x; if (Math.hypot(x - c.cx, y - c.cy) <= 22 && WW.TERRAIN_LUT.wood[st.terrain[i]]) l.push(i); } return l; });
+  const w0 = orig.map(l => l.length);
+  run(sim, 15 * WW.CONFIG.TPY, 20, () => ks.forEach(strip));
+  const w1 = orig.map(l => l.filter(i => WW.TERRAIN_LUT.wood[st.terrain[i]]).length);
+  const cl = cities.map(c => { let n = 0; for (let i = 0; i < st.cleared.length; i++) if (st.cleared[i] && Math.hypot(i % W - c.cx, Math.floor(i / W) - c.cy) < 24) n++; return n; });
+  log('ursprünglicher Wald im Umkreis 22 nach 15 Jahren:', cities.map((c, j) => WW.Growth.natureMode(sim, ks[j]) + ' ' + w0[j] + '→' + w1[j] + ' (Lichtung ' + cl[j] + ')').join(' · '));
+  assert(w1[0] < w0[0] - 10 && cl[0] > 0, 'Holzernte des use-Reichs fällt keinen Wald');
+  // Nachwuchs: frische Lichtungen anlegen (Wiese mit Stümpfen) und beobachten
+  const patches = cities.map(c => {
+    const list = [];
+    for (let i = 0; i < st.W * st.H && list.length < 25; i++) {
+      if (st.owner[i] !== c.id || st.inRing[i] !== -1 || st.structAt[i] !== -1 || st.terrain[i] !== WW.T.GRASS) continue;
+      if (Math.hypot(i % W - c.cx, Math.floor(i / W) - c.cy) < 12) continue;
+      st.cleared[i] = WW.CONFIG.CLEARED_MAX; list.push(i);
+    }
+    return list;
+  });
+  const grown = () => patches.map(l => l.filter(i => WW.TERRAIN_LUT.wood[st.terrain[i]] || st.structAt[i] !== -1).length);
+  run(sim, 6 * WW.CONFIG.TPY, 20, () => ks.forEach(strip));
+  const g6 = grown();
+  run(sim, 24 * WW.CONFIG.TPY, 20, () => ks.forEach(strip));
+  const g30 = grown();
+  log('Nachwuchs auf je ' + patches.map(l => l.length).join('/') + ' Lichtungskacheln: nach 6 Jahren ' + g6.join('/') + ', nach 30 Jahren ' + g30.join('/') + ' (use/care/exploit)');
+  assert(g6[1] > g6[0], 'care forstet nicht schneller auf als use');
+  assert(g30[0] > g6[0], 'use wächst auch nach langer Zeit nicht nach');
+  assert(g30[2] <= g6[2] && g30[2] < patches[2].length * 0.3, 'exploit lässt Wald nachwachsen');
+  const D = WW.Sim.load(sim.serialize());
+  assert(D && D.state.chops && D.state.chops.length === st.W * st.H, 'chops nicht gespeichert');
+});
+
+// --------------------------------------------------------------------------
 // 7. Leistung
 // --------------------------------------------------------------------------
 test('7 Leistung (~800 Einheiten auf 144×96)', function () {

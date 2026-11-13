@@ -1593,6 +1593,137 @@
     COST.prisonerSuit = { top: T3(K2.greyL, K2.grey, K2.greyD), sleeve: T3(K2.greyL, K2.grey, K2.greyD), pants: T3(K2.grey, K2.greyD, K2.greyD), shoes: C.woodD, hat: null };
     TOOL2.prisoner = function (g, hx, hy) { g.vline(hx + 1, hy - 7, 10, C.wood); g.vline(hx + 2, hy - 7, 10, C.woodD); g.rect(hx, hy + 3, 4, 3, C.metal); g.hline(hx, hy + 3, 4, C.metalL); };
     ROLES2.push('prisoner');
+
+    // ================================================================== Etappe 4: Effekte und Licht im feinen Raster (hx_*, Maßstab 0,5)
+    var hash = L.hash;
+    var FXC = {
+      fire: [HC('#ffffff'), HC('#fff2a0'), HC('#ffd23f'), HC('#ff9a2a'), HC('#e8502a'), HC('#a02a26')],
+      smoke: [AC(null, '#c8c4cc', 220), AC(null, '#9a96a0', 210), AC(null, '#6e6a76', 200), AC(null, '#4a4652', 190)],
+      cool: [HC('#f2c08a'), HC('#d08a5a'), HC('#9a5e4a'), HC('#6a4448')],
+      spark: HC('#fff6c0'), debris: [HC('#5a4a3e'), HC('#3a302a')],
+      rain: AC(null, '#cfe8ff', 170), snow: AC(null, '#ffffff', 220), snowD: AC(null, '#d8e8f8', 180),
+      bolt: [HC('#ffffff'), HC('#d8f0ff'), AC(null, '#9ad8ff', 160)]
+    };
+    var GLW = [], GLC2 = [];
+    [20, 35, 55, 80, 110, 140].forEach(function (a) { GLW.push(AC(null, '#ffd890', a)); GLC2.push(AC(null, '#a8d8ff', a)); });
+    function flame(g, cx, by, w, h, f, seed) {   // züngelnde Flamme, Kern hell
+      for (var y = 0; y < h; y++) {
+        var t = y / h, hw = w / 2 * Math.sin(Math.PI * Math.min(1, (1 - t) * 1.1)) * (0.7 + 0.3 * Math.sin(f * 1.7 + y * 0.5 + seed));
+        var sway = Math.sin(f * 1.3 + y * 0.35 + seed) * (1 - t) * 2 * t * 2;
+        for (var x = Math.floor(cx - hw + sway); x <= Math.ceil(cx + hw + sway); x++) {
+          var d = Math.abs(x + 0.5 - cx - sway) / Math.max(0.5, hw), k = Math.min(5, Math.floor(d * 3 + t * 3));
+          if (d > 1) continue;
+          g.set(x, by - y, FXC.fire[Math.max(1, k)]);
+        }
+      }
+    }
+    function fireHi(f) {
+      var g = new Grid(20, 30);
+      flame(g, 10, 28, 14, 22, f, 0); flame(g, 6, 28, 7, 13, f + 2, 1.3); flame(g, 14, 28, 8, 15, f + 4, 2.1); flame(g, 10, 28, 6, 12, f + 1, 3);
+      for (var k = 0; k < 4; k++) { var ex = 4 + Math.round(hash(k, f, 1101) * 12), ey = 20 - ((f * 3 + k * 5) % 18); g.set(ex, ey, FXC.fire[(k % 2) + 1]); }
+      g.hline(5, 29, 10, FXC.fire[5]);
+      return g;
+    }
+    function smokeHi(f, n) {
+      var g = new Grid(20, 24);
+      for (var k = 0; k < 4; k++) {
+        var t = (k + f / 4) / 4, cy = 21 - t * 18, r = 2.5 + t * 4.5, cx = 10 + Math.sin(k * 1.9 + n) * 2 * t;
+        g.ellipse(cx, cy, r, r * 0.85, function (x, y, nx, ny) { var s = nx * 0.7 + ny; return s < -0.6 ? FXC.smoke[0] : (s < 0.2 ? FXC.smoke[1] : (s < 0.7 ? FXC.smoke[2] : FXC.smoke[3])); });
+      }
+      return g;
+    }
+    function blast(size, f) {   // 8 Phasen: Blitz, Feuerball, Funken, Trümmer, Rauchring
+      var R = { s: 10, m: 17, l: 28 }[size], S2 = R * 2 + 6, g = new Grid(S2, S2), c = S2 / 2, t = f / 7;
+      var fr = R * (0.35 + Math.min(1, t * 2.2) * 0.65);
+      if (f <= 5) g.ellipse(c, c, fr, fr, function (x, y, nx, ny) {
+        var d = Math.sqrt(nx * nx + ny * ny) + (hash(x, y, f + 1110) - 0.5) * 0.35, heat = d + t * 1.4;
+        if (f >= 4 && d < 0.45 + (f - 4) * 0.25) return null;
+        return heat < 0.35 ? FXC.fire[0] : (heat < 0.7 ? FXC.fire[1] : (heat < 1.0 ? FXC.fire[2] : (heat < 1.35 ? FXC.fire[3] : (heat < 1.7 ? FXC.fire[4] : FXC.smoke[2]))));
+      });
+      if (f >= 3) {   // Rauchring
+        var rr = R * (0.8 + t * 0.4);
+        g.ellipse(c, c, rr, rr, function (x, y, nx, ny) { var d = Math.sqrt(nx * nx + ny * ny); if (d < 0.72 || hash(x >> 1, y >> 1, f + 1120) < (f - 3) * 0.12) return null; return d > 0.9 ? FXC.smoke[3] : (ny < 0 ? FXC.smoke[1] : FXC.smoke[2]); });
+      }
+      for (var k = 0; k < 6 + R / 3; k++) {   // Funken und Trümmer fliegen nach außen
+        var a = hash(k, 1, 1130) * 6.28, dist = R * (0.4 + t * 0.9) * (0.6 + hash(k, 2, 1131) * 0.5);
+        var px = Math.round(c + Math.cos(a) * dist), py = Math.round(c + Math.sin(a) * dist + t * t * R * 0.4);
+        if (f < 6) g.set(px, py, k % 3 === 0 ? FXC.debris[k & 1] : FXC.spark);
+        if (k % 3 === 0 && f < 6) g.set(px + 1, py, FXC.debris[1]);
+      }
+      return g;
+    }
+    function nuke(f) {   // 10 Phasen: Blitzball, Säule, Pilz, Abkühlen, Zerfasern
+      var g = new Grid(80, 96), t = f / 9;
+      var capY = 82 - Math.min(1, t * 2) * 48, capR = 9 + Math.min(1, t * 1.6) * 17;
+      var pal = f < 2 ? [FXC.fire[0], FXC.fire[1], FXC.fire[2], FXC.fire[3]] : (f < 4 ? [FXC.fire[1], FXC.fire[2], FXC.fire[3], FXC.fire[4]] : (f < 6 ? FXC.cool : [FXC.smoke[0], FXC.smoke[1], FXC.smoke[2], FXC.smoke[3]]));
+      if (f >= 1) for (var y = Math.round(capY + capR * 0.5); y < 92; y++) { var w2 = 4 + (y > 84 ? (y - 84) * 2.2 : 0) + Math.sin(y * 0.6 + f) * 0.8; for (var x = Math.round(40 - w2); x <= Math.round(40 + w2); x++) g.set(x, y, x < 38 ? pal[1] : (x < 42 ? pal[0] : pal[2])); }
+      if (f >= 2) g.ellipse(40, 90, 30 + t * 8, 5, function (x, yy, nx, ny) { return ny < 0 ? pal[2] : pal[3]; });
+      [[-0.55, 0.25, 0.62], [0.55, 0.25, 0.62], [0, 0, 0.8], [-0.25, -0.35, 0.5], [0.3, -0.3, 0.45]].forEach(function (b, k) {
+        g.ellipse(40 + b[0] * capR, capY + b[1] * capR, capR * b[2], capR * b[2] * 0.85, function (x, yy, nx, ny) { var s = nx * 0.6 + ny + (hash(x >> 1, yy >> 1, 1140 + k) - 0.5) * 0.4; return s < -0.6 ? pal[0] : (s < 0.1 ? pal[1] : (s < 0.6 ? pal[2] : pal[3])); });
+      });
+      if (f >= 7) for (var i = 0; i < g.d.length; i++) if (g.d[i] && hash(i % 80 >> 1, (i / 80 | 0) >> 1, 1150 + f) < (f - 6) * 0.22) g.d[i] = 0;
+      return g;
+    }
+    function boltHi(f) {
+      var g = new Grid(24, 72), x = 12 + (f ? 2 : -2);
+      for (var y = 0; y < 72; y += 6) {
+        var nx = Math.max(3, Math.min(20, x + Math.round((hash(y, f, 1160) - 0.5) * 10)));
+        g.line(x - 1, y, nx - 1, y + 6, FXC.bolt[2]); g.line(x + 1, y, nx + 1, y + 6, FXC.bolt[2]); g.line(x, y, nx, y + 6, FXC.bolt[0]);
+        if (y > 12 && y < 50 && hash(y, f, 1161) < 0.35) { var bx = nx + (hash(y, 2, f) < 0.5 ? -6 : 6); g.line(nx, y + 6, bx, y + 12, FXC.bolt[1]); }
+        x = nx;
+      }
+      return g;
+    }
+    function particles(kind, f) {
+      var g = new Grid(16, 16);
+      for (var k = 0; k < (kind === 'rain' ? 5 : 6); k++) {
+        var x = Math.floor(hash(k, 1, 1170) * 16), y = (Math.floor(hash(k, 2, 1171) * 16) + f * 8) % 16;
+        if (kind === 'rain') { g.set(x, y, FXC.rain); g.set((x + 15) % 16, (y + 1) % 16, FXC.rain); g.set((x + 14) % 16, (y + 2) % 16, FXC.rain); }
+        else { g.set((x + f) % 16, y, FXC.snow); if (k % 2) g.set((x + f + 1) % 16, y, FXC.snowD); }
+      }
+      return g;
+    }
+    function glowHi(cold) {
+      var g = new Grid(48, 48), P = cold ? GLC2 : GLW;
+      for (var y = 0; y < 48; y++) for (var x = 0; x < 48; x++) {
+        var d = Math.hypot(x + 0.5 - 24, (y + 0.5 - 24) * 1.15) / 24;
+        if (d >= 1) continue;
+        var k = Math.min(5, Math.floor((1 - d) * 6 + (hash(x, y, 1180) - 0.5) * 0.6));
+        if (k >= 0) g.set(x, y, P[k]);
+      }
+      return g;
+    }
+    function chimneySmoke(f) {
+      var g = new Grid(10, 22);
+      for (var k = 0; k < 3; k++) { var t = (k + f / 4) / 3, cy = 20 - t * 18, r = 1.2 + t * 2.4, cx = 4 + t * 3 + Math.sin(k + f) * 0.8; g.ellipse(cx, cy, r, r, function (x, y, nx, ny) { return nx + ny < -0.3 ? FXC.smoke[0] : FXC.smoke[1]; }); }
+      return g;
+    }
+    L.lazyDef('hx_', function (key) {
+      var m, g, anchor = 'unit';
+      if ((m = /^hx_fire_(\d)$/.exec(key))) g = fireHi(+m[1]);
+      else if ((m = /^hx_smoke_(\d)$/.exec(key))) g = smokeHi(+m[1], 0);
+      else if ((m = /^hx_blast_([sml])_(\d)$/.exec(key))) { g = blast(m[1], +m[2]); anchor = 'center'; }
+      else if ((m = /^hx_nuke_(\d)$/.exec(key))) g = nuke(+m[1]);
+      else if ((m = /^hx_bolt_(\d)$/.exec(key))) g = boltHi(+m[1]);
+      else if ((m = /^hx_(rain|snow)_(\d)$/.exec(key))) return { grid: particles(m[1], +m[2]), scale: 0.5, ox: 0, oy: 0 };
+      else if ((m = /^hx_glow_(warm|cold)$/.exec(key))) { g = glowHi(m[1] === 'cold'); anchor = 'center'; }
+      else if ((m = /^hx_chimney_(\d)$/.exec(key))) g = chimneySmoke(+m[1]);
+      else return null;
+      var dw = g.w * 0.5, dh = g.h * 0.5;
+      return anchor === 'center' ? { grid: g, scale: 0.5, ox: (8 - dw) / 2, oy: (8 - dh) / 2 } : { grid: g, scale: 0.5, ox: Math.floor((8 - dw) / 2), oy: 8 - dh };
+    });
+    var A2 = L.ALIAS, fi2;
+    for (fi2 = 0; fi2 < 6; fi2++) A2['fx_fire_' + fi2] = 'hx_fire_' + fi2;
+    for (fi2 = 0; fi2 < 4; fi2++) { A2['fx_smoke_' + fi2] = 'hx_smoke_' + fi2; A2['fx_chimney_' + fi2] = 'hx_chimney_' + fi2; }
+    ['s', 'm', 'l'].forEach(function (sz) { for (var f = 0; f < 8; f++) A2['fx_blast_' + sz + '_' + f] = 'hx_blast_' + sz + '_' + f; });
+    for (fi2 = 0; fi2 < 4; fi2++) { A2['fx_explosion_' + fi2] = 'hx_blast_m_' + fi2 * 2; A2['fx_explosion_l_' + fi2] = 'hx_blast_l_' + fi2 * 2; }
+    for (fi2 = 0; fi2 < 10; fi2++) A2['fx_nuke_' + fi2] = 'hx_nuke_' + fi2;
+    for (fi2 = 0; fi2 < 6; fi2++) A2['fx_mushroom_' + fi2] = 'hx_nuke_' + Math.round(fi2 * 9 / 5);
+    A2.fx_bolt = 'hx_bolt_0'; A2.fx_bolt_0 = 'hx_bolt_0'; A2.fx_bolt_1 = 'hx_bolt_1';
+    A2.fx_rain_0 = 'hx_rain_0'; A2.fx_rain_1 = 'hx_rain_1'; A2.fx_snow_0 = 'hx_snow_0'; A2.fx_snow_1 = 'hx_snow_1';
+    A2.fx_glow_warm = 'hx_glow_warm'; A2.fx_glow_cold = 'hx_glow_cold';
+    // Phasenzahl je Effekt für den Renderer
+    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, bolt: 2, rain: 2, snow: 2 }[name] || 1; };
   });
 
   WW.SPRITE_RACES = RACES;

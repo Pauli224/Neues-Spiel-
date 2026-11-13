@@ -30,6 +30,7 @@
     this.rowU = []; this.rowS = [];
     this.labelCache = new Map();
     this.gfx = { daynight: true, weather: true, clouds: true, water: true, quality: 'mid' };
+    this.autoOff = {};   // automatische Qualitätsregelung: abgeschaltete Teile
   }
 
   // ------------------------------------------------------------------ Welt setzen
@@ -46,6 +47,8 @@
     this.traffic = new Uint16Array(W * H);
     this.kingTile = new Int16Array(W * H).fill(-1);
     this.decorSig = new Int16Array(W * H);
+    this.waterSig = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) this.waterSig[i] = waterKind(st.terrain[i]);
     for (let i = 0; i < W * H; i++) this.decorSig[i] = st.structAt && st.structAt[i] >= 0 ? -2 : st.terrain[i];
     this.groundDirty.clear();
     this.fx.length = 0;
@@ -467,7 +470,9 @@
       g.setTransform(1, 0, 0, 1, -c.cx * CPX, -c.cy * CPX);
       this.drawGroundTile(g, x, y);
       touched.add(c);
-      c.waterDirty = true;
+      // Wasser-Masken nur neu, wenn sich an Wasser/Land dieser Kachel etwas geändert hat
+      const wk = waterKind(st.terrain[i]);
+      if (this.waterSig[i] !== wk) { this.waterSig[i] = wk; c.waterDirty = true; const c2 = this.chunkAt(Math.min(st.W - 1, x + 1), y), c3 = this.chunkAt(Math.max(0, x - 1), y), c4 = this.chunkAt(x, Math.min(st.H - 1, y + 1)), c5 = this.chunkAt(x, Math.max(0, y - 1)); c2.waterDirty = c3.waterDirty = c4.waterDirty = c5.waterDirty = true; }
       // Deko-Block nur neu, wenn sich die Deko dieser Kachel ändern kann
       const sig = st.structAt && st.structAt[i] >= 0 ? -2 : (this.path[i] ? -3 : st.terrain[i]);
       if (this.decorSig[i] !== sig) { this.decorSig[i] = sig; c._decorTouched = true; }
@@ -1135,8 +1140,7 @@
     if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
 
     this.drawParticles(ctx, dt);
-    // Wolkenschatten, Wetter, Tageszeit
-    if (this.gfx.clouds !== false && this.gfx.quality !== 'low') this.drawCloudShadows(ctx, vt);
+    // Wolkenschatten, Wetter, Tageszeit (Nacht und Wolken in einer Ebene niedriger Auflösung)
     this._dayPhase = opts.dayPhase; this._dpr = cam.dpr;
     this.drawAtmosphere(ctx, cam, vt, dt, opts, s, ox, oy);
     ctx.setTransform(s, 0, 0, s, ox, oy);
@@ -1206,7 +1210,7 @@
 
     const time = this.time;
     const devS = ctx.getTransform ? ctx.getTransform().a : 1;
-    const sway = devS >= 2 && this.gfx.quality !== 'low';
+    const sway = devS >= 2 && this.gfx.quality !== 'low' && !this.autoOff.sway;
     const bubbles = [];
     const bars = [];
     const flyers = [];
@@ -1608,7 +1612,7 @@
   };
 
   // Glitzer je Block einmal vorberechnen (4 Bilder, Meer und Fluss mit versetzten Mustern), dann nur noch wechseln
-  const WFR = 4;
+  const WFR = 6;
   Renderer.prototype.buildWaterGlints = function (c) {
     const frames = this.glintFrames();
     c.wGl = [];
@@ -1623,12 +1627,17 @@
       tg.save(); tg.translate(f * 5, f * 5); tg.fillStyle = tg.createPattern(frames[(f * 2 + 3) % frames.length], 'repeat'); tg.fillRect(-64, -64, CPX + 128, CPX + 128); tg.restore();
       tg.globalCompositeOperation = 'destination-in'; tg.drawImage(c.wRiv, 0, 0);
       g.globalCompositeOperation = 'source-over'; g.drawImage(tmp, 0, 0);
+      // Brandung in dieses Bild einbacken: zwei Ringe, die gegeneinander an- und ablaufen
+      const ph = f / WFR * Math.PI * 2;
+      g.globalAlpha = Math.max(0, 0.5 + 0.45 * Math.sin(ph)) * 0.95; g.drawImage(c.wFoam1, 0, 0);
+      g.globalAlpha = Math.max(0, 0.5 + 0.45 * Math.sin(ph - 2.1)) * 0.7; g.drawImage(c.wFoam2, 0, 0);
+      g.globalAlpha = 1;
       c.wGl.push(cv);
     }
   };
   Renderer.prototype.drawWaterLayer = function (ctx, cx0, cx1, cy0, cy1, rx, ry, low) {
     const st = this.st, t = this.time;
-    const fr = ((t * 4) | 0) % WFR;
+    const fr = ((t * 3.5) | 0) % WFR;
     const a1 = 0.5 + 0.45 * Math.sin(t * 1.7), a2 = 0.5 + 0.45 * Math.sin(t * 1.7 - 2.1);
     let builds = 2;
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
@@ -1638,11 +1647,9 @@
       if (!c.hasWater) continue;
       const X = cx * CPX, Y = cy * CPX, w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
       const dx = rx(X), dy = ry(Y), dw = rx(X + w) - dx, dh = ry(Y + h) - dy;
-      if (!low) {
-        if (!c.wGl && builds-- > 0) this.buildWaterGlints(c);
-        if (c.wGl) ctx.drawImage(c.wGl[fr], 0, 0, w, h, dx, dy, dw, dh);
-      }
-      // Brandung rollt an: zwei Ringe im Wechsel
+      if (!low && !c.wGl && builds-- > 0) this.buildWaterGlints(c);
+      if (!low && c.wGl) { ctx.drawImage(c.wGl[fr], 0, 0, w, h, dx, dy, dw, dh); continue; }
+      // weite Ansicht oder noch nicht gebaut: nur die Brandung
       ctx.globalAlpha = Math.max(0, a1) * 0.9; ctx.drawImage(c.wFoam1, 0, 0, w, h, dx, dy, dw, dh);
       ctx.globalAlpha = Math.max(0, a2) * 0.6; ctx.drawImage(c.wFoam2, 0, 0, w, h, dx, dy, dw, dh);
       ctx.globalAlpha = 1;
@@ -1787,8 +1794,8 @@
         // weiches, kachelbares Rauschen aus Sinuswellen
         let v = 0;
         for (let o = 0; o < 4; o++) { const f = (o + 1) * 2 * Math.PI / N; v += Math.sin(x * f * (o + 1) * 0.5 + o * 1.7 + Math.sin(y * f * 0.7 + o)) * Math.cos(y * f * (o % 2 ? 1 : 0.5) * (o + 1) * 0.5 + o * 2.3) / (o + 1); }
-        const a = Math.max(0, v - 0.35) * 1.3;
-        const i = (y * N + x) * 4; d[i] = 22; d[i + 1] = 30; d[i + 2] = 52; d[i + 3] = Math.round(Math.min(1, a) * 70);
+        const a = Math.min(1, Math.max(0, v - 0.35) * 1.3) * 0.28;
+        const i = (y * N + x) * 4; d[i] = Math.round(255 - a * 233); d[i + 1] = Math.round(255 - a * 225); d[i + 2] = Math.round(255 - a * 203); d[i + 3] = 255;
       }
       c.putImageData(img, 0, 0);
       this._clouds = cv;
@@ -1814,14 +1821,30 @@
     // Wetter (rein optisch): Schauer nach Jahr und Ort, über der Kamera
     const wx = this.weatherState(cam, dt);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // Nacht: multiplizierend abdunkeln und bläulich tönen
-    if (night > 0.01 || wx.dark > 0.01) {
-      const k = Math.min(0.78, night * 0.72 + wx.dark * 0.35);
+    // Nacht (bläulich abdunkeln) und Wolkenschatten: eine Schattierungs-Ebene in 1/8 Auflösung, ein Multiplizier-Durchgang
+    const clouds = this.gfx.clouds !== false && this.gfx.quality !== 'low' && !this.autoOff.clouds;
+    const k = Math.min(0.78, night * 0.72 + wx.dark * 0.35);
+    if (k > 0.01 || clouds) {
+      const sw = Math.ceil(W / 8), sh = Math.ceil(H / 8);
+      const L = this._shade || (this._shade = document.createElement('canvas'));
+      if (L.width !== sw || L.height !== sh) { L.width = sw; L.height = sh; }
+      const lg = L.getContext('2d');
       const r = Math.round(255 - (255 - NIGHT[0]) * k), gg = Math.round(255 - (255 - NIGHT[1]) * k), b = Math.round(255 - (255 - NIGHT[2]) * k);
+      lg.globalCompositeOperation = 'source-over';
+      lg.fillStyle = 'rgb(' + r + ',' + gg + ',' + b + ')';
+      lg.fillRect(0, 0, sw, sh);
+      if (clouds) {
+        // Wolken in Weltkoordinaten, auf die kleine Ebene abgebildet
+        lg.save(); lg.globalCompositeOperation = 'multiply';
+        lg.setTransform(s / 8, 0, 0, s / 8, ox / 8, oy / 8);
+        this.drawCloudShadows(lg, vt);
+        lg.restore();
+      }
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
       ctx.globalCompositeOperation = 'multiply';
-      ctx.fillStyle = 'rgb(' + r + ',' + gg + ',' + b + ')';
-      ctx.fillRect(0, 0, W, H);
-      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(L, 0, 0, sw * 8, sh * 8);
+      ctx.restore();
     }
     // Morgen- und Abendrot
     if (dusk > 0.02) {
@@ -1838,7 +1861,7 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
     // Niederschlag in Bildschirmpixeln
-    if (wx.rain > 0.02 || wx.snow > 0.02) this.drawPrecip(ctx, wx, dt);
+    if ((wx.rain > 0.02 || wx.snow > 0.02) && !this.autoOff.precip) this.drawPrecip(ctx, wx, dt);
     if (wx.fog > 0.02) {
       ctx.fillStyle = 'rgba(225,232,236,' + (wx.fog * 0.28).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);

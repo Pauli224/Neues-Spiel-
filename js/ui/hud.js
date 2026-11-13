@@ -189,13 +189,36 @@
     if (!b) return;
     const on = this.game.audioSet && this.game.audioSet.on;
     b.hidden = !WW.Audio;
-    const key = on ? (WW.Sprites.has('i_sound') ? 'i_sound' : null) : (WW.Sprites.has('i_mute') ? 'i_mute' : null);
+    const S = WW.Sprites;
+    const key = (on ? ['i_sound_on', 'i_sound'] : ['i_sound_off', 'i_mute']).find(k => S.has(k));
     D().clear(b);
-    if (key) b.appendChild(D().icon(key, 28));
-    else b.appendChild(D().h('span.snd', { style: { font: '700 18px/1 var(--font-pixel)' } }, on ? '♪' : '–'));
+    b.appendChild(key ? D().icon(key, 28) : speakerIcon(on, 28));
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.title = on ? 'Ton aus' : 'Ton an';
+    b.title = on ? 'Ton ist an – antippen schaltet aus' : 'Ton ist aus – antippen schaltet an';
+    b.setAttribute('aria-label', on ? 'Ton aus' : 'Ton an');
   };
+
+  // Lautsprecher als Pixel-Icon (Rückfall, bis die Grafik i_sound_on/off liefert): 16×16, Schallwellen oder rotes Kreuz
+  function speakerIcon(on, px) {
+    const dpr = Math.min(3, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+    const sc = Math.max(1, Math.round(px * dpr / 16));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 16 * sc;
+    const g = cv.getContext('2d');
+    const P = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x * sc, y * sc, w * sc, h * sc); };
+    const ink = '#231a2c', body = '#d6cfc4', shade = '#a49d95';
+    // Umriss + Körper
+    P(1, 5, 4, 6, ink); P(4, 3, 2, 10, ink); P(6, 1, 2, 14, ink);
+    P(2, 6, 3, 4, body); P(5, 4, 1, 8, body); P(6, 2, 1, 12, body); P(2, 9, 3, 1, shade); P(6, 12, 1, 2, shade);
+    if (on) {
+      P(10, 6, 1, 4, '#f3ead2'); P(11, 5, 1, 1, '#f3ead2'); P(11, 10, 1, 1, '#f3ead2');
+      P(13, 4, 1, 8, '#f3ead2'); P(14, 3, 1, 1, '#f3ead2'); P(14, 12, 1, 1, '#f3ead2');
+    } else {
+      const r = '#e2543d';
+      for (let i = 0; i < 5; i++) { P(10 + i, 5 + i, 1, 1, r); P(14 - i, 5 + i, 1, 1, r); }
+    }
+    cv.className = 'ico'; cv.style.width = cv.style.height = px + 'px'; cv.setAttribute('aria-hidden', 'true');
+    return cv;
+  }
 
   Hud.prototype.toggleSpeedPop = function (show) {
     if (show == null) show = this.spPop.hidden;
