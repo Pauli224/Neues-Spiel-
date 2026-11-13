@@ -25,10 +25,10 @@
       'In {city} wird das erste Haus eingeweiht. Es gibt Kuchen und einen Streit über die Hausnummer.'
     ],
     tier: [
-      '{city} ist jetzt ein(e) {tier}! Auf dem Ortsschild ist kaum noch Platz.',
+      '{city} ist jetzt {tierA}! Auf dem Ortsschild ist kaum noch Platz.',
       '{city} wächst und darf sich {tier} nennen. Die Ältesten erinnern sich noch an die Zeit mit drei Zelten.',
-      'Herzlichen Glückwunsch: {city} ist zur {tier} aufgestiegen. Die Stadtkasse kauft ein größeres Schild.',
-      '{city} wird {tier}. Der erste Stau vor dem Brunnen wird gemeldet.'
+      'Herzlichen Glückwunsch: {city} ist jetzt {tierA}. Die Stadtkasse kauft ein größeres Schild.',
+      '{city} wird {tierA}. Der erste Stau vor dem Brunnen wird gemeldet.'
     ],
     famine: [
       'In {city} sind die Vorratskammern leer. Man isst Suppe aus Steinen und beschwert sich.',
@@ -59,9 +59,25 @@
       'In {city} fällt das Zentrum. „Wir bauen es wieder auf“, sagt jemand. „Schöner!“'
     ],
     monument: [
-      '{city} errichtet ein(e) {monument}. Tauben aus dem ganzen Land reisen an.',
-      'In {city} entsteht ein(e) {monument}. Es ist größer als nötig und genau richtig.',
-      '{city} baut ein(e) {monument}. Die Stadtführer üben schon ihre Witze.'
+      '{city} bekommt ein Wahrzeichen: {monument}. Tauben aus dem ganzen Land reisen an.',
+      'In {city} wird gebaut: {monument}. Größer als nötig und genau richtig.',
+      'Neues Wahrzeichen für {city}: {monument}. Die Stadtführer üben schon ihre Witze.'
+    ],
+    shrine: [
+      '{city} baut noch einen Schrein für {deity}. Man kann nie genug Schreine haben, sagt die Priesterschaft.',
+      'Ein weiterer Schrein in {city}. {deity} soll sich überall zu Hause fühlen.'
+    ],
+    barracks: [
+      '{city} baut schon die {n}. Kaserne. Die Stiefel stehen in Reih und Glied.',
+      'Noch eine Kaserne in {city}. Die Trompeter üben morgens um fünf.'
+    ],
+    market: [
+      '{city} eröffnet den {n}. Markt. Die Händler überbieten sich im Lautsein.',
+      'Neuer Markt in {city}! Ab sofort gibt es dreierlei Senf.'
+    ],
+    repurpose: [
+      'In {city} werden Gebäude umgewidmet, die zur {gov} nicht passen. Aus der Kaserne wird eine Wohngemeinschaft.',
+      '{city} baut um: Was die {gov} nicht braucht, wird zu Wohnungen. Die Möbelpacker haben viel zu tun.'
     ],
 
     // ---------------------------------------------------------------- Mauern
@@ -132,12 +148,31 @@
       'Göttlicher Erlass: {kingdom_nom} wird {gov}. {leader} probiert vor dem Spiegel den neuen Hut an.',
       'Über Nacht wird aus der {oldGov} eine {gov}. Beim Frühstück fragen sich alle, wer jetzt bestimmt, wer abräumt.'
     ],
+    govChoice: [
+      '{kingdom_nom} hat sich entschieden: Ab jetzt regiert die {gov}. Begründung: {why}.',
+      'Großer Rat am Feuer: Man wählt die {gov}, weil {why}. Es heißt jetzt {kingdom}.',
+      'Nach langem Palaver wird aus dem Stamm eine {gov}. Der Grund: {why}.',
+      'Neue Ordnung im Reich: {gov}! Offizieller Grund: {why}. Inoffizieller Grund: neue Hüte.'
+    ],
+    reform: [
+      'Reform! {kingdom_nom} wird {gov}. Die Krone kommt ins Museum, der Thron wird Parkbank.',
+      'Die Monarchie dankt freiwillig ab. Es lebe die {gov}! Der Ex-Monarch eröffnet eine Bäckerei.'
+    ],
+    strongman: [
+      'In der Krise wählt das Volk einen „starken Mann“. {kingdom_nom} ist jetzt eine {gov}. Bald bereuen es alle.',
+      'Aus Angst wird gewählt, was laut ist: {kingdom_nom} wird {gov}. Die nächste Wahl fällt leider aus.'
+    ],
+    collapse: [
+      'Zusammenbruch! Niemand will mehr regieren. {kingdom_nom} ist jetzt Anarchie, das Plenum tagt ab sofort.',
+      'Die Ordnung zerfällt: In {kingdom_dat} entscheidet nun das Plenum. Oder niemand. Oder alle.'
+    ],
     evolve: [
       'Der Stamm ist erwachsen geworden: {kingdom_nom} ist jetzt eine {gov}. Das Lagerfeuer bekommt einen Kamin.',
       'Aus dem Stammesrat wird eine {gov}. {leader} hält eine erste Rede und verhaspelt sich nur zweimal.',
       '{kingdom_nom}: Nach langem Palaver am Feuer entscheidet man sich für die {gov}.'
     ],
     revolution: [
+      'Revolution! Die {oldGov} ist gestürzt, weil {why}. Es lebe die {gov}!',
       'Revolution! Die {oldGov} ist gestürzt, es lebe die {gov}. {Kingdom_nom} sortiert seine Möbel neu.',
       'Das Volk hat genug: Aus der {oldGov} wird eine {gov}. Die alten Hüte landen im Fluss.',
       'Umsturz im Reich! {kingdom_nom} ist jetzt eine {gov}. Der Hofstaat sucht neue Arbeit.'
@@ -263,14 +298,14 @@
       'Göttliche Fügung: {Kingdom_nom} und {other_nom} sind ab sofort verfeindet. Die Schmiede jubeln.'
     ],
     peace: [
-      'Frieden zwischen {kingdom_nom} und {other_nom}. Man tauscht Kuchen statt Pfeile.',
+      'Frieden zwischen {kingdom_dat} und {other_dat}. Man tauscht Kuchen statt Pfeile.',
       '{kingdom_nom} und {other_nom} schließen Frieden. Der geliehene Hammer wird feierlich zurückgegeben.',
       'Der Krieg ist aus! {kingdom_nom} und {other_nom} sind beide sehr müde und ein bisschen verlegen.',
-      'Waffenstillstand zwischen {kingdom_nom} und {other_nom}. Die Soldaten gehen heim und erzählen Heldengeschichten.'
+      'Waffenstillstand zwischen {kingdom_dat} und {other_dat}. Die Soldaten gehen heim und erzählen Heldengeschichten.'
     ],
     godPeace: [
       'Von oben wird Ruhe verordnet: {kingdom_nom} und {other_nom} schließen Frieden. Die Generäle schmollen.',
-      'Ein himmlischer Fingerzeig beendet den Streit zwischen {kingdom_nom} und {other_nom}.'
+      'Ein himmlischer Fingerzeig beendet den Streit zwischen {kingdom_dat} und {other_dat}.'
     ],
     buyPeace: [
       '{Kingdom_nom} kauft sich für {gold} Goldstücke aus dem Krieg mit {other_dat} frei. Quittung inklusive.',
@@ -286,8 +321,45 @@
       'Göttlich verordnete Freundschaft: {kingdom_nom} und {other_nom} sind verbündet.'
     ],
     allianceEnd: [
-      'Das Bündnis zwischen {kingdom_nom} und {other_nom} zerbricht. Die Kochrezepte werden zurückverlangt.',
+      'Das Bündnis zwischen {kingdom_dat} und {other_dat} zerbricht. Die Kochrezepte werden zurückverlangt.',
       '{kingdom_nom} und {other_nom} sind keine Verbündeten mehr. Grund: ein Streit um das letzte Stück Kuchen.'
+    ],
+    allyJoins: [
+      '{kingdom_nom} steht dem Verbündeten bei und erklärt {other_dat} den Krieg.',
+      'Bündnispflicht! {kingdom_nom} zieht gegen {other_acc}, um {victim} zu helfen.'
+    ],
+    royalWedding: [
+      'Hochzeit! {leader} und das Herrscherhaus von {other_dat} heiraten sich ins Bündnis. Die Torte hat neun Stockwerke.',
+      'Königliche Hochzeit zwischen {kingdom_dat} und {other_dat}. Ab jetzt ist man verschwägert und verbündet.'
+    ],
+    mobilize: [
+      'Generalmobilmachung in {kingdom_dat}! Jeder, der laufen kann, bekommt einen Helm. {leader} hält eine sehr lange Rede.',
+      '{leader} ruft alle zu den Waffen. Die Felder bleiben leer, die Kasernen sind voll.'
+    ],
+    raid: [
+      'Raubzug! Krieger von {kingdom_dat} plündern {city} und schleppen {n} Säcke Beute davon.',
+      '{city} wird überfallen. Die Räuber nehmen Würste, Holz und den guten Kochtopf mit.',
+      'Ein Trupp von {kingdom_dat} stürmt in {city}, rafft zusammen, was er tragen kann, und zieht johlend ab.'
+    ],
+    liberation: [
+      '{city} ist befreit! {kingdom_nom} gibt die Stadt an {other_acc} zurück. Freudentänze auf dem Marktplatz.',
+      'Befreiung: Truppen von {kingdom_dat} vertreiben die Besatzer aus {city}. Die Stadt gehört wieder {other_dat}.'
+    ],
+    uprisingLiberation: [
+      'Das Volk von {city} wirft die Besatzer hinaus und kehrt zu {kingdom_dat} zurück.',
+      'Aufstand in {city} erfolgreich: Die Besatzung ist vorbei, {city} gehört wieder zu {kingdom_dat}.'
+    ],
+    occupation: [
+      '{kingdom_nom} besetzt {city}. Ausgangssperre, Passierscheine, schlechte Laune.',
+      '{city} steht unter Besatzung. {leader} lässt überall Schlagbäume aufstellen.'
+    ],
+    conversion: [
+      'Die Bewohner von {city} werden zu {deity} bekehrt. Die meisten nicken freundlich und singen mit.',
+      '{city} erhält neue Gebete und einen neuen Feiertag zu Ehren von {deity}.'
+    ],
+    agitation: [
+      'Agitatoren aus {kingdom_dat} verteilen in {city} Flugblätter. Thema: Wem gehört eigentlich das Brot?',
+      'In {city} tauchen Plakate auf: „Arbeiter aller Dörfer, vereinigt euch!“ {other_nom} ist nervös.'
     ],
     armyMarch: [
       'Ein Heer von {n} Soldaten zieht von {city} nach {otherCity}. Es wird gesungen, schief.',

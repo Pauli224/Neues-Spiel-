@@ -65,6 +65,11 @@
   const WAR_REASONS = 6;
   function declareWar(sim, a, b, type) {
     if (!setStatus(sim, a, b, 'war')) return false;
+    if (WW.GOVERNMENTS[a.gov].war === 'mass') {
+      const pa0 = capitalPt(sim, a);
+      sim.event('mobilize', { kingdom: a.name, leader: WW.Gov.leaderFull(a) }, { kingdomId: a.id, cityId: pa0 ? pa0.c.id : -1, x: pa0 ? pa0.x : 0, y: pa0 ? pa0.y : 0 });
+    }
+    callAllies(sim, a, b);
     const pa = capitalPt(sim, a), pb = capitalPt(sim, b);
     sim.event(type || 'war', {
       kingdom: a.name, other: b.name, city: pa ? pa.c.name : a.name, otherCity: pb ? pb.c.name : b.name,
@@ -111,7 +116,9 @@
           if (u.order) { if (u.order.k === e.id) marching++; continue; }
           idle.push(u);
         }
-        if (idle.length < 3 && !(idle.length >= 1 && marching > 0)) continue;
+        const yrs = st.year - r.since;
+        const minArmy = WW.GOVERNMENTS[k.gov].war === 'mass' ? 4 : (yrs >= 2 ? 1 : 2);
+        if (idle.length < minArmy && !(idle.length >= 1 && marching > 0)) continue;
         // Ziel: nächste erreichbare Feindstadt
         const pair = nearestCities(sim, k, e);
         if (!pair || !sameLand(sim, pair.a, pair.b)) continue;
@@ -143,6 +150,54 @@
     }
   }
 
+  // Hat q Krieg gegen p oder dessen Verbündete geführt bzw. Städte von p besetzt?
+  function isAggressorAgainst(sim, q, p) {
+    for (const oid in p.relations) {
+      if (p.relations[oid].status !== 'alliance') continue;
+      const rq = q.relations[oid];
+      if (rq && rq.status === 'war') return true;
+    }
+    for (const id of q.cityIds) { const c = sim._cities.get(id); if (c && c.prevKingdomId === p.id) return true; }
+    return false;
+  }
+
+  // Kriegsbeginn: Verbündete (vor allem Demokratien) stehen dem Angegriffenen bei
+  function callAllies(sim, aggressor, victim) {
+    for (const oid in victim.relations) {
+      if (victim.relations[oid].status !== 'alliance') continue;
+      const ally = sim._kingdoms.get(+oid);
+      if (!ally || ally === aggressor || WW.GOVERNMENTS[ally.gov].neverWar) continue;
+      const r = ally.relations[aggressor.id];
+      if (!r || r.status === 'war') continue;
+      if (ally.gov === 'democracy' || r.opinion < 20 || sim.rng.chance(0.5)) {
+        setStatus(sim, ally, aggressor, 'war');
+        const pa = capitalPt(sim, ally);
+        sim.event('allyJoins', { kingdom: ally.name, other: aggressor.name, victim: victim.name }, { kingdomId: ally.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
+      }
+    }
+  }
+
+  // Raubzug (Stamm): Vorräte stehlen und heimziehen
+  function plunder(sim, city, u) {
+    const att = sim._kingdoms.get(u.kingdomId);
+    const home = sim._cities.get(u.cityId);
+    if (!att || !home) return;
+    const vs = WW.Cities.stock(sim, city), hs = WW.Cities.stock(sim, home);
+    let got = 0;
+    for (const res of ['food', 'wood', 'gold']) {
+      const v = Math.min(vs[res] * 0.12, 8);
+      if (v <= 0) continue;
+      vs[res] -= v; hs[res] += v; got += v;
+    }
+    const r = att.relations[city.kingdomId];
+    if (r && r.lastRaid !== sim.state.year) {
+      r.lastRaid = sim.state.year;
+      sim.event('raid', { kingdom: att.name, city: city.name, other: (sim._kingdoms.get(city.kingdomId) || {}).name || '', n: Math.round(got) }, WW.Cities.atCity(city));
+    }
+    u.order = { kind: 'home' }; u.path = null; u.breach = -1;
+    WW.Units.bubble(u, 'note', 40);
+  }
+
   // Eroberung versuchen, wenn das Zentrum gefallen ist
   function tryCapture(sim, city, attK) {
     const st = sim.state;
@@ -159,7 +214,25 @@
     });
     if (a === 0 || d > a) return false;
     const oldName = def.name;
-    WW.Cities.transferCity(sim, city, att.id);
+    const ag = WW.GOVERNMENTS[att.gov];
+    // Demokratie befreit eroberte Städte und gibt sie dem früheren Besitzer zurück
+    const prev = city.prevKingdomId != null ? sim._kingdoms.get(city.prevKingdomId) : null;
+    let newOwner = att;
+    if (ag.war === 'defend' && prev && prev !== att && prev !== def) newOwner = prev;
+    city.prevKingdomId = def.id;
+    WW.Cities.transferCity(sim, city, newOwner.id);
+    if (newOwner !== att) {
+      if (ctr && !ctr.built) { const rs = ctr.restyle; WW.Structs.complete(sim, ctr); ctr.restyle = rs; ctr.progress = rs ? 0 : 1; }
+      for (const u of st.units) if (!u.dead && u.order && u.order.city === city.id) { u.order = null; u.path = null; u.breach = -1; }
+      city.prevKingdomId = null; city.occupiedUntil = 0;
+      sim.event('liberation', { city: city.name, kingdom: att.name, other: newOwner.name }, WW.Cities.atCity(city));
+      if (!def.cityIds.length) WW.Gov.removeKingdom(sim, def, false);
+      return true;
+    }
+    // Besatzung: Unruhe (Faschismus lange), Theokratie bekehrt
+    if (ag.war === 'holy') { city.occupiedUntil = 0; city.happiness = Math.max(city.happiness, 50); sim.event('conversion', { city: city.name, kingdom: att.name, deity: att.deity || '' }, WW.Cities.atCity(city)); }
+    else city.occupiedUntil = st.year + (ag.war === 'mass' ? 10 : 4);
+    if (ag.war === 'mass') sim.event('occupation', { city: city.name, kingdom: att.name, leader: WW.Gov.leaderFull(att) }, WW.Cities.atCity(city));
     if (ctr && !ctr.built) { const rs = ctr.restyle; WW.Structs.complete(sim, ctr); ctr.restyle = rs; ctr.progress = rs ? 0 : 1; ctr.hp = Math.round(ctr.maxHp * 0.4); }
     for (const u of st.units) if (!u.dead && u.order && u.order.city === city.id) { u.order = null; u.path = null; u.breach = -1; }
     const r = att.relations[def.id];
@@ -213,7 +286,18 @@
     const ctr = sim._structs.get(city.centerId);
     if (ctr && !ctr.built) { WW.Structs.complete(sim, ctr); ctr.hp = Math.round(ctr.maxHp * 0.5); }
     if (!k) return;
-    const newGov = sim.rng.weighted({ democracy: 3, anarchy: 2, republic: 1, communism: 2 });
+    // Besetzte Stadt befreit sich selbst
+    const prev = city.prevKingdomId != null ? sim._kingdoms.get(city.prevKingdomId) : null;
+    if (prev && prev !== k && city.occupiedUntil > st.year) {
+      const oldName = k ? k.name : '';
+      city.prevKingdomId = null; city.occupiedUntil = 0;
+      WW.Cities.transferCity(sim, city, prev.id);
+      sim.event('uprisingLiberation', { city: city.name, kingdom: prev.name, other: oldName }, WW.Cities.atCity(city));
+      if (k && !k.cityIds.length) WW.Gov.removeKingdom(sim, k, false);
+      return;
+    }
+    const agit = city.agitated && st.year - city.agitated <= 6;
+    const newGov = sim.rng.weighted(agit ? { communism: 8, democracy: 1, anarchy: 1 } : { democracy: 3, anarchy: 2, republic: 1, communism: 2 });
     if (k.cityIds.length >= 2 && city.id !== k.capitalId) {
       secede(sim, city, newGov === k.gov ? 'anarchy' : newGov);
       return;
@@ -291,6 +375,14 @@
       }
       // Frieden: Krieg oder Bündnis?
       if (op > 60 && sim.rng.chance(0.15)) { makeAlliance(sim, a, b); continue; }
+      // Monarchien: Heiratsbündnis
+      if (a.gov === 'monarchy' && b.gov === 'monarchy' && op > 15 && sim.rng.chance(0.12)) {
+        if (setStatus(sim, a, b, 'alliance')) {
+          const pa = capitalPt(sim, a);
+          sim.event('royalWedding', { kingdom: a.name, other: b.name, leader: WW.Gov.leaderFull(a), otherLeader: WW.Gov.leaderFull(b) }, { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
+        }
+        continue;
+      }
       if (!st.laws.wars || !close || !pair || !sameLand(sim, pair.a, pair.b)) continue;
       if (st.year - ra.since < 3) continue;
       for (const [p, q] of [[a, b], [b, a]]) {
@@ -302,10 +394,33 @@
         let holy = false;
         if (p.gov === 'theocracy' && (q.gov !== 'theocracy' || q.deity !== p.deity)) { need = -20; holy = true; }
         if (p.gov === 'fascism' && sp > sq * 1.2) need = -10;   // aggressiv gegen Schwächere
+        if (p.gov === 'tribe') need = -30;                       // Raubzüge
+        // Demokratie greift nur Angreifer an (Krieg gegen Verbündete, eroberte eigene Städte)
+        if (p.gov === 'democracy' && !isAggressorAgainst(sim, q, p)) continue;
+        if (p.gov === 'democracy') need = 100;
         if (op > need) continue;
-        if (sp < sq * 0.8) continue;
+        if (sp < sq * 0.8 && p.gov !== 'democracy') continue;
         const chance = (g.aggression + race.aggression) * 0.22;
         if (sim.rng.chance(chance)) { declareWar(sim, p, q, holy ? 'holyWar' : 'war'); break; }
+      }
+    }
+    // Kommunismus schürt Aufstände beim Nachbarn
+    for (const k of ks) {
+      if (k.gov !== 'communism' || k.dead) continue;
+      const cap = sim._cities.get(k.capitalId);
+      if (!cap) continue;
+      for (const c of st.cities) {
+        if (c.kingdomId === k.id || c.revolt || c.pop < 8) continue;
+        const ok = sim._kingdoms.get(c.kingdomId);
+        if (!ok || ok.gov === 'communism') continue;
+        const dx = c.cx - cap.cx, dy = c.cy - cap.cy;
+        if (dx * dx + dy * dy > 55 * 55 || c.happiness > 55) continue;
+        if (!sim.rng.chance(0.18)) continue;
+        c.agitated = st.year;
+        c.unhappyYears += 1;
+        c.happiness = Math.max(0, c.happiness - 8);
+        sim.event('agitation', { kingdom: k.name, city: c.name, other: ok.name }, WW.Cities.atCity(c));
+        break;
       }
     }
     // Aufstände
@@ -324,7 +439,8 @@
   WW.Diplo = {
     atWar: atWar, strength: strength, setStatus: setStatus, declareWar: declareWar, makePeace: makePeace,
     makeAlliance: makeAlliance, onCasualty: onCasualty, update: update, yearly: yearly, tryCapture: tryCapture,
-    secede: secede, startRevolt: startRevolt, revoltSuccess: revoltSuccess, nearestCities: nearestCities
+    secede: secede, startRevolt: startRevolt, revoltSuccess: revoltSuccess, nearestCities: nearestCities,
+    plunder: plunder, callAllies: callAllies, isAggressorAgainst: isAggressorAgainst
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

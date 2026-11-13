@@ -209,7 +209,7 @@
     const atWar = k && WW.Diplo.atWar(sim, k.id);
     let soldierShare = g.soldierShare;
     if (k && k.policy && k.policy.bonus === 'safety') soldierShare += 0.06;
-    if (atWar) soldierShare = soldierShare * 1.6 + (g.soldierShare > 0 ? 0.06 : 0);
+    if (atWar) soldierShare = g.war === 'mass' ? Math.min(0.55, soldierShare * 2) : soldierShare * 1.6 + (g.soldierShare > 0 ? 0.06 : 0);
     if (city._rebels > 0 && g.soldierShare > 0) soldierShare += 0.1;
     want.soldier = n >= 4 ? Math.round(n * Math.min(0.55, soldierShare)) : 0;
     if (g.soldierShare > 0 && n >= 6 && want.soldier < 1) want.soldier = 1;
@@ -224,7 +224,10 @@
     }
     needWood = Math.max(0, needWood - st.wood);
     needStone = Math.max(0, needStone - st.stone);
-    if (sites > 0) want.builder = Math.max(1, Math.min(Math.ceil(sites / 5) + 1, Math.floor(n * 0.3)));
+    if (sites > 0) {
+      want.builder = Math.max(1, Math.min(Math.ceil(sites / 5) + 1, Math.floor(n * 0.4)));
+      if (sites >= 8 && n >= 5) want.builder = Math.max(want.builder, 2);
+    }
     // Nahrung
     const need = city.pop * WW.CONFIG.FOOD_PER_YEAR;
     const perFarmer = 11 * race.yields.food * g.workMul;
@@ -259,7 +262,7 @@
     let rest = n - want.soldier - want.builder - want.farmer - want.miner - want.lumberjack;
     if (rest < 0) {
       // Kürzung: erst Steinmetze, dann Holzfäller bis auf einen, Baumeister bis auf einen, Soldaten, Bauern
-      const order = [['miner', 0], ['lumberjack', 1], ['builder', sites ? 1 : 0], ['soldier', 0], ['lumberjack', 0], ['farmer', 1]];
+      const order = [['miner', 0], ['builder', sites >= 8 && n >= 5 ? 2 : (sites ? 1 : 0)], ['lumberjack', 1], ['soldier', 0], ['builder', sites ? 1 : 0], ['lumberjack', 0], ['farmer', 1]];
       for (const o of order) { while (rest < 0 && want[o[0]] > o[1]) { want[o[0]]--; rest++; } }
     }
     // Überschuss: Holz, wenn knapp, sonst Felder; Kommunismus mit Plan-Schwerpunkt
@@ -620,6 +623,7 @@
     else if (sk.food > city.pop * 2) h += 5;
     if (city.pop > city.housing) h -= Math.min(15, (city.pop - city.housing) * 2);
     if (k && WW.Diplo.atWar(sim, k.id)) h -= 8;
+    if (city.occupiedUntil && sim.state.year < city.occupiedUntil) h -= (g.war === 'mass' ? 22 : 10);
     if (city.hasMonument) h += (k && k.gov === 'theocracy') ? 14 : 5;
     if (k && k.gov === 'fascism') h += Math.min(25, city.propaganda || 0);
     if (sim.state.tick < city.blessUntil) h += 20;
@@ -693,7 +697,7 @@
     if (tier > city.tier) {
       city.tier = tier;
       claimTerritory(sim, city);
-      sim.event('tier', { city: city.name, tier: WW.CITY_TIERS[tier].name }, atCity(city));
+      sim.event('tier', { city: city.name, tier: WW.CITY_TIERS[tier].name, tierA: WW.CITY_TIERS[tier].nameA }, atCity(city));
     } else if (tier < city.tier - 1) city.tier = tier + 1;
     // Kommunismus: Stadt zeigt eine Kopie des Reichslagers
     if (sk !== city.stock) { city.stock.food = sk.food; city.stock.wood = sk.wood; city.stock.stone = sk.stone; city.stock.gold = sk.gold; }

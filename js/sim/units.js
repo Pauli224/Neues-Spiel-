@@ -49,6 +49,7 @@
     const frac = u.maxHp > 0 ? u.hp / u.maxHp : 1;
     u.role = role;
     u.maxHp = baseHp(role, race);
+    if (role === 'soldier') u.maxHp = Math.round(u.maxHp * gov(sim, u).unitHpMul);
     u.hp = Math.max(1, Math.round(u.maxHp * frac));
     if (u.carrying && u.cityId >= 0) {
       const c = sim._cities.get(u.cityId);
@@ -139,6 +140,7 @@
     const race = WW.RACES[u.race] || WW.RACES.human;
     let d = u.role === 'soldier' ? C().SOLDIER_DMG : (u.role === 'rebel' ? 6 : C().BASE_DMG);
     if (u.merc) d *= 1.2;
+    if (u.role === 'soldier') d *= gov(sim, u).unitDmgMul;
     if (u.role === 'child') d = 1;
     return d * race.strength;
   }
@@ -614,6 +616,12 @@
 
   function thinkSoldier(sim, u, city) {
     if (u.order && u.order.kind === 'march') { march(sim, u); return; }
+    if (u.order && u.order.kind === 'home') {
+      if (distTo(u, city.cx + 0.5, city.cy + 0.5) < 7) { u.order = null; u.path = null; return; }
+      const r = goTo(sim, u, WW.Cities.centerTile(sim, city, u.id), { limit: C().PATH_LIMIT_LONG });
+      if (r === null && u.fails > 3) { u.order = null; u.fails = 0; }
+      return;
+    }
     // Patrouille: Mauer, Tore oder Zentrum
     if (u.path || u.wait > 0) return;
     const st = sim.state, W = st.W;
@@ -638,7 +646,13 @@
       const s = sim._structs.get(u.breach);
       if (s && !s.dead && s.built && WW.Structs.isWallish(s)) {
         if (distTo(u, s.x + 0.5, s.y + 0.5) <= 1.7) {
-          if (u.cd <= 0) { WW.Structs.damage(sim, s, damageOf(sim, u) * 1.3, 'hit'); u.cd = 6; if (sim.rng.chance(0.1)) bubble(u, 'angry', 20); }
+          if (u.cd <= 0) {
+            if (WW.Structs.damage(sim, s, damageOf(sim, u) * 0.8, 'hit')) {
+              const wc = sim._cities.get(s.cityId), ak = sim._kingdoms.get(u.kingdomId);
+              if (wc && ak && wc.lastBreach !== sim.state.year) { wc.lastBreach = sim.state.year; sim.event('wallBreach', { city: wc.name, other: ak.name }, WW.Cities.atCity(wc)); }
+            }
+            u.cd = 6; if (sim.rng.chance(0.1)) bubble(u, 'angry', 20);
+          }
           if (s.built) return;
         }
       }
@@ -646,6 +660,9 @@
     }
     const ctr = sim._structs.get(city.centerId);
     const d = distTo(u, city.cx + 0.5, city.cy + 0.5);
+    // Stamm: Raubzug statt Eroberung (erobert nur selten)
+    const ag = gov(sim, u);
+    if (ag.war === 'raid' && d <= 3.5 && !(ctr && !ctr.built && sim.rng.chance(0.25))) { WW.Diplo.plunder(sim, city, u); return; }
     if (d <= 2.8) {
       if (ctr && ctr.built) {
         if (u.cd <= 0) { WW.Structs.damage(sim, ctr, damageOf(sim, u), 'hit'); u.cd = 6; }

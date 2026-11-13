@@ -88,18 +88,18 @@
       var p = k.split(','), x = +p[0], y = +p[1], c = wall[k];
       var m = (isW(x, y - 1) ? 1 : 0) | (isW(x + 1, y) ? 2 : 0) | (isW(x, y + 1) ? 4 : 0) | (isW(x - 1, y) ? 8 : 0);
       var horiz = isW(x - 1, y) || isW(x + 1, y);
-      var key = c === 'T' ? 's_tower_2' : (c === 'G' ? 's_gate_2_' + (horiz ? 'h' : 'v') : 's_wall_2_' + m);
+      var key = c === 'T' ? S.towerKey('monarchy', 2) : (c === 'G' ? S.gateKey('monarchy', 2, horiz ? 'h' : 'v') : S.wallKey('monarchy', 2, m));
       items.push({ key: key, x: x, y: y, team: 0, kind: 'wall' });
     });
     function b(key, x, y, opts) { var o = { key: key, x: x, y: y, team: 0 }; for (var k in opts) o[k] = opts[k]; items.push(o); }
     // Zentrum 3×3 am Hauptplatz
     b('s_center_monarchy', 35, 18);
     // Häuser 2×2 mit Gassen
-    [['s_house_2_a', 29, 16], ['s_house_1_a', 32, 16], ['s_house_3_a', 39, 16], ['s_house_2_b', 42, 16],
-     ['s_house_1_b', 29, 19], ['s_house_2_a', 32, 19], ['s_house_3_b', 42, 19],
-     ['s_house_2_b', 29, 23], ['s_house_3_a', 39, 23], ['s_house_1_a', 42, 23],
-     ['s_house_1_b', 29, 26], ['s_house_2_a', 32, 26], ['s_house_2_b', 39, 26], ['s_house_1_b', 42, 26]
-    ].forEach(function (h) { b(h[0], h[1], h[2]); });
+    [[2, 29, 16, 0], [1, 32, 16, 3], [3, 39, 16, 0], [2, 42, 16, 3],
+     [1, 29, 19, 3], [2, 32, 19, 0], [3, 42, 19, 3],
+     [2, 29, 23, 3], [3, 39, 23, 0], [1, 42, 23, 0],
+     [1, 29, 26, 3], [2, 32, 26, 0], [2, 39, 26, 3], [1, 42, 26, 3]
+    ].forEach(function (h) { b(S.houseKey('monarchy', h[0], h[3]), h[1], h[2]); });
     b('s_market', 39, 19);
     b('s_barracks', 32, 23);
     b('s_monument_monarchy', 34, 23);
@@ -122,6 +122,34 @@
     return { items: items, wall: wall };
   }
 
+  // Trampelpfade als Kachelketten (4-zusammenhängend)
+  var PATHS = [
+    [[36, 30], [36, 35]], [[29, 30], [44, 30]],
+    [[27, 22], [25, 22], [25, 16]],
+    [[36, 14], [36, 13], [33, 13]],
+    [[46, 22], [48, 22], [48, 16]],
+    [[36, 16], [36, 17]], [[36, 21], [36, 28]], [[29, 22], [44, 22]], [[29, 25], [44, 25]], [[29, 18], [34, 18]], [[38, 18], [44, 18]]
+  ];
+  function pathSet() {
+    var set = {};
+    PATHS.forEach(function (pl) {
+      for (var k = 1; k < pl.length; k++) {
+        var x = pl[k - 1][0], y = pl[k - 1][1], tx = pl[k][0], ty = pl[k][1];
+        set[x + ',' + y] = 1;
+        while (x !== tx || y !== ty) { if (x !== tx) x += tx > x ? 1 : -1; else y += ty > y ? 1 : -1; set[x + ',' + y] = 1; }
+      }
+    });
+    return set;
+  }
+  function drawPaths(ctx, set, extra) {
+    function has(x, y) { return set[x + ',' + y] || (extra && extra[x + ',' + y]); }
+    Object.keys(set).forEach(function (k) {
+      var p = k.split(','), x = +p[0], y = +p[1];
+      var m = (has(x, y - 1) ? 1 : 0) | (has(x + 1, y) ? 2 : 0) | (has(x, y + 1) ? 4 : 0) | (has(x - 1, y) ? 8 : 0);
+      S.drawPath(ctx, x * 8, y * 8, m);
+    });
+  }
+
   function sortY(it) {
     if (it.unit) return (it.y + 1) * 8;
     var inf = S.info(it.key);
@@ -139,6 +167,9 @@
     var ground = document.createElement('canvas'); ground.width = W * 8; ground.height = H * 8;
     var gx = ground.getContext('2d');
     S.drawGroundMap(gx, ter, vari, W, H);
+    var gatesAt = {}; city.items.forEach(function (it) { if (/gate/.test(it.key)) gatesAt[it.x + ',' + it.y] = 1; });
+    var ps = pathSet();
+    drawPaths(gx, ps, gatesAt);
     var top = document.createElement('canvas'); top.width = W * 8; top.height = H * 8;
     var tx = top.getContext('2d');
     tx.drawImage(ground, 0, 0);
@@ -151,7 +182,7 @@
     });
     var items = city.items.slice();
     for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
-      if (occ[x + ',' + y]) continue;
+      if (occ[x + ',' + y] || ps[x + ',' + y]) continue;
       // Stadtinneres frei halten
       if (x >= 28 && x <= 45 && y >= 15 && y <= 29) continue;
       var d = S.decorFor(ter[y * W + x], vari[y * W + x]);
@@ -236,7 +267,7 @@
     var gx = ground.getContext('2d');
     S.drawGroundMap(gx, ter, vari, W2, H2);
     var items = [];
-    GOVS8.forEach(function (gov, n) { items = items.concat(townItems(gov, (n % 4) * TW, Math.floor(n / 4) * TH, [0, 5, 4, 11, 1, 2, 3, 7][n])); });
+    GOVS8.forEach(function (gov, n) { items = items.concat(townItems(gov, (n % 4) * TW, Math.floor(n / 4) * TH, [9, 5, 4, 3, 0, 2, 1, 7][n])); });
     if (S.drawPath) GOVS8.forEach(function (gov, n) {
       var ox = (n % 4) * TW, oy = Math.floor(n / 4) * TH;
       for (var y = 0; y <= 1; y++) S.drawPath(gx, (ox + 8) * 8, (oy + y) * 8, 5);

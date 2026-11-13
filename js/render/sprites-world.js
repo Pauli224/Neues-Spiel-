@@ -253,39 +253,46 @@
       });
     }
 
-    // --- tiefere Kachel: Wand der nördlichen höheren Kachel, Schatten, Brandung
-    if (rn > r && !GI[n].water) {
+    // --- tiefere Kachel: Wand der nördlichen höheren Kachel (am Fluss nur eine schmale Grasnarbe)
+    var landN = rn > r && !GI[n].water;
+    if (landN) {
       var gn = GI[n], fh = faceH(n, id);
-      for (x = 0; x < 8; x++) {
-        var streak = hash(X0 + x, Y0, 61) < 0.22;
-        buf[x] = gn.lip;
-        for (y = 1; y < fh; y++) buf[y * 8 + x] = (y === fh - 1) ? gn.fd : (streak ? gn.fd : gn.f);
-        if (fh >= 4 && hash(X0 + x, Y0 + 2, 62) < 0.15) buf[2 * 8 + x] = gn.fd;
+      if (me.key === 'river') {
+        fh = 2;
+        for (x = 0; x < 8; x++) { buf[x] = gn.b; buf[8 + x] = me.sh; }
+      } else {
+        for (x = 0; x < 8; x++) {
+          var streak = hash(X0 + x, Y0, 61) < 0.22;
+          buf[x] = gn.lip;
+          for (y = 1; y < fh; y++) buf[y * 8 + x] = (y === fh - 1) ? gn.fd : (streak ? gn.fd : gn.f);
+          if (fh >= 4 && hash(X0 + x, Y0 + 2, 62) < 0.15) buf[2 * 8 + x] = gn.fd;
+        }
       }
       top = fh;
-      if (me.water) {
-        for (x = 0; x < 8; x++) {
-          buf[top * 8 + x] = FOAMI;
-          if (top + 1 < 8 && hash(X0 + x, Y0, 63) < 0.55) buf[(top + 1) * 8 + x] = me.shore;
-        }
-        top += 1;
-      } else {
-        for (x = 0; x < 8; x++) buf[top * 8 + x] = me.sh;
-        top += 1;
-      }
-    } else if (rn > r && GI[n].water && me.water) {
-      // flacheres Wasser im Norden: schon oben behandelt
-    }
-    // Westen höher: Schlagschatten bzw. Brandung
-    if (rw > r && !GI[w].water) {
-      for (y = top; y < 8; y++) {
-        if (me.water) { buf[y * 8] = FOAMI; if (hash(X0 + 1, Y0 + y, 64) < 0.55) buf[y * 8 + 1] = me.shore; }
-        else buf[y * 8] = me.sh;
-      }
+      if (!me.water) { for (x = 0; x < 8; x++) buf[top * 8 + x] = me.sh; top += 1; }
     }
     if (me.water) {
-      if (re > r && !GI[e].water) for (y = top; y < 8; y++) { buf[y * 8 + 7] = FOAMI; if (hash(X0 + 6, Y0 + y, 65) < 0.55) buf[y * 8 + 6] = me.shore; }
-      if (rs > r && !GI[s].water) for (x = 0; x < 8; x++) { buf[56 + x] = FOAMI; if (hash(X0 + x, Y0 + 6, 66) < 0.55) buf[48 + x] = me.shore; }
+      // Ufer: leicht gewelltes Land, Brandungslinie, hellerer Saum; Innenecken diagonal gerundet
+      var lW = rw > r && !GI[w].water, lE = re > r && !GI[e].water, lS = rs > r && !GI[s].water;
+      if (landN || lW || lE || lS) {
+        var wob = function (a, k, sd) { return hash(a >> 1, k, sd) < 0.4 ? 1 : 0; };
+        for (y = top; y < 8; y++) for (x = 0; x < 8; x++) {
+          var d = 99, lc = 0, dd;
+          if (landN) { dd = y - top; if (dd < d) { d = dd; lc = GI[n].b; } }
+          if (lW) { dd = x - wob(Y0 + y, X0, 71); if (dd < d) { d = dd; lc = GI[w].b; } }
+          if (lE) { dd = 7 - x - wob(Y0 + y, X0 + 8, 72); if (dd < d) { d = dd; lc = GI[e].b; } }
+          if (lS) { dd = 7 - y - wob(X0 + x, Y0 + 8, 73); if (dd < d) { d = dd; lc = GI[s].b; } }
+          if (lW && lS) { dd = x + (7 - y) - 2; if (dd < d) { d = dd; lc = GI[w].b; } }
+          if (lE && lS) { dd = (7 - x) + (7 - y) - 2; if (dd < d) { d = dd; lc = GI[e].b; } }
+          if (lW && landN) { dd = x + (y - top) - 2; if (dd < d) { d = dd; lc = GI[w].b; } }
+          if (lE && landN) { dd = (7 - x) + (y - top) - 2; if (dd < d) { d = dd; lc = GI[e].b; } }
+          if (d < 0) buf[y * 8 + x] = lc;
+          else if (d < 1) buf[y * 8 + x] = FOAMI;
+          else if (d < 2 && hash(X0 + x, Y0 + y, 74) < 0.6) buf[y * 8 + x] = me.shore;
+        }
+      }
+    } else if (rw > r && !GI[w].water) {
+      for (y = top; y < 8; y++) buf[y * 8] = me.sh;   // Schlagschatten der westlichen Stufe
     }
 
     // --- höhere Kachel: helle Oberkante nach Norden/Westen, leichte Schattenkante nach Osten
@@ -295,8 +302,8 @@
       if (hiW) for (y = 0; y < 8; y++) buf[y * 8] = me.l;
       if (hiE) for (y = 0; y < 8; y++) buf[y * 8 + 7] = me.d;
       // abgerundete Außenecken
-      if (hiN && hiW) buf[0] = GI[n].water ? GI[n].shore : GI[n].b;
-      if (hiN && hiE) buf[7] = GI[n].water ? GI[n].shore : GI[n].b;
+      if (hiN && hiW) { buf[0] = GI[n].water ? FOAMI : GI[n].b; }
+      if (hiN && hiE) { buf[7] = GI[n].water ? FOAMI : GI[n].b; }
     }
   }
 
@@ -387,6 +394,8 @@
   }
 
   S.drawGround = drawGround;
+  // Trampelpfad über den Boden legen (in die Bodenebene backen). mask: Bit0 N, Bit1 O, Bit2 S, Bit3 W.
+  S.drawPath = function (ctx, px, py, mask) { S.draw(ctx, 't_path_' + (mask & 15), px, py); };
   S.drawGroundMap = drawGroundMap;
   S.decorFor = decorFor;
   S.groundColor = groundColor;
@@ -422,6 +431,39 @@
     g2.ellipse(4.2, 4.3, 2.6, 2.2, function (x, y, nx, ny) { return ny < -0.2 ? soilD : soil; });
     g2.set(4, 4, soilD); g2.set(3, 4, soilD);
     def('t_crater', g2, { group: 'ground' });
+
+    // -------------------------------------------------------------- Trampelpfade t_path_<maske>
+    // Erdweg als Überlagerung (Rand durchsichtig). Maske: Bit0 N, Bit1 O, Bit2 S, Bit3 W = Weg führt dorthin.
+    var PTH = addColor(null, '#c9a26b'), PTHD = addColor(null, '#b08a56'), PTHL = addColor(null, '#dbb882');
+    for (var pm = 0; pm < 16; pm++) {
+      var pg = new Grid(8, 8);
+      var inP = function (x, y) {
+        if (x < 0 || y < 0 || x > 7 || y > 7) return false;
+        var cx = x >= 2 && x <= 5, cy = y >= 2 && y <= 5;
+        if (cx && cy) return !((x === 2 || x === 5) && (y === 2 || y === 5) && pm === 0);
+        if (cx && y < 2 && (pm & 1)) return true;
+        if (cx && y > 5 && (pm & 4)) return true;
+        if (cy && x > 5 && (pm & 2)) return true;
+        if (cy && x < 2 && (pm & 8)) return true;
+        return false;
+      };
+      for (var py = 0; py < 8; py++) for (var px = 0; px < 8; px++) {
+        if (!inP(px, py)) continue;
+        var edge = !inP(px - 1, py) || !inP(px + 1, py) || !inP(px, py - 1) || !inP(px, py + 1);
+        // offene Enden an der Kachelkante zählen nicht als Rand
+        if (edge) {
+          var openSide = (py === 0 && (pm & 1) && inP(px, py + 1) && (inP(px - 1, py) && inP(px + 1, py))) ||
+                         (py === 7 && (pm & 4) && inP(px - 1, py) && inP(px + 1, py)) ||
+                         (px === 7 && (pm & 2) && inP(px, py - 1) && inP(px, py + 1)) ||
+                         (px === 0 && (pm & 8) && inP(px, py - 1) && inP(px, py + 1));
+          if (openSide) edge = false;
+        }
+        var hv = hash(px, py, 300 + pm);
+        if (edge && hv < 0.3) continue;              // ausgefranster Rand
+        pg.set(px, py, edge ? PTHD : (hv < 0.12 ? PTHL : (hv > 0.93 ? PTHD : PTH)));
+      }
+      def('t_path_' + pm, pg, { group: 'ground' });
+    }
 
     // -------------------------------------------------------------- Deko
     var K = function (h) { return addColor(null, h); };

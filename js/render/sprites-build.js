@@ -799,7 +799,7 @@
       }
       return o;
     }
-    function defB(key, gr, n, group) { def(key, shadowR(gr, n), { group: group || 'build', fw: n, fh: n, ox: 0 }); }
+    function defB(key, gr, n, group) { var sg = shadowR(gr, n).pad(0, 0, 0, 1).footShade(); def(key, sg, { group: group || 'build', fw: n, fh: n, ox: 0, oy: n * 8 - sg.h + 1 }); }
 
     // ---------------------------------------------------------------- Häuser (2×2)
     // Stufe 1: Hütte mit Reetdach (neutral, Teamfarbe nur an Tür/Tuch)
@@ -1002,8 +1002,8 @@
     wallPlaster(g, 2, 13, 10, 6); eaveShadow(g, 2, 13, 10, 'woodD'); door(g, 6, 14, 5); win(g, 3, 14); win(g, 9, 14);
     defB(hname('timber', 1, 'b'), finishB(g), 2);
     // Stufe 2 und 3 = die bisherigen Häuser
-    ['2_a', '2_b', '3_a', '3_b'].forEach(function (k) { var d = L.DEFS['s_house_' + k]; def('s_house_timber_' + k, d.grid, { group: 'build', fw: 2, fh: 2, ox: 0 }); });
-    ['1_a', '1_b'].forEach(function (k) { var d = L.DEFS['s_house_timber_' + k]; def('s_house_' + k, d.grid, { group: 'build', fw: 2, fh: 2, ox: 0 }); });
+    ['2_a', '2_b', '3_a', '3_b'].forEach(function (k) { var d = L.DEFS['s_house_' + k]; def('s_house_timber_' + k, d.grid, { group: 'build', fw: 2, fh: 2, ox: 0, oy: d.oy }); });
+    ['1_a', '1_b'].forEach(function (k) { var d = L.DEFS['s_house_timber_' + k]; def('s_house_' + k, d.grid, { group: 'build', fw: 2, fh: 2, ox: 0, oy: d.oy }); });
 
     // ---- town: bunte Bürgerhäuser (a) und Giebelhäuser (b) (Demokratie, Handelsrepublik)
     function townA(lv) {
@@ -1216,47 +1216,53 @@
     });
 
     // Faschismus: Kommandantur – wuchtiger Block, schmaler hoher Mittelturm, schlichte lange Banner
-    CENTER.fascism = center(40, function (g, H) {
-      var DK = ['stone', 'dusk', 'plum', 'plum'];
-      // Mittelturm
-      wallBrick(g, 8, 4, 6, 18, DK, 0);
-      g.rect(7, 2, 8, 2, 'stoneD'); g.hline(7, 2, 8, 'stone');
-      g.set(10, 1, 'fireY'); g.set(11, 1, 'goldL'); g.set(10, 0, 'fireY');
-      g.vline(10, 7, 9, 'ink'); g.vline(11, 7, 9, 'ink');
-      // Hauptblock, stufenförmig
-      g.rect(0, 19, 22, 2, 'stone'); g.hline(0, 19, 22, 'stoneL');
-      wallBrick(g, 0, 21, 22, 17, DK, 1);
-      g.rect(3, 15, 16, 4, 'dusk'); g.hline(3, 15, 16, 'stone'); g.vline(3, 15, 4, 'stone'); g.vline(18, 15, 4, 'plum');
-      for (var x = 4; x <= 17; x += 3) { g.vline(x + 1, 24, 3, 'ink'); g.vline(x + 1, 30, 3, 'ink'); }
-      // lange schlichte Banner
-      [1, 5, 15, 19].forEach(function (bx) { g.rect(bx, 21, 2, 12, 'T'); g.vline(bx + 1, 21, 12, 'Td'); g.set(bx, 33, 'Td'); });
-      // Tor und Stufen
-      g.rect(9, 31, 4, 7, 'ink'); g.vline(10, 31, 7, 'metalD'); g.vline(11, 31, 7, 'metalD'); g.hline(9, 31, 4, 'stoneD');
-      g.hline(6, 38, 10, 'stoneD'); g.hline(7, 39, 8, 'stone');
+    // Faschismus: Kommandantur – breiter, symmetrischer Betonklotz, Mittelrisalit, riesige Banner
+    // mit abstraktem Muster (Teamfarbe, heller Mittelstreifen, dunkle Querbalken), Scheinwerfer auf dem Dach.
+    CENTER.fascism = center(32, function (g, H) {
+      var Cc = [CONC[2], CONC[0], CONC[1]];
+      roofFlat(g, 0, 4, 22, 5, RF[0], RF[1], RF[2]);
+      roofFlat(g, 6, 1, 10, 4, RF[0], RF[1], RF[2]);           // erhöhter Mittelteil
+      g.set(1, 3, 'fireY'); g.set(2, 3, 'metalD'); g.set(20, 3, 'fireY'); g.set(19, 3, 'metalD');
+      paint(g, 0, 9, 22, 21, Cc[1], Cc[2], Cc[0]);
+      paint(g, 6, 5, 10, 25, Cc[0], Cc[2], 'white');            // Mittelrisalit, heller
+      g.hline(0, 9, 22, Cc[2]);
+      for (var x = 2; x < 6; x += 2) for (var y = 11; y < 27; y += 5) g.vline(x, y, 3, 'ink');
+      for (x = 17; x < 21; x += 2) for (y = 11; y < 27; y += 5) g.vline(x, y, 3, 'ink');
+      // zwei riesige Banner am Risalit
+      [7, 13].forEach(function (bx) {
+        g.rect(bx, 6, 2, 17, 'T'); g.vline(bx + 1, 6, 17, 'Td');
+        g.vline(bx, 8, 13, 'Tl');
+        g.hline(bx, 10, 2, 'ink'); g.hline(bx, 18, 2, 'ink');
+        g.set(bx, 23, 'T'); g.set(bx + 1, 22, 'Td');
+      });
+      // Portal mit Stufen
+      g.rect(10, 22, 2, 8, 'ink'); g.hline(9, 21, 4, Cc[2]);
+      g.hline(5, 30, 12, Cc[0]); g.hline(4, 31, 14, Cc[2]);
     });
 
-    // Kommunismus: Volkshaus – breiter Riegel mit Fensterbändern, gestufter Turm mit Kugel
-    CENTER.communism = center(38, function (g, H) {
-      g.ellipse(11, 2, 2, 2, function (x, y, nx, ny) { return nx + ny < -0.3 ? 'Tl' : (nx > 0.4 ? 'Td' : 'T'); });
-      g.vline(10, 4, 2, 'stone'); g.vline(11, 4, 2, 'stoneD');
-      box(g, 8, 6, 6, 4, 'stoneL', 'stone', 'white');
-      box(g, 6, 10, 10, 4, 'stoneL', 'stone', 'white');
-      box(g, 4, 14, 14, 5, 'stoneL', 'stone', 'white');
-      g.hline(9, 7, 4, 'glass'); g.hline(7, 11, 8, 'glass'); g.hline(5, 15, 12, 'glass'); g.hline(5, 16, 12, 'waterD');
-      for (var x = 6; x < 18; x += 3) { g.set(x, 15, 'stone'); g.set(x, 16, 'stone'); }
-      // breiter Riegel
-      box(g, 0, 19, 22, 17, 'stoneL', 'stone', 'white');
-      g.rect(0, 19, 22, 3, 'T'); g.hline(0, 21, 22, 'Td'); g.hline(0, 19, 6, 'Tl');
-      for (x = 1; x <= 20; x++) {
-        var c = (x % 4 === 0) ? 'stone' : 'glass';
-        g.set(x, 24, c); g.set(x, 25, c === 'glass' ? 'waterD' : c);
-        g.set(x, 28, c); g.set(x, 29, c === 'glass' ? 'waterD' : c);
+    // Kommunismus: Volkshaus – breiter Saalbau mit Fensterbändern, hoher Schornstein, Fahne auf dem Dach
+    CENTER.communism = center(36, function (g, H) {
+      // Schornstein mit Rauch
+      g.rect(1, 3, 3, 30, 'red'); g.vline(1, 3, 30, 'redL'); g.vline(3, 3, 30, 'redD');
+      for (var y = 5; y < 33; y += 3) g.hline(1, y, 3, 'redD');
+      g.hline(0, 3, 5, 'stoneD');
+      g.paint(0, 0, ['.qq.', 'qggq', '.gq.']);
+      // Saalbau
+      roofSide(g, 4, 10, 18, 7, ['stoneL', 'stone', 'stoneD'], 2);
+      paint(g, 4, 17, 18, 16, PANEL[0], PANEL[1], PANEL[2]);
+      g.rect(4, 17, 18, 2, 'T'); g.hline(4, 18, 18, 'Td');
+      for (var x = 5; x < 21; x++) {
+        var c = (x % 4 === 0) ? PANEL[1] : 'glass';
+        g.set(x, 21, c); g.set(x, 22, c === 'glass' ? 'waterD' : c);
+        g.set(x, 26, c); g.set(x, 27, c === 'glass' ? 'waterD' : c);
       }
-      g.rect(8, 31, 6, 5, 'woodD'); g.vline(9, 31, 5, 'wood'); g.vline(11, 31, 5, 'wood'); g.hline(7, 30, 8, 'stoneD');
-      g.hline(0, 36, 22, 'stone'); g.hline(0, 37, 22, 'stoneD');
+      g.rect(11, 29, 4, 4, 'woodD'); g.vline(12, 29, 4, 'wood'); g.hline(10, 28, 6, PANEL[1]);
+      // Fahne auf dem Dachfirst
+      g.vline(16, 1, 10, 'woodD'); g.set(16, 0, 'gold');
+      g.paint(17, 1, ['TTTTu', 'TTTTT', 'TTTTt', 'tttt.']);
+      g.hline(4, 33, 18, PANEL[1]); g.hline(4, 34, 18, 'stone');
     });
 
-    // Theokratie: Tempel mit großer Knödelkuppel, zwei schlanken Türmchen mit Goldspitzen
     CENTER.theocracy = center(38, function (g, H) {
       [[0, 'white'], [19, 'stoneL']].forEach(function (t) {
         var x = t[0];
@@ -1359,47 +1365,54 @@
     function plinth(g, y) { g.rect(2, y, 6, 2, 'stoneL'); g.vline(7, y, 2, 'stone'); g.rect(1, y + 2, 8, 2, 'stone'); g.hline(1, y + 2, 8, 'stoneL'); g.vline(8, y + 2, 2, 'stoneD'); }
     function monument(fn) { var mg = new Grid(10, 20); fn(mg); return mg.outline(); }
     var MON = {};
-    MON.tribe = monument(function (g) { // Totempfahl
-      g.paint(2, 1, [
-        'z....z',
-        'yz..zy',
-        '.vwwv.',
-        '.Twwt.',
-        '.vowo.',
-        '.wwWw.',
-        '.rrRr.',
-        '.vwwW.',
-        '.oowo.',
-        '.wSSw.',
-        '.TTTt.',
-        '.vwwW.',
-        '.wkkW.',
-        '.wwwW.',
-        '.wwwW.',
-        '.WWWW.',
-        'hhhhhh']);
-    });
-    MON.monarchy = monument(function (g) { // goldene Krone auf Sockel
-      g.paint(1, 7, [
-        'j..j..k.',
-        'jk.jk.kK',
-        'jkkjrkKK',
-        'jkkkkkkK',
-        'KKKKKKKK']);
-      g.paint(2, 4, ['...r....']);
-      plinth(g, 12); g.rect(3, 12, 4, 2, 'T'); g.hline(3, 13, 4, 'Td');
-    });
-    MON.democracy = monument(function (g) { // Wahlurne mit Stimmzettel
+    MON.tribe = monument(function (g) { // Hinkelstein mit Ritzmuster
       g.paint(2, 3, [
-        '..ll..',
-        '..lc..',
-        '.WllW.',
-        'vvwwwW',
-        'vTTTtW',
-        'vTllTW',
-        'vTTTtW',
-        'vwwwwW']);
-      plinth(g, 12);
+        '..qqg.',
+        '.qqggG',
+        '.qgggG',
+        'qqgrgG',
+        'qggrgG',
+        'qgrrrG',
+        'qggrgG',
+        'qgggGG',
+        'qgggGG',
+        'qggrGG',
+        'qgrgGG',
+        'qgggGG',
+        'qggGGG',
+        '.gGGG.']);
+      g.paint(0, 16, ['.hhhhhhhh.', 'hhhhhhhhhh']);
+      g.set(1, 15, 'leaf'); g.set(8, 15, 'leafL');
+    });
+    MON.monarchy = monument(function (g) { // Königsstatue mit Krone und Zepter auf Sockel
+      g.paint(2, 0, [
+        '.k.k.k',
+        '.kkkkk',
+        '..qqg.',
+        '..qqG.',
+        '.TqgTt',
+        'qTTTTtk',
+        'qTTTTtk',
+        '.TTTTtK',
+        '.TTTtt.',
+        '.Tt.tt.']);
+      plinth(g, 10); g.rect(1, 14, 8, 2, 'stone'); g.hline(1, 14, 8, 'stoneL'); g.vline(8, 14, 2, 'stoneD');
+      g.hline(3, 12, 4, 'gold');
+    });
+    MON.democracy = monument(function (g) { // Rednerpult mit Wahlurne
+      g.paint(0, 4, [
+        '......lll.',
+        '...vv.lcl.',
+        '..vwwW.l..',
+        '..wTTW.WW.',
+        '..wTlW.TTt',
+        '..wTTWvTlt',
+        '..wwwWvTTt',
+        '..wwwWvwwW',
+        '..wwwWvwwW']);
+      g.paint(1, 13, ['TtTtTtTt']);
+      plinth(g, 14);
+      g.vline(0, 0, 8, 'woodD'); g.paint(1, 0, ['TTu', 'TTT']);
     });
     MON.fascism = monument(function (g) { // Propagandaturm mit Lautsprechern
       g.vline(4, 3, 13, 'stone'); g.vline(5, 3, 13, 'stoneD');
@@ -1445,34 +1458,35 @@
         '.W....W.']);
       plinth(g, 11);
     });
-    MON.republic = monument(function (g) { // Brunnen mit goldener Münze
-      g.paint(1, 0, [
-        '...jk...',
-        '..jkkK..',
-        '..kKkK..',
-        '...KK...',
-        '...gG...',
-        '.b.gG.b.',
-        'b..gG..b',
-        'b.qggG.b',
-        '..qggG..',
-        'qqqqqqqG',
-        'qbbbbbbG',
-        'gBBBBBBG',
-        'gggggggG',
-        '.GGGGGG.']);
+    MON.republic = monument(function (g) { // Goldene Waage
+      g.paint(0, 1, [
+        '....jk....',
+        '....kK....',
+        'jkkkkkkkkK',
+        '.j..kK..K.',
+        '.j..kK..K.',
+        'j.k.kK.K.K',
+        'kkK.kK.kKK',
+        '.KK.kK.KK.',
+        '....kK....',
+        '....kK....',
+        '...kkKK...']);
+      g.set(1, 7, 'gold'); g.set(8, 7, 'goldD');
+      plinth(g, 12); g.rect(1, 16, 8, 2, 'stone'); g.hline(1, 16, 8, 'stoneL');
     });
-    MON.anarchy = monument(function (g) { // schiefe Stange mit Flickenfahne auf Kistenberg
-      g.line(3, 1, 5, 13, 'woodD');
-      g.paint(4, 1, ['rrPP', 'rkkP', 'TTbb', 'TT.b']);
-      g.paint(1, 11, [
-        '.vwwW...',
-        '.wvwW.vW',
-        'vwwWwvwW',
-        'wWWWwWWW']);
-      g.set(7, 10, 'red');
+    MON.anarchy = monument(function (g) { // bunt bemalte Wand
+      var cols = ['pink', 'fireY', 'glass', 'leafL', 'purple', 'red', 'Tl', 'T'];
+      g.rect(0, 5, 10, 13, 'cream'); g.vline(9, 5, 13, 'sandD'); g.hline(0, 17, 10, 'stoneD');
+      for (var y = 6; y < 17; y++) for (var x = 0; x < 9; x++) {
+        var k = Math.floor((x + Math.sin(y * 0.9) * 2 + 9) / 2.5) + Math.floor(y / 4);
+        if ((x * 3 + y * 5) % 7 < 4) g.set(x, y, cols[k % cols.length]);
+      }
+      g.paint(2, 8, ['ll.', 'lol', 'lll']);
+      g.paint(6, 12, ['oo', 'oo']);
+      g.hline(0, 4, 10, 'stone'); g.set(3, 3, 'fireO'); g.set(7, 2, 'fireY');
+      g.paint(0, 18, ['..W..W..W.']);
     });
-    GOVS.forEach(function (gv) { def('s_monument_' + gv, MON[gv], { group: 'monument' }); });
+    GOVS.forEach(function (gv) { var mg = MON[gv].pad(0, 0, 1, 1).footShade(); def('s_monument_' + gv, mg, { group: 'monument', oy: 8 - mg.h + 1 }); });
 
     // ---------------------------------------------------------------- Felder (ohne Kontur)
     // Ackerboden mit waagrechten Furchen; Pflanzen stehen in den Reihen und wachsen 0..3
@@ -1637,6 +1651,8 @@
       '..rW.f..',
       '........']);
     def('s_grave', g.outline(), { group: 'build' });
+    // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
+    Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

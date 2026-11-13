@@ -218,7 +218,7 @@
       if (WW.TERRAIN_LUT.walk[st.terrain[y * st.W + x]] > 0) {
         WW.Powers.strike(sim, x, y, 'lightning', true);
         const c = sim._cities.get(st.owner[y * st.W + x]);
-        sim.event('randomLightning', { city: c ? c.name : 'der Wildnis' }, { kingdomId: c ? c.kingdomId : -1, cityId: c ? c.id : -1, x: x, y: y });
+        if (c) sim.event('randomLightning', { city: c.name }, { kingdomId: c.kingdomId, cityId: c.id, x: x, y: y });
       }
     } else if (r < 0.07 && st.cities.length) {
       const c = st.cities[sim.rng.int(st.cities.length)];

@@ -42,10 +42,10 @@
   // Stadtstufen
   // ---------------------------------------------------------------------------
   WW.CITY_TIERS = [
-    { key: 'camp', name: 'Lager', minPop: 0 },
-    { key: 'village', name: 'Dorf', minPop: 8 },
-    { key: 'town', name: 'Stadt', minPop: 20 },
-    { key: 'city', name: 'Großstadt', minPop: 40 }
+    { key: 'camp', name: 'Lager', nameA: 'ein Lager', minPop: 0 },
+    { key: 'village', name: 'Dorf', nameA: 'ein Dorf', minPop: 8 },
+    { key: 'town', name: 'Stadt', nameA: 'eine Stadt', minPop: 20 },
+    { key: 'city', name: 'Großstadt', nameA: 'eine Großstadt', minPop: 40 }
   ];
 
   // ---------------------------------------------------------------------------
@@ -255,9 +255,9 @@
     barracks: { name: 'Kaserne', w: 2, h: 2, core: true, inside: true, work: 130, hp: [180], cost: [{ wood: 8, stone: 4 }], burn: 0.6 },
     market:   { name: 'Markt', w: 2, h: 2, core: true, inside: true, work: 120, hp: [120], cost: [{ wood: 8, stone: 2 }], burn: 1 },
     monument: { name: 'Denkmal', w: 1, h: 1, core: true, inside: true, work: 160, hp: [160], cost: [{ stone: 8, gold: 3 }], burn: 0 },
-    wall:     { name: 'Mauer', w: 1, h: 1, work: 22, hp: [60, 220, 420], cost: [{ wood: 1 }, { stone: 1 }, { stone: 2 }], burn: 1 },
-    gate:     { name: 'Tor', w: 1, h: 1, work: 40, hp: [55, 190, 380], cost: [{ wood: 2 }, { stone: 3 }, { stone: 4 }], burn: 1 },
-    tower:    { name: 'Turm', w: 1, h: 1, work: 50, hp: [80, 300, 520], cost: [{ wood: 2 }, { stone: 3 }, { stone: 5 }], burn: 0.5 },
+    wall:     { name: 'Mauer', w: 1, h: 1, work: 16, hp: [200, 600, 1100], cost: [{ wood: 1 }, { stone: 1 }, { stone: 2 }], burn: 1 },
+    gate:     { name: 'Tor', w: 1, h: 1, work: 40, hp: [180, 520, 950], cost: [{ wood: 2 }, { stone: 3 }, { stone: 4 }], burn: 1 },
+    tower:    { name: 'Turm', w: 1, h: 1, work: 50, hp: [240, 750, 1300], cost: [{ wood: 2 }, { stone: 3 }, { stone: 5 }], burn: 0.5 },
     ruin:     { name: 'Ruine', w: 1, h: 1, work: 1, hp: [1], cost: [{}], burn: 0 }
   };
   WW.WALL_STYLES = ['palisade', 'stone', 'fortress'];

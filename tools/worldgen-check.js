@@ -86,6 +86,10 @@ function inspect(w, label) {
   // Mini-Seen
   const lakes = comps(ter, W, H, t => t === T.WATER || t === T.SHALLOW || t === T.DEEP).filter(c => !c.some(i => i % W === 0 || i < W));
   stat.tinyLakes += lakes.filter(c => c.length < 4).length;
+  // Wüstenanteil an der Landfläche (für die Standardwerte-Prüfung)
+  let land = 0, desert = 0;
+  for (let i = 0; i < N; i++) { const t = ter[i]; if (!isSea(t)) { land++; if (t === T.DESERT) desert++; } }
+  stat.lastDesert = land ? desert / land : 0;
   // Startplätze
   const sp = w.startSpots;
   check(Array.isArray(sp) && sp.length <= 12, label + ': startSpots');
@@ -113,7 +117,7 @@ function comps(ter, W, H, pred) {
   }
   return out;
 }
-const stat = { straight: 0, straightWorlds: 0, reliefSpecks: 0, tinyLakes: 0 };
+const stat = { straight: 0, straightWorlds: 0, reliefSpecks: 0, tinyLakes: 0, desertSum: 0, desertN: 0, desertBig: 0, desertMax: 0, lastDesert: 0 };
 
 // ---------------------------------------------------------------- Determinismus
 console.log('Determinismus');
@@ -141,6 +145,7 @@ for (const tk of tplKeys) {
     const w = G.generate({ seed: s * 7919 + 13, template: tk });
     genMs += now() - t0; worlds++;
     const n = inspect(w, tk + '#' + s);
+    stat.desertSum += stat.lastDesert; stat.desertN++; if (stat.lastDesert > 0.1) stat.desertBig++; if (stat.lastDesert > stat.desertMax) stat.desertMax = stat.lastDesert;
     sum += n; if (n < mn) mn = n; if (n < 6) few++;
   }
   perTpl[tk] = { avg: (sum / SEEDS).toFixed(1), min: mn, few };
@@ -149,6 +154,11 @@ for (const tk of tplKeys) {
 }
 for (const k in perTpl) console.log('  ' + k.padEnd(12) + ' Startplätze Ø ' + perTpl[k].avg + ', min ' + perTpl[k].min);
 console.log('  längste schnurgerade Flussstrecke: ' + stat.straight + ' Kacheln (Welten mit Gerade > 10: ' + stat.straightWorlds + ' von ' + worlds + '); Relief-Sprenkel (<4): ' + stat.reliefSpecks + '; Mini-Seen (<4): ' + stat.tinyLakes);
+{
+  const avg = 100 * stat.desertSum / stat.desertN;
+  console.log('  Wüste bei Standardwerten: Ø ' + avg.toFixed(1) + ' % der Landfläche, höchstens ' + (100 * stat.desertMax).toFixed(1) + ' %, Welten über 10 %: ' + stat.desertBig);
+  check(avg <= 5 && stat.desertBig <= stat.desertN * 0.03, 'Wüste dominiert bei Standardwerten (Ø ' + avg.toFixed(1) + ' %)');
+}
 check(stat.straight <= 14 && stat.straightWorlds <= worlds * 0.02, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
 
 // ---------------------------------------------------------------- Regler

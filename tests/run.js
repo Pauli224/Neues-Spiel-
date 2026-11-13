@@ -339,26 +339,48 @@ test('3b Regierungen fühlen sich verschieden an', function () {
 });
 
 // --------------------------------------------------------------------------
+// 3c. Regierungen selbst wählen
+// --------------------------------------------------------------------------
+test('3c Reiche wählen ihre Regierung selbst (6 Stämme, 40 000 Ticks)', function () {
+  const sim = makeSim({ seed: 'selbstwahl-2', size: 'large', populate: 6 });
+  assert(sim.state.kingdoms.every(k => k.gov === 'tribe'), 'Startreiche sind nicht alle Stämme');
+  const seen = {};
+  run(sim, 40000, 500, () => { for (const k of sim.state.kingdoms) seen[k.gov] = (seen[k.gov] || 0) + 1; if (sim.state.tick % 5000 === 0) checkInvariants(sim, 'Selbstwahl'); });
+  const kinds = Object.keys(seen).filter(g => g !== 'tribe');
+  const evs = sim.state.events.filter(e => /govChoice|revolution|regimeFall|coup|strongman|reform|collapse|plenumVote/.test(e.type));
+  for (const e of evs.slice(-6)) log('  [' + e.year + '] ' + e.type + ': ' + e.text);
+  log('Von selbst entstandene Regierungsformen:', kinds.join(', '), '· Wechsel-Ereignisse (letzte 400):', evs.length);
+  assert(kinds.length >= 3, 'nur ' + kinds.length + ' Regierungsformen entstanden');
+});
+
+// --------------------------------------------------------------------------
 // 4. Krieg
 // --------------------------------------------------------------------------
-test('4 Krieg (Kämpfe, Mauerschaden, Ende)', function () {
+// Zwei Reiche auf einer Wiese, Vorlauf ohne Krieg, bis beide ummauert sind
+function warSetup(seed, govA, govB, raceA, raceB) {
   const world = meadowWorld(120, 70, { hills: true, spots: [{ x: 32, y: 35 }, { x: 88, y: 35 }] });
-  const sim = makeSim({ seed: 'krieg', world: world, populate: 2, govs: ['fascism', 'monarchy'], races: ['orc', 'human'], animals: false });
+  const sim = makeSim({ seed: seed, world: world, populate: 2, govs: [govA, govB], races: [raceA, raceB], animals: false });
   const [a, b] = sim.state.kingdoms;
   a.govLocked = b.govLocked = true;
   sim.actions.setLaw('wars', false);
-  run(sim, 10 * WW.CONFIG.TPY);
-  sim.actions.setLaw('wars', true);
+  sim.actions.setLaw('disasters', false);
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
-  log('Vor dem Krieg:', a.name, ca.pop, 'Einw.,', ca.jobs.soldier || 0, 'Soldaten, Mauer', ca.wall.style + '/' + ca.wall.level, '|', b.name, cb.pop, 'Einw.,', cb.jobs.soldier || 0, 'Soldaten, Mauer', cb.wall.style + '/' + cb.wall.level);
+  run(sim, 40 * WW.CONFIG.TPY, 240, () => ca.wall.level >= 1 && cb.wall.level >= 1 && sim.state.year >= 8);
+  return { sim: sim, a: a, b: b, ca: ca, cb: cb };
+}
+
+test('4 Krieg (Marsch, Angriff auf Mauer/Tor, Kampf, Ende)', function () {
+  const { sim, a, b, ca, cb } = warSetup('krieg', 'fascism', 'monarchy', 'orc', 'human');
+  sim.actions.setLaw('wars', true);
+  log('Vor dem Krieg (Jahr ' + sim.state.year + '):', a.name, ca.pop, 'Einw.,', ca.jobs.soldier || 0, 'Soldaten, Mauer', ca.wall.style + '/' + ca.wall.level, '|', b.name, cb.pop, 'Einw.,', cb.jobs.soldier || 0, 'Soldaten, Mauer', cb.wall.style + '/' + cb.wall.level);
+  assert(ca.wall.level >= 1 && cb.wall.level >= 1, 'Vorlauf: Städte nicht ummauert');
   assert(sim.actions.setRelation(a.id, b.id, 'war'), 'setRelation war');
   assert(a.relations[b.id].status === 'war' && b.relations[a.id].status === 'war', 'Status nicht Krieg');
-  const d0 = (sim._deaths && sim._deaths.battle) || 0;
-  let wallHits = 0, ended = -1, minWall = 1;
-  const wallHp0 = new Map();
-  for (const s of sim.state.structs) if (WW.Structs.isWallish(s) && s.built) wallHp0.set(s.id, s.maxHp);
+  const d0 = (sim._deaths && sim._deaths.battle) || 0, e0 = sim.state.eventSeq;
+  let wallHits = 0, ended = -1, firstHit = -1;
   const origDamage = WW.Structs.damage;
-  WW.Structs.damage = function (sim2, s, amt, fx) { if (WW.Structs.isWallish(s)) wallHits++; return origDamage(sim2, s, amt, fx); };
+  WW.Structs.damage = function (sim2, s, amt, fx) { if (WW.Structs.isWallish(s) && fx === 'hit') { wallHits++; if (firstHit < 0) firstHit = sim2.state.tick; } return origDamage(sim2, s, amt, fx); };
+  const t0 = sim.state.tick;
   try {
     run(sim, 60000, 50, (i) => {
       if (i % 1000 === 0) checkInvariants(sim, 'Krieg ' + i);
@@ -367,12 +389,74 @@ test('4 Krieg (Kämpfe, Mauerschaden, Ende)', function () {
     });
   } finally { WW.Structs.damage = origDamage; }
   const battle = ((sim._deaths && sim._deaths.battle) || 0) - d0;
-  const evs = sim.state.events.filter(e => /war|peace|conquest|fallen|armyMarch|wallBreach|buyPeace/.test(e.type)).slice(-8);
-  for (const e of evs) log('  [' + e.year + '] ' + e.text);
-  log('Gefallene:', battle, '· Treffer an Mauern:', wallHits, '· Ende nach', ended > 0 ? (ended / WW.CONFIG.TPY).toFixed(1) + ' Jahren' : 'nie');
+  const evs = sim.state.events.filter(e => e.id > e0 && /war|peace|conquest|fallen|armyMarch|wallBreach|buyPeace|mobilize|occupation/.test(e.type));
+  for (const e of evs.slice(0, 10)) log('  [' + e.year + '] ' + e.text);
+  log('Gefallene:', battle, '· Treffer an Mauern/Toren:', wallHits, '(erster nach', firstHit > 0 ? ((firstHit - t0) / WW.CONFIG.TPY).toFixed(1) + ' Jahren)' : '–)', '· Ende nach', ended > 0 ? (ended / WW.CONFIG.TPY).toFixed(1) + ' Jahren' : 'nie');
+  assert(evs.some(e => e.type === 'armyMarch'), 'kein Heer ist ausgezogen');
   assert(battle > 0, 'keine Kämpfe');
   assert(wallHits > 0, 'Mauern nahmen keinen Schaden');
   assert(ended > 0, 'Krieg endet nicht');
+});
+
+// Belagerung: gleicher Angriff auf dieselbe Stadt mit und ohne Mauer
+function siege(save, withWall) {
+  const sim = WW.Sim.load(save); sim._throwErrors = true;
+  const [a, b] = sim.state.kingdoms;
+  const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
+  if (!withWall) WW.Walls.demolishAll(sim, cb);
+  // Angreifer bekommt ein großes Heer vor die Tore
+  const W = sim.state.W;
+  for (let n = 0; n < 24; n++) {
+    const u = WW.Units.create(sim, { x: cb.cx + 16 + (n % 4), y: cb.cy - 3 + Math.floor(n / 4), role: 'soldier', kingdomId: a.id, cityId: ca.id, race: 'orc', age: 20 });
+    if (u) WW.Units.setRole(sim, u, 'soldier');
+  }
+  sim.actions.setLaw('wars', true);
+  sim.actions.setRelation(a.id, b.id, 'war');
+  const t0 = sim.state.tick;
+  let fell = -1;
+  for (let i = 1; i <= 30000; i++) {
+    sim.tick();
+    if (i % 50 === 0) {
+      if (cb.dead || cb.kingdomId !== b.id) { fell = sim.state.tick - t0; break; }
+      const r = a.relations[b.id];
+      if (r && r.status !== 'war') sim.actions.setRelation(a.id, b.id, 'war');
+      if (i % 1000 === 0) checkInvariants(sim, 'Belagerung');
+    }
+  }
+  return { sim: sim, fell: fell, city: cb, att: a, def: b };
+}
+
+test('4b Ummauerte Stadt hält länger durch, Eroberung läuft stabil weiter', function () {
+  const { sim } = warSetup('belagerung', 'fascism', 'democracy', 'orc', 'human');
+  const save = sim.serialize();
+  const wall = siege(save, true), open = siege(save, false);
+  const fmt = (r) => r.fell > 0 ? (r.fell / WW.CONFIG.TPY).toFixed(1) + ' Jahre' : 'hält > ' + (30000 / WW.CONFIG.TPY).toFixed(0) + ' Jahre';
+  log('Mit Mauer:', fmt(wall), '· ohne Mauer:', fmt(open));
+  assert(open.fell > 0, 'Stadt ohne Mauer fällt nicht einmal');
+  assert(wall.fell < 0 || wall.fell > open.fell * 1.3, 'Mauer bringt keinen messbaren Vorteil');
+  // (c) Eroberte Stadt gehört dem Sieger und läuft stabil weiter
+  const c = open.city;
+  assert(!c.dead && c.kingdomId === open.att.id, 'eroberte Stadt gehört nicht dem Sieger');
+  log('Erobert:', c.name, 'gehört jetzt', open.att.name, '· Verteidiger', open.def.dead ? 'untergegangen' : 'existiert noch');
+  sim.actions.setLaw && open.sim.actions.setRelation(open.att.id, open.def.id, 'peace');
+  run(open.sim, 6000, 500, (i) => checkInvariants(open.sim, 'nach Eroberung ' + i));
+  assert(open.sim._cities.get(c.id), 'eroberte Stadt ist danach verschwunden');
+  log('6000 Ticks nach der Eroberung:', c.name, c.pop, 'Einw., Reich', (open.sim._kingdoms.get(c.kingdomId) || {}).name);
+});
+
+test('4d Reich ohne Stadt verschwindet sauber', function () {
+  const sim = makeSim({ seed: 'untergang', size: 'small', populate: 3 });
+  run(sim, 1200);
+  const k = sim.state.kingdoms[0];
+  for (const id of k.cityIds.slice()) WW.Cities.destroyCity(sim, sim._cities.get(id), 'cityAbandoned');
+  for (const u of sim.state.units) if (u.kingdomId === k.id) WW.Units.kill(sim, u, 'test');
+  run(sim, 100);
+  assert(!sim._kingdoms.get(k.id) && sim.state.kingdoms.indexOf(k) < 0, 'Reich existiert noch');
+  for (const o of sim.state.kingdoms) assert(!(k.id in o.relations), 'Beziehung zum Untergegangenen übrig');
+  assert(sim.state.events.some(e => e.type === 'kingdomGone'), 'keine Chronik-Meldung');
+  run(sim, 2000, 500, (i) => checkInvariants(sim, 'nach Untergang ' + i));
+  assert(WW.Sim.load(sim.serialize()), 'Spielstand nach Untergang kaputt');
+  log('Untergang gemeldet:', sim.state.events.filter(e => e.type === 'kingdomGone').pop().text);
 });
 
 // --------------------------------------------------------------------------

@@ -237,56 +237,56 @@
         if (role === 'child' && race === 'gnome') gnomeCap(A);
       }
       if (A.eyes) A.eyes();
-      return A.g.pad(1, 1, 1, 1).outline();
+      return A.g.pad(1, 1, 2, 1).outline().pad(0, 0, 0, 1).footShade();
     }
 
     RACES.forEach(function (race) {
       ROLES.concat(['punk']).forEach(function (role) {
         for (var f = 0; f < 2; f++) {
           var g = unit(race, role, f);
-          def('u_' + race + '_' + role + '_' + f, g, { group: 'unit', anchor: 'unit' });
-          if (race === 'human') def('u_' + role + '_' + f, g, { group: 'unit-alias', anchor: 'unit' });
+          def('u_' + race + '_' + role + '_' + f, g, { group: 'unit', anchor: 'unit', lift: 0 });
+          if (race === 'human') def('u_' + role + '_' + f, g, { group: 'unit-alias', anchor: 'unit', lift: 0 });
         }
       });
       LEADER_GOVS.forEach(function (gov) {
         for (var f = 0; f < 2; f++) {
           var g = unit(race, 'leader', f, gov);
-          def('u_' + race + '_leader_' + gov + '_' + f, g, { group: 'unit', anchor: 'unit' });
-          if (race === 'human') def('u_leader_' + gov + '_' + f, g, { group: 'unit-alias', anchor: 'unit' });
+          def('u_' + race + '_leader_' + gov + '_' + f, g, { group: 'unit', anchor: 'unit', lift: 0 });
+          if (race === 'human') def('u_leader_' + gov + '_' + f, g, { group: 'unit-alias', anchor: 'unit', lift: 0 });
         }
       });
     });
 
     // ------------------------------------------------------------------ Tiere
-    function animal(rows) { var g = new Grid(rows[0].length, rows.length); g.paint(0, 0, rows); return g.pad(1, 1, 1, 1).outline(); }
+    function animal(rows) { var g = new Grid(rows[0].length, rows.length); g.paint(0, 0, rows); return g.pad(1, 1, 2, 1).outline().pad(0, 0, 0, 1).footShade(); }
     def('a_sheep_0', animal([
       '.lll....',
       'lllllcOO',
       'llllllOd',
       'clllllO.',
       '.ccccc..',
-      '.O...O..']), { group: 'animal', anchor: 'unit' });
+      '.O...O..']), { group: 'animal', anchor: 'unit', lift: 0 });
     def('a_sheep_1', animal([
       '........',
       '.lll..OO',
       'lllllcOd',
       'llllllO.',
       'cccccc..',
-      '..O.O...']), { group: 'animal', anchor: 'unit' });
+      '..O.O...']), { group: 'animal', anchor: 'unit', lift: 0 });
     def('a_wolf_0', animal([
       '......G.G',
       'G....GgGg',
       '.GgggggGqo',
       '..gggGGG..',
       '..GG..GG..',
-      '..G....G..']), { group: 'animal', anchor: 'unit' });
+      '..G....G..']), { group: 'animal', anchor: 'unit', lift: 0 });
     def('a_wolf_1', animal([
       '.......G.G',
       '.G....GgGg',
       '..GggggGqo',
       '..gggGGG..',
       '...GGGG...',
-      '...G..G...']), { group: 'animal', anchor: 'unit' });
+      '...G..G...']), { group: 'animal', anchor: 'unit', lift: 0 });
 
     // ------------------------------------------------------------------ Effekte
     function fx(rows, opts) { var g = new Grid(rows[0].length, rows.length); g.paint(0, 0, rows); return opts && opts.outline ? g.pad(1, 1, 1, 1).outline(opts.outline) : g; }

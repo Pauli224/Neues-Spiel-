@@ -173,6 +173,23 @@
     g.blit(this, l, t);
     return g;
   };
+  // Weicher Bodenschatten: unter dem untersten deckenden Pixel jeder Spalte ein Schattenpixel
+  // (nach rechts verlängert, Licht von links oben). Erdet Figuren, Gebäude und Mauern.
+  Grid.prototype.footShade = function () {
+    var w = this.w, h = this.h, last = -1;
+    for (var x = 0; x < w; x++) {
+      var low = -1;
+      for (var y = h - 1; y >= 0; y--) { var v = this.d[y * w + x]; if (v && v !== C.shade && v !== C.shadeL) { low = y; break; } }
+      if (low >= 0 && low + 1 < h) {
+        if (!this.d[(low + 1) * w + x]) this.d[(low + 1) * w + x] = C.shade;
+        last = x;
+      }
+    }
+    if (last >= 0 && last + 1 < w) {
+      for (y = h - 1; y >= 0; y--) if (this.d[y * w + last] === C.shade) { if (!this.d[y * w + last + 1]) this.d[y * w + last + 1] = C.shadeL; break; }
+    }
+    return this;
+  };
   Grid.prototype.hasTeam = function () {
     for (var i = 0; i < this.d.length; i++) if (this.d[i] >= 1000 && this.d[i] <= 1002) return true;
     return false;

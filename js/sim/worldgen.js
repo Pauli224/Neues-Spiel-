@@ -300,39 +300,94 @@
     return pts;
   }
 
+  // Kapsel (Strecke mit von r0 nach r1 verjüngtem Radius): 1 auf der Achse, 0 am Rand, darunter negativ.
+  function capsule(x, y, c) {
+    const ex = c.x1 - c.x0, ey = c.y1 - c.y0, L2 = ex * ex + ey * ey || 1e-9;
+    let t = ((x - c.x0) * ex + (y - c.y0) * ey) / L2; if (t < 0) t = 0; else if (t > 1) t = 1;
+    const dx = x - c.x0 - ex * t, dy = y - c.y0 - ey * t;
+    return 1 - Math.sqrt(dx * dx + dy * dy) / (c.r0 + (c.r1 - c.r0) * t);
+  }
+  // Gebogener Arm aus mehreren Kapseln (Halbinsel, Fjord, Riss).
+  function arm(r, x, y, dirX, dirY, len, r0, r1, bend, out) {
+    const n = 3;
+    let px = x, py = y, dx = dirX, dy = dirY;
+    for (let k = 0; k < n; k++) {
+      const a = r.range(-bend, bend); // seitliches Abknicken (ohne Winkelfunktionen)
+      let nx = dx - a * dy, ny = dy + a * dx; const l = Math.sqrt(nx * nx + ny * ny); nx /= l; ny /= l; dx = nx; dy = ny;
+      const sl = len / n, qx = px + dx * sl, qy = py + dy * sl;
+      out.push({ x0: px, y0: py, x1: qx, y1: qy, r0: r0 + (r1 - r0) * k / n, r1: r0 + (r1 - r0) * (k + 1) / n });
+      px = qx; py = qy;
+    }
+  }
+  // Gelappte Landmasse: Kern, Lappen, Halbinseln, Buchten, vorgelagerte Inseln.
+  function lobedMass(r, S, cx, cy, R, o) {
+    o = o || {}; R *= o.ls || 1;
+    const asp = r.range(0.75, 1.35);
+    S.pos.push(mkBlob(r, cx, cy, R * Math.sqrt(asp) * 0.85, R / Math.sqrt(asp) * 0.62));
+    const nl = (o.lobes || 3) + r.int(3);
+    for (let k = 0; k < nl; k++) {
+      const d = randDir(r), dist = R * r.range(0.4, 0.75), s = R * r.range(0.28, 0.5);
+      S.pos.push(Object.assign(mkBlob(r, cx + d[0] * dist, cy + d[1] * dist * 0.62, s * r.range(1, 1.5), s * r.range(0.55, 0.9)), { w: r.range(0.85, 1) }));
+    }
+    const np = (o.pen || 1) + r.int(3);
+    for (let k = 0; k < np; k++) {
+      const d = randDir(r), st = R * r.range(0.55, 0.8);
+      arm(r, cx + d[0] * st, cy + d[1] * st * 0.62, d[0], d[1] * 0.7, R * r.range(0.5, 1.0), R * r.range(0.12, 0.18), R * r.range(0.03, 0.06), 0.5, S.cap);
+    }
+    const nb = (o.bays || 1) + r.int(3);
+    for (let k = 0; k < nb; k++) {
+      const d = randDir(r), dist = R * r.range(0.7, 1.0), s = R * r.range(0.18, 0.36);
+      S.neg.push(Object.assign(mkBlob(r, cx + d[0] * dist, cy + d[1] * dist * 0.62, s * r.range(1, 1.8), s), { k: r.range(1.5, 2.5) }));
+    }
+    const ni = o.isl === undefined ? r.int(4) : o.isl;
+    for (let k = 0; k < ni; k++) {
+      const d = randDir(r), dist = R * r.range(1.1, 1.5), s = R * r.range(0.07, 0.15);
+      S.pos.push(Object.assign(mkBlob(r, cx + d[0] * dist, cy + d[1] * dist * 0.62, s * r.range(1, 1.8), s), { w: 0.9 }));
+    }
+  }
+  function shapeMask(S) {
+    return (x, y) => {
+      let m = -9;
+      for (let k = 0; k < S.pos.length; k++) { const v = blob(x, y, S.pos[k]) * (S.pos[k].w || 1); if (v > m) m = v; }
+      for (let k = 0; k < S.cap.length; k++) { const v = capsule(x, y, S.cap[k]) * 0.85; if (v > m) m = v; }
+      for (let k = 0; k < S.neg.length; k++) { const b = blob(x, y, S.neg[k]); if (b > 0) m -= b * S.neg[k].k; }
+      for (let k = 0; k < S.cut.length; k++) { const c = capsule(x, y, S.cut[k]); if (c > 0) m -= (0.6 + c) * 2.5; }
+      if (S.extra) m = S.extra(x, y, m);
+      return m < -1.5 ? -1.5 : m;
+    };
+  }
+
   // Jede Vorlage liefert eine Maske (positiv = Land wahrscheinlich) und ihren Landanteil-Bereich.
-  function makeTemplate(key, r, A) {
-    const P = { lo: 0.25, hi: 0.62, mw: 1, nw: 0.55, freq: 1, mirror: false, cracks: null, mtnBoost: 0, mtnCenter: null };
+  function makeTemplate(key, r, A, land) {
+    const LS = 0.84 + 0.32 * land; // Formen wachsen mit dem Landregler mit, statt nur das Rauschen aufzufüllen
+    const P = { lo: 0.25, hi: 0.55, mw: 1, nw: 0.5, freq: 1, mirror: false, mtnCenter: null };
+    const S = { pos: [], neg: [], cap: [], cut: [], extra: null };
+    const nz = new Noise(r.int(2147483647));
     if (key === 'continents') {
+      // verschieden große Landmassen, Gruppe aus der Mitte gerückt → Meere unterschiedlich breit
       const K = 2 + r.int(3);
-      const sep = K === 2 ? 0.62 : K === 3 ? 0.5 : 0.42;
-      const pts = placeSpread(r, K, A * 0.2, A * 0.8, 0.26, 0.74, sep);
-      const rb = 0.42 / Math.sqrt(pts.length);
-      const list = pts.map((p, k) => mkBlob(r, p[0], p[1], rb * r.range(0.95, 1.4) * (k === 0 ? 1.15 : 1), rb * r.range(0.6, 0.95)));
-      const extra = 1 + r.int(3);
-      for (let k = 0; k < extra; k++) list.push(Object.assign(mkBlob(r, r.range(0.12, A - 0.12), r.range(0.15, 0.85), r.range(0.04, 0.08), r.range(0.03, 0.06)), { w: 0.8 }));
-      const nc = pts.length;
-      P.mask = (x, y) => {
-        // Meerengen zwischen den Kontinenten
-        return Math.max(maxBlobs(x, y, list), -0.5) - 1.5 * straitAt(x, y, list, nc, 0.075);
-      };
-      P.lo = 0.22; P.hi = 0.52; P.nw = 0.6;
-    } else if (key === 'pangaea') {
-      const main = mkBlob(r, A * r.range(0.45, 0.55), r.range(0.46, 0.54), A * 0.37, 0.36);
-      const bays = [];
-      const nb = 3 + r.int(3);
-      for (let k = 0; k < nb; k++) {
-        const d = randDir(r), rr = r.range(0.09, 0.16);
-        bays.push(mkBlob(r, main.x + d[0] * A * 0.3, main.y + d[1] * 0.3, rr * r.range(1, 1.8), rr));
+      const sizes = [r.range(0.22, 0.28), r.range(0.13, 0.2), r.range(0.09, 0.14), r.range(0.07, 0.1)].slice(0, K);
+      const gx = A * 0.5 + r.range(-0.12, 0.12) * A, gy = 0.5 + r.range(-0.06, 0.06);
+      const placed = [];
+      for (let k = 0; k < K; k++) {
+        const R = sizes[k];
+        for (let t = 0; t < 600; t++) {
+          const x = k === 0 ? gx + r.range(-0.2, 0.2) * A : r.range(R + 0.04, A - R - 0.04), y = r.range(0.15 + R * 0.5, 0.85 - R * 0.5);
+          const gap = r.range(0.02, 0.14) * (1 - t / 700);
+          if (placed.every(p => { const dx = p[0] - x, dy = (p[1] - y) * 1.2; const need = (p[2] + R) * 1.45 + gap; return dx * dx + dy * dy >= need * need; })) { placed.push([x, y, R]); break; }
+        }
       }
-      const inner = r.next() < 0.8 ? mkBlob(r, main.x + r.range(-0.15, 0.15), main.y + r.range(-0.1, 0.1), r.range(0.08, 0.13), r.range(0.05, 0.08)) : null;
-      P.mask = (x, y) => {
-        let m = blob(x, y, main) * 1.3;
-        for (let k = 0; k < bays.length; k++) { const b = blob(x, y, bays[k]); if (b > 0) m -= b * 2.2; }
-        if (inner) { const b = blob(x, y, inner); if (b > 0) m -= b * 3; }
-        return Math.max(m, -0.6);
-      };
-      P.lo = 0.28; P.hi = 0.55; P.nw = 0.5;
+      for (const p of placed) lobedMass(r, S, p[0], p[1], p[2], { ls: LS, lobes: 2, pen: 1, bays: 1, isl: r.int(3) });
+      P.lo = 0.18; P.hi = 0.44; P.nw = 0.45;
+    } else if (key === 'pangaea') {
+      // riesige zerlappte Masse mit Binnenmeer
+      const cx = A * r.range(0.4, 0.6), cy = r.range(0.47, 0.53), R = 0.36;
+      lobedMass(r, S, cx, cy, R, { ls: LS, lobes: 4, pen: 2, bays: 3, isl: 1 + r.int(3) });
+      const d = randDir(r);
+      const sea = mkBlob(r, cx + d[0] * 0.06, cy + d[1] * 0.05, r.range(0.12, 0.17), r.range(0.07, 0.1));
+      S.neg.push(Object.assign(sea, { k: 3.5 }));
+      if (r.next() < 0.6) { const e = randDir(r); arm(r, sea.x, sea.y, e[0], e[1], 0.42, 0.025, 0.035, 0.4, S.cut); }
+      P.lo = 0.22; P.hi = 0.48; P.nw = 0.4;
     } else if (key === 'archipelago') {
       const list = [];
       const chains = 4 + r.int(4);
@@ -348,108 +403,132 @@
       }
       const scat = 8 + r.int(6);
       for (let k = 0; k < scat; k++) { const rr = r.range(0.03, 0.1); list.push(mkBlob(r, r.range(0.1, A - 0.1), r.range(0.12, 0.88), rr * r.range(1, 1.6), rr)); }
-      const nl = list.length;
-      P.mask = (x, y) => Math.max(maxBlobs(x, y, list), -0.4) - 0.7 * straitAt(x, y, list, nl, 0.03);
-      P.lo = 0.1; P.hi = 0.34; P.nw = 0.38; P.mw = 1.2; P.freq = 1.5;
+      S.pos = list;
+      P.lo = 0.1; P.hi = 0.34; P.nw = 0.45; P.mw = 1.1; P.freq = 1.5;
     } else if (key === 'twins') {
-      const yo = r.range(-0.07, 0.07), rx = A * r.range(0.17, 0.2), ry = r.range(0.3, 0.36);
-      const d = randDir(r);
-      const L = { x: A * 0.27, y: 0.5 + yo, rx, ry, c: d[0], s: d[1] };
-      const R = { x: A * 0.73, y: 0.5 - yo, rx, ry, c: d[0], s: -d[1] };
-      P.mask = (x, y) => {
-        let m = Math.max(blob(x, y, L), blob(x, y, R));
-        const g = 1 - Math.abs(x - A * 0.5) / 0.1; if (g > 0) m -= g * 1.4;
-        return Math.max(m, -0.5);
+      // zwei ähnliche Massen, dazwischen ein geschwungener, unterschiedlich breiter Meeresarm
+      const yo = r.range(-0.06, 0.06), R = r.range(0.27, 0.32);
+      const rs = r.int(2147483647);
+      lobedMass(new Rng(rs), S, A * 0.27, 0.5 + yo, R, { ls: LS, lobes: 3, pen: 2, bays: 2, isl: 1 });
+      // Zwilling: gleiche Würfe, um den Kartenmittelpunkt gedreht, leicht verwackelt
+      const S2 = { pos: [], neg: [], cap: [], cut: [] };
+      lobedMass(new Rng(rs), S2, A * 0.27, 0.5 + yo, R, { ls: LS, lobes: 3, pen: 2, bays: 2, isl: 1 });
+      for (const b of S2.pos) S.pos.push(Object.assign({}, b, { x: A - b.x + r.range(-0.02, 0.02), y: 1 - b.y + r.range(-0.02, 0.02), rx: b.rx * r.range(0.85, 1.15) }));
+      for (const b of S2.neg) S.neg.push(Object.assign({}, b, { x: A - b.x, y: 1 - b.y }));
+      for (const c of S2.cap) S.cap.push({ x0: A - c.x0, y0: 1 - c.y0, x1: A - c.x1, y1: 1 - c.y1, r0: c.r0, r1: c.r1 });
+      const amp = r.range(0.05, 0.1), ph = r.range(0, 50);
+      S.extra = (x, y, m) => {
+        const cxl = A * 0.5 + amp * nz.fbm(y * 2.2 + ph, 3.3, 2, 0.5) * 2;
+        const w = 0.03 + 0.045 * (0.5 + nz.fbm(y * 3.1 + ph, 7.7, 2, 0.5));
+        const g = 1 - Math.abs(x - cxl) / w;
+        return g > 0 ? m - g * 2.2 - 0.3 : m;
       };
-      P.mirror = true; P.lo = 0.24; P.hi = 0.54; P.nw = 0.5;
+      P.lo = 0.22; P.hi = 0.48; P.nw = 0.4;
     } else if (key === 'ringsea') {
-      const cx = A * 0.5 + r.range(-0.04, 0.04), cy = 0.5 + r.range(-0.03, 0.03);
-      const r0 = r.range(0.58, 0.64), w = r.range(0.17, 0.22);
+      const cx = A * 0.5 + r.range(-0.06, 0.06), cy = 0.5 + r.range(-0.04, 0.04);
+      const r0 = r.range(0.56, 0.64), w = r.range(0.15, 0.22);
       const gaps = []; const ng = 1 + r.int(2);
       for (let k = 0; k < ng; k++) gaps.push(randDir(r));
       const isl = [];
       if (r.next() < 0.8) isl.push(mkBlob(r, cx + r.range(-0.04, 0.04), cy + r.range(-0.03, 0.03), r.range(0.06, 0.1), r.range(0.05, 0.08)));
       const ni = 2 + r.int(3);
       for (let k = 0; k < ni; k++) { const d = randDir(r); isl.push(Object.assign(mkBlob(r, cx + d[0] * A * 0.16, cy + d[1] * 0.16, 0.035, 0.03), { w: 0.85 })); }
-      P.mask = (x, y) => {
+      const ph = r.range(0, 50);
+      S.extra = (x, y) => {
         const dx = (x - cx) / (A * 0.5), dy = (y - cy) / 0.5, d = Math.sqrt(dx * dx + dy * dy);
-        let m = 1 - Math.abs(d - r0) / w;
-        if (d > 0.001) {
-          for (let k = 0; k < gaps.length; k++) {
-            const cs = (dx * gaps[k][0] + dy * gaps[k][1]) / d;
-            if (cs > 0.975) m -= (cs - 0.975) / 0.025 * 1.6;
-          }
+        const ww = w * (0.7 + 0.6 * (0.5 + nz.fbm(dx * 2 + ph, dy * 2, 2, 0.5))); // Ring verschieden breit
+        let m = 1 - Math.abs(d - r0) / ww;
+        if (d > 0.001) for (let k = 0; k < gaps.length; k++) {
+          const cs = (dx * gaps[k][0] + dy * gaps[k][1]) / d;
+          if (cs > 0.975) m -= (cs - 0.975) / 0.025 * 1.6;
         }
         if (isl.length) m = Math.max(m, maxBlobs(x, y, isl));
-        return Math.max(m, -0.6);
+        return m;
       };
-      P.lo = 0.22; P.hi = 0.48; P.mw = 1.2; P.nw = 0.42;
+      P.lo = 0.22; P.hi = 0.48; P.mw = 1.1; P.nw = 0.45;
     } else if (key === 'lakeland') {
-      const main = mkBlob(r, A * r.range(0.47, 0.53), r.range(0.47, 0.53), A * 0.39, 0.37);
+      const cx = A * r.range(0.4, 0.6), cy = r.range(0.46, 0.54);
+      lobedMass(r, S, cx, cy, 0.34, { ls: LS, lobes: 5, pen: 2, bays: 2, isl: r.int(3) });
       const holes = [];
       const nh = 9 + r.int(7);
       for (let t = 0; holes.length < nh && t < 300; t++) {
-        const x = r.range(A * 0.15, A * 0.85), y = r.range(0.18, 0.82);
-        if (blob(x, y, main) < 0.3) continue;
+        const x = cx + r.range(-0.3, 0.3) * A, y = cy + r.range(-0.28, 0.28);
         if (holes.some(h => (h.x - x) * (h.x - x) + (h.y - y) * (h.y - y) < 0.022)) continue;
         const rr = r.range(0.03, 0.065);
         holes.push(mkBlob(r, x, y, rr * r.range(1, 2.2), rr));
       }
-      P.mask = (x, y) => {
-        let m = blob(x, y, main) * 1.3;
+      S.extra = (x, y, m) => {
+        if (m < 0.15) return m;
         for (let k = 0; k < holes.length; k++) { const b = blob(x, y, holes[k]); if (b > 0) m -= 1.6 + b * 4; }
-        return Math.max(m, -1.8);
+        return m;
       };
-      P.lo = 0.36; P.hi = 0.6; P.mw = 1.2; P.nw = 0.38;
+      P.lo = 0.26; P.hi = 0.5; P.mw = 1.2; P.nw = 0.4;
     } else if (key === 'coast') {
+      // Festland füllt eine ganze Kartenseite; zerklüftete Küste mit Halbinseln, davor Inseln
       const side = r.pick(['W', 'E']);
-      const pos = r.range(0.42, 0.5);
-      const isl = [];
-      const ni = 4 + r.int(5);
-      for (let k = 0; k < ni; k++) {
-        const t = r.range(0.68, 0.9), o = r.range(0.12, 0.88), rr = r.range(0.03, 0.075);
-        let x, y;
-        if (side === 'W') { x = t * A; y = o; } else if (side === 'E') { x = (1 - t) * A; y = o; }
-        else if (side === 'N') { x = o * A; y = t; } else { x = o * A; y = 1 - t; }
-        isl.push(Object.assign(mkBlob(r, x, y, rr * r.range(1, 1.8), rr), { w: 0.9 }));
+      const pos = r.range(0.38, 0.48), sg = side === 'W' ? 1 : -1;
+      const tx = t => side === 'W' ? t * A : (1 - t) * A;
+      for (let k = 0, np = 2 + r.int(3); k < np; k++) {
+        const y = r.range(0.15, 0.85);
+        arm(r, tx(pos - 0.05), y, sg, r.range(-0.5, 0.5), r.range(0.15, 0.32) * A, r.range(0.04, 0.07), r.range(0.015, 0.03), 0.6, S.cap);
       }
-      const pen = r.next() < 0.7 ? { o: r.range(0.3, 0.7), len: r.range(0.12, 0.22), wid: r.range(0.04, 0.07) } : null;
-      P.mask = (x, y) => {
-        let t, o;
-        if (side === 'W') { t = x / A; o = y; } else if (side === 'E') { t = 1 - x / A; o = y; }
-        else if (side === 'N') { t = y; o = x / A; } else { t = 1 - y; o = x / A; }
-        let m = (pos - t) * 3.2;
-        if (pen) { const pw = 1 - Math.abs(o - pen.o) / pen.wid; if (pw > 0 && t < pos + pen.len) m = Math.max(m, pw * 0.8 * (1 - Math.max(0, t - pos) / pen.len)); }
-        m = Math.max(m, maxBlobs(x, y, isl));
-        return Math.max(Math.min(m, 1.1), -0.7);
+      for (let k = 0, nb = 1 + r.int(3); k < nb; k++) {
+        const s = r.range(0.07, 0.13);
+        S.neg.push(Object.assign(mkBlob(r, tx(pos + r.range(-0.08, 0.02)), r.range(0.15, 0.85), s * r.range(1, 1.8), s), { k: r.range(1.6, 2.4) }));
+      }
+      for (let k = 0, ni = 4 + r.int(5); k < ni; k++) {
+        const rr = r.range(0.03, 0.075);
+        S.pos.push(Object.assign(mkBlob(r, tx(r.range(pos + 0.12, 0.88)), r.range(0.12, 0.88), rr * r.range(1, 1.8), rr), { w: 0.9 }));
+      }
+      const ph = r.range(0, 50);
+      S.extra = (x, y, m) => {
+        const t = side === 'W' ? x / A : 1 - x / A;
+        const p = pos + 0.08 * nz.fbm(y * 2.5 + ph, 1.7, 3, 0.5);
+        return Math.max(m, Math.min((p - t) * 3.5, 1.2));
       };
-      P.lo = 0.27; P.hi = 0.52; P.nw = 0.5; P.mw = 1.7; P.open = side;
+      P.open = side; P.lo = 0.27; P.hi = 0.52; P.nw = 0.45; P.mw = 1.2;
     } else if (key === 'shards') {
-      const main = mkBlob(r, A * r.range(0.47, 0.53), r.range(0.47, 0.53), A * 0.4, 0.38);
-      P.mask = (x, y) => Math.max(blob(x, y, main) * 1.3, -0.6);
-      P.cracks = { f: r.range(1.9, 2.4), w: r.range(0.15, 0.19), d: 2.6 };
-      P.lo = 0.32; P.hi = 0.58; P.nw = 0.4; P.mw = 1.1;
+      // zersprungener Kontinent: lange Fjorde von der Küste, Risse quer hindurch
+      const cx = A * r.range(0.42, 0.58), cy = r.range(0.47, 0.53), R = 0.32;
+      lobedMass(r, S, cx, cy, R, { ls: LS, lobes: 3, pen: 1, bays: 0, isl: 2 + r.int(3) });
+      for (let k = 0, nf = 6 + r.int(5); k < nf; k++) {
+        const d = randDir(r), st = R * r.range(1.0, 1.25);
+        arm(r, cx + d[0] * st * A * 0.9, cy + d[1] * st * 0.85, -d[0] + r.range(-0.4, 0.4), -d[1] + r.range(-0.4, 0.4), R * r.range(0.6, 1.1), r.range(0.022, 0.035), 0.006, 0.45, S.cut);
+      }
+      for (let k = 0, nc = 1 + r.int(2); k < nc; k++) {
+        const d = randDir(r);
+        arm(r, cx - d[0] * 0.75, cy - d[1] * 0.6, d[0], d[1] * 0.8, 1.5, 0.018, 0.028, 0.35, S.cut);
+      }
+      P.lo = 0.22; P.hi = 0.46; P.nw = 0.4; P.mw = 1.1;
     } else if (key === 'highlands') {
-      const main = mkBlob(r, A * r.range(0.46, 0.54), r.range(0.46, 0.54), A * 0.36, 0.36);
-      const isl = [];
-      const ni = 2 + r.int(3);
-      for (let k = 0; k < ni; k++) { const d = randDir(r); isl.push(Object.assign(mkBlob(r, main.x + d[0] * A * 0.4, main.y + d[1] * 0.42, r.range(0.04, 0.07), r.range(0.03, 0.05)), { w: 0.85 })); }
-      P.mask = (x, y) => Math.max(Math.max(blob(x, y, main) * 1.2, maxBlobs(x, y, isl)), -0.6);
-      P.mtnCenter = { x: main.x + r.range(-0.05, 0.05), y: main.y + r.range(-0.04, 0.04), rx: A * 0.2, ry: 0.22 };
-      P.mtnBoost = 1;
-      P.lo = 0.28; P.hi = 0.56; P.nw = 0.45;
+      // sternförmiges Hochland: rundes Zentralmassiv, strahlenförmige Rücken, schmaler Küstensaum
+      const cx = A * r.range(0.45, 0.55), cy = r.range(0.46, 0.54);
+      S.pos.push(mkBlob(r, cx, cy, 0.26, 0.24));
+      const ns = 5 + r.int(3), a0 = r.next();
+      const dirs = [];
+      for (let k = 0; k < ns; k++) {
+        // gleichmäßig verteilte Richtungen aus einer Tabelle (16er-Kreis), leicht verwackelt
+        const idx = Math.floor((k + a0) / ns * 16 + r.range(-0.4, 0.4)) & 15;
+        const dx = G16[idx * 2], dy = G16[idx * 2 + 1];
+        dirs.push([dx, dy]);
+        arm(r, cx + dx * 0.15, cy + dy * 0.15, dx, dy, r.range(0.3, 0.45), r.range(0.09, 0.12), r.range(0.03, 0.05), 0.35, S.cap);
+      }
+      for (let k = 0, ni = 2 + r.int(3); k < ni; k++) { const d = randDir(r); S.pos.push(Object.assign(mkBlob(r, cx + d[0] * 0.5, cy + d[1] * 0.42, r.range(0.03, 0.06), r.range(0.025, 0.04)), { w: 0.85 })); }
+      P.mtnCenter = { x: cx, y: cy, rx: 0.2, ry: 0.19, spokes: dirs };
+      P.lo = 0.22; P.hi = 0.46; P.nw = 0.4; P.mw = 1.2;
     }
+    P.mask = S.extra && !S.pos.length && !S.cap.length ? (x, y) => { const m = S.extra(x, y, -9); return m < -1.5 ? -1.5 : m; } : shapeMask(S);
     return P;
   }
 
   // ---------------------------------------------------------------- Biomwahl
   // Klima → Biom (ohne Wald); t, m etwa 0..1.
   function classifyBiome(t, m) {
-    if (t < 0.1) return TT.SNOWFIELD;
-    if (t < 0.27) return TT.TUNDRA;
-    if (t < 0.66) return (m < 0.15 && t > 0.56) ? TT.DESERT : TT.GRASS;
-    if (m < 0.22) return TT.DESERT;
-    if (m < 0.46) return TT.SAVANNA;
+    if (t < 0.07) return TT.SNOWFIELD;
+    if (t < 0.22) return TT.TUNDRA;
+    if (t < 0.7) return TT.GRASS;
+    if (m < 0.22 && t > 0.74) return TT.DESERT;
+    if (m < 0.4) return TT.SAVANNA;
     return TT.GRASS;
   }
 
@@ -490,7 +569,7 @@
     const W = o.W, H = o.H, N = W * H, A = W / H;
     const seed = seedToInt(o.seed);
     const tplKey = resolveTemplate(o.template, seed);
-    const P = makeTemplate(tplKey, stream(seed, 'tpl:' + tplKey), A);
+    const P = makeTemplate(tplKey, stream(seed, 'tpl:' + tplKey), A, o.land);
     const areaScale = N / (144 * 96);
 
     const nWarp = new Noise(mix32(seed, 101)), nBase = new Noise(mix32(seed, 102));
@@ -498,35 +577,28 @@
     const nClim = new Noise(mix32(seed, 105)), nVeg = new Noise(mix32(seed, 106));
 
     const rs = stream(seed, 'shape');
-    const warp = rs.range(0.16, 0.26);
+    const warp = rs.range(0.22, 0.32);
     const sizeF = Math.sqrt(Math.sqrt(H / 96));
     const F = rs.range(2.2, 2.8) * P.freq * sizeF;
     const oct = H > 120 ? 6 : 5;
 
     // 1) Grundform: verzerrtes Rauschen + Vorlagenmaske − Randabfall
     const h0 = new Float32Array(N), QX = new Float32Array(N), QY = new Float32Array(N);
-    const edgeW = 0.22;
-    const MW = 0.6, NW = 1.45, DW = 0.2;
+    // Die Vorlagenmaske bestimmt die große Form; das Rauschen nur Küstendetails. Der Rand drückt
+    // nur in einem schmalen Saum (verrauscht), damit man den Kartenrahmen der Form nicht ansieht.
+    const MW = 1.0, NW = 0.75, DW = 0.16;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, ax = (x + 0.5) / H, ay = (y + 0.5) / H;
-      const qx = ax + warp * nWarp.fbm(ax * 1.5, ay * 1.5, 3, 0.5);
-      const qy = ay + warp * nWarp.fbm(ax * 1.5 + 57.3, ay * 1.5 + 21.1, 3, 0.5);
-      let n = nBase.fbm(qx * F, qy * F, oct, 0.58);
-      if (P.mirror) n = 0.35 * n + 0.65 * 0.5 * (n + nBase.fbm((A - qx) * F, qy * F, oct, 0.58));
-      let m = P.mask(qx, qy);
-      if (P.cracks) {
-        const c = nMisc.fbm(qx * P.cracks.f + 40, qy * P.cracks.f, 3, 0.45);
-        const k = 1 - Math.abs(c) / P.cracks.w;
-        if (k > 0) m -= k * P.cracks.d;
-      }
-      const ux = (x + 0.5) / W * 2 - 1, uy = (y + 0.5) / H * 2 - 1, u4 = ux * ux * ux * ux + uy * uy * uy * uy;
-      // abgerundetes Rechteck statt harter Kante, dazu Rauschen → kein eckiger Kartenrand
+      let qx = ax + warp * nWarp.fbm(ax * 1.5, ay * 1.5, 3, 0.5);
+      let qy = ay + warp * nWarp.fbm(ax * 1.5 + 57.3, ay * 1.5 + 21.1, 3, 0.5);
+      qx += 0.035 * nWarp.fbm(ax * 5 + 13.1, ay * 5, 2, 0.5); qy += 0.035 * nWarp.fbm(ax * 5, ay * 5 + 71.3, 2, 0.5);
+      const n = nBase.fbm(qx * F, qy * F, oct, 0.58);
+      const m = P.mask(qx, qy);
       let dx0 = x + 0.5, dx1 = W - x - 0.5;
-      if (P.open === 'W') dx0 += 0.03 * H; else if (P.open === 'E') dx1 += 0.03 * H; // offene Seite: Land läuft bis nah an den Rand
-      let e = Math.min(dx0, dx1, y + 0.5, H - y - 0.5) / H;
-      if (!P.open) e = Math.min(e, (1 - Math.sqrt(Math.sqrt(u4))) * 0.5);
-      e += 0.07 * nWarp.fbm(ax * 3.5 + 9, ay * 3.5, 2, 0.5);
-      let pen = 0; if (e < edgeW) { const t = (edgeW - e) / edgeW; pen = t * t * 2.8; }
+      if (P.open === 'W') dx0 = 9 * H; else if (P.open === 'E') dx1 = 9 * H; // offene Seite: Land bis an den Rand
+      const e = Math.min(dx0, dx1, y + 0.5, H - y - 0.5) / H + 0.025 * nWarp.fbm(ax * 4 + 9, ay * 4, 2, 0.5);
+      const edgeW = 0.1;
+      let pen = 0; if (e < edgeW) { const t = (edgeW - e) / edgeW; pen = t * t * 3; }
       const det = nMisc.fbm(qx * F * 3.1 + 77, qy * F * 3.1, 3, 0.55);
       h0[i] = m * P.mw * MW + n * P.nw * NW + det * DW - pen;
       QX[i] = qx; QY[i] = qy;
@@ -606,6 +678,13 @@
       if (mc) {
         const dx = (px - mc.x) / mc.rx, dy = (py - mc.y) / mc.ry, d = Math.sqrt(dx * dx + dy * dy);
         const c = 1 - d; if (c > 0) mtn += smooth01(c * 1.6) * (0.3 + 0.9 * rn);
+        // strahlenförmige Rücken vom Massiv nach außen (Täler dazwischen sammeln die Flüsse)
+        if (mc.spokes) for (const sp of mc.spokes) {
+          const ox = px - mc.x, oy = py - mc.y, along = ox * sp[0] + oy * sp[1];
+          if (along < 0.05 || along > 0.4) continue;
+          const side = Math.abs(ox * sp[1] - oy * sp[0]);
+          const k = 1 - side / 0.035; if (k > 0) mtn += k * (1 - along / 0.45) * (0.4 + 0.6 * rn);
+        }
       }
       const dc = dWater[i];
       const b = dc / (dc + 0.07 * H);
@@ -996,7 +1075,7 @@
       let b = classifyBiome(t, m);
       if (b !== TT.SNOWFIELD && b !== TT.DESERT && b !== TT.SAVANNA && !(b === TT.TUNDRA && m < 0.2)) forestable[i] = 1;
       // Sumpf: nass, tief, nahe Wasser
-      if (t >= 0.3 && m > 0.74 && E[i] < 0.22 && dWet[i] <= 4 && nVeg.fbm(qx * 6 + 400, qy * 6, 2, 0.5) > 0.16 - (m - 0.74) * 1.2) { b = TT.SWAMP; forestable[i] = 0; }
+      if (t >= 0.3 && m > 0.78 && E[i] < 0.22 && dWet[i] <= 4 && nVeg.fbm(qx * 6 + 400, qy * 6, 2, 0.5) > 0.16 - (m - 0.78) * 1.2) { b = TT.SWAMP; forestable[i] = 0; }
       ter[i] = b;
       fscore[i] = 0.25 * m + 0.75 * (0.5 + 0.5 * nVeg.fbm(qx * 3.5 + 700, qy * 3.5, 4, 0.5)) + 0.06 * (3 / (3 + dWet[i]));
     }
@@ -1006,7 +1085,7 @@
       for (let i = 0; i < N; i++) {
         if (!forestable[i] || fscore[i] < thF) continue;
         const t = Tm[i];
-        ter[i] = t < 0.33 ? TT.TAIGA : (t >= 0.66 && Mo[i] >= 0.48) ? TT.JUNGLE : TT.FOREST;
+        ter[i] = t < 0.3 ? TT.TAIGA : (t >= 0.72 && Mo[i] >= 0.55) ? TT.JUNGLE : TT.FOREST;
       }
     }
     // Blumenwiesen als Flecken
