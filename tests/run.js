@@ -853,7 +853,7 @@ test('14 Kahlschlag (exploit) gegen Naturschutz (care)', function () {
   log('Waldanteil im Gebiet:', a.name, (fa0 * 100).toFixed(0) + ' % → ' + (fa * 100).toFixed(0) + ' %', '(nature ' + ca.nature + ', Stümpfe ' + cleared + ')', '|', b.name, (fb0 * 100).toFixed(0) + ' % → ' + (fb * 100).toFixed(0) + ' %', '(nature ' + cb.nature + ')');
   const ev = sim.state.events.filter(e => e.type === 'clearcut' || e.type === 'natureComplaint').map(e => e.text);
   if (ev.length) log('  ' + ev[0]);
-  assert(fa < fb * 0.75, 'Kahlschlag-Regime hat nicht deutlich weniger Wald');
+  assert(fa < fb - 0.1, 'Kahlschlag-Regime hat nicht deutlich weniger Wald (mindestens 10 Prozentpunkte)');
   assert(cleared > 0, 'keine Rodungsmarken (state.cleared)');
   assert(ca.nature < cb.nature, 'Kennzahl nature unterscheidet sich nicht');
   // Speichern/Laden und alter Spielstand ohne Raster
