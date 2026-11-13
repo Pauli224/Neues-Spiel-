@@ -938,8 +938,6 @@
       }
       if (u.hp <= 0) { kill(sim, u, 'plague'); return; }
     } else if (u.hp < u.maxHp && sim.rng.chance(0.15)) u.hp = Math.min(u.maxHp, u.hp + 1);
-    // wer gerade wartet und nichts zu tun hat, denkt nicht weiter nach (spart Rechenzeit)
-    if (u.wait > 0 && !u.path && u.foe < 0 && !u.carrying && u.role !== 'soldier' && u.role !== 'rebel' && u.role !== 'settler' && !isEngine(u.role)) return;
 
     // Kampf
     const g = gov(sim, u);

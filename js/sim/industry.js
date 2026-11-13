@@ -32,7 +32,7 @@
 //   state.pollution  Uint8Array(pw * ph), Luftverschmutzung 0..255. Zellgröße CELL = 4 Kacheln
 //                    (WW.INDUSTRY.CFG.CELL); pw = ceil(W / 4), ph = ceil(H / 4); Kachel (x, y) -> Zelle
 //                    floor(y / 4) * pw + floor(x / 4). Hilfe: WW.Industry.dims(state) -> { pw, ph, cell },
-//                    WW.Industry.at(state, x, y) -> 0..255. Ab ~60 Dunst sichtbar, ab 200 Säureregen-Gefahr.
+//                    WW.Industry.at(state, x, y) -> 0..255. Ab ~60 Dunst sichtbar, ab 170 Säureregen-Gefahr.
 //   state.murk       Uint8Array(W * H), Trübung von Flusskacheln 0..255 (nur auf 'river'; > 0 trüb, weniger Fisch).
 //                    Dirty-Kacheln, wenn sich murk >> 6 ändert.
 //   state.wind       { dx, dy (Einheitsvektor aus 16 Richtungen), dir 0..15 (0 = Osten, im Uhrzeigersinn, 4 = Süden),
@@ -52,7 +52,7 @@
 // FOLGEN (alle 60 Ticks): Bäume sterben ab Zelle ≥ 85 (Wald -> deforested-Gelände, state.cleared = CLEARED_MAX:
 //   tote Stümpfe), Flüsse ab ≥ 70 trüb (breitet sich entlang des Flusses aus, Fische verschwinden), Bewohner ab
 //   ≥ 105 krank (u.sick), Tiere (category 'animal', nicht vom Spieler gesetzt) wandern ab ≥ 95 ab, Säureregen
-//   (Kraft 'acidrain') über Städten mit pollution ≥ 85 und Zelle ≥ 200, Nachbarreiche (Hauptstadt ≤ 64 Kacheln)
+//   (Kraft 'acidrain') über Städten mit pollution ≥ 60 und Zelle ≥ 170 (höchstens alle 2 Jahre), Nachbarreiche (Hauptstadt ≤ 64 Kacheln)
 //   verlieren jährlich Meinung (Elfen ×2,5).
 // REINIGUNG: Abbau je Schritt, Wind trägt fort und verdünnt; Kraft 'rain' (r 5, ×0,35), 'breeze' (r 7, ×0,12),
 //   'acidrain' (r 5, ×0,6) – angehängt über WW.POWERS[key].apply (Hülle, powers.js unverändert).
