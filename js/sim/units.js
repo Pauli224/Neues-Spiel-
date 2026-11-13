@@ -158,6 +158,8 @@
     let best = null, bd = 1e9;
     forNear(sim, u.x, u.y, r, false, (v, d2) => {
       if (!hostile(sim, u, v)) return;
+      // Zivilisten werden nur angegriffen, wenn sie selbst kämpfen (Miliz) oder angreifen
+      if (!isFighterRole(v.role) && v.foe !== u.id && !gov(sim, v).militia) return;
       const w = d2 + (isFighterRole(v.role) ? 0 : 6);
       if (w < bd) { bd = w; best = v; }
     });

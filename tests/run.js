@@ -443,7 +443,8 @@ test('4b Ummauerte Stadt hält länger durch, Eroberung läuft stabil weiter', f
   assert(!c.dead && c.kingdomId === open.att.id, 'eroberte Stadt gehört nicht dem Sieger');
   log('Erobert:', c.name, 'gehört jetzt', open.att.name, '· Verteidiger', open.def.dead ? 'untergegangen' : 'existiert noch');
   sim.actions.setLaw && open.sim.actions.setRelation(open.att.id, open.def.id, 'peace');
-  run(open.sim, 6000, 500, (i) => checkInvariants(open.sim, 'nach Eroberung ' + i));
+  run(open.sim, 6000, 500, (i) => { checkInvariants(open.sim, 'nach Eroberung ' + i); if (i % 1000 === 0) log('  +' + i, 'Einw.', c.pop, 'Reich', c.kingdomId, 'tot', !!c.dead, 'Laune', Math.round(c.happiness), 'Hunger', c.hungry, JSON.stringify(c.jobs)); });
+  for (const e of open.sim.state.events.filter(e => e.cityId === c.id && e.tick > open.sim.state.tick - 6000)) log('  [' + e.year + '] ' + e.type + ': ' + e.text);
   assert(open.sim._cities.get(c.id), 'eroberte Stadt ist danach verschwunden');
   log('6000 Ticks nach der Eroberung:', c.name, c.pop, 'Einw., Reich', (open.sim._kingdoms.get(c.kingdomId) || {}).name);
 });
