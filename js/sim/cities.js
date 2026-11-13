@@ -201,7 +201,7 @@
     const g = gov(sim, city);
     const k = kingdomOf(sim, city);
     const race = WW.RACES[city.race] || WW.RACES.human;
-    const workers = city._members.filter(u => WORKERS[u.role] && !u.merc);
+    const workers = city._members.filter(u => WORKERS[u.role] && !u.merc && !u.order);
     const n = workers.length;
     if (!n) return;
     const st = stock(sim, city);

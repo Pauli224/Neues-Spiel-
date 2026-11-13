@@ -646,8 +646,12 @@
       const s = sim._structs.get(u.breach);
       if (s && !s.dead && s.built && WW.Structs.isWallish(s)) {
         if (distTo(u, s.x + 0.5, s.y + 0.5) <= 1.7) {
-          if (u.cd <= 0) {
-            if (WW.Structs.damage(sim, s, damageOf(sim, u) * 0.8, 'hit')) {
+          // höchstens drei Angreifer schlagen gleichzeitig auf ein Mauerstück ein
+          const win = sim.state.tick >> 3;
+          if (s.siegeT !== win) { s.siegeT = win; s.siegeN = 0; }
+          if (u.cd <= 0 && s.siegeN < 3) {
+            s.siegeN++;
+            if (WW.Structs.damage(sim, s, damageOf(sim, u) * (s.level >= 3 ? 0.22 : (s.level === 2 ? 0.4 : 0.8)), 'hit')) {
               const wc = sim._cities.get(s.cityId), ak = sim._kingdoms.get(u.kingdomId);
               if (wc && ak && wc.lastBreach !== sim.state.year) { wc.lastBreach = sim.state.year; sim.event('wallBreach', { city: wc.name, other: ak.name }, WW.Cities.atCity(wc)); }
             }

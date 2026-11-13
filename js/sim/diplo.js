@@ -346,7 +346,7 @@
           if (sk.gold >= 40 && years >= 1) { sk.gold -= 40; makePeace(sim, p, q, 'buyPeace', { gold: 40 }); break; }
         }
         if (ra.status !== 'war') continue;
-        if (years >= 2 && ra.weariness > 55 + sim.rng.next() * 45) { makePeace(sim, a, b); continue; }
+        if (years >= 3 && ra.weariness > 80 + sim.rng.next() * 60) { makePeace(sim, a, b); continue; }
         if (years >= 14) { makePeace(sim, a, b); continue; }
         // Söldner
         for (const p of [a, b]) {

@@ -591,7 +591,7 @@
       const i = y * W + x, ax = (x + 0.5) / H, ay = (y + 0.5) / H;
       let qx = ax + warp * nWarp.fbm(ax * 1.5, ay * 1.5, 3, 0.5);
       let qy = ay + warp * nWarp.fbm(ax * 1.5 + 57.3, ay * 1.5 + 21.1, 3, 0.5);
-      qx += 0.035 * nWarp.fbm(ax * 5 + 13.1, ay * 5, 2, 0.5); qy += 0.035 * nWarp.fbm(ax * 5, ay * 5 + 71.3, 2, 0.5);
+      qx += 0.03 * nWarp.n2(ax * 5 + 13.1, ay * 5); qy += 0.03 * nWarp.n2(ax * 5, ay * 5 + 71.3);
       const n = nBase.fbm(qx * F, qy * F, oct, 0.58);
       const m = P.mask(qx, qy);
       let dx0 = x + 0.5, dx1 = W - x - 0.5;
@@ -599,7 +599,7 @@
       const e = Math.min(dx0, dx1, y + 0.5, H - y - 0.5) / H + 0.025 * nWarp.fbm(ax * 4 + 9, ay * 4, 2, 0.5);
       const edgeW = 0.1;
       let pen = 0; if (e < edgeW) { const t = (edgeW - e) / edgeW; pen = t * t * 3; }
-      const det = nMisc.fbm(qx * F * 3.1 + 77, qy * F * 3.1, 3, 0.55);
+      const det = nMisc.fbm(qx * F * 3.1 + 77, qy * F * 3.1, 2, 0.55);
       h0[i] = m * P.mw * MW + n * P.nw * NW + det * DW - pen;
       QX[i] = qx; QY[i] = qy;
     }
@@ -820,7 +820,7 @@
 
       const lakeLab = components(lake, W, H).lab;
       let skipLake = -2; // Abfluss: der eigene See zählt nicht als Mündung
-      let path = [], status = 0, runDir = 0, runLen = 0, jogSide = 0; // status: 1 = Mündung (Meer/See), 2 = Zusammenfluss
+      let path = [], status = 0, runDir = 0, runLen = 0, jogSide = 0, laneLock = 0, laneAxis = 0, laneSide = 0; // status: 1 = Mündung (Meer/See), 2 = Zusammenfluss
       let curId = 0;
       const nb4 = (c, k) => {
         const x = c % W;
@@ -840,6 +840,7 @@
         for (let k = 0; k < 4; k++) { const n = nb4(t, k); if (n >= 0 && isOwn(n) && own[n] < path.length - 1 && (jmin < 0 || own[n] < jmin)) jmin = own[n]; }
         if (jmin >= 0) truncate(jmin);
         stamp[t] = curId; own[t] = path.length; path.push(t);
+        if (laneLock > 0) laneLock--;
         if (path.length >= 2) { const d = t - path[path.length - 2]; if (d === runDir) runLen++; else { runDir = d; runLen = 1; jogSide = 0; } }
         for (let k = 0; k < 4; k++) {
           const n = nb4(t, k); if (n < 0) continue;
@@ -868,7 +869,7 @@
         return false;
       }
       function trace(src, phase, lakeStart) {
-        path = []; status = 0; runDir = 0; runLen = 0;
+        path = []; status = 0; runDir = 0; runLen = 0; laneLock = 0;
         let cur = src;
         stamp[src] = curId; own[src] = 0; path.push(src);
         let px = src % W + 0.5, py = (src - src % W) / W + 0.5;
@@ -891,6 +892,8 @@
             }
             const dl2 = Math.sqrt(dx * dx + dy * dy); dx /= dl2; dy /= dl2;
             vx = vx * 0.66 + dx * 0.34; vy = vy * 0.66 + dy * 0.34;
+            // nach einem Spurwechsel nicht sofort zurückschwenken (das gäbe einen 2×2-Haken)
+            if (laneLock > 0) { if (laneAxis === 0 && vx * laneSide < 0) vx = 0; else if (laneAxis === 1 && vy * laneSide < 0) vy = 0; }
             vl = Math.sqrt(vx * vx + vy * vy) || 1; vx /= vl; vy /= vl;
             let nx = px + vx * 0.4, ny = py + vy * 0.4; sLen += 0.4;
             if (nx < 0 || ny < 0 || nx >= W || ny >= H) break;
@@ -903,8 +906,8 @@
               // Spurwechsel festhalten: in die Mitte der neuen Spur rücken, sonst zieht das Gefälle zurück
               if (hadJog && path.length >= 2) {
                 const sd = now - path[path.length - 2];
-                if ((prevDir === 1 || prevDir === -1) && (sd === W || sd === -W)) ny = Math.floor(ny) + 0.5;
-                else if ((prevDir === W || prevDir === -W) && (sd === 1 || sd === -1)) nx = Math.floor(nx) + 0.5;
+                if ((prevDir === 1 || prevDir === -1) && (sd === W || sd === -W)) { ny = Math.floor(ny) + 0.5; laneAxis = 1; laneSide = sd > 0 ? 1 : -1; laneLock = 5; }
+                else if ((prevDir === W || prevDir === -W) && (sd === 1 || sd === -1)) { nx = Math.floor(nx) + 0.5; laneAxis = 0; laneSide = sd > 0 ? 1 : -1; laneLock = 5; }
               }
               if (Pot[now] < best - 1e-7) { best = Pot[now]; since = 0; } else if (++since > 30) mode = 1;
             }
@@ -912,8 +915,18 @@
           } else {
             // Rückfall: ein paar Kacheln der Abflusskette folgen (aus Mulden heraus), dann wieder frei
             const last = path[path.length - 1];
-            const t = parent[last];
+            let t = parent[last];
             if (t < 0) break;
+            if (runLen >= 4 && t - last === runDir) { // auch hier keine langen Geraden: seitlich ausweichen
+              const pp = (runDir === 1 || runDir === -1) ? W : 1, lx = last % W;
+              let best = -1;
+              for (const c of [last + pp, last - pp]) {
+                if (c < 0 || c >= N || (pp === 1 && Math.abs(c % W - lx) !== 1)) continue;
+                if (!land[c] || isOwn(c) || Pot[c] > Pot[last] + 0.01) continue;
+                if (best < 0 || Pot[c] < Pot[best]) best = c;
+              }
+              if (best >= 0) t = best;
+            }
             if (walkTo(t, lakeSteps > 0)) break;
             const now = path[path.length - 1];
             if (lakeSteps > 0) lakeSteps--;
@@ -1046,7 +1059,7 @@
       Tm[i] = 1 - lat + 0.07 * nClim.fbm(qx * 4 + 50, qy * 4, 2, 0.5) - alt;
       absT[i] = 1.05 - 1.2 * lat - alt;
       const wp = 3 / (3 + dWet[i]);
-      const mn = 0.5 + 0.8 * nClim.fbm(qx * 2.6 + 200, qy * 2.6, 4, 0.5);
+      const mn = 0.5 + 0.8 * nClim.fbm(qx * 2.6 + 200, qy * 2.6, 3, 0.5);
       const la = Math.abs(qy - 0.5 - eqOff) * 2;
       let latAdj = 0;
       if (la < 0.12) latAdj += 0.06 * (1 - la / 0.12);
@@ -1444,7 +1457,6 @@
       { core: 52, space: 135, fert: 0.3, wood: 2, stone: 1, comp: 120 },
       { core: 40, space: 90, fert: 0.18, wood: 0, stone: 0, comp: 60 }
     ];
-    const info = new Array(N);
     const scoreArr = new Float32Array(N).fill(-1), tierArr = new Int8Array(N).fill(-1);
     for (let y = 5; y < H - 5; y++) for (let x = 5; x < W - 5; x++) {
       const i = y * W + x, t = ter[i];

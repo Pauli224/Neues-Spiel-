@@ -159,7 +159,7 @@ console.log('  längste schnurgerade Flussstrecke: ' + stat.straight + ' Kacheln
   console.log('  Wüste bei Standardwerten: Ø ' + avg.toFixed(1) + ' % der Landfläche, höchstens ' + (100 * stat.desertMax).toFixed(1) + ' %, Welten über 10 %: ' + stat.desertBig);
   check(avg <= 5 && stat.desertBig <= stat.desertN * 0.03, 'Wüste dominiert bei Standardwerten (Ø ' + avg.toFixed(1) + ' %)');
 }
-check(stat.straight <= 14 && stat.straightWorlds <= worlds * 0.02, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
+check(stat.straight <= 12 && stat.straightWorlds <= worlds * 0.02, 'Flüsse mit zu langen Geraden (' + stat.straight + ')');
 
 // ---------------------------------------------------------------- Regler
 console.log('Regler (Landanteil folgt dem Regler, jeder Regler wirkt)');

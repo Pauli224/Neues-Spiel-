@@ -118,7 +118,8 @@
     const k = o.k, breach = !!o.breach;
     const tab = sim._tables[o.race] || sim._tables.human;
     const cost = tab.cost, ter = st.terrain, block = sim.block;
-    const limit = Math.min(o.limit || WW.CONFIG.PATH_LIMIT, sim._pathBudget + 200);
+    const want = o.limit || WW.CONFIG.PATH_LIMIT;
+    const limit = Math.min(want, sim._pathBudget + 200);
     let stamp = ++sim._stamp;
     if (stamp >= 0xfffffff0) { sim._seen.fill(0); sim._closed.fill(0); sim._stamp = stamp = 1; }
     const g = sim._g, came = sim._came, seen = sim._seen, closed = sim._closed;
@@ -200,7 +201,8 @@
       }
     }
     sim._pathBudget -= expanded + 1;
-    if (!found) return null;
+    // Abbruch nur wegen leerem Budget: später nochmal versuchen (kein „kein Weg“)
+    if (!found) return (expanded > limit && limit < want) ? false : null;
     const path = [];
     let c = goal;
     while (c !== from && c >= 0) { path.push(c); c = came[c]; }

@@ -357,7 +357,7 @@ test('3c Reiche wählen ihre Regierung selbst (6 Stämme, 40 000 Ticks)', functi
 // 4. Krieg
 // --------------------------------------------------------------------------
 // Zwei Reiche auf einer Wiese, Vorlauf ohne Krieg, bis beide ummauert sind
-function warSetup(seed, govA, govB, raceA, raceB) {
+function warSetup(seed, govA, govB, raceA, raceB, minLevelB) {
   const world = meadowWorld(120, 70, { hills: true, spots: [{ x: 32, y: 35 }, { x: 88, y: 35 }] });
   const sim = makeSim({ seed: seed, world: world, populate: 2, govs: [govA, govB], races: [raceA, raceB], animals: false });
   const [a, b] = sim.state.kingdoms;
@@ -365,7 +365,8 @@ function warSetup(seed, govA, govB, raceA, raceB) {
   sim.actions.setLaw('wars', false);
   sim.actions.setLaw('disasters', false);
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
-  run(sim, 40 * WW.CONFIG.TPY, 240, () => ca.wall.level >= 1 && cb.wall.level >= 1 && sim.state.year >= 8);
+  const lvB = minLevelB || 1;
+  run(sim, 60 * WW.CONFIG.TPY, 120, () => ca.wall.level >= 1 && cb.wall.level >= lvB && cb.wall.state === 'done' && sim.state.year >= 8);
   return { sim: sim, a: a, b: b, ca: ca, cb: cb };
 }
 
@@ -420,6 +421,7 @@ function siege(save, withWall) {
       if (cb.dead || cb.kingdomId !== b.id) { fell = sim.state.tick - t0; break; }
       const r = a.relations[b.id];
       if (r && r.status !== 'war') sim.actions.setRelation(a.id, b.id, 'war');
+      if (r) { r.weariness = 0; b.relations[a.id].weariness = 0; }   // Belagerung ohne Friedensschluss
       if (i % 1000 === 0) checkInvariants(sim, 'Belagerung');
     }
   }
@@ -427,7 +429,9 @@ function siege(save, withWall) {
 }
 
 test('4b Ummauerte Stadt hält länger durch, Eroberung läuft stabil weiter', function () {
-  const { sim } = warSetup('belagerung', 'fascism', 'democracy', 'orc', 'human');
+  const { sim, cb } = warSetup('belagerung', 'fascism', 'monarchy', 'orc', 'dwarf', 2);
+  log('Verteidiger:', cb.name, 'Mauer', cb.wall.style + '/' + cb.wall.level, cb.wall.state, cb.wall.built + '/' + cb.wall.total, 'Türme', cb.wall.towers.length, '· Jahr', sim.state.year);
+  assert(cb.wall.level >= 2 && cb.wall.state === 'done', 'Vorlauf: keine fertige Steinmauer');
   const save = sim.serialize();
   const wall = siege(save, true), open = siege(save, false);
   const fmt = (r) => r.fell > 0 ? (r.fell / WW.CONFIG.TPY).toFixed(1) + ' Jahre' : 'hält > ' + (30000 / WW.CONFIG.TPY).toFixed(0) + ' Jahre';

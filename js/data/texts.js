@@ -367,7 +367,7 @@
       'Aus {city} rückt ein Heer aus. Ziel: {otherCity}. Proviant: drei Brote pro Kopf.'
     ],
     conquest: [
-      '{city} fällt an {kingdom_nom}! Die Fahnen werden umgenäht.',
+      '{city} fällt an {kingdom_acc}! Die Fahnen werden umgenäht.',
       '{Kingdom_nom} erobert {city}. Die Bewohner gewöhnen sich an neue Hüte.',
       '{city} gehört jetzt zu {kingdom_dat}. {Other_nom} ist darüber sehr verstimmt.'
     ],
