@@ -407,32 +407,12 @@
   }
 
   // Rohstoffkachel nahe der Stadt suchen (Holz, Stein, Wasser)
-  // wie findResource, aber erst ab Abstand minR (Hain um die Stadt bleibt stehen); Rückfall ohne Mindestabstand
-  function findResourceFrom(sim, u, city, res, minR, maxR) {
-    const st = sim.state, W = st.W, H = st.H, tab = WW.TERRAIN_LUT[res];
-    const cand = [];
-    for (let r = minR; r <= maxR && cand.length < 6; r++) {
-      const test = (x, y) => {
-        if (x < 0 || y < 0 || x >= W || y >= H) return;
-        const i = y * W + x;
-        if (!tab[st.terrain[i]]) return;
-        const o = st.owner[i];
-        if (o !== -1 && o !== city.id) { const oc = sim._cities.get(o); if (oc && oc.kingdomId !== city.kingdomId) return; }
-        if (st.inRing[i] !== -1 && st.inRing[i] !== city.id) return;
-        cand.push(i);
-      };
-      for (let d = -r; d <= r; d++) { test(city.cx + d, city.cy - r); test(city.cx + d, city.cy + r); }
-      for (let d = -r + 1; d <= r - 1; d++) { test(city.cx - r, city.cy + d); test(city.cx + r, city.cy + d); }
-    }
-    if (!cand.length) return findResource(sim, u, city, res, maxR);
-    return cand[sim.rng.int(cand.length)];
-  }
-
-  function findResource(sim, u, city, res, maxR) {
-    const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
-    const tab = LUT[res], ter = st.terrain, inRing = st.inRing, owner = st.owner;
-    const px = city.cx, py = city.cy, cid = city.id;
-    const cand = [];
+  // Rohstoffkacheln um die Stadt (innen nach außen, ab minR bis maxR). Ergebnis wird je Stadt zwischengespeichert
+  // (city.resCache, im Spielstand enthalten) und alle 240 Ticks erneuert; ungültig gewordene Kacheln fallen heraus.
+  function scanRes(sim, city, res, minR, maxR, want) {
+    const st = sim.state, W = st.W, H = st.H;
+    const tab = WW.TERRAIN_LUT[res], ter = st.terrain, inRing = st.inRing, owner = st.owner, cid = city.id;
+    const out = [];
     const test = (x, y) => {
       if (x < 0 || y < 0 || x >= W || y >= H) return;
       const i = y * W + x;
@@ -441,15 +421,37 @@
       if (ring !== -1 && ring !== cid) return;
       const o = owner[i];
       if (o !== -1 && o !== cid) { const oc = sim._cities.get(o); if (oc && oc.kingdomId !== city.kingdomId) return; }
-      cand.push(i);
+      out.push(i);
     };
-    // nur den Rand jedes Rings absuchen (innen nach außen)
-    for (let r = 2; r <= maxR && cand.length < 6; r++) {
-      for (let d = -r; d <= r; d++) { test(px + d, py - r); test(px + d, py + r); }
-      for (let d = -r + 1; d <= r - 1; d++) { test(px - r, py + d); test(px + r, py + d); }
+    for (let r = Math.max(1, minR); r <= maxR && out.length < want; r++) {
+      for (let d = -r; d <= r; d++) { test(city.cx + d, city.cy - r); test(city.cx + d, city.cy + r); }
+      for (let d = -r + 1; d <= r - 1; d++) { test(city.cx - r, city.cy + d); test(city.cx + r, city.cy + d); }
     }
-    if (!cand.length) return -1;
-    return cand[sim.rng.int(cand.length)];
+    return out;
+  }
+  function cachedRes(sim, u, city, res, minR, maxR) {
+    const st = sim.state;
+    const key = res + ':' + minR + ':' + maxR;
+    const rc = city.resCache || (city.resCache = {});
+    let e = rc[key];
+    if (!e || st.tick - e.t >= 240 || (!e.list.length && st.tick - e.t >= 60)) { e = { t: st.tick, list: scanRes(sim, city, res, minR, maxR, 24) }; rc[key] = e; }
+    const tab = WW.TERRAIN_LUT[res];
+    for (let n = 0; n < 6 && e.list.length; n++) {
+      const k = sim.rng.int(Math.min(e.list.length, 8));   // nahe Kacheln bevorzugt (Liste ist innen nach außen sortiert)
+      const i = e.list[k];
+      if (tab[st.terrain[i]]) return i;
+      e.list.splice(k, 1);
+    }
+    return -1;
+  }
+  // wie findResource, aber erst ab Abstand minR (Hain um die Stadt bleibt stehen); Rückfall ohne Mindestabstand
+  function findResourceFrom(sim, u, city, res, minR, maxR) {
+    const i = cachedRes(sim, u, city, res, minR, maxR);
+    return i >= 0 ? i : findResource(sim, u, city, res, maxR);
+  }
+  function findResource(sim, u, city, res, maxR) {
+    const cand = scanRes(sim, city, res, 2, maxR, 6);
+    return cand.length ? cand[sim.rng.int(cand.length)] : -1;
   }
 
   // --------------------------------------------------------------------------

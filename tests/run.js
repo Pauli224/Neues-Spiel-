@@ -838,10 +838,15 @@ test('14 Kahlschlag (exploit) gegen Naturschutz (care)', function () {
   a.govLocked = b.govLocked = true;
   sim.actions.setLaw('wars', false);
   sim.actions.setLaw('disasters', false);   // Waldbrände würden den Vergleich verfälschen
+  let fa0 = 0, fb0 = 0;
   const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
+  {
   assert(WW.Growth.natureMode(sim, a) === 'exploit' && WW.Growth.natureMode(sim, b) === 'care', 'Naturmodus falsch');
-  const fa0 = forestShare(sim, ca), fb0 = forestShare(sim, cb);
-  run(sim, 20000, 2000, () => checkInvariants(sim, 'Wald'));
+    fa0 = forestShare(sim, ca); fb0 = forestShare(sim, cb);
+    // Ereignisse dürfen den Umgang mit der Natur hier nicht umstellen (Test vergleicht die Regierungen)
+    const strip = (k) => { if (Array.isArray(k.mods) && k.mods.some(m => m.key === 'nature')) { k.mods = k.mods.filter(m => m.key !== 'nature'); k._modc = null; } };
+    run(sim, 20000, 20, (i) => { strip(a); strip(b); if (i % 2000 === 0) checkInvariants(sim, 'Wald'); assert(WW.Growth.natureMode(sim, a) === 'exploit' && WW.Growth.natureMode(sim, b) === 'care', 'Naturmodus hat sich verändert: ' + WW.Growth.natureMode(sim, a) + '/' + WW.Growth.natureMode(sim, b) + ' ' + a.gov + ' ' + a.dead + ' ' + JSON.stringify(a.mods) + JSON.stringify(a.policy)); });
+  }
   const fa = forestShare(sim, ca), fb = forestShare(sim, cb);
   log('Todesursachen:', JSON.stringify(sim._deaths || {}));
   let cleared = 0; for (let i = 0; i < sim.state.cleared.length; i++) if (sim.state.cleared[i] && Math.hypot(i % sim.state.W - ca.cx, Math.floor(i / sim.state.W) - ca.cy) < 30) cleared++;
