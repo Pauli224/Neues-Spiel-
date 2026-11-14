@@ -442,7 +442,7 @@
         try { sim.tick(); } catch (e) { simFailed(e); break; }
         n++; game.acc -= 1;
         if ((sim.state.tick & 1) === 0) game.renderer.trample(sim.state.units);
-        if (performance.now() - t0 > 10) break;
+        if (performance.now() - t0 > (dt < 0.0125 ? 4 : 8)) break;   // Zeitbudget der Simulation je Bild: 4 ms bei schnellen Bildschirmen (über 80 Hz), sonst 8 ms
       }
       if (game.acc > 2) game.acc = Math.min(game.acc, 1);   // keine Zeitschuld: lieber etwas langsamer als ruckeln
       if (n) {

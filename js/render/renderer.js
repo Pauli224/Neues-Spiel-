@@ -1138,8 +1138,6 @@
     if (this.shake > 0) { this.shake -= dt; const a = this.shake * 10 * cam.dpr; ox += Math.round((Math.random() - 0.5) * a); oy += Math.round((Math.random() - 0.5) * a); }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = this.bg || (this.bg = S.groundColor(0));
-    ctx.fillRect(0, 0, cv.width, cv.height);
 
     const vt = cam.visibleTiles(st.W, st.H, 1);
     const ntiles = (vt.x1 - vt.x0 + 1) * (vt.y1 - vt.y0 + 1);
@@ -1150,54 +1148,74 @@
     const cy0 = Math.max(0, (vt.y0 / CH) | 0), cy1 = Math.min(this.chh - 1, ((vt.y1) / CH) | 0);
     let missing = false;
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) if (!this.chunks[cy * this.cw + cx].built) missing = true;
-    if (missing) {
-      // Platzhalter: Kleinbild hochskaliert, sichtbare Blöcke zuerst bauen
-      ctx.drawImage(this.mini, 0, 0, st.W, st.H, ox, oy, Math.round(st.W * 8 * s), Math.round(st.H * 8 * s));
-      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-        const c = this.chunks[cy * this.cw + cx];
-        if (!c.built && performance.now() - tb < budget + 6) this.buildChunk(c);
-      }
-    }
+    // Standbild: ruht die Kamera, wird die Landschaft (Boden, Wasser, Gebiete, Deko der weiten Ansicht) nur 5-mal je Sekunde
+    // neu gezeichnet und sonst als ein Bild kopiert. Das spart je Bild mehrere bildschirmfüllende Durchgänge.
+    const SK = s + '|' + ox + '|' + oy + '|' + cv.width + '|' + cv.height + '|' + (low ? 1 : 0);
+    const camStill = SK === this._camKey && !(this.shake > 0);
+    this._camKey = SK;
+    const wf = (this.time * 5) | 0;
+    let g = ctx, fromStill = false;
+    if (camStill && !missing && !opts.firstFrames && !opts.brush && !opts.held && this.gfx.still !== false) {   // mit Werkzeug in der Hand wird direkt gezeichnet: Malen bleibt sofort sichtbar
+      const sc = this._still || (this._still = document.createElement('canvas'));
+      if (sc.width !== cv.width || sc.height !== cv.height) { sc.width = cv.width; sc.height = cv.height; this._stillKey = ''; }
+      if (this._stillKey === SK && this._stillF === wf) fromStill = true;
+      else { g = sc.getContext('2d'); this._stillKey = SK; this._stillF = wf; }
+    } else this._stillKey = '';
     const rx = (wx) => Math.round(ox + wx * s), ry = (wy) => Math.round(oy + wy * s);
-    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-      const c = this.chunks[cy * this.cw + cx];
-      if (!c.built) continue;
-      const X = cx * CPX, Y = cy * CPX;
-      const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
-      const dx = rx(X), dy = ry(Y), k = c.hi ? 2 : 1;
-      c.usedT = this.time;
-      ctx.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
-    }
-    // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
-    if (this.gfx.water !== false && !this.autoOff.glints) this.drawWaterLayer(ctx, cx0, cx1, cy0, cy1, rx, ry, low);
-    // (2) Gebietstönung
-    if (st.owner && opts.territory !== false) {
-      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-        const c = this.chunks[cy * this.cw + cx];
-        if (c.terrDirty) this.buildTerr(c);
-        if (c.terrEmpty) continue;
-        const X = cx * CPX, Y = cy * CPX;
-        const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
-        const dx = rx(X), dy = ry(Y);
-        ctx.drawImage(c.terr, 0, 0, w, h, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
+    if (!fromStill) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.imageSmoothingEnabled = false;
+      g.fillStyle = this.bg || (this.bg = S.groundColor(0));
+      g.fillRect(0, 0, cv.width, cv.height);
+      if (missing) {
+        // Platzhalter: Kleinbild hochskaliert, sichtbare Blöcke zuerst bauen
+        g.drawImage(this.mini, 0, 0, st.W, st.H, ox, oy, Math.round(st.W * 8 * s), Math.round(st.H * 8 * s));
+        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+          const c = this.chunks[cy * this.cw + cx];
+          if (!c.built && performance.now() - tb < budget + 6) this.buildChunk(c);
+        }
       }
-    }
-
-    // (3) Deko, Bauwerke, Figuren
-    let refreshed = false;
-    if (low) {
-      const dcy1 = Math.min(this.chh - 1, ((vt.y1 + 5) / CH) | 0);
-      const dcx0 = Math.max(0, ((vt.x0 - 3) / CH) | 0);
-      for (let cy = cy0; cy <= dcy1; cy++) for (let cx = dcx0; cx <= cx1; cx++) {
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
         const c = this.chunks[cy * this.cw + cx];
         if (!c.built) continue;
-        if (c.decorDirty || c.decorT == null) this.buildDecor(c);
-        else if (!refreshed && this.time - c.decorT > 8 && this.time - (this._decorRefT || 0) > 0.5) { this.buildDecor(c); refreshed = true; this._decorRefT = this.time; }
-        const X = cx * CPX - DL, Y = cy * CPX - DECOR_TOP;
-        const dx = rx(X), dy = ry(Y);
-        ctx.drawImage(c.decor, dx, dy, rx(X + CPX + DL + DR) - dx, ry(Y + CPX + DECOR_TOP) - dy);
+        const X = cx * CPX, Y = cy * CPX;
+        const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
+        const dx = rx(X), dy = ry(Y), k = c.hi ? 2 : 1;
+        c.usedT = this.time;
+        g.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
+      }
+      // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
+      if (this.gfx.water !== false && !this.autoOff.glints) this.drawWaterLayer(g, cx0, cx1, cy0, cy1, rx, ry, low);
+      // (2) Gebietstönung
+      if (st.owner && opts.territory !== false) {
+        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+          const c = this.chunks[cy * this.cw + cx];
+          if (c.terrDirty) this.buildTerr(c);
+          if (c.terrEmpty) continue;
+          const X = cx * CPX, Y = cy * CPX;
+          const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
+          const dx = rx(X), dy = ry(Y);
+          g.drawImage(c.terr, 0, 0, w, h, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
+        }
+      }
+
+      // (3) Deko, Bauwerke, Figuren
+      let refreshed = false;
+      if (low) {
+        const dcy1 = Math.min(this.chh - 1, ((vt.y1 + 5) / CH) | 0);
+        const dcx0 = Math.max(0, ((vt.x0 - 3) / CH) | 0);
+        for (let cy = cy0; cy <= dcy1; cy++) for (let cx = dcx0; cx <= cx1; cx++) {
+          const c = this.chunks[cy * this.cw + cx];
+          if (!c.built) continue;
+          if (c.decorDirty || c.decorT == null) this.buildDecor(c);
+          else if (!refreshed && this.time - c.decorT > 8 && this.time - (this._decorRefT || 0) > 0.5) { this.buildDecor(c); refreshed = true; this._decorRefT = this.time; }
+          const X = cx * CPX - DL, Y = cy * CPX - DECOR_TOP;
+          const dx = rx(X), dy = ry(Y);
+          g.drawImage(c.decor, dx, dy, rx(X + CPX + DL + DR) - dx, ry(Y + CPX + DECOR_TOP) - dy);
+        }
       }
     }
+    if (fromStill || g !== ctx) ctx.drawImage(this._still, 0, 0);
     ctx.setTransform(s, 0, 0, s, ox, oy);
     if (st.scars && st.scars.length) this.drawScars(ctx, vt);
     let drawn = low && (opts.scale || 1) < 0.9 ? this.drawDots(ctx, vt, opts) : this.drawObjects(ctx, vt, low, opts);
