@@ -491,7 +491,8 @@
     if (st.tick % 30 === 20) WW.Growth.update(this);
     if (st.tick % 10 === 7) WW.Resources.update(this);
     if (st.tick % 40 === 25) { WW.Cities.stats(this); WW.Growth.updatePlots(this); }
-    if (st.tick % 40 === 35) WW.Culture.update(this);   // Kultur: Sonderbauten, Karawanen, Reichskultur
+    if (st.tick % 40 === 35) WW.Culture.update(this);
+    if (st.tick % 40 === 5) WW.Garrison.update(this);   // Garnisonen (9.10)   // Kultur: Sonderbauten, Karawanen, Reichskultur
     if (st.tick % TPY === 0) {
       st.year++;
       WW.Units.yearly(this);
@@ -591,6 +592,7 @@
     if (WW.Naval) WW.Naval.defaults(st);   // [see] Schiffe, Häfen (alte Spielstände: leer)
     if (WW.Events) WW.Events.defaults(st);   // [events] mods, laws, Ereignis-Zustand
     WW.Culture.defaults(st);   // Kulturen nachrüsten (nach den Mods)
+    WW.Garrison.defaults(st);   // Besatzung/Garnison nachrüsten (9.10)
   }
 
   // ---------------------------------------------------------------------------
@@ -885,7 +887,8 @@
     const acts = {   // [wild]
       paintTerrain: safe(paintTerrain), spawnSettlers: safe(spawnSettlers), spawnAnimal: safe(spawnAnimal),
       setGovernment: safe(setGovernment), setGovLocked: safe(setGovLocked), setRelation: safe(setRelation),
-      strike: safe(strike), setLaw: safe(setLaw)
+      strike: safe(strike), setLaw: safe(setLaw),
+      setGarrison: safe(function (cityId, n) { return WW.Garrison.setGarrison(sim, cityId, n); })   // 9.10
     };
     if (WW.Events) {   // [events] Reichsgesetze
       acts.setRealmLaw = safe(function (kid, key, v, o) { return WW.Events.setRealmLaw(sim, kid, key, v, o); });   // [events]

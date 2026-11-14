@@ -38,6 +38,9 @@
 //   Fahrzeuge schließen sich im Krieg dem Marsch des eigenen Heeres an (state.mil.march), sonst parken sie daheim.
 //   u.parole (Tick): hat bei einer Aufgabe die Waffen niedergelegt; bis dahin weder Angreifer noch Ziel (units.js hostile),
 //   wird nicht in neue Heere eingezogen (diplo.js). Darstellung: ohne Waffe / weiße Fahne.
+//   GARNISON (u.garrison = Stadt-ID, Kern): solche Soldaten und Fahrzeuge zählen nicht zu Marschgruppen, Ausfällen, Abfangen
+//   oder Feldschlachten (weder Teilnehmer noch Verluste-Seite), werden von „Schlacht befehlen" nicht losgeschickt; ein
+//   stationiertes Fahrzeug folgt keinem Marsch, verteidigt aber seine Stadt.
 //   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts von selbst.
 //
 // ZUSTAND
@@ -135,7 +138,8 @@
   function capOf(sim, k, kind, war) {
     const sp = govSpec(k.gov);
     if (!sp || !sp[kind]) return 0;
-    let n = Math.min(sp[kind].max, Math.floor(kingdomPop(sim, k) / sp[kind].per + 0.5));
+    const pop = kingdomPop(sim, k);
+    let n = Math.min(sp[kind].max + (sp.maxPer ? Math.floor(pop / sp.maxPer) : 0), Math.floor(pop / sp[kind].per + 0.5));
     if (!war) n = n > 0 ? Math.max(1, Math.round(n * M().PEACE_SHARE)) : 0;
     return n;
   }
@@ -190,11 +194,12 @@
     const sp = k && govSpec(k.gov);
     if (!sp || st.laws.industry === false || !WW.Industry || !WW.Industry.findSpot) return null;
     const own = arsenalsOfKingdom(sim, k.id);
-    if (own.some((s) => s.cityId === city.id)) return null;
+    const inCity = own.filter((s) => s.cityId === city.id).length;
+    if (inCity >= 1 + (sp.arsenalPer ? Math.floor(city.pop / sp.arsenalPer) : 0)) return null;
     if (!force) {
       if ((city.tier | 0) < 2 || city.pop < sp.minPop || !city.centerOk) return null;
       if ((city.milNext | 0) > st.tick) return null;
-      if (own.length >= sp.arsenals || own.some((s) => !s.built)) return null;
+      if (own.length >= sp.arsenals + (sp.arsenalPer ? Math.floor(kingdomPop(sim, k) / sp.arsenalPer) : 0) || own.some((s) => !s.built)) return null;
       if (!sp.noWorkshop && !hasWorkshop(sim, city)) return null;   // Regime bauen auch ohne Werkstatt (dann langsamer)
     }
     const W = st.W;
@@ -643,7 +648,7 @@
     }
     // im Krieg dem eigenen Heer folgen (Verteidiger und ein Teil der Geschütze bleiben daheim)
     const m = st.mil.march[k.id];
-    if (m && m.n >= 3) {
+    if (m && m.n >= 3 && u.garrison == null) {
       const sp = govSpec(k.gov) || {};
       const stay = sp.defensive || (!tank && hh(u.id, 77) < 0.3);
       const tc = sim._cities.get(m.city);
@@ -699,7 +704,7 @@
       sim.fx({ type: 'wreck', x: u.x, y: u.y, kind: kind });
       if (cause === 'battle') sim.fx({ type: 'explosion', x: u.x, y: u.y, r: 1.6 });
     }
-    if (st.battles.length && FIGHTER[u.role]) {
+    if (st.battles.length && FIGHTER[u.role] && u.garrison == null) {
       for (const b of st.battles) {
         const dx = u.x - b.x, dy = u.y - b.y;
         if (dx * dx + dy * dy > (b.r + 3) * (b.r + 3)) continue;
@@ -808,7 +813,7 @@
     const st = sim.state, B = M().BATTLE;
     const groups = new Map(), idleByCity = new Map(), engaged = [];
     for (const u of st.units) {
-      if (u.dead || !FIGHTER[u.role] || u.role === 'rebel') continue;
+      if (u.dead || !FIGHTER[u.role] || u.role === 'rebel' || u.garrison != null) continue;   // Garnison bleibt bei ihrer Stadt
       if ((u.foe >= 0 && !u.vehicle) || (u.vehicle && u.aim >= 0)) engaged.push(u);
       const o = u.order;
       if (o && o.kind === 'march') {
@@ -904,7 +909,7 @@
       if (!hostileK(sim, tmp.a, tmp.b)) continue;
       let nA = 0, nB = 0, mA = 0, mB = 0;
       WW.Units.forNear(sim, cx, cy, B.r, false, (v) => {
-        if (!FIGHTER[v.role] || v.role === 'rebel') return;
+        if (!FIGHTER[v.role] || v.role === 'rebel' || v.garrison != null) return;
         const sd = sideOf(sim, tmp, v.kingdomId);
         const m = v.order && v.order.kind === 'march' ? 1 : 0;
         if (sd === 1) { nA++; mA += m; } else if (sd === 2) { nB++; mB += m; }
@@ -944,7 +949,7 @@
     const memA = [], memB = [];
     let sx = 0, sy = 0;
     WW.Units.forNear(sim, b.x, b.y, b.r + 3, false, (v) => {
-      if (!FIGHTER[v.role] || v.role === 'rebel') return;
+      if (!FIGHTER[v.role] || v.role === 'rebel' || v.garrison != null) return;
       const sd = sideOf(sim, b, v.kingdomId);
       if (sd === 1) memA.push(v); else if (sd === 2) memB.push(v); else return;
       sx += v.x; sy += v.y;
@@ -1177,7 +1182,7 @@
     if (!pair) return false;
     const st = sim.state;
     for (const [k, target, ek] of [[ka, pair.b, kb], [kb, pair.a, ka]]) {
-      const idle = st.units.filter((u) => !u.dead && u.kingdomId === k.id && (u.role === 'soldier' || u.vehicle) && !u.order);
+      const idle = st.units.filter((u) => !u.dead && u.kingdomId === k.id && (u.role === 'soldier' || u.vehicle) && !u.order && u.garrison == null);
       const send = Math.max(1, Math.ceil(idle.length * 0.75));
       for (let i = 0; i < idle.length && i < send; i++) {
         const u = idle[i];

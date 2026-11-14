@@ -91,7 +91,8 @@
       hasBarracks: false, hasMarket: false, hasMonument: false,
       hungry: false, starve: 0, unhappyYears: 0, lastSettlers: st.year, blessUntil: 0,
       noSpace: false, empty: 0, centerOk: true, centerLost: 0, revolt: false, propaganda: 0, sick: 0,
-      loyalty: 80, joinedYear: st.year, flurs: 0, needLand: false, governor: null
+      loyalty: 80, joinedYear: st.year, flurs: 0, needLand: false, governor: null,
+      occupied: null, garrison: 0, garrisonWant: 0, garrisonSet: null   // 9.10
     };
     sim._usedNames.add(city.name);
     WW.Culture.setCity(sim, city, cul);
@@ -889,7 +890,9 @@
       if (old && u.id === old.leaderId) { u.role = 'farmer'; old.leaderId = -1; }
       u.kingdomId = nk.id; u.path = null; u.order = null; u.task = null;
       if (u.role === 'rebel') u.role = 'farmer';
+      if (u.garrison != null) delete u.garrison;   // alte Garnison dient nicht dem neuen Herrn
     }
+    city.occupied = null; city.garrisonSet = null;   // Besatzung setzt nur die Eroberung (Diplo.tryCapture)
     WW.Gov.restyleCity(sim, city, nk.gov);
     for (const s of sim.state.structs) if (!s.dead && s.cityId === city.id) {
       if (WW.Structs.isWallish(s)) { s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp); }

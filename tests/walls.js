@@ -269,6 +269,52 @@ test('8 Zeitaufschlag der Geräte', function () {
   assert(ms / 3 < 0.05, 'Geräte zu teuer');
 });
 
+
+// [walls] Megastadt (Faschismus 9.10 B): Ring für ~600 Einwohner dicht, Tore erreichbar, Planung schnell
+test('9 Megastadt: Ring um eine künstlich große Stadt (600 Einwohner) dicht, Tore erreichbar, Planung ≤ 20 ms', function () {
+  const world = meadowWorld(220, 160, {});
+  const sim = makeSim({ seed: 'mega', world: world, populate: 0, animals: false, laws: { wars: false, disasters: false, newRealms: false, govChanges: false, camps: false } });
+  const r = sim.actions.spawnSettlers(110, 80, 30, 'fascism', 'human');
+  assert(r, 'keine Stadt');
+  const c = sim._cities.get(r.cityId), st = sim.state, W = st.W;
+  // dichte Bebauung: Häuser (2×2) im Umkreis 22 um das Zentrum, mit Gassen
+  let houses = 0;
+  for (let y = c.cy - 22; y <= c.cy + 22; y += 3) for (let x = c.cx - 22; x <= c.cx + 22; x += 3) {
+    if (Math.hypot(x - c.cx, y - c.cy) > 22 || Math.abs(x - c.cx) < 3 && Math.abs(y - c.cy) < 3) continue;
+    const h = WW.Structs.create(sim, 'house', x, y, c.id, { level: 3, built: true });
+    if (h) houses++;
+  }
+  WW.Growth.claimTiles(sim, c, (() => { const t = []; for (let y = c.cy - 34; y <= c.cy + 34; y++) for (let x = c.cx - 34; x <= c.cx + 34; x++) t.push(y * W + x); return t; })());
+  WW.Cities.refreshLists(sim, c);
+  c.pop = 600;
+  // Planung messen (mehrfach, Mittel und Maximum)
+  const times = [];
+  for (let n = 0; n < 12; n++) {
+    const t0 = process.hrtime.bigint();
+    assert(WW.Walls.plan(sim, c, WW.CONFIG.WALL_MARGIN, 1, false), 'Ring nicht geplant');
+    times.push(Number(process.hrtime.bigint() - t0) / 1e6);
+  }
+  const ring = c.wall.plan.length;
+  for (const s of st.structs.slice()) if (!s.dead && s.cityId === c.id && WW.Structs.isWallish(s) && !s.built) WW.Structs.complete(sim, s);
+  WW.Walls.refreshCounts(sim, c);
+  const lk = leaks(sim, c);
+  // Tore erreichbar: eigener Weg vom Zentrum weit nach draußen
+  const out = (c.cy - 60) * W + c.cx;
+  sim._pathBudget = 1e9;
+  const p = WW.Path.find(sim, c.cy * W + c.cx, out, { k: c.kingdomId, limit: 200000 });
+  // Erweiterung (größerer Ring) ebenfalls schnell
+  c.noSpace = true; c.wall.plannedYear = -99; c.wall.state = 'done'; c.wall.level = 1;
+  const t1 = process.hrtime.bigint();
+  const ex = WW.Walls.plan(sim, c, WW.CONFIG.WALL_MARGIN, 1, true);
+  const tEx = Number(process.hrtime.bigint() - t1) / 1e6;
+  const warm = times.slice(2).sort((a, b) => a - b), mean = warm[warm.length >> 1], max = warm[warm.length - 1];
+  log('Häuser', houses, '· Ringkacheln', ring, '· Tore', c.wall.gates.length, '· dicht', !lk.leak, '(Innenfläche ' + lk.n + ')', '· Weg nach draußen', !!p,
+    '· Planung: erste (kalt)', times[0].toFixed(1), 'ms, Median', mean.toFixed(1), 'ms, max', max.toFixed(1), 'ms · Erweiterung', tEx.toFixed(1), 'ms', ex ? '' : '(keine Erweiterung möglich)');
+  assert(!lk.leak, 'Ring undicht bei ' + lk.at);
+  assert(c.wall.gates.length >= 1 && p, 'Tore nicht erreichbar');
+  assert(max <= 20 && tEx <= 25, 'Ringplanung zu langsam: ' + max.toFixed(1) + ' / ' + tEx.toFixed(1) + ' ms');
+});
+
 console.log('\n===== Ergebnis');
 for (const r of results) console.log((r.ok ? '  ok    ' : '  FEHLER') + '  ' + r.name + '  (' + (r.ms / 1000).toFixed(1) + ' s)' + (r.ok ? '' : '  -> ' + r.err.message));
 const bad = results.filter(r => !r.ok).length;

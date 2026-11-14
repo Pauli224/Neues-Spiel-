@@ -125,6 +125,8 @@
   }
   function hr(sim, a, b) { return mix(mix((sim._seedHash | 0) ^ 0x5eaf00d, a | 0), b | 0) / 4294967296; }
 
+  // Regierung gründet keine Siedlungen (WW.GOVERNMENTS[g].build.noSettle, PLAN-9 9.10: Faschismus); fehlt die Marke: false
+  function noSettle(gov) { const g = WW.GOVERNMENTS && WW.GOVERNMENTS[gov]; return !!(g && g.build && g.build.noSettle); }
   function govSpec(gov) { return NV().GOVS[gov] || NV().GOVS.tribe; }
   function hasGuns(gov) {
     if (WW.MIL && WW.MIL.GOVS) return !!(WW.MIL.GOVS[gov] && WW.MIL.GOVS[gov].artillery);
@@ -155,7 +157,7 @@
     n.mask = typeof n.mask === 'string' ? n.mask : '';   // Wasser-Schnappschuss (siehe seaInfo); leer = beim ersten Bedarf
     n.maskVer = n.maskVer | 0;
     const S = n.stats && typeof n.stats === 'object' ? n.stats : {};
-    for (const k of ['built', 'sunk', 'fish', 'trades', 'colonies', 'landings', 'wrecks']) S[k] = +S[k] || 0;
+    for (const k of ['built', 'sunk', 'fish', 'trades', 'colonies', 'landings', 'wrecks', 'invasions', 'troopsSent', 'troopsLanded']) S[k] = +S[k] || 0;
     n.stats = S;
     st.naval = n;
     if (!Array.isArray(st.wrecks)) st.wrecks = [];
@@ -377,7 +379,7 @@
     return found;
   }
   // Landestelle: Landkachel (Landmasse landComp, außerhalb jedes Rings, frei) mit Wassernachbar im Meer seaComp
-  function landingNear(sim, x0, y0, rMin, rMax, landComp, seaComp, kid) {
+  function landingNear(sim, x0, y0, rMin, rMax, landComp, seaComp, kid, avoid) {
     const st = sim.state, W = st.W, H = st.H, ter = st.terrain, L = seaLut(), walk = WW.TERRAIN_LUT.walk;
     const nav = seaInfo(sim), comp = comps(sim);
     let best = -1, bestA = -1, bs = 1e9;
@@ -396,6 +398,7 @@
         if (L[ter[j]] && nav.comp[j] === seaComp) { a = j; break; }
       }
       if (a < 0) continue;
+      if (avoid) { const ax = (a % W) + 0.5 - avoid.x, ay = Math.floor(a / W) + 0.5 - avoid.y; if (ax * ax + ay * ay < avoid.r * avoid.r) continue; }
       const sc = d2 + hr(sim, i, 77) * 2;
       if (sc < bs) { bs = sc; best = i; bestA = a; }
     }
@@ -783,7 +786,7 @@
       chron(sim, 'seaColonyLand', { kingdom: k ? k.name : '', city: home ? home.name : '', n: n, ship: s.name, terrain: WW.TERRAIN[st.terrain[m.site]].name },
         { kingdomId: s.kingdomId, cityId: home ? home.id : -1, x: lx, y: ly }, 'economy', n + ' Siedler an Land');
     } else if (m.kind === 'invade') {
-      st.naval.stats.landings++;
+      st.naval.stats.landings++; st.naval.stats.troopsLanded += n;
       const tc = sim._cities.get(m.city), ek = sim._kingdoms.get(m.k);
       chron(sim, 'seaLanding', { kingdom: k ? k.name : '', other: ek ? ek.name : '', otherCity: tc ? tc.name : '', n: n, ship: s.name },
         { kingdomId: s.kingdomId, cityId: tc ? tc.id : -1, x: lx, y: ly }, 'war', n + ' Soldaten gelandet');
@@ -883,7 +886,7 @@
     for (const k of st.kingdoms) {
       if (k.dead || !k.cityIds.length) continue;
       const spec = govSpec(k.gov);
-      if (!spec.colonize || WW.Diplo.atWar(sim, k.id)) continue;
+      if (!spec.colonize || noSettle(k.gov) || WW.Diplo.atWar(sim, k.id)) continue;
       if (n.colony[k.id] != null && n.colony[k.id] + S.every > st.year) continue;
       if (k.cityIds.length >= WW.Growth.cityLimit(sim, k) + 2) continue;
       if (st.units.length >= CF().MAX_UNITS - 50) continue;
@@ -959,7 +962,8 @@
         if (d < jd) { jd = d; join = c; }
       }
       if (join) { for (const u of g.list) { u.cityId = join.id; u.kingdomId = join.kingdomId; u.path = null; } continue; }
-      if (g.list.length < 3 || !sim._kingdoms.get(g.k)) continue;
+      const gk = sim._kingdoms.get(g.k);
+      if (g.list.length < 3 || !gk || noSettle(gk.gov)) continue;
       // eigener Ort in der Nähe
       let site = -1, bd = 1e9;
       const x0 = Math.floor(u0.x), y0 = Math.floor(u0.y), md = CF().CITY_MIN_DIST - 4;
@@ -1014,7 +1018,7 @@
     if (!best) { n.invade[k.id] = st.year - I.every + 1; return false; }   // nächstes Jahr wieder versuchen
     const s = best.s, board = boardTile(sim, best.h), hc = comp[board];
     const bx = board % W, by = Math.floor(board / W);
-    const list = idle.filter((u) => !u.dead && !u.order && !u.sea && !u.ind && comp[Math.floor(u.y) * W + Math.floor(u.x)] === hc);
+    const list = idle.filter((u) => !u.dead && !u.order && !u.sea && !u.ind && !(u.garrison != null && u.garrison >= 0) && comp[Math.floor(u.y) * W + Math.floor(u.x)] === hc);   // Garnison bleibt
     if (list.length < I.min) return false;
     list.sort((a, b) => (Math.abs(a.x - bx) + Math.abs(a.y - by)) - (Math.abs(b.x - bx) + Math.abs(b.y - by)) || a.id - b.id);
     const keep = marching > 0 ? 0 : Math.floor(list.length * 0.25);
@@ -1029,6 +1033,7 @@
     s.t = 'load'; s.wait = I.wait;
     s.mission = { kind: 'invade', city: best.c.id, k: e.id, land: best.land.land, anchor: best.land.anchor, board: board, spd: 0, escort: -1 };
     n.invade[k.id] = st.year;
+    n.stats.invasions++; n.stats.troopsSent += send;
     const home = sim._cities.get(s.cityId);
     chron(sim, 'seaInvasion', { kingdom: k.name, other: e.name, city: home ? home.name : '', otherCity: best.c.name, n: send, ship: s.name },
       home ? WW.Cities.atCity(home) : undefined, 'war', send + ' Soldaten an Bord');
@@ -1069,19 +1074,46 @@
     if (!aboard || !okWar) { unload(sim, s, null); s.t = 'dock'; s.mission = null; s.wait = 120; return; }
     const r = route(sim, s.home, m.anchor);
     if (!r) { unload(sim, s, null); s.t = 'dock'; s.mission = null; s.wait = 240; return; }
-    depart(sim, s, r, m, true);
-    // Geleitschutz: ein freies Kriegsschiff desselben Hafens fährt mit
+    // Geleitschutz: freies Kriegsschiff des Reichs nahe dem Hafen (bevorzugt derselbe Hafen); hat das Reich Kriegsschiffe,
+    // aber gerade keins frei, wartet der Transporter einmal bis zu INVADE.escortWait Ticks darauf
+    let esc = null;
     if (m.kind === 'invade') {
+      const nav = seaInfo(sim), sc = nav.comp[s.home], hx = s.home % st.W, hy = Math.floor(s.home / st.W);
+      let any = false, bd = 1e9;
       for (const w of st.ships) {
-        if (w.dead || w.kind !== 'warship' || w.kingdomId !== s.kingdomId || w.harborId !== s.harborId || w.t === 'sink') continue;
+        if (w.dead || w.kind !== 'warship' || w.kingdomId !== s.kingdomId || w.t === 'sink') continue;
+        any = true;
         if (w.mission && w.mission.kind !== 'patrol') continue;
-        const wr = route(sim, tileOf(sim, w), m.anchor);
-        if (!wr) continue;
-        depart(sim, w, wr, { kind: 'escort', ship: s.id, k: m.k, spd: speedOf(sim, s) }, w.t === 'dock');
-        m.escort = w.id;
-        break;
+        if (nav.comp[tileOf(sim, w)] !== sc) continue;
+        const d = Math.abs(w.x - hx) + Math.abs(w.y - hy) + (w.harborId === s.harborId ? 0 : 10);
+        if (d <= NV().INVADE.escortR && d < bd) { bd = d; esc = w; }
       }
+      if (!esc && any && !m.escWait) { m.escWait = 1; s.wait = NV().INVADE.escortWait; return; }
     }
+    depart(sim, s, r, m, true);
+    if (esc) {
+      const wr = route(sim, tileOf(sim, esc), m.anchor);
+      if (wr) { depart(sim, esc, wr, { kind: 'escort', ship: s.id, k: m.k, spd: speedOf(sim, s) }, esc.t === 'dock'); m.escort = esc.id; }
+    }
+  }
+  // Transporter auf dem Weg zur Landung: feindliches Kriegsschiff nah und kein Geleit in der Nähe -> einmal an eine andere
+  // Landestelle ausweichen; schwer getroffen -> umkehren (die Truppen steigen daheim aus)
+  function evade(sim, s, foe) {
+    const st = sim.state, m = s.mission, I = NV().INVADE;
+    const e = m.escort >= 0 ? shipById(sim, m.escort) : null;
+    if (e && !e.dead && e.t !== 'sink') { const dx = e.x - s.x, dy = e.y - s.y; if (dx * dx + dy * dy <= 36) return; }
+    if (s.hp < s.maxHp * 0.5) { goHome(sim, s); return; }
+    if (m.diverted) return;
+    m.diverted = 1;
+    const tc = sim._cities.get(m.city);
+    if (!tc) return;
+    const comp = comps(sim), nav = seaInfo(sim), W = st.W;
+    const land = landingNear(sim, tc.cx, tc.cy, I.landMin, I.landMax + 6, comp[tc.cy * W + tc.cx], nav.comp[s.home], s.kingdomId, { x: foe.x, y: foe.y, r: 9 });
+    if (!land) return;
+    const r = route(sim, tileOf(sim, s), land.anchor);
+    if (!r) return;
+    m.land = land.land; m.anchor = land.anchor;
+    s.route = r; s.ri = 0; s.moving = r.length > 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -1165,7 +1197,7 @@
     let warK = null;
     for (const w of ships) {
       if (w.dead || w.kind !== 'warship' || w.t === 'sink') continue;
-      if (w.cd > 0) { w.cd -= 5; continue; }
+      if (w.cd > 0) { w.cd -= 10; continue; }
       if (!warK) warK = new Map();
       let aw = warK.get(w.kingdomId);
       if (aw === undefined) { aw = WW.Diplo.atWar(sim, w.kingdomId); warK.set(w.kingdomId, aw); }
@@ -1176,9 +1208,11 @@
         if (o === w || o.dead || o.t === 'sink' || !hostileShips(sim, w, o)) continue;
         const dx = o.x - w.x, dy = o.y - w.y, d = dx * dx + dy * dy;
         // Transporter zuerst, dann Kriegsschiffe
-        const pd = d * (o.kind === 'transport' ? 0.6 : o.kind === 'warship' ? 0.8 : 1);
+        const pd = d * (o.kind === 'warship' ? 0.6 : o.kind === 'transport' ? 0.8 : 1);   // erst das Geleit, dann der Transporter
         if (d <= K.range * K.range && pd < fd) { fd = pd; foe = o; }
         if (d <= K.sight * K.sight && d < nd) { nd = d; near = o; }
+        // bedrohter Transporter auf Landungsfahrt weicht aus
+        if (o.kind === 'transport' && o.t === 'out' && o.mission && o.mission.kind === 'invade' && d <= 36) evade(sim, o, w);
       }
       if (foe) {
         const hit = hr(sim, w.id, st.tick) < K.hit;
@@ -1194,7 +1228,7 @@
       // Verfolgung: feindliches Schiff in Sicht, Kriegsschiff frei
       const free = w.t === 'dock' || (w.t === 'work' && (!w.mission || w.mission.kind !== 'escort')) || (w.t === 'out' && w.mission && w.mission.kind === 'patrol');
       const chasing = w.t === 'out' && w.mission && w.mission.kind === 'chase';
-      if (near && (free || (chasing && ((st.tick + w.id) % 40) < 5))) {
+      if (near && (free || (chasing && ((st.tick + w.id) % 80) < 10))) {
         const r = route(sim, tileOf(sim, w), tileOf(sim, near), 700);
         if (r && r.length <= 3 * K.sight) {
           const was = w.t === 'dock';
@@ -1386,7 +1420,7 @@
         if (s.wait > 0) { s.wait--; if (s.t !== 'load') continue; }
         decide(sim, s);
       }
-      if (t % 5 === 2 && sim._hostileWorld) combat(sim);
+      if (t % 10 === 2 && sim._hostileWorld) combat(sim);
       if (t % 40 === 21) smoke(sim);
       // Aufräumen
       if (sim._shipsDead) {

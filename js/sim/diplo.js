@@ -116,6 +116,7 @@
         let marching = 0;
         for (const u of st.units) {
           if (u.dead || u.kingdomId !== k.id || u.role !== 'soldier') continue;
+          if (u.garrison != null) continue;   // Garnison bleibt in ihrer Stadt (9.10)
           if (u.parole && u.parole > st.tick) continue;   // [mil] hat die Waffen niedergelegt
           if (u.order) { if (u.order.k === e.id) marching++; continue; }
           idle.push(u);
@@ -285,6 +286,7 @@
       u.order = null; u.path = null; u.breach = -1;
       if (u.kingdomId === att.id && Math.abs(u.x - px) + Math.abs(u.y - py) < 10) u.cityId = city.id;
     }
+    WW.Garrison.onConquest(sim, city, att, def);   // Besatzung und Garnison (9.10)
     const r = att.relations[def.id];
     if (r) r.weariness += 15;
     sim.event('conquest', { city: city.name, kingdom: att.name, other: oldName }, WW.Cities.atCity(city));
@@ -484,6 +486,8 @@
       if (c.unhappyYears >= 2) {
         // Propagandaturm dämpft nur vorübergehend
         if (k.gov === 'fascism' && c.propaganda > 8 && sim.rng.chance(0.6)) continue;
+        // Garnison schreckt ab (Faschismus: Angst)
+        if ((c.garrisonWant | 0) > 0 && sim.rng.chance((c.garrisonRatio || 0) * (k.gov === 'fascism' ? 0.8 : 0.5))) continue;
         // Aufstand kündigt sich als Vorhaben an
         const pl = WW.Growth.addPlot(sim, 'revolt', k.id, c.id, c.id, c.cx + 0.5, c.cy + 0.5);
         if (!pl.announced) { pl.announced = true; sim.event('plotRevolt', { city: c.name, kingdom: k.name }, WW.Cities.atCity(c)); }
@@ -497,5 +501,163 @@
     secede: secede, startRevolt: startRevolt, revoltSuccess: revoltSuccess, nearestCities: nearestCities,
     plunder: plunder, callAllies: callAllies, isAggressorAgainst: isAggressorAgainst
   };
+
+})(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
+
+// ============================================================================
+// Garnisonen (9.10): Soll, Zuteilen, Nachschicken, Besatzung und Eingliederung. Schnittstelle: Kopf von js/sim/sim.js.
+// ============================================================================
+(function (WW) { 'use strict';
+
+  const OCC_BASE = 35;      // Besatzungsmalus auf die Loyalität zu Beginn
+  const MISSING = 20;       // fehlende Garnison in besetzter Stadt
+
+  function G(k) { return WW.GOVERNMENTS[(k && k.gov) || 'tribe'] || WW.GOVERNMENTS.tribe; }
+  function hasBarr(sim, city) { return !!city.garrisonHall; }
+
+  // Soll-Stärke einer Stadt
+  function want(sim, city, k) {
+    const g = G(k), gs = g.garrison;
+    if (!gs || !gs.share) return 0;
+    if (city.garrisonSet != null && city.garrisonSet >= 0) return city.garrisonSet | 0;
+    let w = 0;
+    if (city.occupied) w = Math.max(3, Math.ceil(city.pop * gs.share) + 1);
+    else if (k && k.capitalId !== city.id && city.pop >= 30) w = Math.round(city.pop * gs.share / 3);
+    if (city.happiness < 35 && city.pop >= 10) w += Math.ceil(city.pop * 0.04);
+    if (w > 0 && hasBarr(sim, city)) w += 4;
+    return Math.min(w, 60);
+  }
+
+  // Loyalitätswirkung (für Growth.loyaltyRaw): + Garnison, − Besatzung, − fehlende Garnison
+  function loyalty(sim, city, k) {
+    const g = G(k), gs = g.garrison || { cap: 0, integ: 8 };
+    const st = sim.state;
+    let l = 0;
+    const w = city.garrisonWant | 0, n = city.garrison | 0;
+    const ratio = w > 0 ? Math.min(1, n / w) : 0;
+    if (w > 0) l += gs.cap * ratio * (hasBarr(sim, city) ? 1.5 : 1);
+    if (city.occupied) {
+      const yrs = st.year - city.occupied.since;
+      l -= OCC_BASE * Math.max(0, 1 - yrs / Math.max(1, gs.integ));
+      if (w > 0) l -= MISSING * (1 - ratio);
+    }
+    return l;
+  }
+
+  function soldierOk(u) { return !u.dead && u.role === 'soldier' && !u.merc && !u.vehicle && !(u.order && u.order.kind === 'march'); }
+
+  function assign(sim, u, city, walk) {
+    u.garrison = city.id; u.cityId = city.id;
+    if (walk) { u.order = { kind: 'garrison', city: city.id }; u.path = null; u.fails = 0; }
+    else if (u.order && u.order.kind !== 'garrison') u.order = null;
+  }
+  function release(u) { delete u.garrison; if (u.order && u.order.kind === 'garrison') u.order = null; }
+
+  // alle 40 Ticks
+  function update(sim) {
+    const st = sim.state;
+    const cnt = new Map();
+    for (const u of st.units) {
+      if (u.garrison == null) continue;
+      const c = sim._cities.get(u.garrison);
+      if (u.dead || !c || c.kingdomId !== u.kingdomId || u.role !== 'soldier') { if (!u.dead) release(u); continue; }
+      cnt.set(c.id, (cnt.get(c.id) || 0) + 1);
+    }
+    const halls = new Set();
+    for (const s of st.structs) if (!s.dead && s.built && s.type === 'garrison') halls.add(s.cityId);
+    for (const city of st.cities) {
+      if (city.dead) continue;
+      const k = sim._kingdoms.get(city.kingdomId);
+      city.garrisonHall = halls.has(city.id);
+      const w = want(sim, city, k);
+      let n = cnt.get(city.id) || 0;
+      city.garrisonWant = w; city.garrison = n;
+      // Eingliederung
+      if (city.occupied && k && st.year - city.occupied.since >= G(k).garrison.integ) {
+        city.occupied = null;
+        sim.event('integrated', { city: city.name, kingdom: k.name }, WW.Cities.atCity(city));
+      }
+      if (!k) continue;
+      if (n < w && city._members) {
+        // 1) eigene Soldaten der Stadt
+        for (const u of city._members) { if (n >= w) break; if (u.garrison == null && soldierOk(u) && !u.order) { assign(sim, u, city, false); n++; } }
+        // 2) Nachschub aus der Hauptstadt bzw. der größten anderen Stadt des Reichs (höchstens 3 je Runde)
+        if (n < w) {
+          let donor = sim._cities.get(k.capitalId);
+          if (!donor || donor === city) { donor = null; for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && c !== city && (!donor || c.pop > donor.pop)) donor = c; } }
+          if (donor && donor._members) {
+            let sent = 0;
+            for (const u of donor._members) {
+              if (n >= w || sent >= 3) break;
+              if (u.garrison == null && soldierOk(u) && !u.order) { assign(sim, u, city, true); n++; sent++; }
+            }
+            if (sent && (city.garrisonSentYear | 0) !== st.year) { city.garrisonSentYear = st.year; sim.event('garrisonSent', { city: city.name, other: donor.name, kingdom: k.name, n: sent }, WW.Cities.atCity(city)); }
+          }
+        }
+        city.garrison = n;
+      } else if (n > w + (city.garrisonSet != null ? 0 : 2) && city._members) {
+        // überzählige Garnison wird wieder normale Wache
+        let drop = city.garrisonSet != null ? n - w : 1;
+        for (const u of st.units) { if (drop <= 0) break; if (u.garrison === city.id && !u.dead) { release(u); n--; drop--; } }
+        city.garrison = n;
+      }
+      city.garrisonRatio = w > 0 ? Math.min(1, n / w) : (n > 0 ? 1 : 0);
+      if (city.occupied && w > 0 && city.garrisonRatio < 0.4 && (city.garrisonLowYear | 0) + 5 <= st.year) {
+        city.garrisonLowYear = st.year;
+        sim.event('garrisonLow', { city: city.name, kingdom: k.name }, WW.Cities.atCity(city));
+      }
+      // Garnisonskaserne in besetzten Städten mit großem Soll
+      if (city.occupied && w >= 6 && !city.garrisonHall && city.centerOk && !(city.hallTry > st.tick)) {
+        city.hallTry = st.tick + 600;
+        let have = false;
+        for (const id of city.sites) { const s = sim._structs.get(id); if (s && s.type === 'garrison') have = true; }
+        const cost = WW.Structs.costFor(sim, 'garrison', 1, city.id);
+        if (!have && WW.Cities.canPay(sim, city, cost)) {
+          const i = WW.Cities.findCoreSpot(sim, city, 'garrison');
+          if (i >= 0) { const s = WW.Cities.placeStruct(sim, city, 'garrison', i % st.W, Math.floor(i / st.W), { style: k.gov }); if (s) city.sites.push(s.id); }
+        }
+      }
+    }
+  }
+
+  // Eroberung: Besatzung beginnt, Eroberer bleiben bis zum Soll als Garnison
+  function onConquest(sim, city, att, def) {
+    const st = sim.state;
+    city.occupied = { since: st.year, prev: def ? def.id : -1 };
+    const w = want(sim, city, att);
+    city.garrisonWant = w;
+    const px = city.cx + 0.5, py = city.cy + 0.5;
+    const near = [];
+    for (const u of st.units) if (!u.dead && u.kingdomId === att.id && u.role === 'soldier' && u.cityId === city.id && u.garrison == null) near.push(u);
+    near.sort((a, b) => (Math.abs(a.x - px) + Math.abs(a.y - py)) - (Math.abs(b.x - px) + Math.abs(b.y - py)) || a.id - b.id);
+    let n = 0;
+    for (const u of near) { if (n >= w) break; assign(sim, u, city, false); n++; }
+    city.garrison = n;
+  }
+
+  // Sandkasten: feste Stärke (n ≥ 0), null/-1 = wieder selbst
+  function setGarrison(sim, cityId, n) {
+    const city = sim._cities.get(cityId);
+    if (!city) return false;
+    if (n == null || !(typeof n === 'number' && isFinite(n)) || n < 0) { city.garrisonSet = null; update(sim); return true; }
+    const before = city.garrison | 0;
+    city.garrisonSet = Math.min(60, Math.floor(n));
+    update(sim);
+    const k = sim._kingdoms.get(city.kingdomId);
+    if (k && city.garrisonSet < before) sim.event('garrisonWithdrawn', { city: city.name, kingdom: k.name, n: before - city.garrisonSet }, WW.Cities.atCity(city));
+    return true;
+  }
+
+  // alte Spielstände: Besatzung aus conqueredYear ableiten
+  function defaults(st) {
+    for (const c of st.cities) {
+      if (c.occupied === undefined) c.occupied = (c.conqueredYear != null && st.year - c.conqueredYear < 12) ? { since: c.conqueredYear, prev: c.prevKingdomId != null ? c.prevKingdomId : -1 } : null;
+      if (c.garrisonSet === undefined) c.garrisonSet = null;
+      if (c.garrison == null) c.garrison = 0;
+      if (c.garrisonWant == null) c.garrisonWant = 0;
+    }
+  }
+
+  WW.Garrison = { want: want, loyalty: loyalty, update: update, onConquest: onConquest, setGarrison: setGarrison, defaults: defaults, release: release, OCC_BASE: OCC_BASE };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

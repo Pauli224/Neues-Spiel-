@@ -335,8 +335,11 @@
     if (over > 0) l -= over * 14;
     const years = st.year - (city.joinedYear == null ? city.founded : city.joinedYear);
     l += Math.min(20, years * 0.8);
-    if (city.conqueredYear != null && st.year - city.conqueredYear < 12) l -= 30 * (1 - (st.year - city.conqueredYear) / 12);
-    if (city.occupiedUntil && st.year < city.occupiedUntil) l -= 15;
+    if (city.occupied !== undefined && WW.Garrison) l += WW.Garrison.loyalty(sim, city, k);   // Garnison, Besatzung (9.10)
+    else {   // ältere Stände ohne Besatzungsfeld
+      if (city.conqueredYear != null && st.year - city.conqueredYear < 12) l -= 30 * (1 - (st.year - city.conqueredYear) / 12);
+      if (city.occupiedUntil && st.year < city.occupiedUntil) l -= 15;
+    }
     if (city.governor) l += (city.governor.diplo - 3) * 4;
     if (k.ruler) l += (k.ruler.admin - 3) * 3;
     if (city.hungry) l -= 10;
@@ -428,7 +431,7 @@
         if (p.type === 'revolt') {
           const limit = a.gov === 'fascism' ? 28 : 22;
           if (c.happiness > limit + 6) { p.progress -= 0.12; if (p.progress <= 0) removePlot(sim, p); continue; }
-          p.progress += 0.05;
+          p.progress += 0.05 * (1 - 0.7 * ((c.garrisonWant | 0) > 0 ? (c.garrisonRatio || 0) : 0));   // Garnison bremst
           if (p.progress >= 1) { removePlot(sim, p); WW.Diplo.startRevolt(sim, c); }
         } else {
           if ((c.loyalty == null ? 50 : c.loyalty) > 10 || a.capitalId === c.id || a.cityIds.length < 2) { p.progress -= 0.1; if (p.progress <= 0) removePlot(sim, p); continue; }

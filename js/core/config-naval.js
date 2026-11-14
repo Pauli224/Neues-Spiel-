@@ -29,7 +29,7 @@
     KINDS: {
       fishboat:  { name: 'Fischerboot',   hp: 40,  cost: { wood: 6 },             work: 240, cap: 0 },
       trader:    { name: 'Handelsschiff', hp: 70,  cost: { wood: 12, gold: 8 },   work: 380, cap: 0 },
-      transport: { name: 'Transporter',   hp: 90,  cost: { wood: 14, stone: 4 },  work: 420, cap: 10 },
+      transport: { name: 'Transporter',   hp: 130,  cost: { wood: 14, stone: 4 },  work: 420, cap: 10 },
       warship:   { name: 'Kriegsschiff',  hp: 150, cost: { wood: 16, stone: 8 },  work: 600, cap: 0,
                    dmg: 13, range: 4.5, reload: 30, sight: 9, hit: 0.75, wallDmg: 36, shoreRange: 6.5 }
     },
@@ -47,7 +47,7 @@
     FISH: { catch: 8, time: 120, rMin: 3, rMax: 11, deposit: 1.6, dockWait: 40 },
     TRADE: { gold: 5, perTile: 1 / 40, max: 14, opinion: 2, wait: 60, goods: 4 },
     SETTLE: { minAdults: 18, minTier: 2, every: 5, n: [6, 9], free: 30, minDist: 20, landR: 8, wait: 360 },
-    INVADE: { min: 4, every: 3, landMin: 4, landMax: 22, wait: 200, guard: 600 },
+    INVADE: { min: 4, every: 3, landMin: 4, landMax: 22, wait: 200, guard: 600, escortR: 30, escortWait: 400 },
     PATROL: { r: 8, wait: 100, out: 60 },
     PATH_NODES: 9000,     // Knotenlimit der Wegsuche über Wasser
     ROUTE_CACHE: 160,     // zwischengespeicherte Routen (Laufzeit)

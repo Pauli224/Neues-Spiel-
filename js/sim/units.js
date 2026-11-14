@@ -717,6 +717,12 @@
 
   function thinkSoldier(sim, u, city) {
     if (u.order && u.order.kind === 'march') { march(sim, u); return; }
+    if (u.order && u.order.kind === 'garrison') {   // auf dem Weg in die Garnison (9.10)
+      if (distTo(u, city.cx + 0.5, city.cy + 0.5) < 5) { u.order = null; u.path = null; return; }
+      const r = goTo(sim, u, WW.Cities.centerTile(sim, city, u.id), { limit: C().PATH_LIMIT_LONG });
+      if (r === null && u.fails > 4) { u.order = null; u.fails = 0; }
+      return;
+    }
     if (u.order && u.order.kind === 'home') {
       if (distTo(u, city.cx + 0.5, city.cy + 0.5) < 7) { u.order = null; u.path = null; return; }
       const r = goTo(sim, u, WW.Cities.centerTile(sim, city, u.id), { limit: C().PATH_LIMIT_LONG });

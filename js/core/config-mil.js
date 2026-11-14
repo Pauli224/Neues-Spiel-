@@ -6,6 +6,8 @@
 //                     costMul (Kosten), speedMul (Bautempo), arsenals (je Reich), minPop (Stadt), focus (bevorzugt),
 //                     simple (Panzer einfach: weniger Panzerung, billiger), defensive (Fahrzeuge bleiben daheim),
 //                     noWorkshop (Arsenal auch ohne Fabrik/Schmiede, dann Bautempo × COST.noWorkshop)
+//                     maxPer (Obergrenze je Art + 1 je so viele Einwohner des Reichs), arsenalPer (+1 Arsenal je so viele
+//                     Einwohner; eine Stadt darf dann mehrere haben: 1 + Einwohner / arsenalPer)
 //   WW.MIL.TANK / GUN Kampfwerte;  WW.MIL.COST Kosten je Fahrzeug;  WW.MIL.BATTLE, TRENCH Schlachten und Gräben
 //   WW.STRUCT_INFO.arsenal (3×2)
 // =============================================================================
@@ -13,8 +15,10 @@
 
   WW.MIL = {
     GOVS: {
-      fascism:   { name: 'Panzer und Artillerie (Schwerpunkt)', tank: { per: 25, max: 8 }, artillery: { per: 50, max: 4 },
-                   costMul: 0.8, speedMul: 1.25, arsenals: 2, minPop: 18, focus: 'tank', noWorkshop: true },
+      // Faschismus (9.10 D): Rüstungsstaat – günstig, schnell, viele Fahrzeuge; Obergrenzen wachsen mit der (Mega-)Stadt
+      fascism:   { name: 'Panzer und Artillerie (Schwerpunkt)', tank: { per: 18, max: 8 }, artillery: { per: 40, max: 4 },
+                   costMul: 0.6, speedMul: 1.6, arsenals: 2, minPop: 16, focus: 'tank', noWorkshop: true,
+                   maxPer: 45, arsenalPer: 180 },
       communism: { name: 'viele einfache Panzer und Artillerie', tank: { per: 22, max: 10 }, artillery: { per: 55, max: 4 },
                    costMul: 0.65, speedMul: 1.1, arsenals: 2, minPop: 18, focus: 'tank', simple: true, noWorkshop: true },
       monarchy:  { name: 'Feldgeschütze (teuer)', artillery: { per: 55, max: 2 }, costMul: 1.4, speedMul: 0.8, arsenals: 1, minPop: 28 },

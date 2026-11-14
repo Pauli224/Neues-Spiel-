@@ -3895,28 +3895,27 @@
       g.vline(x0 + w - 4, top - 6, 7, C.metalD); g.set(x0 + w - 4, top - 7, C.red);   // Antenne mit Warnlicht
       return g;
     }
-    function megaCenter(stage, lit) {
-      var H = stage === 3 ? 100 : 124, g = new Grid(CG, H), x, y, i;
-      var base = H - 4, hallTop = base - 58, attic = hallTop - 14;
-      // Treppe über die ganze Breite
-      for (i = 0; i < 6; i++) { g.hline(i, base - i * 2, CG - 2 * i, i & 1 ? PAVE[1] : PAVE[0]); g.hline(i, base - i * 2 + 1, CG - 2 * i, PAVE[2]); }
-      // Halle: Pfeilerreihe vor dunkler Wand, riesige Banner
-      g.rect(3, hallTop, 40, base - 12 - hallTop, C.ink);
-      for (x = 3; x < 43; x += 5) { g.rect(x, hallTop, 3, base - 12 - hallTop, MEGA[1]); g.vline(x, hallTop, base - 12 - hallTop, MEGA[0]); g.vline(x + 2, hallTop, base - 12 - hallTop, MEGA[2]); }
-      [8, 33].forEach(function (bx) { govBanner(g, bx, hallTop + 2, 6, 40, 'fascism', 0); });
-      g.rect(20, base - 22, 6, 10, lit ? LITC[2] : C.plum); g.hline(19, base - 23, 8, MEGA[0]);   // winzige Tür
-      // Attika mit großem Bündel-Relief
-      g.rect(0, attic, CG, 14, MEGA[1]); g.hline(0, attic, CG, MEGA[0]); g.hline(0, attic + 13, CG, MEGA[3]); g.hline(0, attic + 1, CG, MEGA[0]);
-      for (x = 2; x < CG - 2; x += 4) g.set(x, attic + 11, MEGA[3]);
-      bigFasces(g, 23, attic + 2, 10, 5);
-      flatT(g, 2, attic - 8, CG - 4, 8);
-      if (stage === 4) {   // Turm mit Stufen und Feuerschale, seitliche Standarten
-        var tw = 16, tx = 15;
-        for (i = 0; i < 4; i++) { var ww = tw - i * 3, xx = tx + Math.floor(i * 1.5), yy = attic - 8 - (i + 1) * 7; g.rect(xx, yy, ww, 7, MEGA[1]); g.vline(xx, yy, 7, MEGA[0]); g.vline(xx + ww - 1, yy, 7, MEGA[3]); g.hline(xx, yy, ww, MEGA[0]); for (x = xx + 2; x < xx + ww - 2; x += 3) g.vline(x, yy + 2, 3, lit ? LITC[1] : C.ink); }
-        var fy = attic - 8 - 4 * 7; g.rect(20, fy - 3, 6, 3, C.metalD); g.hline(19, fy - 3, 8, C.metal);
-        g.paint(20, fy - 9, ['..F...', '.FQF..', '.QFFQ.', 'QFjFQ.', '.QQQQ.', '......']);
-        [0, 41].forEach(function (mx) { g.vline(mx + 2, attic - 30, 30, C.metalD); govBanner(g, mx, attic - 28, 5, 18, 'fascism', 0); });
-      } else { g.vline(23, attic - 22, 14, C.metalD); govBanner(g, 21, attic - 20, 5, 12, 'fascism', 0); }
+    function megaCenter(stage, lit) {   // breiter als die Grundfläche (62 fein = 31 Logikpixel), wuchtig, überzeichnet
+      var CW2 = 62, H = stage === 3 ? 104 : 132, g = new Grid(CW2, H), x, y, i;
+      var base = H - 3, hallTop = base - 48, attic = hallTop - 18;
+      for (i = 0; i < 7; i++) { g.hline(i * 2, base - i * 2, CW2 - 4 * i, i & 1 ? PAVE[1] : PAVE[0]); g.hline(i * 2, base - i * 2 + 1, CW2 - 4 * i, PAVE[2]); }
+      var hb = base - 14;
+      g.rect(3, hallTop, CW2 - 6, hb - hallTop, C.ink);
+      for (x = 3; x < CW2 - 6; x += 7) { g.rect(x, hallTop, 4, hb - hallTop, MEGA[1]); g.vline(x, hallTop, hb - hallTop, MEGA[0]); g.vline(x + 3, hallTop, hb - hallTop, MEGA[2]); g.rect(x - 1, hb - 3, 6, 3, MEGA[2]); g.hline(x - 1, hallTop, 6, MEGA[0]); }
+      [8, 27, 47].forEach(function (bx, k) { govBanner(g, bx, hallTop + 3, k === 1 ? 8 : 7, hb - hallTop - 6, 'fascism', 0); });
+      g.rect(28, hb - 8, 6, 8, lit ? LITC[2] : C.plum); g.hline(27, hb - 9, 8, MEGA[0]);   // winzige Tür unter dem großen Banner
+      g.rect(0, attic, CW2, 18, MEGA[1]); g.hline(0, attic, CW2, MEGA[0]); g.hline(0, attic + 1, CW2, MEGA[0]); g.hline(0, attic + 17, CW2, MEGA[3]);
+      g.hline(2, attic + 4, CW2 - 4, C.goldD); g.hline(2, attic + 14, CW2 - 4, C.goldD);
+      bigFasces(g, 31, attic + 3, 12, 7); bigFasces(g, 12, attic + 6, 7, 3); bigFasces(g, 50, attic + 6, 7, 3);
+      flatT(g, 4, attic - 8, CW2 - 8, 8);
+      g.rect(0, attic - 2, 4, hb - attic + 2, MEGA[2]); g.rect(CW2 - 4, attic - 2, 4, hb - attic + 2, MEGA[3]);
+      if (stage === 4) {
+        var tw = 26, tx = 18;
+        for (i = 0; i < 5; i++) { var ww = tw - i * 4, xx = tx + i * 2, yy = attic - 8 - (i + 1) * 7; g.rect(xx, yy, ww, 7, MEGA[1]); g.vline(xx, yy, 7, MEGA[0]); g.vline(xx + ww - 1, yy, 7, MEGA[3]); g.hline(xx, yy, ww, MEGA[0]); for (x = xx + 2; x < xx + ww - 2; x += 3) g.vline(x, yy + 2, 3, lit && hash(x, i, 1621) < 0.6 ? LITC[1] : C.ink); }
+        var fy = attic - 8 - 5 * 7; g.rect(27, fy - 3, 8, 3, C.metalD); g.hline(26, fy - 3, 10, C.metal);
+        g.paint(28, fy - 9, ['..F...', '.FQF..', '.QFFQ.', 'QFjFQ.', '.QQQQ.']);
+        [2, 55].forEach(function (mx) { g.vline(mx + 2, attic - 40, 40, C.metalD); govBanner(g, mx, attic - 38, 6, 26, 'fascism', 0); });
+      } else { [20, 38].forEach(function (mx) { g.vline(mx + 2, attic - 26, 18, C.metalD); govBanner(g, mx, attic - 24, 5, 14, 'fascism', 0); }); }
       return g;
     }
     function garrison(st, lit) {
@@ -3972,7 +3971,7 @@
       var lit = /_lit$/.test(key), k = key.replace(/_lit$/, ''), m;
       if ((m = /^hm9_garrison_([a-z]+)$/.exec(k))) return lazyB(garrison(m[1], lit), 2);
       if ((m = /^hm9_house_([45])_([ab])$/.exec(k))) return lazyB(megaBlock(+m[1], m[2] === 'b' ? 1 : 0, lit), 2);
-      if ((m = /^hm9_center_([34])$/.exec(k))) return lazyB(megaCenter(+m[1], lit), 3);
+      if ((m = /^hm9_center_([34])$/.exec(k))) { var mc = finishH(megaCenter(+m[1], lit), 3); return { grid: mc, scale: 0.5, fw: 3, fh: 3, ox: (24 - mc.w * 0.5) / 2 + 1, oy: 24 - mc.h * 0.5 + 0.5 }; }
       if (k === 'hm9_warworks') return lazyB(warworks(lit), 3);
       if ((m = /^hm9_parade_(lamp|mast|column)$/.exec(k))) { var dg = paradeDeco(m[1]).pad(1, 1, 1, 0).outline().pad(0, 0, 0, 1).footShade(); return { grid: dg, scale: 0.5, ox: Math.floor((8 - dg.w * 0.5) / 2), oy: 8 - dg.h * 0.5 }; }
       if (k === 'hm9_parade_tribune') { var tg = finishH(paradeDeco('tribune'), 1); return { grid: tg, scale: 0.5, fw: 2, fh: 1, ox: 0, oy: 8 - tg.h * 0.5 + 0.5 }; }
