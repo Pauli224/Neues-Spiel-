@@ -90,14 +90,26 @@
         if (sid !== -1) { const s = sim._structs.get(sid); if (s && s.cityId !== -1 && s.cityId !== city.id) ok = false; }
       }
       allowed[y * bw + x] = ok ? 1 : 0;
-      if (!ok) continue;
-      let best = 1e9;
+    }
+    // [walls] Abstandsfläche: jede Kernkachel stempelt ihre Scheibe (r² ≤ m2) – O(Kern × Scheibe) statt O(Fläche × Kern),
+    // gleiches Ergebnis; nötig für Megastädte (Tausende Kernkacheln)
+    {
+      const mr = Math.floor(Math.sqrt(m2)), disc = [];
+      for (let dy = -mr; dy <= mr; dy++) for (let dx = -mr; dx <= mr; dx++) if (dx * dx + dy * dy <= m2) disc.push(dx, dy);
+      const seenCore = new Uint8Array(BN);
       for (let i = 0; i < core.length; i += 2) {
-        const ddx = core[i] - wx, ddy = core[i + 1] - wy;
-        const d = ddx * ddx + ddy * ddy;
-        if (d < best) { best = d; if (d === 0) break; }
+        const cx0 = core[i] - bx0, cy0 = core[i + 1] - by0;
+        if (cx0 < 0 || cy0 < 0 || cx0 >= bw || cy0 >= bh) continue;
+        const ci = cy0 * bw + cx0;
+        if (seenCore[ci]) continue;   // doppelte Kernkacheln (Gebäude + Reserve) nur einmal
+        seenCore[ci] = 1;
+        for (let k = 0; k < disc.length; k += 2) {
+          const x = cx0 + disc[k], y = cy0 + disc[k + 1];
+          if (x < 0 || y < 0 || x >= bw || y >= bh) continue;
+          const j = y * bw + x;
+          if (allowed[j]) R[j] = 1;
+        }
       }
-      if (best <= m2) R[y * bw + x] = 1;
     }
     // morphologisches Schließen (Scheibe r² ≤ 5)
     const K = [];
