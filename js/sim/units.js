@@ -167,7 +167,7 @@
   }
 
   function hitUnit(sim, att, t, dmg) {
-    if (WW.Military && (t.vehicle || (sim.state.mil && sim.state.mil.trenchN > 0))) dmg = WW.Military.armor(sim, att, t, dmg);   // [mil] Panzerung, Deckung im Graben
+    if (WW.Military && (t.vehicle || att.vehicle || (sim.state.mil && sim.state.mil.trenchN > 0))) dmg = WW.Military.armor(sim, att, t, dmg);   // [mil] Panzerung, Deckung im Graben
     t.hp -= dmg;
     if (t.foe < 0 && att.id != null) t.foe = att.id;
     if (t.hp <= 0) {
@@ -958,7 +958,7 @@
       for (let r = 1; r <= 3 && !ok; r++) for (let dy = -r; dy <= r && !ok; dy++) for (let dx = -r; dx <= r && !ok; dx++) {
         if (WW.Cities.canFoundAt(sim, sx + dx, sy + dy, u.race, md, k.id)) { x = sx + dx; y = sy + dy; ok = true; }
       }
-      if (!ok) { giveUp(); return; }
+      if (!ok || (home && WW.govNoSettle(k.gov))) { giveUp(); return; }   // inzwischen Faschismus: keine Gründung (9.10)
       const c = WW.Cities.found(sim, x, y, k.id, u.race);
       if (!c) { giveUp(); return; }
       const sk = home ? WW.Cities.stock(sim, home) : null;

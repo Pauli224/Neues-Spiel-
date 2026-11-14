@@ -87,7 +87,10 @@
   // Lagerstädte und Kriegsgefangene (js/sim/camps.js) – kritisch dargestellt; Insassen nur Kriegsgefangene und
   // politische Gefangene, nie nach Volk oder Kultur. Schnittstelle: Kopfkommentar von js/sim/camps.js.
   WW.CAMPS = {
-    GOVS: { fascism: 1, communism: 1 },   // Regime mit Lagerstädten (Tabelle, erweiterbar)
+    // Regime mit Lagerstädten (Tabelle, erweiterbar). eager: baut die Lagerstadt ohne Anlass, sobald Stufe, Platz und
+    // Vorräte reichen (Wunsch des Spielers, PLAN-9 9.10 E); sonst nur bei Anlass (Gefangene, Rebellen, Unzufriedenheit)
+    GOVS: { fascism: { eager: true }, communism: {} },
+    EAGER_PICKUP: 50,   // eager-Regime holen schon unter dieser Zufriedenheit Unzufriedene ab (ein Regime findet stets welche)
     MIN_TIER: 2,        // Anlass „Unzufriedene/Rebellen" erst, wenn das Regime eine Stadt dieser Stufe hat
     PLAN_EVERY: 120,    // Ticks je Planung (Gründung, Ausbau, Wachen, Haftorte)
     BUILD_EVERY: 40,    // Ticks je Bauschritt der Lagerstadt

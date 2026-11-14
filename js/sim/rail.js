@@ -46,7 +46,7 @@
 //   prisoners [Einheiten-IDs an Bord], guards (Zahl der mitfahrenden Wachen, nur Anzeige), camp (Lagerstadt-ID).
 //   Die Insassen steigen an der Rampe aus und gehen bewacht durchs Tor. Bleibt ein Gefangenenzug liegen (Gleis zerstört,
 //   Lager befreit oder erobert; liegengeblieben = über 8 Ticks vor einer Lücke), kommen die Insassen frei
-//   (WW.Camps.trainFreed). Niemand stirbt im Zug. Im Zug tragen Gefangene das Reich des Zugs (u.kingdomId), sonst −1.
+//   (WW.Camps.trainFreed). Niemand stirbt im Zug (Gefangene tragen kingdomId −1, auch während der Fahrt).
 // SCHNITTSTELLE: WW.Rail.tick(sim), defaults(st), ride(sim, u), lineOf(sim, id), path(sim, a, b), emitters(sim),
 //   campLineOf(sim, camp) -> fertige Strecke | null, prisonTrain(sim, camp, ids) -> Zug | null, guardTrain(sim, camp, u) -> bool
 // =============================================================================

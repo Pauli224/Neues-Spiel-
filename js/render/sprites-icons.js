@@ -981,6 +981,36 @@
       'DDDDDDJJDDvvDD',
       'JDDDDDDDDDWWDD',
       'DDDDJJDDDDDDDJ']);
+    icon('i_garrison', [
+      '......oTTu....',
+      '......oTTTT...',
+      '......oTt.....',
+      '..g.g.og.g.g..',
+      '..ggggoggggg..',
+      '..gqqqqqqqqG..',
+      '..gqoqqqqoqG..',
+      '..gqqqqqqqqG..',
+      '..gqqqooqqqG..',
+      '..gqqqooqqqG..',
+      '..GGGGooGGGG..',
+      'MMMMMMMMMMMMMM',
+      '.n.n.n.n.n.n..',
+      '..............']);
+    icon('i_occupied', [
+      '.o............',
+      '.oTTTTTu......',
+      '.oTTTTTTTu....',
+      '.oTTTTTTTT....',
+      '.oTtTTTTt.....',
+      '.ot..tt.......',
+      '.o............',
+      '.o............',
+      '.o.......lll..',
+      '.o......lglgl.',
+      '.o......lgggl.',
+      'gGgg....lllll.',
+      'GGGG..........',
+      '..............']);
     // ================================================================== Menü-Icons: Ton, Musik, Nacht, Wetter
     function speaker(g) { g.rect(1, 5, 3, 5, 'stoneL'); g.vline(3, 5, 5, 'stone'); for (var j = 0; j < 4; j++) g.vline(4 + j, 4 - j, 7 + j * 2, j === 3 ? 'stoneD' : 'stone'); g.set(4, 4, 'white'); }
     icon('i_sound_on', function (g) { speaker(g); g.vline(9, 5, 5, 'white'); g.set(10, 4, 'white'); g.set(10, 10, 'white'); g.vline(11, 3, 9, 'snowD'); g.set(12, 2, 'snowD'); g.set(12, 12, 'snowD'); g.vline(13, 3, 9, 'snowD'); });

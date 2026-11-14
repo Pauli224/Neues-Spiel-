@@ -46,6 +46,7 @@
     // × coverMelee; decay: jährlicher Abbau nach Naturmodus des Gebiets (care wächst am schnellsten zu)
     TRENCH: { dig: 45, cover: 60, coverRanged: 0.55, coverMelee: 0.85, decay: { care: 40, use: 24, exploit: 12, none: 24 } },
     CRATER: [150, 199],    // state.mark-Wert eines Granattrichters (Zufall im Bereich; zählt wie alle Marken herunter)
+    ENGINE_MUL: 0.3,       // Schaden von Panzern/Geschützen an Rammböcken und Katapulten
     WRECK_YEARS: 30, MAX_WRECKS: 80, MAX_SITES: 40,
     SITE_NEAR_CITY: 26,    // Ortsname nach Stadt, wenn eine im Umkreis liegt; sonst nach Gelände
 

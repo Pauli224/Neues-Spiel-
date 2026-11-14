@@ -18,6 +18,8 @@
 // -----------------------------------------------------------------------------
 // STADT
 //   city.kind        'town' (normale Stadt; fehlt bei ganz alten Ständen = 'town', wird nachgerüstet) | 'camp' (Lagerstadt)
+//   Gründung: Regime in WW.CAMPS.GOVS; mit eager (Faschismus) ohne Anlass, sobald Stufe/Platz/Vorräte reichen; sonst
+//   (Kommunismus) nur bei Anlass (Kriegsgefangene im Gefangenenlager, Rebellen, Zufriedenheit < UNHAPPY).
 //   Lagerstadt (kind 'camp'): gehört dem Regime (kingdomId), steht abseits der Hauptstadt (≥ CAMPS.MIN_CAP_DIST), bevorzugt
 //   bei Wald/Fels/Rohstoff/Gleis. Kein Zentrum (centerId -1, centerOk false), keine Häuser/Felder/Familien, kein
 //   natürliches Wachstum, keine Wahl/Abspaltung. cx, cy = rechte untere Kachel der Kommandantur (die 3×3-Fläche
@@ -56,6 +58,10 @@
 //     u.work (ID der Arbeitsstätte | -1), u.tx/u.ty (Ziel), u.powUntil (Jahr der vertraglichen Freilassung | 0).
 //     Heimweg ('home'): u.role bleibt 'prisoner' (ohne Waffe, Uniform nach u.pow); bei Ankunft wieder Soldat der Heimat.
 //   Wachen: normale Soldaten des Regimes mit cityId = Lagerstadt.
+//   Begleitwache: marschierende Gefangene (campState 'march') bekommen je bis zu 4 einen Soldaten des haltenden Reichs:
+//     Soldat u.ind 'escort', u.escortTo (Haftort-ID), u.escortN (Zahl der Begleiteten); Gefangener u.escort = Soldaten-ID.
+//     Die Wache läuft mit, danach Lagerwache (wenn welche fehlen) bzw. zurück in ihre Stadt. Fällt die Wache, sind die
+//     Gefangenen frei (Ereignis campEscortBeaten). Ohne freien Soldaten in der Nähe marschieren sie allein.
 // REICH
 //   kingdom.powsHeld  Anzahl Kriegsgefangener, die dieses Reich hält     kingdom.powsLost  eigene Soldaten in fremder Haft
 //   relations[id].grievance = 'liberation' (Kriegsgrund gegen Lager-Regime; js/sim/diplo.js wertet ihn aus)
@@ -179,7 +185,7 @@
     u.merc = false; u.work = -1; u.moving = false;
     u.hp = Math.max(4, Math.round(u.maxHp * 0.5));
     if (!o.march) { const p = centerXY(place); u.x = p.x; u.y = p.y; }
-    u.campVia = 0; u.train = 0;
+    u.campVia = 0; u.train = 0; u.escort = 0;
     // mit Gleisanschluss: erst zum Bahnhof der Mutterstadt, dann im Gefangenenzug zur Rampe
     if (o.march && place.kind === 'camp' && WW.Rail && WW.Rail.campTownStation) {
       const ts = WW.Rail.campTownStation(sim, place);
@@ -190,6 +196,58 @@
     if (place.kind === 'camp') { place.inmates = (place.inmates | 0) + 1; if (pow) place.pows = (place.pows | 0) + 1; }
     else place.inmates = (place.inmates | 0) + 1;
     if (place.kind === 'camp' && hk) fear(sim, hk);
+    if (o.march && hk) assignEscort(sim, u, place, hk);
+    return true;
+  }
+  // Begleitwache: 1 Soldat je bis zu 4 Gefangene (echte Einheit, läuft mit; besiegt = die Gefangenen sind frei)
+  function assignEscort(sim, u, place, hk) {
+    const st = sim.state;
+    let best = null, bd = 12 * 12;
+    for (const v of st.units) {
+      if (v.dead || v.kingdomId !== hk.id || v.role !== 'soldier') continue;
+      const d = dist2(v.x, v.y, u.x, u.y);
+      if (v.ind === 'escort') { if (v.escortTo === place.id && (v.escortN | 0) < 4 && d < 8 * 8) { best = v; break; } continue; }
+      if (v.ind || v.merc || v.vehicle || v.garrison != null && v.garrison >= 0 && d > 4) continue;
+      if (d < bd) { bd = d; best = v; }
+    }
+    if (!best) return null;
+    if (best.ind !== 'escort') {
+      best.ind = 'escort'; best.escortTo = place.id; best.escortN = 0; best.order = null; best.path = null; best.foe = -1; best.marchT = st.tick;
+    }
+    best.escortN = (best.escortN | 0) + 1;
+    u.escort = best.id;
+    return best;
+  }
+  // Begleitwache bewegen (Haken über WW.Industry.unit, u.ind 'escort'); true = selbst bewegt
+  function escort(sim, s) {
+    const st = sim.state;
+    let lead = null, n = 0;
+    for (const u of st.units) {
+      if (u.dead || u.role !== 'prisoner' || u.escort !== s.id) continue;
+      if (u.campState !== 'march') { u.escort = 0; continue; }
+      n++;
+      if (!lead || u.id < lead.id) lead = u;
+    }
+    s.escortN = n;
+    if (!lead) {
+      // abgeliefert: wird Lagerwache (fehlen Wachen) oder kehrt in die Garnison/Heimatstadt zurück
+      s.ind = null; s.escortTo = 0; s.escortN = 0; s.path = null;
+      const camp = sim._cities.get(s.escortToLast);
+      if (isCamp(camp) && camp.kingdomId === s.kingdomId && (camp.guards | 0) < (camp.guardsWant | 0)) { s.cityId = camp.id; camp.guards = (camp.guards | 0) + 1; }
+      s.order = { kind: 'home' };
+      return false;
+    }
+    s.escortToLast = s.escortTo;
+    const d2 = dist2(s.x, s.y, lead.x, lead.y);
+    if (d2 > 14 * 14) {   // Gefangene wurden übergesetzt: Wache folgt
+      const W = st.W, f = WW.Path.nearestFree(sim, Math.floor(lead.y) * W + Math.floor(lead.x), s.kingdomId, 3);
+      if (f >= 0) { s.x = (f % W) + 0.5; s.y = Math.floor(f / W) + 0.5; s.path = null; }
+      return true;
+    }
+    s.marchT = st.tick;
+    if (d2 > 2.2) walk(sim, s, Math.floor(lead.y) * st.W + Math.floor(lead.x), lead.x, lead.y);
+    else s.moving = false;
+    if (s.cd > 0) s.cd--;
     return true;
   }
   // Belegung inkl. Gefangener auf dem Weg
@@ -287,13 +345,29 @@
   // ---------------------------------------------------------------------------
   function unit(sim, u) {
     if (u.role !== 'prisoner') { u.ind = null; return false; }
-    if (u.kingdomId !== -1 && u.campState !== 'train') u.kingdomId = -1;   // alte Stände: Insassen trugen das Reich des Regimes
+    if (u.kingdomId !== -1) u.kingdomId = -1;   // alte Stände: Insassen trugen das Reich des Regimes
     if (u.hp < u.maxHp && ((sim.state.tick + u.id) & 63) === 0) u.hp++;   // Gefangene werden versorgt und erholen sich
     if (u.campState === 'home') { goHome(sim, u); return true; }
     const h = holdOf(sim, u);
     if (!h) { release(sim, u, null); return false; }
     if (h.type === 'laborcamp') { u.moving = false; return true; }   // alter Stand: Keimzelle wird gleich zur Lagerstadt
-    if (u.campState === 'march') { marchTo(sim, u, h); return true; }
+    if (u.campState === 'march') {
+      if (u.escort) {
+        const e = sim._units.get(u.escort);
+        if (!e || e.dead || e.role !== 'soldier' || e.ind !== 'escort') {
+          // Begleitwache besiegt (oder abgezogen): die Gefangenen sind frei
+          const was = !e || !!e.dead;   // (tote Einheiten verschwinden bald aus der Liste)
+          u.escort = 0;
+          if (was) {
+            release(sim, u, null, u.pow < 0);
+            const c = nearestTown(sim, u.x, u.y);
+            if (c && sim.state.year - (c.campEscY == null ? -99 : c.campEscY) >= 2) { c.campEscY = sim.state.year; chron(sim, 'campEscortBeaten', { city: c.name }, c, 'Die Wache fiel, die Gefangenen sind frei'); }
+            return true;
+          }
+        }
+      }
+      marchTo(sim, u, h); return true;
+    }
     if (u.campState === 'wait') { waitTrain(sim, u, h); return true; }
     if (u.campState === 'train') { onTrain(sim, u); return true; }
     held(sim, u, h);
@@ -371,8 +445,11 @@
   function onTrain(sim, u) {
     const tr = sim.state.trains.find((t) => t.id === u.train && t.kind === 'prison');
     if (!tr) { u.campState = 'march'; u.campVia = 0; u.train = 0; u.marchT = sim.state.tick; u.kingdomId = -1; unstick(sim, u); return; }
-    // im Zug unter der Aufsicht des Regimes (fährt durch dessen Gleistore); Reich nur für die Fahrt
-    u.x = tr.x; u.y = tr.y; u.moving = false; u.kingdomId = tr.kingdomId;
+    // fährt mit (gehört keinem Reich: stirbt nie mit einem aufgelösten Reich); über einem Gleistor bleibt die Figur
+    // eine Kachel zurück (hinterer Wagen), damit sie nie auf einem Tor steht
+    const W = sim.state.W, i = Math.floor(tr.y) * W + Math.floor(tr.x);
+    if (!sim.block[i]) { u.x = tr.x; u.y = tr.y; }
+    u.moving = false; u.kingdomId = -1;
   }
   // nie auf Mauer/Tor stehen bleiben (nach Aussteigen, Befreiung, Ankunft)
   function unstick(sim, u) {
@@ -526,6 +603,11 @@
     WW.Units.bubble(u, 'heart', 60);
     if (WW.Mods) WW.Mods.add(c, { key: 'happiness', add: C().HOME_JOY, until: sim.state.tick + 3 * TPY(), source: 'powhome', name: 'Heimkehr der Kriegsgefangenen' });
     c.powHomeN = (c.powHomeN | 0) + 1;
+  }
+  function nearestTown(sim, x, y) {
+    let c = null, bd = 1e18;
+    for (const t of sim.state.cities) { if (t.dead || t.kind === 'camp') continue; const d = dist2(t.cx, t.cy, x, y); if (d < bd) { bd = d; c = t; } }
+    return c;
   }
   // wird freier Bürger der nächsten Stadt (Heimat verloren) bzw. von city
   function settle(sim, u, city) {
@@ -1182,7 +1264,10 @@
       const big = towns.some((c) => c.tier >= cfg.MIN_TIER && c.centerOk);
       const pows = stockadesOf(sim, k).some((s) => inmatesOf(sim, s).length > 0);
       const unrest = big && towns.some((c) => c.revolt || (c.jobs && c.jobs.rebel > 0) || c.happiness < cfg.UNHAPPY);
-      if (!pows && !unrest) continue;
+      // Faschismus (eager): ohne Anlass, sobald eine Stadt groß genug ist und die Kosten der Keimzelle da sind
+      const eager = !!(cfg.GOVS[k.gov] && cfg.GOVS[k.gov].eager) && big &&
+        towns.some((c) => c.tier >= cfg.MIN_TIER && c.centerOk && WW.Cities.canPay(sim, c, WW.Structs.costFor(sim, 'laborcamp', 1, c.id)));
+      if (!pows && !unrest && !eager) continue;
       if (!found(sim, k, null)) k.campNext = st.tick + TPY();
     }
   }
@@ -1196,8 +1281,9 @@
       // Abholung Unzufriedener (Auswahl nur nach Lage und Beruf, nie nach Herkunft)
       if (camp.cap > 0 && load(sim, camp) < camp.cap && hh(s0 ^ camp.id, st.year) < cfg.PICKUP) {
         let total = 0;
+        const limit = cfg.GOVS[k.gov] && cfg.GOVS[k.gov].eager ? cfg.EAGER_PICKUP : cfg.UNHAPPY;
         for (const c of townsOf(sim, k)) {
-          if (c.happiness >= cfg.UNHAPPY) continue;
+          if (c.happiness >= limit) continue;
           const cand = st.units.filter((u) => !u.dead && u.cityId === c.id && !u.ind && !u.order && (u.role === 'farmer' || u.role === 'lumberjack' || u.role === 'miner'));
           const n = Math.min(cand.length, 1 + Math.floor(hh(s0 ^ c.id, st.year) * 3), camp.cap - load(sim, camp));
           cand.sort((a, b) => hh(a.id, st.year) - hh(b.id, st.year));
@@ -1256,7 +1342,8 @@
   WW.Camps = {
     tick: tick, defaults: defaults, unit: unit, capture: capture, onPeace: onPeace, cityUpdate: cityUpdate,
     campsOf: campsOf, stockadesOf: stockadesOf, inmatesOf: inmatesOf, holdOf: holdOf, liberate: liberate, intern: intern,
-    found: found, grow: grow, uprising: uprising, isRegime: isRegime, count: count, unload: unload, trainFreed: trainFreed, surrender: surrender
+    found: found, grow: grow, uprising: uprising, isRegime: isRegime, count: count, unload: unload, trainFreed: trainFreed, surrender: surrender,
+    escort: escort
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

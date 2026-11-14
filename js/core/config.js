@@ -68,7 +68,9 @@
     { key: 'town', name: 'Stadt', nameA: 'eine Stadt', minPop: 20 },
     { key: 'city', name: 'Großstadt', nameA: 'eine Großstadt', minPop: 40 },
     { key: 'metro', name: 'Metropole', nameA: 'eine Metropole', minPop: 110 },
-    { key: 'world', name: 'Weltstadt', nameA: 'eine Weltstadt', minPop: 220 }
+    { key: 'world', name: 'Weltstadt', nameA: 'eine Weltstadt', minPop: 220 },
+    { key: 'megacity', name: 'Megastadt', nameA: 'eine Megastadt', minPop: 350, govs: ['fascism'] },     // 9.10
+    { key: 'gigacity', name: 'Riesenstadt', nameA: 'eine Riesenstadt', minPop: 550, govs: ['fascism'] }
   ];
 
   // ---------------------------------------------------------------------------
@@ -134,8 +136,9 @@
       desc: 'Alles ist geregelt, sogar die Freude, und die ist leider gestrichen.',
       pros: ['Sehr viele Soldaten', 'Mauern ab 6 Einw. und +50 % schneller', 'Arbeit +15 % (Zwang)'],
       cons: ['Zufriedenheit −25', 'Widerstand und Aufstände', 'Keiner mag das Regime', 'Keine Märkte, besetzte Städte murren'],
-      wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.3, aggression: 0.9,
-      war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3 },
+      wallThreshold: 6, wallSpeedMul: 1.5, workMul: 1.15, happiness: -25, soldierShare: 0.36, aggression: 0.9,
+      unitHpMul: 1.2, unitDmgMul: 1.2, megaHousing: true, megaGrowth: 1.4, housesPerFlur: 2.6,   // Ausbildung, Megastadt (9.10)
+      war: 'mass', soldierMul: 1, build: { barracks: { first: 9, per: 12, max: 4 }, market: { first: 99, per: 99, max: 0 }, monument: { first: 12, per: 25, max: 2 }, towerSpacing: 3, noSettle: true },
       looks: { center: 'Kommandantur (grauer Betonklotz mit Bannern)', wall: 'Beton mit Stacheldraht, eckige Wachtürme, Schlagbaum', house: 'graue Einheitsblöcke', monument: 'Propagandaturm mit Lautsprechern' },
       cityLimit: 4, landReach: 2,
       nature: 'exploit', landSpeed: 1.6
@@ -190,13 +193,23 @@
       nature: 'care', landSpeed: 0.6
     }
   };
+  // Garnisonen (9.10): cap = höchster Loyalitätsgewinn bei voller Garnison, integ = Jahre bis zur Eingliederung Eroberter,
+  // share = Soll-Anteil der Einwohner in besetzten Städten (sonst ein Drittel davon, ab 30 Einwohnern)
+  const GARRISON = {
+    tribe: { cap: 15, integ: 8, share: 0.10 }, monarchy: { cap: 30, integ: 10, share: 0.12 }, democracy: { cap: 12, integ: 4, share: 0.08 },
+    fascism: { cap: 45, integ: 60, share: 0.16 }, communism: { cap: 35, integ: 15, share: 0.13 }, theocracy: { cap: 25, integ: 8, share: 0.10 },
+    republic: { cap: 20, integ: 5, share: 0.09 }, anarchy: { cap: 0, integ: 6, share: 0 }
+  };
   WW.GOVERNMENTS = {};
   for (const k of WW.GOV_KEYS) {
     const g = Object.assign({ key: k }, GOV_BASE, G[k]);
     g.build = Object.assign({}, GOV_BASE.build, G[k].build || {});
+    g.garrison = GARRISON[k] || GARRISON.tribe;
     WW.GOVERNMENTS[k] = Object.freeze(g);
   }
   // Wie viele Gebäude eines Typs erlaubt diese Regierung bei pop Einwohnern?
+  WW.govNoSettle = function (govKey) { const g = WW.GOVERNMENTS[govKey]; return !!(g && g.build.noSettle); };
+  WW.tierAllowed = function (tier, govKey) { const t = WW.CITY_TIERS[tier]; return !!t && (!t.govs || t.govs.indexOf(govKey) >= 0); };
   WW.govBuildCount = function (govKey, type, pop) {
     const b = (WW.GOVERNMENTS[govKey] || WW.GOVERNMENTS.tribe).build[type];
     if (!b || !b.max || pop < b.first) return 0;
@@ -290,7 +303,8 @@
     center:   { name: 'Zentrum', w: 3, h: 3, core: true, inside: true, work: 200, hp: [360, 360, 360], cost: [{ wood: 12 }], burn: 0.3,
                 stageNames: ['Lager', 'Dorfhalle', 'Regierungssitz'], stageHp: [160, 260, 360],
                 stageCost: [{ wood: 14 }, { wood: 18, stone: 14 }], stageWork: [110, 260], stageTier: [1, 2], stageMinYears: [5, 8] },
-    house:    { name: 'Haus', w: 2, h: 2, core: true, inside: true, work: 70, hp: [50, 90, 140], cost: [{ wood: 5 }, { wood: 4, stone: 5 }, { wood: 4, stone: 8 }], burn: 1,
+    house:    { name: 'Haus', w: 2, h: 2, core: true, inside: true, work: 70, hp: [50, 90, 140, 220, 320], cost: [{ wood: 5 }, { wood: 4, stone: 5 }, { wood: 4, stone: 8 }, { wood: 4, stone: 14 }, { wood: 6, stone: 20 }], burn: 1,   // Stufe 4/5: Wohnblöcke (megaHousing)
+               
                 tent: { name: 'Zelt', hp: 25, cost: { wood: 2 }, work: 26, cap: 2 } },   // Haus-Stufe 0
     field:    { name: 'Feld', w: 1, h: 1, work: 22, hp: [20], cost: [{}], burn: 1 },
     lumber:   { name: 'Holzfällerhütte', w: 2, h: 2, work: 60, hp: [60], cost: [{ wood: 4 }], burn: 1 },
@@ -308,6 +322,8 @@
   WW.STRUCT_INFO.smithy  = { name: 'Schmiede', w: 2, h: 2, core: true, inside: true, work: 110, hp: [140], cost: [{ wood: 6, stone: 8 }], burn: 0.5 };
   WW.STRUCT_INFO.fishery = { name: 'Fischerei', w: 2, h: 2, work: 60, hp: [70], cost: [{ wood: 8 }], burn: 1 };
   WW.STRUCT_INFO.pasture = { name: 'Weide', w: 2, h: 2, work: 40, hp: [40], cost: [{ wood: 6 }], burn: 0.6 };
+  // Garnisonskaserne (9.10): verstärkt die Wirkung der Garnison
+  WW.STRUCT_INFO.garrison = { name: 'Garnisonskaserne', w: 2, h: 2, core: true, inside: true, work: 120, hp: [220], cost: [{ wood: 8, stone: 8 }], burn: 0.4 };
   // Kultur-Sonderbauten (Ausbau 9)
   WW.STRUCT_INFO.caravanserai = { name: 'Karawanserei', w: 2, h: 2, core: true, inside: true, work: 120, hp: [150], cost: [{ wood: 6, stone: 4, gold: 30 }], burn: 0.3, culture: 'sahel' };
   WW.STRUCT_INFO.pyramid = { name: 'Pyramide', w: 1, h: 1, core: true, inside: true, work: 140, hp: [180, 300, 450], cost: [{ stone: 10 }, { stone: 14 }, { stone: 20 }], burn: 0, culture: 'nil' };   // level 1..3, stage 0..2

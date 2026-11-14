@@ -121,12 +121,21 @@ test('1 Gründung nur mit Anlass und nur bei Regimen; Gesetz aus = keine', funct
     const d = Math.hypot(camp.cx - o.c.cx, camp.cy - o.c.cy);
     assert(d >= WW.CAMPS.MIN_CAP_DIST, 'Lagerstadt zu nah an der Hauptstadt: ' + d.toFixed(1));
   }
-  // ohne Anlass (zufriedene Stadt, kein Krieg, keine Rebellen): keine Lagerstadt
-  const calm = city('fascism');
+  // ohne Anlass (zufriedene Stadt, kein Krieg, keine Rebellen): Kommunismus baut keine Lagerstadt …
+  const calm = city('communism');
   WW.Mods.add(calm.c, { key: 'happiness', add: 60, source: 'test', name: 'Test: Feststimmung' });
   years(calm, 20);
-  log('zufriedenes Regime: Zufriedenheit', Math.round(calm.c.happiness), 'Lagerstädte', campCities(calm.sim).length);
-  assert(!campCities(calm.sim).length && !seeds(calm.sim).length, 'Lagerstadt ohne Anlass');
+  log('zufriedener Kommunismus: Zufriedenheit', Math.round(calm.c.happiness), 'Lagerstädte', campCities(calm.sim).length);
+  assert(!campCities(calm.sim).length && !seeds(calm.sim).length, 'Kommunismus: Lagerstadt ohne Anlass');
+  // … der Faschismus schon (eager: „wenn sie es können"), sobald Stufe, Platz und Vorräte reichen
+  assert(WW.CAMPS.GOVS.fascism.eager && !WW.CAMPS.GOVS.communism.eager, 'Tabelle eager');
+  const fx = city('fascism');
+  WW.Mods.add(fx.c, { key: 'happiness', add: 60, source: 'test', name: 'Test: Feststimmung' });
+  const yf = years(fx, 30, () => campCities(fx.sim).length > 0);
+  log('zufriedener Faschismus: Lagerstadt nach', yf, 'Jahren, Zufriedenheit', Math.round(fx.c.happiness), '| Stufe', fx.c.tier);
+  assert(campCities(fx.sim).length, 'Faschismus baut ohne Anlass keine Lagerstadt');
+  const ins = prisoners(fx.sim);
+  assert(ins.every((u) => u.pow >= 0 || u.origK === fx.k.id), 'Insassen falscher Herkunft');
   for (const g of ['tribe', 'democracy', 'monarchy', 'republic', 'theocracy', 'anarchy']) {
     const o = city(g, { unhappy: true });
     years(o, 15);
@@ -185,8 +194,16 @@ test('3 Kriegsgefangene: Regime -> Lagerstadt (Zwangsarbeit), andere -> Gefangen
   const moved = p1.filter((u, i) => Math.hypot(u.x - x0[i][0], u.y - x0[i][1]) > 0.3).length;
   log('nach 40 Ticks unterwegs', moved, '/ 5, größter Schritt', maxStep.toFixed(2), 'Kacheln');
   assert(moved >= 4 && maxStep < 0.5, 'Gefangene marschieren nicht zu Fuß');
+  // sichtbare Begleitwache: echte Soldaten des Regimes laufen mit
+  const escIds = [...new Set(p1.map((u) => u.escort).filter(Boolean))];
+  const escs = escIds.map((id) => sim._units.get(id));
+  log('Begleitwachen', escs.length, escs.map((e) => e.role + '/' + e.ind + '/Reich ' + e.kingdomId).join(', '));
+  assert(escs.length >= 1 && escs.length <= 2 && escs.every((e) => e.role === 'soldier' && e.ind === 'escort' && e.kingdomId === W.A.id), 'keine Begleitwache');
+  const e0 = escs.map((e) => [e.x, e.y]);
   let t = 0;
   for (; t < 3000 && !p1.every((u) => u.campState === 'held'); t += 20) run(sim, 20);
+  log('Begleitwachen nach Ankunft:', escs.map((e, i) => (e.dead ? 'tot' : e.ind || 'frei') + ' ' + Math.round(Math.hypot(e.x - e0[i][0], e.y - e0[i][1])) + ' Kacheln gelaufen').join(', '));
+  assert(escs.every((e) => e.dead || (e.ind !== 'escort' && e.role === 'soldier')), 'Begleitwache bleibt hängen');
   if (!p1.every((u) => u.campState === 'held')) log('Stand:', p1.map((u) => [u.dead ? 'tot' : u.role, u.campState, u.x.toFixed(1), u.y.toFixed(1), u.fails, u.path ? u.path.length : '-'].join(' ')).join(' | '), 'Lager', W.camp.cx, W.camp.cy, W.camp.kind, '| Chronik', evs(sim, /^(pow|camp|peace|god)/).map((e) => e.year + ':' + e.type).join(','), '| B lebt', !!sim._kingdoms.get(W.B.id));
   log('angekommen nach', t, 'Ticks; Insassen', W.camp.inmates, 'davon Kriegsgefangene', W.camp.pows, '| Herkunft', JSON.stringify(W.camp.powFrom));
   assert(p1.every((u) => u.campState === 'held' && (u.work >= 0 || sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id)), 'nicht im Lager angekommen');
@@ -480,6 +497,35 @@ test('11 Gleisanschluss: Rampe vor dem Tor, Güterzug liefert ab, Gefangenenzug 
   log('Befreiung unterwegs: an Bord', aboard.length, ', frei', freed, '| Chronik', evs(sim, /^campTrain/).map((e) => e.type).join(','));
   assert(aboard.length >= 1 && freed === aboard.length && evs(sim, /^campTrainFreed$/).length, 'Befreiung unterwegs fehlt');
   assert(st.units.every((u) => u.dead || u.role !== 'prisoner' || u.campState !== 'train' || st.trains.some((x) => x.id === u.train)), 'Gefangene in Zug ohne Zug');
+});
+
+// -----------------------------------------------------------------------------
+test('12 Begleitwache besiegt: die Gefangenen sind frei; niemand stirbt bei Auflösung des haltenden Reichs', function () {
+  const W = warWorld('fascism', 'democracy', { seed: 6 });
+  const sim = W.sim;
+  sim.actions.setLaw('industry', false);
+  sim.actions.setRelation(W.A.id, W.B.id, 'war');
+  const p = takePows(sim, W.A, W.B, 3);
+  const esc = sim._units.get(p[0].escort);
+  assert(esc && esc.ind === 'escort', 'keine Begleitwache');
+  run(sim, 30);
+  WW.Units.kill(sim, esc, 'battle');   // die Wache fällt im Gefecht
+  run(sim, 20);
+  const freed = p.filter((u) => u.escort !== 0 || u.role !== 'prisoner' || u.campState === 'home');
+  log('Wache gefallen: frei', p.filter((u) => u.role !== 'prisoner' || u.campState === 'home').length, '/ 3 | Chronik', evs(sim, /^campEscortBeaten$/).length);
+  assert(p.filter((u) => u.escort === esc.id || (u.role === 'prisoner' && u.campState !== 'home')).every((u) => u.escort !== esc.id), 'Gefangene hängen an toter Wache');
+  assert(p.filter((u) => u.escort === 0).every((u) => u.role !== 'prisoner' || u.campState === 'home') || p.some((u) => u.escort && u.escort !== esc.id), 'Gefangene nicht frei');
+  assert(evs(sim, /^campEscortBeaten$/).length, 'keine Chronik zur geschlagenen Wache');
+  void freed;
+  // haltendes Reich wird aufgelöst: Insassen (auch im Lager) überleben und kommen frei
+  const p2 = takePows(sim, W.A, W.B, 3);
+  run(sim, 200);
+  const alive0 = p2.filter((u) => !u.dead).length;
+  WW.Gov.removeKingdom(sim, W.A, true);
+  run(sim, 260);
+  log('Reich aufgelöst: Gefangene lebend', p2.filter((u) => !u.dead).length, '/', alive0, '| noch gefangen', p2.filter((u) => !u.dead && u.role === 'prisoner' && u.campState !== 'home').length);
+  assert(p2.filter((u) => !u.dead).length === alive0, 'Gefangene sterben mit dem Reich');
+  assert(p2.every((u) => u.dead || u.role !== 'prisoner' || u.campState === 'home'), 'Gefangene nach Auflösung nicht frei');
 });
 
 // -----------------------------------------------------------------------------

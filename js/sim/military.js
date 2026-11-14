@@ -676,6 +676,7 @@
       else m = T.armor * (t.simple ? M().SIMPLE.armorMul : 1);
       return dmg * m;
     }
+    if (att && att.vehicle && (t.role === 'ram' || t.role === 'catapult')) dmg *= M().ENGINE_MUL;   // Belagerungsgerät ist zäh: Belagerungen bleiben möglich
     const mil = st.mil;
     if (mil && mil.trenchN > 0 && st.trench) {
       const tx = Math.floor(t.x), ty = Math.floor(t.y);

@@ -8,7 +8,7 @@
 // LADEREIHENFOLGE: js/core/config-industry.js direkt nach js/core/config.js, js/data/texts-industry.js direkt
 //   nach js/data/texts.js, dann js/sim/industry.js, js/sim/rail.js, js/sim/camps.js unmittelbar vor js/sim/sim.js
 //   (nach powers.js/events.js). Bahn: Kopf von js/sim/rail.js, Arbeitslager: Kopf von js/sim/camps.js.
-// HAKEN in js/sim/units.js (markiert // [industry]): updateAll überspringt Einheiten mit u.ind ('train'|'camp') ->
+// HAKEN in js/sim/units.js (markiert // [industry]): updateAll überspringt Einheiten mit u.ind ('train'|'camp'|'escort') ->
 //   WW.Industry.unit; hitUnit -> WW.Camps.capture; hostile: role 'prisoner' ist nie Ziel.
 //
 // WELTGESETZ 'industry' (WW.LAW_INFO, Standard an): aus = keine neuen Fabriken, alle vorhandenen ruhen (active
@@ -859,10 +859,11 @@
   WW.Industry = {
     tick: tick, defaults: defaults, save: save, load: load, dims: dims, at: at, specFor: specFor, tryBuild: tryBuild,
     clean: clean, factories: factories, emission: emission, kindVars: kindVars, hookPowers: hookPowers, findSpot: findSpot,
-    // Haken aus js/sim/units.js (markiert): Einheiten mit u.ind ('train' | 'camp') bewegen Bahn bzw. Lager selbst
+    // Haken aus js/sim/units.js (markiert): Einheiten mit u.ind ('train' | 'camp' | 'escort') bewegen Bahn bzw. Lager selbst
     unit: function (sim, u) {
       if (u.ind === 'train') return WW.Rail ? WW.Rail.ride(sim, u) : (u.ind = null, false);
       if (u.ind === 'camp') return WW.Camps ? WW.Camps.unit(sim, u) : (u.ind = null, false);
+      if (u.ind === 'escort') return WW.Camps && WW.Camps.escort ? WW.Camps.escort(sim, u) : (u.ind = null, false);
       return false;
     }
   };

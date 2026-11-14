@@ -256,6 +256,37 @@
 //   state.grazed Uint8 (W*H, gespeichert): 1 = sichtbar abgeweidet, mit Hysterese (an ab CONFIG.GRAZED_ON 170, aus unter
 //     GRAZED_OFF 90; nur fruchtbares Gelände). Darstellung bitte st.grazed[i] statt graze[i] >= 128 lesen (auch in groundSig),
 //     sonst passen gezeichnete Beweidung und Meldungen nicht zusammen.
+//
+// AUSBAU 9.10 – FASCHISMUS STÄRKER, MEGASTÄDTE, GARNISONEN (verbindlich für Darstellung, Militär, Seefahrt, Mauern)
+// KEINE SIEDLUNGSGRÜNDUNG
+//   WW.GOVERNMENTS[g].build.noSettle === true (Faschismus): keine Tochterstädte/Siedlertrupps, auch nicht über See (Seefahrt
+//     bitte diese Marke lesen). Vom Spieler gesetzte Siedler und Lagerstädte bleiben erlaubt. Hilfe: WW.govNoSettle(govKey).
+// MEGASTADT
+//   WW.CITY_TIERS[6] = { key 'megacity', name 'Megastadt', minPop 350, govs ['fascism'] }, [7] = { key 'gigacity', 'Riesenstadt',
+//     minPop 550, govs ['fascism'] }. Stufen mit govs gelten nur für diese Regierungen (WW.tierAllowed(tier, govKey)); city.tier 0..7.
+//     Fällt die Regierung, sinkt die Stufe auf höchstens 5.
+//   Wohnblöcke: house.level 4 und 5 (nur Regierungen mit megaHousing, also Faschismus; ab Stufe Metropole bzw. Megastadt),
+//     Plätze je Haus WW.Cities.HOUSE_CAP = [3, 5, 8, 14, 22]. Sprites: s_house_<gov>_4/5 (bis dahin zeigt die Grafik Stufe 3).
+//   Faschismus: gov.megaGrowth (Geburten/Zuzug ×1,4 ab Großstadt), gov.housesPerFlur (mehr Häuser je Flur).
+//   Weltobergrenze Einwohner WW.CONFIG.MAX_UNITS (siehe Messwerte im Bericht).
+// GARNISONEN (alle Regierungen außer Anarchie; Werte WW.GOVERNMENTS[g].garrison { cap (Loyalität max.), integ (Jahre bis zur
+//   Eingliederung), share (Soll-Anteil besetzt) })
+//   u.garrison = Stadt-ID | undefined: Soldat dieser Stadt fest zugeteilt; bleibt in/bei der Stadt, besetzt Mauer/Tore, wird nie
+//     zum Marsch, zu Feldschlachten oder Zügen eingeteilt (Militär/Seefahrt: Einheiten mit u.garrison überspringen).
+//     Unterwegs zur Stadt: u.order = { kind: 'garrison', city }.
+//   city.garrison (Anzahl, alle 40 Ticks gezählt), city.garrisonWant (Soll aus Einwohnern, Unruhe, Besatzung, Kaserne),
+//     city.garrisonSet (Spieler-Vorgabe | null = selbst), city.garrisonRatio 0..1 (Ist/Soll, für die Anzeige).
+//   city.occupied = { since: Jahr, prev: früheres Reich } | null: eroberte Stadt. Besatzungsmalus auf die Loyalität
+//     (-35 × (1 − Jahre/integ)), klingt je Regierung ab (Demokratie 4 J., Handelsrepublik 5, Stamm 8, Theokratie 8, Monarchie 10,
+//     Kommunismus 15, Faschismus 60 = praktisch nie). Danach city.occupied = null (Ereignis integrated).
+//   Wirkung: Loyalität + cap × Ist/Soll (Faschismus 45, Kommunismus 35, Monarchie 30, Theokratie 25, Handelsrepublik 20, Stamm 15,
+//     Demokratie 12, Anarchie 0); fehlende Garnison in besetzter Stadt -20 × Fehlanteil; Aufstands-Vorhaben wachsen mit
+//     Garnison langsamer.
+//   Bauwerk 'garrison' („Garnisonskaserne“, 2×2, core): +50 % Wirkung, Soll +4. Wird in besetzten Städten mit Soll ≥ 6 gebaut.
+//   Eroberung: bis zum Soll bleiben Eroberer als Garnison; danach schickt die Hauptstadt (bzw. nächste eigene Stadt) Soldaten nach.
+//   sim.actions.setGarrison(cityId, n) -> bool   n ≥ 0 feste Stärke (0 = abziehen), n = null/-1 -> wieder selbst
+//   Ereignisse: garrisonSent, garrisonWithdrawn, integrated, garrisonLow.
+// FASCHISMUS STÄRKER: soldierShare 0,36, unitDmgMul/unitHpMul erhöht (Ausbildung), Wehrpflicht im Krieg; Schwächen bleiben.
 // =============================================================================
 (function (WW) { 'use strict';
 

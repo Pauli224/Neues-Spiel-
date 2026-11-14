@@ -2,7 +2,7 @@
 (function (WW) { 'use strict';
 
   const WORKERS = { farmer: 1, lumberjack: 1, miner: 1, builder: 1, soldier: 1 };
-  const HOUSE_CAP = [3, 5, 8];
+  const HOUSE_CAP = [3, 5, 8, 14, 22];   // Stufe 4/5: Wohnblöcke der Megastadt (megaHousing)
   // 16 Richtungen als feste Tabelle (kein sin/cos in der Simulation)
   const DIRS16 = [[1, 0], [0.924, 0.383], [0.707, 0.707], [0.383, 0.924], [0, 1], [-0.383, 0.924], [-0.707, 0.707], [-0.924, 0.383],
     [-1, 0], [-0.924, -0.383], [-0.707, -0.707], [-0.383, -0.924], [0, -1], [0.383, -0.924], [0.707, -0.707], [0.924, -0.383]];
@@ -153,7 +153,7 @@
     else if (s.type === 'house') {
       c._houses++;
       if (s.built) c._bh++;
-      if (s.built) c._cap += (s.level === 0 ? WW.STRUCT_INFO.house.tent.cap : HOUSE_CAP[Math.max(0, Math.min(2, s.level - 1))]) + (WW.RACES[c.race] || WW.RACES.human).housingBonus;
+      if (s.built) c._cap += (s.level === 0 ? WW.STRUCT_INFO.house.tent.cap : HOUSE_CAP[Math.max(0, Math.min(4, s.level - 1))]) + (WW.RACES[c.race] || WW.RACES.human).housingBonus;
     } else if (s.type === 'barracks') c._barr = true;
     else if (s.type === 'market') { c._mark = true; if (s.built) c._markets = (c._markets || 0) + 1; }
     else if (s.type === 'monument') c._mon = true;
@@ -206,7 +206,7 @@
     const g = gov(sim, city);
     const k = kingdomOf(sim, city);
     const race = WW.RACES[city.race] || WW.RACES.human;
-    const workers = city._members.filter(u => WORKERS[u.role] && !u.merc && !u.order);
+    const workers = city._members.filter(u => WORKERS[u.role] && !u.merc && !u.order && !u.garrison);   // Garnison arbeitet nicht
     const n = workers.length;
     if (!n) return;
     const st = stock(sim, city);
@@ -532,7 +532,7 @@
     const open = countSites(sim, city, true);
     const maxOpen = 2 + city.tier;
     // Häuser
-    const houseCap = 2 + Math.floor((city.flurs || 1) * WW.CONFIG.HOUSES_PER_FLUR);
+    const houseCap = 2 + Math.floor((city.flurs || 1) * (g.housesPerFlur || WW.CONFIG.HOUSES_PER_FLUR));
     if (open < maxOpen && city.pop + 2 >= city.housing && city.houses >= houseCap) {
       // wer wachsen will, muss Land nehmen; bis dahin Häuser aufstocken
       city.needLand = true;
@@ -626,11 +626,13 @@
   }
 
   function upgradeHouse(sim, city, sk) {
+    const megaOk = !!gov(sim, city).megaHousing;
     const ctr = sim._structs.get(city.centerId);
     const stage = ctr ? (ctr.stage || 0) : 0;
     let best = null;
     for (const s of sim.state.structs) {
-      if (s.dead || s.cityId !== city.id || s.type !== 'house' || !s.built || s.upgradeTo || s.level >= 3) continue;
+      if (s.dead || s.cityId !== city.id || s.type !== 'house' || !s.built || s.upgradeTo) continue;
+      if (s.level >= 3 && !(megaOk && (s.level === 3 ? city.tier >= 4 : (s.level === 4 && city.tier >= 6)))) continue;   // Wohnblöcke
       if (s.level === 0 && stage < 1) continue;          // Zelte erst mit der Dorfhalle aufwerten
       if (s.level >= 1 && city.tier < 1) continue;
       if (s.level === 2 && city.tier < 2) continue;
@@ -738,6 +740,7 @@
     if (city.pop < city.housing && st.units.length < WW.CONFIG.MAX_UNITS && city.centerOk) {
       const race = WW.RACES[city.race] || WW.RACES.human;
       let p = WW.CONFIG.BIRTH_RATE * city.adults * WW.SimUtil.mod(sim, k, city, 'growth', g.growthMul) * race.fertility;
+      if (g.megaGrowth && city.tier >= 3) p *= g.megaGrowth;   // Megastadt (9.10)
       if (sk.food < city.pop * 0.6) p *= 0.15;
       if (city.happiness < 30) p *= 0.4;
       if (city.hungry) p = 0;
@@ -753,7 +756,9 @@
     }
     // Stadtstufe
     let tier = 0;
-    for (let i = 0; i < WW.CITY_TIERS.length; i++) if (city.pop >= WW.CITY_TIERS[i].minPop) tier = i;
+    const tgk = (kingdomOf(sim, city) || { gov: 'tribe' }).gov;
+    for (let i = 0; i < WW.CITY_TIERS.length; i++) if (city.pop >= WW.CITY_TIERS[i].minPop && WW.tierAllowed(i, tgk)) tier = i;
+    if (!WW.tierAllowed(city.tier, tgk)) city.tier = tier;   // Regierung kennt die Megastufen nicht (mehr)
     if (tier > city.tier) {
       city.tier = tier;
       claimTerritory(sim, city);
@@ -813,6 +818,7 @@
     const st = sim.state;
     const k = kingdomOf(sim, city);
     if (!k || k.cityIds.length >= WW.Growth.cityLimit(sim, k) + 2) return;
+    if (WW.govNoSettle(k.gov)) return;   // Faschismus gründet keine Dörfer (9.10)
     const site = findSettleSite(sim, city);
     city.lastSettlers = st.year;
     if (!site) return;
@@ -930,7 +936,7 @@
       const leaderOk = k && (g.noLeader || (sim._units.get(k.leaderId) && !sim._units.get(k.leaderId).dead));
       // Tochterstädte erst, wenn die Mutterstadt Stadt ist und ihre Reichweite ausgeschöpft hat (das Reich wächst zuerst flächig)
       const landDone = city.landFull || (city.flurs || 0) >= WW.Growth.flurTarget(sim, city) * 0.75;
-      if (city.tier >= 2 && landDone && city.adults >= WW.CONFIG.DAUGHTER_ADULTS && leaderOk && !WW.Diplo.atWar(sim, k.id) && st.year - city.lastSettlers >= 4 && city.centerOk) sendSettlers(sim, city);
+      if (city.tier >= 2 && landDone && !g.build.noSettle && city.adults >= WW.CONFIG.DAUGHTER_ADULTS && leaderOk && !WW.Diplo.atWar(sim, k.id) && st.year - city.lastSettlers >= 4 && city.centerOk) sendSettlers(sim, city);   // Faschismus: keine Dörfer (9.10)
     }
   }
 

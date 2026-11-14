@@ -126,6 +126,10 @@
       'Bei {city} bleibt ein Gefangenenzug liegen – die Türen gehen auf, {n} Menschen laufen in die Freiheit. Das Regime schickt einen Bericht, keinen Zug.',
       'Der Gefangenenzug kommt nicht an: {n} Insassen sind frei. Bei {city} winken die Leute vom Feldrand.'
     ],
+    campEscortBeaten: [
+      'Bei {city} wird eine Gefangenenkolonne überfallen. Die Wache liegt im Gras, die Gefangenen laufen nach Hause.',
+      'Die Begleitwache eines Gefangenenzugs bei {city} ist geschlagen – und plötzlich hat niemand mehr Gefangene.'
+    ],
     campMemorial: [
       'In {city} wird ein Mahnmal enthüllt. Darauf steht nur der Name des Lagers – und dass es nie wieder eines geben soll.'
     ],
