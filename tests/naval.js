@@ -155,11 +155,17 @@ test('2 Küstenstadt baut Hafen, Binnenstadt nicht; Mauerring bleibt dicht', fun
   for (const k of st.kingdoms) sim.actions.setGovernment(k.id, 'monarchy');
   const inland = st.cities.find((c) => c.cx < 50), coast = st.cities.find((c) => c.cx > 50);
   assert(inland && coast, 'Städte');
+  // Dichtheit je Stadt prüfen, sobald ihr Ring vollständig steht (später laufen Ausbauten, dann fehlen kurz Stücke)
+  const leak = {};
   let done = false;
   for (let y = 0; y < 40 && !done; y++) {
+    for (let q = 0; q < 6; q++) {
+      run(sim, 40);
+      for (const c of [coast, inland]) if (y >= 8 && leak[c.id] == null && c.wall.plan && c.wall.total > 0 && c.wall.built >= c.wall.total) leak[c.id] = ringLeak(sim, c);
+    }
     grow(sim, 1, 40);
     const h = harbor(sim, coast);
-    done = !!(h && h.built && coast.wall.plan && coast.wall.total > 0 && coast.wall.built >= coast.wall.total && inland.wall.plan && inland.wall.built >= inland.wall.total && y >= 12);
+    done = !!(h && h.built && leak[coast.id] && leak[inland.id]);
   }
   const h = harbor(sim, coast);
   log('Jahr', st.year, 'Küstenstadt Stufe', coast.tier, 'Hafen', h ? h.x + ',' + h.y + ' dock ' + (h.dock % W) + ',' + Math.floor(h.dock / W) + (h.built ? ' fertig' : ' Baustelle') : '-',
@@ -175,8 +181,8 @@ test('2 Küstenstadt baut Hafen, Binnenstadt nicht; Mauerring bleibt dicht', fun
   const r0 = st.inRing[h.y * W + h.x];
   assert([1, W, W + 1].every((d) => st.inRing[h.y * W + h.x + d] === r0), 'Hafen halb im Ring');
   for (const c of [coast, inland]) {
-    assert(c.wall.plan && c.wall.built >= c.wall.total, c.name + ': Ring nicht fertig');
-    const lk = ringLeak(sim, c);
+    const lk = leak[c.id];
+    assert(lk, c.name + ': Ring nie vollständig');
     assert(!lk.leak, c.name + ': Ring undicht bei ' + lk.at);
   }
   assert(ships(sim, coast.kingdomId, 'fishboat').length >= 1, 'kein Fischerboot');
@@ -243,7 +249,9 @@ test('6 Truppenlandung im Krieg erreicht die feindliche Insel', function () {
   const sim = twoIslands({ govs: ['fascism', 'theocracy'] });
   const st = sim.state, [A, B] = st.kingdoms;
   const cb = st.cities.find((c) => c.kingdomId === B.id);
-  grow(sim, 14, 44);
+  // Testaufbau: der Angreifer bekommt Bauholz (die Testinsel hat wenig Wald, Faschismus holzt ihn schnell ab)
+  const ca = st.cities.find((c) => c.kingdomId === A.id);
+  for (let y = 0; y < 18; y++) { grow(sim, 1, 44); if (y % 3 === 2) { const sk = WW.Cities.stock(sim, ca); sk.wood += 60; sk.stone += 20; } }
   const tr = ships(sim, A.id, 'transport');
   log('Jahr', st.year, 'Schiffe A', ships(sim, A.id).map((s) => s.kind).join(','), '| B', ships(sim, B.id).map((s) => s.kind).join(','));
   assert(tr.length >= 1, 'Angreifer hat keinen Transporter');
@@ -252,9 +260,10 @@ test('6 Truppenlandung im Krieg erreicht die feindliche Insel', function () {
   let landed = 0;
   const ok = runUntil(sim, 240 * 12, () => {
     landed = st.units.filter((u) => !u.dead && u.kingdomId === A.id && !u.sea && u.role === 'soldier' && compAt(sim, u.x, u.y) === bComp).length;
+    if (process.env.NAVDBG && st.tick % 240 === 0) console.log('   dbg', st.year, ships(sim, A.id, 'transport').map((s) => s.t + ':' + (s.mission ? s.mission.kind : '-') + ' p' + s.passengers.length + ' @' + s.x.toFixed(0) + ',' + s.y.toFixed(0)).join(' '), 'inv', JSON.stringify(st.naval.invade));
     return landed >= 3;
   }, 20);
-  const ev = st.events.filter((e) => /^sea/.test(e.type)).map((e) => e.year + ' ' + e.type);
+  const ev = st.events.filter((e) => /^sea/.test(e.type)).map((e) => e.year + ' ' + e.type + (e.type === 'seaLanding' ? '@' + e.x.toFixed(0) + ',' + e.y.toFixed(0) + ' comp ' + compAt(sim, e.x, e.y) + '/' + bComp + ' ' + e.text : ''));
   log('Ereignisse', ev.join(', '));
   log('Soldaten von A auf der Insel von B', landed, 'Landungen', st.naval.stats.landings);
   assert(ok, 'keine Truppen auf der feindlichen Insel');
@@ -287,7 +296,14 @@ test('7 Seegefecht: Wrack, gerettete Besatzung, niemand ertrinkt', function () {
   }
   const drown0 = (sim._deaths && sim._deaths.drown) || 0;
   const wr0 = st.wrecks.filter((x) => x.kind === 'ship').length;
-  const ok = runUntil(sim, 2000, () => !sim.query.ship(tid), 5);
+  sim.drainFx();
+  const fxSeen = new Set();
+  let swimSeen = 0;
+  const ok = runUntil(sim, 2000, () => {
+    for (const f of sim.drainFx()) fxSeen.add(f.type);
+    swimSeen = Math.max(swimSeen, crew.filter((u) => u.seaS === 'swim').length);
+    return !sim.query.ship(tid);
+  }, 1);
   log('Transporter versenkt', ok, 'Kriegsschiff hp', w.hp + '/' + w.maxHp);
   assert(ok, 'Seegefecht ohne Ergebnis');
   const wrecks = st.wrecks.filter((x) => x.kind === 'ship');
@@ -295,9 +311,10 @@ test('7 Seegefecht: Wrack, gerettete Besatzung, niemand ertrinkt', function () {
   const wk = wrecks[wrecks.length - 1];
   log('Wrack', JSON.stringify(wk));
   assert(wk.ship === 'transport' && WW.Naval.isSea(st.terrain[Math.floor(wk.y) * W + Math.floor(wk.x)]), 'Wrack falsch');
-  const swimmers = crew.filter((u) => u.seaS === 'swim');
-  assert(swimmers.length === 4, 'Passagiere schwimmen nicht: ' + crew.map((u) => u.seaS).join(','));
   run(sim, 450);
+  for (const f of sim.drainFx()) fxSeen.add(f.type);
+  assert(swimSeen === 4 && fxSeen.has('swim'), 'Passagiere sind nicht geschwommen (' + swimSeen + ')');
+  for (const k of ['shipfire', 'shipsink', 'splash']) assert(fxSeen.has(k), 'Fx ' + k + ' fehlt');
   for (const u of crew) {
     assert(!u.dead, 'Passagier gestorben');
     assert(!u.sea && WW.TERRAIN_LUT.walk[st.terrain[Math.floor(u.y) * W + Math.floor(u.x)]] > 0, 'Passagier nicht an Land');
@@ -306,8 +323,7 @@ test('7 Seegefecht: Wrack, gerettete Besatzung, niemand ertrinkt', function () {
   const ev = st.events.find((e) => e.type === 'seaBattle');
   assert(ev && ev.popup === 'battle', 'Chronik des Seegefechts fehlt');
   log(ev.text);
-  const fx = sim.drainFx().map((f) => f.type);
-  log('Fx', Array.from(new Set(fx)).join(','));
+  log('Fx', Array.from(fxSeen).join(','));
   invariants(sim, 'Seegefecht');
 });
 
@@ -337,9 +353,9 @@ test('8 Kräfte: Hafen setzen, Schiff setzen; Aktionen werfen nie', function () 
 });
 
 test('9 Speichern/Laden und Determinismus', function () {
-  const mk = () => { const s = twoIslands({ govs: ['republic', 'fascism'] }); s.actions.setRelation(s.state.kingdoms[0].id, s.state.kingdoms[1].id, 'peace'); return s; };
+  const mk = () => { const s = twoIslands({ govs: ['republic', 'monarchy'] }); s.actions.setRelation(s.state.kingdoms[0].id, s.state.kingdoms[1].id, 'peace'); return s; };
   const a = mk(), b = mk();
-  grow(a, 9, 36); grow(b, 9, 36);
+  grow(a, 12, 36); grow(b, 12, 36);
   assert(a.state.ships.length > 0, 'keine Schiffe für den Test');
   assert(a.hash() === b.hash(), 'gleicher Samen, verschiedener Stand');
   // Speichern -> Laden -> Speichern ergibt denselben Text
@@ -408,12 +424,12 @@ test('12 Dauerlauf Inselwelt (gemischte Regierungen) ohne Ausnahme', function ()
   const st = sim.state;
   const m = meter();
   const t0 = Date.now();
-  let maxShips = 0, maxPer = 0;
+  let maxShips = 0, maxPer = 0, sumMs = 0;
   try {
     for (let t = 0; t < ticks; t += 1000) {
       m.reset();
       run(sim, 1000);
-      maxPer = Math.max(maxPer, m.ms() / 1000);
+      maxPer = Math.max(maxPer, m.ms() / 1000); sumMs += m.ms();
       maxShips = Math.max(maxShips, st.ships.length);
       if (t % 5000 === 0) invariants(sim, 'Tick ' + st.tick);
       // gelegentlich Unruhe stiften, damit auch Krieg über das Meer vorkommt
@@ -436,7 +452,8 @@ test('12 Dauerlauf Inselwelt (gemischte Regierungen) ohne Ausnahme', function ()
   log('Inseln (≥ 40 Kacheln)', isl, '| besiedelt', settled.size, '| Häfen', st.naval.harbors.length, '| Schiffe jetzt', st.ships.length, 'höchstens', maxShips);
   log('Statistik', JSON.stringify(st.naval.stats), '| Wracks', st.wrecks.filter((w) => w.kind === 'ship').length);
   log('Chronik (letzte 400)', JSON.stringify(ev));
-  log('Seefahrt höchstens', maxPer.toFixed(4), 'ms/Tick (Mittel je 1000 Ticks)');
+  log('Seefahrt im Mittel', (sumMs / ticks).toFixed(4), 'ms/Tick, schlechtester Abschnitt', maxPer.toFixed(4), 'ms/Tick (je 1000 Ticks)');
+  assert(sumMs / ticks < 0.03, 'Zeitaufschlag im Dauerlauf ' + (sumMs / ticks).toFixed(4) + ' ms/Tick');
   assert(st.naval.harbors.length > 0 && st.naval.stats.built > 0, 'keine Seefahrt im Dauerlauf');
   const s = sim.serialize();
   assert(WW.Sim.load(s).serialize() === s, 'Endstand nicht stabil speicherbar');

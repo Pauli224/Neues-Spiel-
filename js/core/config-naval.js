@@ -35,9 +35,9 @@
     },
     KIND_KEYS: ['fishboat', 'trader', 'transport', 'warship'],
     LOOK: {
-      canoe: { name: 'Kanu',        speed: 0.075, hpMul: 0.6, capMul: 0.5 },
-      sail:  { name: 'Segelschiff', speed: 0.10,  hpMul: 1,   capMul: 1 },
-      steam: { name: 'Dampfschiff', speed: 0.09,  coalSpeed: 0.15, hpMul: 1.2, capMul: 1.2 }
+      canoe: { name: 'Kanu',        speed: 0.085, hpMul: 0.6, capMul: 0.5 },
+      sail:  { name: 'Segelschiff', speed: 0.12,  hpMul: 1,   capMul: 1 },
+      steam: { name: 'Dampfschiff', speed: 0.11,  coalSpeed: 0.18, hpMul: 1.2, capMul: 1.2 }
     },
     COAL_TRIP: 1,         // Kohle je Ausfahrt eines Dampfers (stock.coal); ohne Kohle fährt er langsamer und raucht nicht
     SMOKE_EMIT: 2,        // Qualm je 40 Ticks in die Verschmutzungszelle eines fahrenden Dampfers (state.pollution, falls vorhanden)
@@ -46,7 +46,7 @@
     FISH: { catch: 8, time: 120, rMin: 3, rMax: 11, deposit: 1.6, dockWait: 40 },
     TRADE: { gold: 5, perTile: 1 / 40, max: 14, opinion: 2, wait: 60, goods: 4 },
     SETTLE: { minAdults: 18, minTier: 2, every: 5, n: [6, 9], free: 30, minDist: 20, landR: 8, wait: 360 },
-    INVADE: { min: 4, every: 3, landMin: 4, landMax: 14, wait: 300, guard: 600 },
+    INVADE: { min: 4, every: 3, landMin: 4, landMax: 22, wait: 200, guard: 600 },
     PATROL: { r: 8, wait: 100, out: 60 },
     PATH_NODES: 9000,     // Knotenlimit der Wegsuche über Wasser
     ROUTE_CACHE: 160,     // zwischengespeicherte Routen (Laufzeit)

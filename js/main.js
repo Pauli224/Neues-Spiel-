@@ -300,7 +300,7 @@
     // steht still in der Chronik.
     const all = ev.filter(e => e.id > game.lastEventId);
     if (WW.Audio && game.audioOn) for (const e of all) { try { WW.Audio.onEvent(e); } catch (er) { /* egal */ } }
-    const fresh = all.filter(e => TOAST_TYPES.test(e.type));
+    const fresh = all.filter(e => TOAST_TYPES.test(e.type) || e.popup === 'battle');
     game.lastEventId = last.id;
     if (!fresh.length) return;
     // höchstens eine Meldung alle paar Sekunden, auch bei hohem Tempo
@@ -308,10 +308,10 @@
     if (now - (game._toastAt || 0) < 4000) return;
     game._toastAt = now;
     const e = fresh[fresh.length - 1];
-    game.hud.toast(e.text, { year: e.year, sub: e.effectText || null, warn: /war|revolt|gone|fall|conquer|plague|coup|fire/i.test(e.type),
+    game.hud.toast(e.text, { year: e.year, sub: e.effectText || null, warn: /war|revolt|gone|fall|conquer|plague|coup|fire|battle|uprising|invasion/i.test(e.type),
       onClick: (e.x >= 0 ? () => game.jumpToEvent(e) : null) });
   };
-  const TOAST_TYPES = /^(war|holyWar|peace|alliance|allianceEnd|conquest|fallen|kingdomGone|newRealm|secede|secedeLoyalty|gov|govChoice|reform|strongman|collapse|evolve|revolution|regimeFall|coup|succession|throneFeud|revolt|cityAbandoned|centerLost|randomPlague)$/;
+  const TOAST_TYPES = /^(war|holyWar|peace|alliance|allianceEnd|conquest|fallen|kingdomGone|newRealm|secede|secedeLoyalty|gov|govChoice|reform|strongman|collapse|evolve|revolution|regimeFall|coup|succession|throneFeud|revolt|cityAbandoned|centerLost|randomPlague|battle|seaBattle|realmRenamed|campFounded|campUprising|campLiberated|campMemorial|powReturn|powExchange|firstTank|seaInvasion|seaColonyLand)$/;
 
   // ------------------------------------------------------------------ Welt starten
   function attachSim(sim) {
@@ -542,6 +542,7 @@
     if (sim.state.tick % 300 === 0) pv.clear();
     for (const u of sim.state.units) { let p = pv.get(u.id); if (!p) pv.set(u.id, p = [0, 0]); p[0] = u.x; p[1] = u.y; }
     for (const a of sim.state.animals) { let p = pv.get(-a.id); if (!p) pv.set(-a.id, p = [0, 0]); p[0] = a.x; p[1] = a.y; }
+    if (sim.state.ships) for (const sh of sim.state.ships) { let p = pv.get(1e9 + sh.id); if (!p) pv.set(1e9 + sh.id, p = [0, 0]); p[0] = sh.x; p[1] = sh.y; }
   }
 
   // Leinwand an Größe und Gerätepixel anpassen

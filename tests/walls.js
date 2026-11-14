@@ -150,7 +150,7 @@ test('4 Selbstschussanlage trifft auch mal ein Schaf', function () {
 
 test('5 Stufe 6 mit Geräten hält länger als Stufe 3, ist aber mit Gerät und Übermacht zu knacken', function () {
   const world = meadowWorld(120, 70, { hills: true, spots: [{ x: 32, y: 35 }, { x: 88, y: 35 }] });
-  const base = makeSim({ seed: 'belagerung6', world: world, populate: 2, govs: ['fascism', 'communism'], races: ['orc', 'human'], animals: false, laws: { wars: false, disasters: false } });
+  const base = makeSim({ seed: 'belagerung6', world: world, populate: 2, govs: ['fascism', 'communism'], races: ['orc', 'human'], animals: false, laws: { wars: false, disasters: false, newRealms: false, govChanges: false, camps: false } });
   const [a, b] = base.state.kingdoms;
   a.govLocked = b.govLocked = true;
   const ca = base._cities.get(a.cityIds[0]), cb = base._cities.get(b.cityIds[0]);
@@ -182,6 +182,8 @@ test('5 Stufe 6 mit Geräten hält länger als Stufe 3, ist aber mit Gerät und 
     const t0 = sim.state.tick;
     for (let i = 1; i <= 24000; i++) {
       sim.tick();
+      // die Verteidiger bleiben hinter ihrer Mauer (sonst erobern sie im Gegenzug die Stadt der Angreifer)
+      if (i % 5 === 0) for (const u of sim.state.units) if (!u.dead && u.kingdomId === B.id && u.order && u.order.city === CA.id) { u.order = null; u.path = null; }
       if (i % 50 === 0) {
         if (CB.dead || CB.kingdomId !== B.id || B.dead) { fell = i; break; }
         if (A.dead) { console.log('    Angreifer-Reich untergegangen bei Tick', i, sim.state.events.filter((e) => e.kingdomId === A.id || e.cityId === CA.id).slice(-6).map((e) => e.type + ': ' + e.text).join(' | ')); break; }
@@ -189,6 +191,7 @@ test('5 Stufe 6 mit Geräten hält länger als Stufe 3, ist aber mit Gerät und 
         if (r && r.status !== 'war') sim.actions.setRelation(A.id, B.id, 'war');
         if (r && B.relations[A.id]) { r.weariness = 0; B.relations[A.id].weariness = 0; }
         feed(sim, CA);   // das Heer der Angreifer verhungert nicht (Testaufbau)
+
         // Verteidiger bleiben zu Hause (reine Belagerung, kein Gegenangriff)
         for (const u of sim.state.units) if (!u.dead && u.kingdomId === B.id && u.order && u.order.kind === 'march') { u.order = null; u.path = null; }
         // Nachschub für die Angreifer (Übermacht)

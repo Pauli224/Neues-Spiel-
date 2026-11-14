@@ -81,7 +81,7 @@
 
   if (WW.STRUCT_INFO && !WW.STRUCT_INFO.station) {
     WW.STRUCT_INFO.station = { name: 'Bahnhof', w: 2, h: 2, work: 140, hp: [200], cost: [{ wood: 12, stone: 8 }], burn: 0.5 };
-    WW.STRUCT_INFO.rail = { name: 'Gleis', w: 1, h: 1, work: 7, hp: [60], cost: [{ wood: 1, stone: 1 }], burn: 0.2 };
+    WW.STRUCT_INFO.rail = { name: 'Gleis', w: 1, h: 1, work: 7, hp: [60], cost: [{ wood: 2 }], burn: 0.2 };   // Schwellen und Schienen: Holz (Stein fehlt Bahn-Städten oft)
   }
 
   // Lagerstädte und Kriegsgefangene (js/sim/camps.js) – kritisch dargestellt; Insassen nur Kriegsgefangene und

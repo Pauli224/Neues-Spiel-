@@ -93,14 +93,14 @@
   // und ihrer 8 Nachbarn, dazu Variante, Beweidung, Trübung, Risse, Fallout, Krater und Gleis.
   Renderer.prototype.groundSig = function (x, y) {
     const st = this.st, W = st.W, H = st.H, i = y * W + x, t = st.terrain, path = this.path;
-    const cl = st.cleared, ba = st.barren, so = st.soot;
+    const cl = st.cleared, ba = st.barren, so = st.soot, tr = st.trench;
     let h = 2166136261 | 0;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const xx = x + dx, yy = y + dy;
       let v = -1;
       if (xx >= 0 && yy >= 0 && xx < W && yy < H) {
         const j = yy * W + xx;
-        v = t[j] | (path[j] ? 256 : 0) | (cl && cl[j] > 0 ? 512 : 0) | (so && so[j] > 0 ? 1024 : 0) | (ba && ba[j] > 0 ? (ba[j] > 170 ? 3 : ba[j] > 85 ? 2 : 1) << 11 : 0);
+        v = t[j] | (path[j] ? 256 : 0) | (cl && cl[j] > 0 ? 512 : 0) | (so && so[j] > 0 ? 1024 : 0) | (ba && ba[j] > 0 ? (ba[j] > 170 ? 3 : ba[j] > 85 ? 2 : 1) << 11 : 0) | (tr && tr[j] >> 6 ? 1 << 13 : 0);
       }
       h = Math.imul(h ^ v, 16777619);
     }
@@ -110,6 +110,7 @@
     if (st.structAt && st.structAt[i] >= 0 && this.structById) {
       const rs = this.structById(st.structAt[i]);
       if (rs && rs.type === 'rail') h = Math.imul(h ^ (64 + ((rs.mask | 0) & 15) * 2 + (rs.bridge ? 1 : 0)), 16777619);
+      else if (rs && rs.type === 'gate' && rs.rail) h = Math.imul(h ^ (128 + this.railMaskAt(x, y)), 16777619);
     }
     return h | 0;
   };
@@ -133,10 +134,13 @@
     if (st.cleared && st.cleared[i] > 0) this.softOverlay(g, x, y, st.cleared, 't_cleared', null);
     if (st.barren && st.barren[i] > 0) this.softOverlay(g, x, y, st.barren, 't_barren', (v) => v > 170 ? 3 : v > 85 ? 2 : 1);
     if (st.soot && st.soot[i] > 0) this.softOverlay(g, x, y, st.soot, 't_soot', null);
+    // Schützengraben (sichtbar ab Wert >> 6), weiche Ränder über softKey
+    if (st.trench && st.trench[i] >> 6) this.softOverlay(g, x, y, st.trench, 't_trench', null, (v) => v >> 6 ? 1 : 0);
     // Schienen liegen im Boden wie Pfade
     if (st.structAt && st.structAt[i] >= 0 && this.structById) {
       const rs = this.structById(st.structAt[i]);
       if (rs && rs.type === 'rail') this.drawRailTile(g, rs, x, y);
+      else if (rs && rs.type === 'gate' && rs.rail) this.drawRailTile(g, { mask: this.railMaskAt(x, y) }, x, y);
     }
     if (st.crack && st.crack[i]) { const ck = this.S.has('t_crack') ? 't_crack' : (this.S.has('fx_crack') ? 'fx_crack' : null); if (ck) { g.globalAlpha = Math.min(1, st.crack[i] / 120); this.S.drawFast(g, ck, x * 8, y * 8, 0, false); g.globalAlpha = 1; } }
     if (st.fallout && st.fallout[i] && this.S.has('t_fallout')) { g.globalAlpha = Math.min(1, 0.35 + st.fallout[i] / 160); this.S.drawFast(g, 't_fallout', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
@@ -175,9 +179,9 @@
   };
 
   // Überlagerung mit weichen Rändern: Stufe L der Kachel, Maske = Nachbarn mit Stufe >= L
-  Renderer.prototype.softOverlay = function (g, x, y, ras, base, levelOf) {
+  Renderer.prototype.softOverlay = function (g, x, y, ras, base, levelOf, present) {
     const S = this.S, st = this.st, W = st.W, H = st.H, i = y * W + x;
-    const lv = (v) => v > 0 ? (levelOf ? levelOf(v) : 1) : 0;
+    const lv = present ? present : (v) => v > 0 ? (levelOf ? levelOf(v) : 1) : 0;
     const L = lv(ras[i]);
     const key0 = levelOf ? base + '_' + L : base;
     const at = (xx, yy) => (xx < 0 || yy < 0 || xx >= W || yy >= H) ? L : lv(ras[yy * W + xx]);
@@ -196,6 +200,12 @@
     else { g.fillStyle = '#5b4a3a'; g.fillRect(x * 8 + 1, y * 8 + 3, 6, 2); }
   };
 
+  // Gleismaske einer Kachel aus den Nachbarn (Gleis oder Gleistor)
+  Renderer.prototype.railMaskAt = function (x, y) {
+    const st = this.st, W = st.W, H = st.H;
+    const r = (xx, yy) => { if (xx < 0 || yy < 0 || xx >= W || yy >= H || !this.structById) return false; const o = this.structById(st.structAt[yy * W + xx]); return !!(o && (o.type === 'rail' || (o.type === 'gate' && o.rail) || o.type === 'station')); };
+    return (r(x, y - 1) ? 1 : 0) | (r(x + 1, y) ? 2 : 0) | (r(x, y + 1) ? 4 : 0) | (r(x - 1, y) ? 8 : 0);
+  };
   Renderer.prototype.pathMask = function (x, y) {
     const W = this.st.W, H = this.st.H, p = this.path, i = y * W + x;
     return (y > 0 && p[i - W] ? 1 : 0) | (x < W - 1 && p[i + 1] ? 2 : 0) | (y < H - 1 && p[i + W] ? 4 : 0) | (x > 0 && p[i - 1] ? 8 : 0);
@@ -316,7 +326,7 @@
       const i = y * W + x;
       return st.structAt[i] < 0 && !this.path[i] && WW.TERRAIN_LUT.build[st.terrain[i]];
     };
-    const add = (kind, px, py, k, seed) => out.push({ kind: kind, px: px, py: py, pat: k.bannerPattern | 0, team: k.colorIndex | 0, seed: seed });
+    const add = (kind, px, py, k, seed) => out.push({ kind: kind, px: px, py: py, pat: k.bannerPattern | 0, team: k.colorIndex | 0, seed: seed, gov: k.gov });
     for (const s of st.structs) {
       if (s.dead || !s.built || s.cityId < 0) continue;
       const k = cityK.get(s.cityId);
@@ -377,7 +387,8 @@
       if (f.px < (vt.x0 - 2) * 8 || f.px > (vt.x1 + 2) * 8 || f.py < (vt.y0 - 2) * 8 || f.py > (vt.y1 + 3) * 8) continue;
       const fr = ((this.time * 3 + (f.seed & 7) * 0.4) | 0) & 1;
       let k = null;
-      try { k = S.flagKey(f.kind, f.pat, f.kind === 'center' ? 0 : fr, f.team); } catch (e) { k = null; }
+      try { k = S.flagKey(f.kind, f.pat, f.kind === 'center' ? 0 : fr, f.team, f.gov); } catch (e) { k = null; }
+      if (!k || !S.has(k)) { try { k = S.flagKey(f.kind, f.pat, f.kind === 'center' ? 0 : fr, f.team); } catch (e) { k = null; } }
       if (k && S.has(k)) S.drawFast(g, k, f.px, f.py, f.team, false);
     }
   };
@@ -587,12 +598,14 @@
 
   // ------------------------------------------------------------------ Effekte
   const FX_DUR = { treeFall: 1.1, whistle: 0.8, explosion: 0.9, mushroom: 3.6, rock: 0.5, ward: 0.8, dud: 0.6, smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
-    govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
+    govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6,
+    tankfire: 0.4, wake: 0.9, shipsmoke: 1.3, shipfire: 0.45, shipsink: 1.6, dig: 0.8, battlepick: 1.2, campgate: 1.0, freed: 2.0, memorial: 2.0, caravan: 1.2, horn: 0.8, sail: 0.6, swim: 0.05, wreck: 1.4 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
       if (this.fx.length > 500) break;
       const o = Object.assign({}, f);
-      o.t = 0; o.d = (typeof f.dur === 'number' && f.dur > 0) ? f.dur : (FX_DUR[f.type] || 0.8);
+      if (f.type === 'shell') o.ft = f.t;
+      o.t = 0; o.d = (typeof f.dur === 'number' && f.dur > 0) ? f.dur : f.type === 'shell' ? Math.max(0.35, Math.min(1.4, (f.t || 12) / 16)) : (FX_DUR[f.type] || 0.8);
       o.seed = (Math.random() * 1e6) | 0;
       this.fx.push(o);
       if (f.type === 'bolt' || f.type === 'meteor') this.flash = Math.max(this.flash || 0, f.type === 'bolt' ? 0.35 : 0.25);
@@ -739,6 +752,9 @@
       }
       let any = false; for (let i = 3; i < d.length; i += 4) if (d[i] > 6) { any = true; break; }
       this._smogAny = any;
+      const A = this._smogAlpha && this._smogAlpha.length === cw * chh ? this._smogAlpha : (this._smogAlpha = new Float32Array(cw * chh));
+      for (let i = 0; i < cw * chh; i++) A[i] = d[i * 4 + 3] / 255;
+      this._smogCell = cell; this._smogCW = cw; this._smogCH = chh;
       c.putImageData(img, 0, 0);
       if (any) {
         const q = Math.max(1, Math.min(4, Math.floor(1536 / (cw * cell))));
@@ -752,6 +768,37 @@
       }
     }
     return !!this._smogAny;
+  };
+  // Dunststärke an einer Stelle (Kacheln), weich zwischen den Zellmitten wie die vergrößerte Ebene
+  Renderer.prototype.smogAt = function (tx, ty) {
+    const A = this._smogAlpha, c = this._smogCell, cw = this._smogCW, ch = this._smogCH;
+    if (!A || !c) return 0;
+    const fx = Math.max(0, Math.min(cw - 1, tx / c - 0.5)), fy = Math.max(0, Math.min(ch - 1, ty / c - 0.5));
+    const x0 = fx | 0, y0 = fy | 0, x1 = Math.min(cw - 1, x0 + 1), y1 = Math.min(ch - 1, y0 + 1), ax = fx - x0, ay = fy - y0;
+    return (A[y0 * cw + x0] * (1 - ax) + A[y0 * cw + x1] * ax) * (1 - ay) + (A[y1 * cw + x0] * (1 - ax) + A[y1 * cw + x1] * ax) * ay;
+  };
+  // Umriss eines Sprites in Dunstfarbe (zwischengespeichert) mit Stärke a über das Sprite legen
+  Renderer.prototype.drawHaze = function (g, key, px, py, flip, a) {
+    const m = this._hazeC || (this._hazeC = new Map()), id = flip ? key + '|f' : key;
+    let e = m.get(id);
+    if (e === undefined) {
+      e = null;
+      const inf = this.S.info(key);
+      if (inf && inf.w > 0 && inf.h > 0) {
+        const cv = document.createElement('canvas'); cv.width = inf.w; cv.height = inf.h;
+        const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+        const fox = inf.fw * 8 - inf.dw - inf.ox, ox = flip ? fox : inf.ox;
+        c.setTransform(inf.w / inf.dw, 0, 0, inf.h / inf.dh, -ox * inf.w / inf.dw, -inf.oy * inf.h / inf.dh);
+        this.S.drawFast(c, key, 0, 0, 0, flip);
+        c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-in'; c.fillStyle = 'rgb(96,86,70)'; c.fillRect(0, 0, inf.w, inf.h);
+        e = { cv: cv, x: ox, y: inf.oy, w: inf.dw, h: inf.dh };
+      }
+      m.set(id, e);
+    }
+    if (!e) return;
+    g.globalAlpha = Math.min(0.62, a);
+    g.drawImage(e.cv, px + e.x, py + e.y, e.w, e.h);
+    g.globalAlpha = 1;
   };
   // Dunst-Ebene in Weltkoordinaten (Transformation ist gesetzt), pixelgenau (kein Weichzeichnen je Bild)
   Renderer.prototype.drawSmogLayer = function (g) {
@@ -1027,8 +1074,50 @@
           g.beginPath(); g.ellipse(px, py, r * 0.9, r * 0.68, 0, 0, Math.PI * 2); g.stroke();
           break;
         }
-        case 'flash':
+        case 'flash': case 'swim': case 'sail':
           break;
+        case 'shell': {
+          // Granate fliegt im Bogen von (x0,y0) nach (x1,y1)
+          if (f.x0 == null || f.x1 == null) break;
+          const x = (f.x0 + (f.x1 - f.x0) * k) * 8, y = (f.y0 + (f.y1 - f.y0) * k) * 8 - Math.sin(k * Math.PI) * Math.min(40, 6 + Math.hypot(f.x1 - f.x0, f.y1 - f.y0) * 2.2);
+          const fk = 'fx_shell_' + (((f.t * 12) | 0) % 3);
+          if (S.has(fk)) S.drawFast(g, fk, Math.round(x) - 4, Math.round(y) - 4, 0, false); else { g.fillStyle = '#2b2533'; g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2); }
+          break;
+        }
+        case 'tankfire': case 'wake': {
+          // Mündungsfeuer des Panzers / Kielwasser: Bilder zeigen nach rechts, für links gespiegelt
+          const fr = this.fxFrames(f.type);
+          if (!fr.length) break;
+          const left = f.type === 'wake' ? ((f.dir | 0) & 3) === 2 : (f.x2 != null ? f.x2 < f.x : ((f.dir | 0) & 3) === 2);
+          const key = fr[Math.min(fr.length - 1, (k * fr.length) | 0)];
+          g.globalAlpha = k > 0.6 ? (1 - k) / 0.4 : 1;
+          S.drawFast(g, key, px - 4, py - (f.type === 'wake' ? 2 : 6), 0, left);
+          g.globalAlpha = 1;
+          break;
+        }
+        case 'shipfire': {
+          // Breitseite: kurzer Feuerstrich zum Ziel, Rauch an der Bordwand
+          if (f.x2 != null) { g.strokeStyle = 'rgba(255,220,120,' + (1 - k) + ')'; g.lineWidth = 1; g.beginPath(); g.moveTo(px, py - 3); g.lineTo(f.x2 * 8, f.y2 * 8 - 2); g.stroke(); }
+          g.globalAlpha = 1 - k; S.drawFast(g, 'fx_smoke_' + (f.seed & 1), px - 4, py - 8 - k * 6, 0, false); g.globalAlpha = 1;
+          break;
+        }
+        case 'shipsink': case 'dig': case 'wreck': {
+          g.globalAlpha = (1 - k) * 0.8;
+          for (let j = 0; j < 3; j++) S.drawFast(g, f.type !== 'shipsink' ? 'fx_smoke_' + (j & 1) : (S.has('fx_splash_0') ? 'fx_splash_' + Math.min(3, (k * 4) | 0) : 'fx_smoke_0'), px - 4 + (rnd(f.seed, j) - 0.5) * 8, py - 4 - k * (f.type === 'dig' ? 6 : 2), 0, false);
+          g.globalAlpha = 1;
+          break;
+        }
+        case 'battlepick': case 'campgate': case 'freed': case 'memorial': case 'caravan': case 'horn': {
+          // freundliche Funken (Befreiung, Enthüllung, Ankunft der Karawane, Wahl der Kraft)
+          const n = f.type === 'freed' ? 22 : f.type === 'horn' ? 3 : 10, r = (f.type === 'freed' ? 3 : 1.4) * 8;
+          for (let j = 0; j < n; j++) {
+            const ph = (k * 2 + rnd(f.seed, j)) % 1;
+            g.globalAlpha = Math.sin(Math.min(1, k * 1.2) * Math.PI);
+            S.drawFast(g, 'fx_sparkle_' + (ph < 0.5 ? 0 : 1), px - 4 + (rnd(f.seed, j) - 0.5) * 2 * r, py - 8 + (rnd(f.seed, j + 3) - 0.5) * r - k * 8, 0, false);
+          }
+          g.globalAlpha = 1;
+          break;
+        }
         case 'tracer': {
           g.strokeStyle = 'rgba(255,230,120,' + (1 - k) + ')'; g.lineWidth = 1;
           g.beginPath(); g.moveTo(px, py); g.lineTo(f.x2 * 8, f.y2 * 8); g.stroke();
@@ -1084,23 +1173,46 @@
   };
 
   // ------------------------------------------------------------------ Schlüssel
+  // Kultur eines Bauwerks (eigene Angabe, sonst Stadt); nur Kulturen mit eigener Grafik (sahel, nil, nord …)
+  Renderer.prototype.cultureOf = function (s) {
+    let cu = s.culture;
+    if (!cu) { const c = this._cityById ? this._cityById.get(s.cityId) : null; cu = c && c.culture; }
+    return cu && cu !== 'mitte' ? cu : null;
+  };
   Renderer.prototype.structKey = function (s, gov) {
     const S = this.S;
     const style = s.style || gov || 'tribe';
     if (!s.built) return s.w >= 3 ? 's_site_3' : (s.w >= 2 ? 's_site_2' : 's_site');
     switch (s.type) {
       case 'center': {
+        // Kultur (sahel, nil, nord): eigene Zentren je Ausbaustufe
+        const cu = this.cultureOf(s);
+        if (cu && typeof S.centerKey === 'function') { let k = null; try { k = S.centerKey(style, s.stage == null ? 2 : s.stage, cu, varOf(s)); } catch (e) { k = null; } if (k && S.has(k) && k.indexOf('_' + cu) > 0) return k; }
         // Ausbaustufen: 0 Lager, 1 Dorfhalle, 2 (oder fehlend) Regierungssitz
         if (s.stage === 0) { const k = this.pickVar(S.campKey, ['s_camp_a', 's_camp_b'], s); if (k) return k; }
         if (s.stage === 1) { const k = this.pickVar(S.hallKey, ['s_hall_a', 's_hall_b'], s); if (k) return k; }
         return 's_center_' + style;
       }
       case 'house': {
+        const cu = this.cultureOf(s);
+        if (cu) { let k = null; try { k = S.houseKey(style, s.level | 0, varOf(s), cu); } catch (e) { k = null; } if (k && S.has(k) && k.indexOf('_' + cu + '_') > 0) return k; }
         if (s.level === 0) { const k = this.pickVar(S.tentKey, ['s_tent_a', 's_tent_b', 's_tent_c', 's_tent_d'], s); if (k) return k; }
         return S.houseKey(style, Math.max(1, s.level | 0), varOf(s));
       }
       case 'field': return 's_field_' + Math.max(0, Math.min(3, s.growth | 0));
       case 'monument': return 's_monument_' + style;
+      case 'pyramid': { const k = 's_monument_' + Math.max(0, Math.min(2, s.stage != null ? s.stage | 0 : (s.level | 0) - 1)); return S.has(k) ? k : 's_monument_' + style; }
+      case 'market': { const cu = this.cultureOf(s); if (cu && typeof S.marketKey === 'function') { const k = S.marketKey(cu); if (k && S.has(k)) return k; } return 's_market'; }
+      case 'temple': { const cu = this.cultureOf(s); if (cu && typeof S.templeKey === 'function') { const k = S.templeKey(cu); if (k && S.has(k)) return k; } return S.has('s_temple') ? 's_temple' : 's_monument_' + style; }
+      case 'arsenal': { const k = typeof S.arsenalKey === 'function' ? S.arsenalKey(style) : 's_arsenal_' + style; return S.has(k) ? k : (S.has('s_barracks') ? 's_barracks' : 's_ruin_2'); }
+      case 'camphq': case 'barrack': { const k = typeof S.campBuildKey === 'function' ? S.campBuildKey(s.type, style) : 's_' + s.type; return S.has(k) ? k : (S.has('s_' + s.type) ? 's_' + s.type : 's_barracks'); }
+      case 'harbor': {
+        const side = s.side || ['e', 's', 'w', 'n'][(s.dockDir | 0) & 3] || 's';
+        let k = null;
+        if (typeof S.harborKey === 'function') { try { k = S.harborKey(style, this.cultureOf(s), side); } catch (e) { k = null; } }
+        return k && S.has(k) ? k : (S.has('s_harbor') ? 's_harbor' : 's_market');
+      }
+      case 'memorial': return S.has('s_memorial') ? 's_memorial' : 's_ruin';
       case 'wall': case 'gate': case 'tower': return this.wallishKey(s, style);
       case 'factory': {
         const lv = Math.max(1, Math.min(2, s.level | 0 || (s.w >= 3 ? 2 : 1)));
@@ -1113,7 +1225,8 @@
         if (S.has('s_factory_' + s.kind + '_' + lv)) return 's_factory_' + s.kind + '_' + lv;
         return s.w >= 3 ? 's_center_communism' : 's_barracks';   // Platzhalter, bis die Grafik da ist
       }
-      case 'station': return typeof S.stationKey === 'function' && S.has(S.stationKey(style)) ? S.stationKey(style) : (S.has('s_station') ? 's_station' : 's_market');
+      case 'station': if (s.campStation && S.has('s_camp_station')) return 's_camp_station';
+        return typeof S.stationKey === 'function' && S.has(S.stationKey(style)) ? S.stationKey(style) : (S.has('s_station') ? 's_station' : 's_market');
       case 'laborcamp': { const k = typeof S.laborcampKey === 'function' ? S.laborcampKey(style, !!s.ruin || !!s.closed) : 's_laborcamp'; return S.has(k) ? k : 's_barracks'; }
       case 'mine': { const k = typeof S.mineKey === 'function' ? S.mineKey(s.res || s.ore || s.kind) : 's_mine'; return S.has(k) ? k : 's_quarry'; }
       case 'lair': return this.S.has('s_lair_' + s.kind) ? 's_lair_' + s.kind : 's_ruin';
@@ -1172,6 +1285,13 @@
   // Mauer, Tor, Turm: Stufe bis 6 durchreichen; fehlt das Sprite, nächstniedrigere Stufe
   Renderer.prototype.wallishKey = function (s, style) {
     const S = this.S, st = this.st;
+    if (s.mat === 'fence') {
+      // Lagerzaun: Pfosten und Draht, Tor (mit Gleis: breit offen), Wachturm
+      let k = null;
+      try { k = s.type === 'wall' ? S.wallKey('fence', 1, s.mask) : s.type === 'gate' ? S.gateKey('fence', 1, s.orient === 'v' ? 'v' : 'h', !!s.rail) : S.towerKey('fence', 1); } catch (e) { k = null; }
+      if (k && S.has(k)) return k;
+    }
+    if (s.type === 'gate' && s.rail) { let k = null; try { k = S.gateKey(style, Math.max(1, s.level | 0), s.orient === 'v' ? 'v' : 'h', true); } catch (e) { k = null; } if (k && S.has(k) && k !== S.gateKey(style, Math.max(1, s.level | 0), s.orient === 'v' ? 'v' : 'h')) return k; }
     const river = st.terrain[s.y * st.W + s.x] === WW.T.RIVER;
     for (let lv = Math.max(1, s.level | 0); lv >= 1; lv--) {
       let k = null;
@@ -1191,13 +1311,28 @@
     return ok.length ? ok[v % ok.length] : null;
   };
 
+  const VDIR = ['e', 's', 'w', 'n'];
   Renderer.prototype.unitKey = function (u, gov, frame) {
-    const S = this.S, race = u.race || 'human', role = u.role || 'farmer';
+    const S = this.S, race = u.race || 'human';
+    let role = u.role || 'farmer';
+    // Fahrzeuge (Panzer, Geschütz): eigene Bilder je Richtung
+    if (u.vehicle && typeof S.vehicleKey === 'function') {
+      let k = null;
+      const vf = role === 'tank' ? (u.moving ? ((this.time * 6 + (u.id & 3)) | 0) & 1 : 0) : (this.muzzleT && this.time - (this.muzzleT.get(Math.floor(u.y) * this.st.W + Math.floor(u.x)) || -9) < 0.3 ? 1 : 0);
+      try { k = S.vehicleKey(role === 'artillery' ? 'artillery' : 'tank', u.gov || gov || 'tribe', VDIR[(u.vdir | 0) & 3], vf); } catch (e) { k = null; }
+      if (k && S.has(k)) return k;
+    }
+    // Kriegsgefangene in der abgetragenen Uniform ihres Reichs
+    if (role === 'prisoner' && u.pow >= 0) role = 'pow';
     if (typeof S.unitKey === 'function') {
       // Tracht je Regierung; nach einem Wechsel ziehen sich die Leute zeitversetzt um
       const g = this.costumeGov(u, gov || 'tribe');
       let k = null;
+      const cu = u.culture && u.culture !== 'mitte' ? u.culture : null;
+      if (cu) { try { k = S.unitKey(race, role, g, frame, cu); } catch (e) { k = null; } if (k && S.has(k)) return k; }
       try { k = S.unitKey(race, role, g, frame); } catch (e) { k = null; }
+      if (k && S.has(k)) return k;
+      if (role === 'pow') { role = 'prisoner'; try { k = S.unitKey(race, role, g, frame); } catch (e) { k = null; } if (k && S.has(k)) return k; }
       if (k && S.has(k)) return k;
       if (typeof frame !== 'number') { try { k = S.unitKey(race, role, g, 0); } catch (e) { k = null; } if (k && S.has(k)) return k; }
     }
@@ -1414,7 +1549,7 @@
     const add = (bx, x, y) => { if (!bx) return; rc.x0 = Math.min(rc.x0, x + bx[0]); rc.y0 = Math.min(rc.y0, y + bx[1]); rc.x1 = Math.max(rc.x1, x + bx[0] + bx[2]); rc.y1 = Math.max(rc.y1, y + bx[1] + bx[3]); };
     if (key !== null) {
       const bx = this.keyBox(key), inf = bx ? S.info(key) : null, fh = inf ? inf.fh : s.h;
-      const px = s.x * 8, py = (s.type === 'ruin' && fh > s.h ? s.y : s.y + s.h - fh) * 8;
+      const px = s.x * 8 - (inf && inf.fw > s.w ? (inf.fw - s.w) * 4 : 0), py = (s.type === 'ruin' && fh > s.h ? s.y : s.y + s.h - fh) * 8;
       add(bx, px, py);
       if (s.upgrading && s.built !== false) {
         const sk = s.w >= 3 ? 's_scaffold_3' : (s.w >= 2 ? 's_scaffold_2' : 's_scaffold');
@@ -1750,14 +1885,20 @@
     const zoomBig = opts.scale >= 2.5;
     const pool = this._dynPool || (this._dynPool = []);
     let np = 0;
-    const item = () => { let o = pool[np]; if (!o) o = pool[np] = { cls: 0, row: 0, sub: 0, t: 0, x0: 0, y0: 0, x1: 0, y1: 0, key: null, px: 0, py: 0, team: 0, flip: false, u: null, v: 0, sick: false }; np++; return o; };
+    const item = () => { let o = pool[np]; if (!o) o = pool[np] = { cls: 0, row: 0, sub: 0, t: 0, x0: 0, y0: 0, x1: 0, y1: 0, key: null, px: 0, py: 0, team: 0, flip: false, u: null, v: 0, sick: false, alpha: null }; else { o.alpha = null; o.flip = false; o.team = 0; } np++; return o; };
     const dyn = this._dynList || (this._dynList = []); dyn.length = 0;
     const bubbles = [], bars = [], flyers = [];
     const prev = opts.prev, a = opts.alpha == null ? 1 : opts.alpha;
     const y0 = vt.y0, y1 = vt.y1;
     const addU = (u, isAnimal) => {
       let x = u.x, y = u.y;
-      if (prev) { const pp = prev.get(isAnimal ? -u.id : u.id); if (pp) { const dx = x - pp[0], dy = y - pp[1]; if (dx * dx + dy * dy < 4) { x = pp[0] + dx * a; y = pp[1] + dy * a; } } }
+      if (!isAnimal && u.sea && u.seaS === 'aboard') return;   // an Bord: das Schiff zeigt sie
+      if (!isAnimal && u.campState === 'train') return;         // im Gefangenenzug
+      if (!isAnimal && u.seaS === 'swim' && u.swim && u.swim.t1 > u.swim.t0) {
+        // Schiffbrüchige schwimmen zur Küste
+        const q = Math.max(0, Math.min(1, ((st.tick || 0) + a - u.swim.t0) / (u.swim.t1 - u.swim.t0)));
+        if (q < 1) { x = u.swim.x0 + (u.x - u.swim.x0) * q; y = u.swim.y0 + (u.y - u.swim.y0) * q; }
+      } else if (prev) { const pp = prev.get(isAnimal ? -u.id : u.id); if (pp) { const dx = x - pp[0], dy = y - pp[1]; if (dx * dx + dy * dy < 4) { x = pp[0] + dx * a; y = pp[1] + dy * a; } } }
       if (x < vt.x0 - 1 || x > vt.x1 + 2 || y < y0 || y >= y1 + 1) return;
       if (isAnimal && u.flying) { flyers.push({ u: u, x: x, y: y }); return; }
       const o = item();
@@ -1769,9 +1910,18 @@
         o.team = 0;
       } else {
         o.t = 1;
-        const k = kings.get(u.kingdomId);
+        const k = kings.get(u.role === 'prisoner' ? (u.pow >= 0 ? u.pow : u.kingdomId) : u.kingdomId);
         o.team = k ? k.colorIndex | 0 : 10;
-        o.key = this.unitKey(u, k ? k.gov : 'tribe', this.unitFrame(u));
+        o.key = this.unitKey(u, k ? k.gov : 'tribe', u.vehicle ? 0 : this.unitFrame(u));
+        if (u.vehicle) o.flip = false;
+        if (u.camel && typeof S.camelKey === 'function') {
+          // Kamel der Karawane läuft neben dem Führer (etwas dahinter)
+          const c = item(); c.t = 3; c.cls = 1; c.row = o.row; c.sub = y - 0.01; c.team = o.team; c.flip = u.dir < 0; c.sick = false;
+          c.key = S.camelKey(true, u.moving ? ((time * 6 + (u.id & 3)) | 0) & 3 : 0);
+          c.px = o.px + (u.dir < 0 ? 7 : -7); c.py = o.py - 1;
+          const cb = S.has(c.key) ? this.keyBox(c.key) : null;
+          if (cb) { const ox = c.flip ? cb[4] : cb[0]; c.x0 = c.px + ox - 1; c.y0 = c.py + cb[1] - 1; c.x1 = c.px + ox + cb[2] + 1; c.y1 = c.py + cb[1] + cb[3] + 1; dyn.push(c); }
+        }
         o.sick = !!(u.sick && (((time * 2) | 0) + u.id) & 1);
         if (u.bubble && u.bubble.icon) bubbles.push({ x: o.px, y: o.py, icon: u.bubble.icon });
         if (zoomBig && u.hp < u.maxHp * 0.95 && u.maxHp > 0) bars.push({ x: o.px + 1, y: o.py - 11, w: 6, v: u.hp / u.maxHp, col: '#7ecb5a' });
@@ -1784,6 +1934,35 @@
     };
     if (st.units) for (const u of st.units) if (!u.dead && u.ind !== 'train') addU(u, false);
     if (st.animals) for (const an of st.animals) if (!an.dead && !an.buried) addU(an, true);
+    // Schiffe: wie Figuren, mit weicher Bewegung zwischen den Schritten
+    const box = (o) => { const bx = S.has(o.key) ? this.keyBox(o.key) : null; if (!bx) return false; const ox = o.flip ? bx[4] : bx[0]; o.x0 = o.px + ox - 1; o.y0 = o.py + bx[1] - 1; o.x1 = o.px + ox + bx[2] + 1; o.y1 = o.py + bx[1] + bx[3] + 1; return true; };
+    if (st.ships && st.ships.length && typeof S.shipKey === 'function') for (const sh of st.ships) {
+      if (!sh || sh.dead || !(sh.x >= 0)) continue;
+      let x = sh.x, y = sh.y;
+      const pp = prev && prev.get(1e9 + sh.id);
+      if (pp) { const dx = x - pp[0], dy = y - pp[1]; if (dx * dx + dy * dy < 4) { x = pp[0] + dx * a; y = pp[1] + dy * a; } }
+      if (x < vt.x0 - 2 || x > vt.x1 + 3 || y < y0 - 1 || y >= y1 + 2) continue;
+      const k = kings.get(sh.kingdomId);
+      let key = null;
+      try { key = S.shipKey(sh.kind || 'trader', sh.gov || (k ? k.gov : 'tribe'), VDIR[(sh.dir | 0) & 3], ((time * 2 + (sh.id & 3) * 0.5) | 0) & 1, sh.culture); } catch (e) { key = null; }
+      if (!key) continue;
+      const o = item(); o.t = 3; o.cls = 1; o.row = Math.floor(y); o.sub = y; o.key = key; o.team = k ? k.colorIndex | 0 : 10;
+      o.px = Math.round(x * 8 - 4); o.py = Math.round(y * 8 - 4);
+      if (sh.t === 'sink') { const q = Math.max(0, Math.min(1, 1 - (sh.sinkT | 0) / 40)); o.alpha = 1 - q * 0.8; o.py += Math.round(q * 3); }
+      o.u = sh;
+      if (box(o)) dyn.push(o);
+    }
+    // Wracks (Panzer, Geschütz, Schiff): ruhen, wenige – wie Bewegtes gezeichnet
+    if (st.wrecks && st.wrecks.length) for (const w of st.wrecks) {
+      if (!w || !(w.x >= 0)) continue;
+      const tx = Math.floor(w.x), ty = Math.floor(w.y);
+      if (tx < vt.x0 - 2 || tx > vt.x1 + 2 || ty < y0 || ty > y1 + 1) continue;
+      let key = w.kind === 'ship' ? 'd_wreck_ship' : null;
+      if (!key) { try { key = typeof S.wreckKey === 'function' ? S.wreckKey(w.kind, (st.year | 0) - (w.year | 0) + ((w.rust | 0) >= 2 ? 4 : 0)) : 'd_wreck_' + w.kind; } catch (e) { key = null; } }
+      if (!key || !S.has(key)) continue;
+      const o = item(); o.t = 3; o.cls = 2; o.row = ty; o.sub = tx; o.key = key; o.px = tx * 8; o.py = ty * 8; o.flip = ((w.id | 0) & 1) === 1;
+      if (box(o)) dyn.push(o);
+    }
     if (near) {
       // Fischschwärme, Lagerfeuer, feuernde Mauergeräte
       for (let cy = F.cy0; cy <= F.cy1; cy++) for (let cx = F.cx0; cx <= F.cx1; cx++) {
@@ -1823,7 +2002,7 @@
           S.drawFast(ctx, it.key, it.px, it.py, it.team, it.flip);
           if (it.sick) { ctx.globalAlpha = 0.6; S.drawFast(ctx, 'fx_plague', it.px, it.py - 10, 0, false); ctx.globalAlpha = 1; }
         } else if (it.t === 2) this.drawAnimal(ctx, it.u, it.px, it.py, it.v);
-        else if (it.t === 3) S.drawFast(ctx, it.key, it.px, it.py, 0, false);
+        else if (it.t === 3) { if (it.alpha != null && it.alpha < 1) { ctx.globalAlpha = it.alpha; S.drawFast(ctx, it.key, it.px, it.py, it.team | 0, !!it.flip); ctx.globalAlpha = 1; } else S.drawFast(ctx, it.key, it.px, it.py, it.team | 0, !!it.flip); }
         else if (it.t === 4) this.drawStruct(ctx, it.u, cityK, false, OBJ_NOBARS, P);
         else { this.objDraw(ctx, it.cls, it.v, P, sway); drawn++; }
       };
@@ -1890,17 +2069,14 @@
       } else for (const o of dyn) simple.push(o);
       // (a) einfache Dinge: direkt aufs Standbild, bei Dunst im Ausschnitt über dem Bild ohne Dunst
       simple.sort(order);
-      // bewegte Kamera (keine Zwischenbilder): Figuren ohne Dunst-Ausschnitt, Verdecktes ohne Bodenkopie (nur ruhend genau)
+      // bewegte Kamera (keine Zwischenbilder): Verdecktes ohne Bodenkopie (nur ruhend genau)
       const exact = !!this._patchBase;
-      if (smogOn && simple.length && exact) {
-        clipTo(simple);
-        if (this._patchA0) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchA0, 0, 0); }
-        else { this.drawBase(ctx); if (near) { ctx.setTransform(1, 0, 0, 1, 0, 0); this.drawRegions(ctx, P); } }
-        ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
-        for (const it of simple) drawIt(it);
-        this.drawSmogLayer(ctx);
-        ctx.restore(); ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
-      } else for (const it of simple) drawIt(it);
+      const haze = smogOn && !this._smogAir && this._smogAlpha;
+      for (const it of simple) {
+        drawIt(it);
+        // Dunst über der Figur: gleich gefärbter Umriss mit der Dunststärke an dieser Stelle (kein Ausschnitt nötig)
+        if (haze && it.t <= 3) { const a = this.smogAt(it.px / 8 + 0.5, it.py / 8 + 0.75); if (a > 0.02) this.drawHaze(ctx, it.key, it.px, it.py, it.flip, a); }
+      }
       // (b) verdeckte Dinge: Ausschnitt vom Boden an neu malen (Ruhendes davor und dahinter in Malreihenfolge)
       if (complex.length) {
         const items = this._cItems;
@@ -2114,7 +2290,7 @@
     }
     const inf = S.info(key);
     const fh = inf ? inf.fh : s.h;
-    const px = s.x * 8, py = (s.type === 'ruin' && fh > s.h ? s.y : s.y + s.h - fh) * 8;
+    const px = s.x * 8 - (inf && inf.fw > s.w ? (inf.fw - s.w) * 4 : 0), py = (s.type === 'ruin' && fh > s.h ? s.y : s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
     // Kornwogen auf reifenden Feldern: helle Welle läuft über das Feld
     if (s.type === 'field' && s.built !== false && (s.growth | 0) >= 2 && zoomBig && typeof S.swayKey !== 'function') {

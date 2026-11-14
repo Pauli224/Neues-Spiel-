@@ -58,24 +58,31 @@ test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
   log('Jahr', st.year, 'Strecke', line.tiles.length, 'Kacheln, Brücken', rails(o.sim).filter((s) => s.bridge).length, 'Bahnhöfe', stations(o.sim).length);
   for (const s of rails(o.sim)) assert(s.mask > 0, 'Gleis ohne Nachbarn (mask)');
   // Bahnhöfe liegen draußen; Gleise im Ring nur, wenn die Strecke den Ring an einem Gleistor (walls.js) quert
-  for (const s of stations(o.sim)) assert(st.inRing[s.y * st.W + s.x] === -1, 'Bahnhof im Mauerring');
+  // (ein Bahnhof darf bei einer Stadterweiterung in den Ring geraten; er darf aber keine Lücke im Mauerverlauf sein)
+  for (const c of st.cities) if (c.wall && c.wall.plan && c.wall.state === 'done') for (const i of c.wall.plan) {
+    const s = o.sim._structs.get(st.structAt[i]);
+    if (s && (s.type === 'station' || s.type === 'rail')) assert(false, 'Bahn als Lücke im Mauerring von ' + c.name);
+  }
   const gates = st.structs.filter((s) => !s.dead && s.type === 'gate' && s.rail);
   for (const s of rails(o.sim)) if (st.inRing[s.y * st.W + s.x] !== -1) assert(gates.some((g) => g.line === s.line), 'Gleis im Mauerring ohne Gleistor');
   for (const s of rails(o.sim)) { const c = o.sim._cities.get(st.inRing[s.y * st.W + s.x]); if (c && c.wall && c.wall.plan) assert(!c.wall.plan.includes(s.y * st.W + s.x), 'Gleis als Lücke im Mauerring'); }
   log('Gleistore', gates.length);
   const A = WW.Cities.stock(o.sim, o.sim._cities.get(o.sim._structs.get(line.a).cityId)), B = WW.Cities.stock(o.sim, o.sim._cities.get(o.sim._structs.get(line.b).cityId));
   A.stone = 260; B.stone = 0;
-  let smoke = 0, whistle = 0, moved = 0;
+  let smoke = 0, whistle = 0, moved = 0, carried = 0;
   const tr = st.trains.find((t) => t.line === line.id);
-  let px = tr.x;
+  let px = tr.x, pt = tr.t;
   for (let i = 0; i < 900; i++) {
     o.sim.tick();
+    if (pt === 'load' && tr.t === 'run') carried += tr.cargo.stone || 0;
+    pt = tr.t;
     for (const f of o.sim.drainFx()) { if (f.type === 'trainsmoke') smoke++; if (f.type === 'whistle') whistle++; }
     if (Math.abs(tr.x - px) > 0) moved++; px = tr.x;
   }
   log('Stein A', Math.round(A.stone), 'B', Math.round(B.stone), '| Rauch', smoke, 'Pfiffe', whistle, 'Fahr-Ticks', moved);
   assert(moved > 50 && smoke > 5 && whistle > 0, 'Zug fährt nicht sichtbar');
-  assert(B.stone >= 40, 'Vorräte werden nicht ausgeglichen');
+  log('beförderter Stein', Math.round(carried));
+  assert(carried >= 40, 'Vorräte werden nicht ausgeglichen');   // (B verbaut Stein sofort, daher die Fracht zählen)
   assert(st.events.some((e) => e.type === 'railFirst'), 'keine Chronik zur ersten Fahrt');
   log('Chronik:', st.events.filter((e) => /^rail/.test(e.type)).map((e) => e.text).join(' / '));
 });
@@ -85,11 +92,21 @@ test('2 Zerstörtes Gleis stoppt den Zug, Reparatur lässt ihn weiterfahren', fu
   const line = untilLine(o, 60);
   assert(line, 'keine Strecke');
   const st = o.sim.state, tr = st.trains.find((t) => t.line === line.id);
-  const mid = line.tiles[Math.min(line.tiles.length - 1, Math.max(1, Math.floor(line.tiles.length / 2)))];
+  // ein echtes Gleisstück nahe der Mitte (kein Gleistor)
+  let mid = -1;
+  // (kurz vor dem fahrenden Zug, damit er die Lücke trifft, bevor der Bautrupp sie flickt)
+  for (let n = 0; n < 200 && tr.t !== 'run'; n++) o.sim.tick();
+  const aim = Math.max(1, Math.min(line.tiles.length - 2, Math.round(tr.pos) + tr.fw * 6));
+  for (let d = 0; d < line.tiles.length && mid < 0; d++) for (const q of [aim + d * tr.fw, aim - d * tr.fw]) {
+    const r = q > 0 && q < line.tiles.length - 1 ? o.sim._structs.get(st.structAt[line.tiles[q]]) : null;
+    if (r && r.type === 'rail' && r.built) { mid = line.tiles[q]; break; }
+  }
   const s = o.sim._structs.get(st.structAt[mid]);
   WW.Structs.destroy(o.sim, s);
   let blocked = false;
-  for (let i = 0; i < 400 && !blocked; i++) { o.sim.tick(); blocked = tr.t === 'blocked'; }
+  let trn = tr;
+  for (let i = 0; i < 400 && !blocked; i++) { o.sim.tick(); trn = st.trains.find((t) => t.line === line.id) || trn; blocked = trn.t === 'blocked'; }
+  log('Zug', trn === tr ? 'derselbe' : 'neu', 'Gleisstück', mid >= 0 ? 'zerstört' : 'nicht gefunden', '| Strecke noch', !!WW.Rail.lineOf(o.sim, line.id));
   // Reparatur verhindern und prüfen, dass er wirklich steht
   const p0 = tr.pos;
   log('Zug blockiert:', blocked, 'bei', p0.toFixed(1), 'von', line.tiles.length);

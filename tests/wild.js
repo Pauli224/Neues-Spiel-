@@ -284,9 +284,11 @@ test('4 Land heben/senken ändert Gelände konsistent', function () {
   run(sim, 300, 50, (i) => checkInvariants(sim, 'Heben ' + i));
 });
 
-test('5 Fuzz (3000 zufällige Aktionen)', function () {
+test('5 Fuzz (3000 zufällige Aktionen)', function () { fuzz('', 3000); });
+test('5b Fuzz mit weiteren Aktions-Seeds (3 × 1500)', function () { for (const sfx of ['-b', '-c', '-d']) fuzz(sfx, 1500); });
+function fuzz(sfx, N) {
   const sim = WW.Sim.create({ seed: 'wild-fuzz', size: 'small', populate: 3 });
-  const r = WW.RNG.create('wild-fuzz-aktionen');
+  const r = WW.RNG.create('wild-fuzz-aktionen' + sfx);
   const W = sim.state.W, H = sim.state.H;
   const junk = [NaN, -1, 1e9, Infinity, null, undefined, 'x', {}, [], 0.5];
   const coord = (m) => r.chance(0.1) ? r.pick(junk) : r.range(-3, m + 3);
@@ -295,7 +297,7 @@ test('5 Fuzz (3000 zufällige Aktionen)', function () {
   const lairs = WW.LAIR_KEYS.concat(['burg', null]);
   const anyId = () => { const s = sim.state; const pool = s.units.concat(s.animals).concat(s.aircraft); return r.chance(0.1) ? r.pick(junk) : (pool.length ? r.pick(pool).id : 1); };
   const counts2 = {};
-  for (let n = 0; n < 3000; n++) {
+  for (let n = 0; n < N; n++) {
     const a = r.int(10);
     let name;
     switch (a) {
@@ -317,8 +319,8 @@ test('5 Fuzz (3000 zufällige Aktionen)', function () {
   run(sim, 1500, 150, (i) => checkInvariants(sim, 'Nachlauf ' + i));
   const D = WW.Sim.load(sim.serialize());
   assert(D && D.serialize() === sim.serialize(), 'Spielstand nach Fuzz nicht stabil');
-  log('Aktionen:', JSON.stringify(counts2), '· Tiere', sim.state.animals.length, '· Einheiten', sim.state.units.length);
-});
+  log('Aktionen' + (sfx ? ' (' + sfx + ')' : '') + ':', JSON.stringify(counts2), '· Tiere', sim.state.animals.length, '· Einheiten', sim.state.units.length);
+}
 
 test('6 Speichern/Laden und Determinismus (auch mitten im Überflug)', function () {
   const mk = () => makeSim({ seed: 'wild-det', size: 'small', populate: 2 });

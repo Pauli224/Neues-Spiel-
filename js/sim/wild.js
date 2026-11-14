@@ -1023,7 +1023,7 @@
 
   WW.Wild = {
     defaults: defaults, ensure: ensure, addScar: addScar, RASTERS: RASTERS, bandOf: bandOf, terrainForBand: terrainForBand, terrainFromHeight: terrainFromHeight,
-    setTerrain: setTerrain, setHeight: setHeight, finishTerrain: finishTerrain, rescueAll: rescueAll, rescueArea: rescueArea, plantTree: plantTree, capOf: capOf, habitat: habitat,
+    setTerrain: setTerrain, setHeight: setHeight, finishTerrain: finishTerrain, rescueAll: rescueAll, rescueArea: rescueArea, markRescue: markRescue, plantTree: plantTree, capOf: capOf, habitat: habitat,
     chron: chron, cityNear: cityNear, cityDist2: cityDist2, sturdy: sturdy, scare: scare, sendSoldiers: sendSoldiers, placeLair: placeLair, lairsOf: lairsOf,
     spawnBandit: spawnBandit, makeMad: makeMad, populate: populate, immigrate: immigrate, grab: grab, drop: drop,
     actions: actions, update: update, yearly: yearly,

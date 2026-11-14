@@ -31,6 +31,7 @@
 // NUTZEN: Güterzug gleicht beim Abfahren Vorräte aus (Überschuss der Abfahrtsstadt -> Zielstadt; Kommunismus hat ohnehin ein
 //   gemeinsames Lager). Truppenzug: im Krieg steigen marschierende Soldaten am Bahnhof zu, wenn der andere Bahnhof näher am
 //   Ziel liegt, und steigen dort aus. Brennstoff je Abfahrt: stock.coal, wenn vorhanden, sonst Holz (RAIL.FUEL).
+//   Ohne Kohle und Holz fährt der Zug im Notbetrieb (tr.slow = true, halbes Tempo).
 //   Fahrende Züge stoßen Qualm aus (WW.Industry: RAIL.EMIT in die Zelle des Zugs).
 // FX: trainsmoke { x, y } (alle 8 Ticks je fahrendem Zug), whistle { x, y } (Abfahrt)
 // EREIGNISSE (group 'economy'|'war', mit effectText): railStation, railFirst, railBroken, railRepaired, railTroops
@@ -44,7 +45,8 @@
 //   Gefangenenzug (kind 'prison'): Gefangene sammeln sich am Bahnhof der Mutterstadt und fahren zur Rampe; Felder
 //   prisoners [Einheiten-IDs an Bord], guards (Zahl der mitfahrenden Wachen, nur Anzeige), camp (Lagerstadt-ID).
 //   Die Insassen steigen an der Rampe aus und gehen bewacht durchs Tor. Bleibt ein Gefangenenzug liegen (Gleis zerstört,
-//   Lager befreit oder erobert), kommen die Insassen frei (WW.Camps.trainFreed). Niemand stirbt im Zug.
+//   Lager befreit oder erobert; liegengeblieben = über 8 Ticks vor einer Lücke), kommen die Insassen frei
+//   (WW.Camps.trainFreed). Niemand stirbt im Zug. Im Zug tragen Gefangene das Reich des Zugs (u.kingdomId), sonst −1.
 // SCHNITTSTELLE: WW.Rail.tick(sim), defaults(st), ride(sim, u), lineOf(sim, id), path(sim, a, b), emitters(sim),
 //   campLineOf(sim, camp) -> fertige Strecke | null, prisonTrain(sim, camp, ids) -> Zug | null, guardTrain(sim, camp, u) -> bool
 // =============================================================================
@@ -84,14 +86,21 @@
     const st = sim.state, T = WW.T, LUT = WW.TERRAIN_LUT, t = st.terrain[i];
     const sid = st.structAt[i];
     if (sid !== -1) { const s0 = sim._structs.get(sid); if (s0 && s0.type === 'gate' && s0.rail) return 4; }   // vorhandenes Gleistor
-    if (st.inRing[i] !== -1 || rings.has(i)) return -1;
     let c = 10;
+    // Mauerringe des eigenen Reichs dürfen gequert werden (Mauerstück wird Gleistor, innen nur freie Kacheln), teuer
+    const rc = st.inRing[i] !== -1 ? sim._cities.get(st.inRing[i]) : null;
+    if (st.inRing[i] !== -1) { if (!rc || rc.kingdomId !== kid || rc.kind === 'camp') return -1; c += 30; }
     if (sid !== -1) {
       const s = sim._structs.get(sid);
       if (!s) return -1;
       if (s.type === 'rail') c = 4;
-      else if (s.type === 'field' || s.type === 'ruin') c = 14;
+      else if (s.type === 'field' || s.type === 'ruin') c += 4;
+      else if ((s.type === 'wall' || s.type === 'gate') && !s.device && sim._cities.get(s.cityId) && sim._cities.get(s.cityId).kingdomId === kid && sim._cities.get(s.cityId).kind !== 'camp') c += 60;
       else return -1;
+    } else if (rings.has(i)) {
+      const oc = sim._cities.get(st.owner[i]);
+      if (!oc || oc.kingdomId !== kid) return -1;
+      c += 60;
     }
     if (t === T.RIVER) return c + 30;
     if (LUT.walk[t] <= 0 || LUT.water[t]) return -1;
@@ -213,7 +222,9 @@
     let open = 0, missing = 0;
     const need = [];
     for (let n = 0; n < line.tiles.length; n++) {
-      const i = line.tiles[n], s = sim._structs.get(st.structAt[i]);
+      const i = line.tiles[n];
+      let s = sim._structs.get(st.structAt[i]);
+      if (s && (s.type === 'wall' || (s.type === 'gate' && !s.rail)) && toRailGate(sim, s, line)) s = sim._structs.get(st.structAt[i]);
       if (s && s.type === 'gate' && s.rail) continue;   // Gleistor: bauen die Baumeister der Stadt
       if (s && s.type === 'rail') { if (!s.built) open++; continue; }
       if (s && s.type !== 'field' && s.type !== 'ruin') return false;   // etwas anderes steht im Weg
@@ -227,8 +238,10 @@
       let done = 0;
       for (let q = 0; q < L && done < R().CREW_TILES; q++) {
         const n = dir > 0 ? q : L - 1 - q, i = line.tiles[n];
-        const s = sim._structs.get(st.structAt[i]);
-        if (!s || s.type !== 'rail') break;          // Lücke ohne Baustelle: hier endet der Trupp
+        let s = sim._structs.get(st.structAt[i]);
+        if (s && s.type === 'gate' && s.rail) { if (s.built) continue; break; }
+        if (!s || s.type === 'field' || s.type === 'ruin') { if (placeSite(sim, line, n, ca, cb)) open++; break; }   // Trupp setzt die Baustelle, gebaut wird beim nächsten Mal
+        if (s.type !== 'rail') break;          // etwas anderes im Weg: hier endet der Trupp
         if (s.built) continue;
         const x = i % W;
         const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W];
@@ -245,23 +258,44 @@
     need.sort((p, q) => Math.min(p, line.tiles.length - 1 - p) - Math.min(q, line.tiles.length - 1 - q) || p - q);
     for (const n of need) {
       if (open >= R().SITES) break;
-      const i = line.tiles[n];
-      const old = sim._structs.get(st.structAt[i]);
-      if (old) WW.Structs.remove(sim, old);
-      const t = st.terrain[i];
-      if (WW.TERRAIN_LUT.wood[t] && WW.Walls && WW.Walls.deforested) {
-        st.terrain[i] = WW.Walls.deforested(t);
-        if (st.cleared) st.cleared[i] = WW.CONFIG.CLEARED_MAX || 240;
-        sim.terrainChanged();
-      }
-      const city = n < line.tiles.length / 2 ? ca : cb;
-      const s = WW.Structs.create(sim, 'rail', i % W, Math.floor(i / W), city.id, { style: (sim._kingdoms.get(city.kingdomId) || {}).gov });
-      if (!s) continue;
-      s.line = line.id; s.bridge = st.terrain[i] === T.RIVER; s.mask = 0;
-      city.sites.push(s.id);
-      masksAround(sim, i);
-      open++;
+      const i = line.tiles[n], o = sim._structs.get(st.structAt[i]);
+      if (o && o.type === 'rail') continue;   // schon vom Trupp gesetzt
+      if (placeSite(sim, line, n, ca, cb)) open++;
     }
+    return true;
+  }
+  // Gleis-Baustelle auf Trassen-Kachel n (Feld/Ruine weicht, Wald wird gerodet)
+  function placeSite(sim, line, n, ca, cb) {
+    const st = sim.state, W = st.W, T = WW.T, i = line.tiles[n];
+    const old = sim._structs.get(st.structAt[i]);
+    if (old && old.type !== 'field' && old.type !== 'ruin') return null;
+    if (old) WW.Structs.remove(sim, old);
+    const t = st.terrain[i];
+    if (WW.TERRAIN_LUT.wood[t] && WW.Walls && WW.Walls.deforested) {
+      st.terrain[i] = WW.Walls.deforested(t);
+      if (st.cleared) st.cleared[i] = WW.CONFIG.CLEARED_MAX || 240;
+      sim.terrainChanged();
+    }
+    const city = n < line.tiles.length / 2 ? ca : cb;
+    const s = WW.Structs.create(sim, 'rail', i % W, Math.floor(i / W), city.id, { style: (sim._kingdoms.get(city.kingdomId) || {}).gov });
+    if (!s) return null;
+    s.line = line.id; s.bridge = st.terrain[i] === T.RIVER; s.mask = 0;
+    city.sites.push(s.id);
+    masksAround(sim, i);
+    return s;
+  }
+
+  // Mauerstück des eigenen Reichs auf der Trasse wird Gleistor (Tor mit Gleis): dicht für Feinde, Züge fahren durch
+  function toRailGate(sim, s, line) {
+    const c = sim._cities.get(s.cityId), k = sim._kingdoms.get(line.kingdomId);
+    if (!c || !k || c.kingdomId !== k.id || c.kind === 'camp' || s.device) return false;
+    const st = sim.state, W = st.W, i = s.y * W + s.x, plan = new Set((c.wall && c.wall.plan) || []);
+    s.type = 'gate'; s.rail = true; s.line = line.id; s.towerSpot = false;
+    s.orient = plan.has(i - 1) && plan.has(i + 1) ? 'h' : 'v';
+    s.maxHp = WW.Structs.maxHpFor(sim, s); s.hp = Math.min(s.hp, s.maxHp);
+    WW.Structs.setBlockAt(sim, s); WW.Structs.updateMasksAround(sim, s.x, s.y);
+    if (c.wall && c.wall.gates && c.wall.gates.indexOf(i) < 0) c.wall.gates.push(i);
+    sim.markDirty(i); st.pathVersion++;
     return true;
   }
 
@@ -481,7 +515,7 @@
   // ---------------------------------------------------------------------------
   function trackOk(sim, line, n) {
     const s = sim._structs.get(sim.state.structAt[line.tiles[n]]);
-    return !!(s && railish(s) && s.built);
+    return !!(s && railish(s) && (s.built || s.type === 'gate'));   // Gleistor im Bau: die Schienen liegen schon
   }
   function setPos(sim, tr, line) {
     const W = sim.state.W, L = line.tiles.length;
@@ -502,9 +536,10 @@
     const sf = WW.Cities.stock(sim, from);
     // Brennstoff: Kohle, sonst Holz (Lagerstrecke: zahlt die Mutterstadt)
     const fuelC = from.kind === 'camp' ? to : from, sfu = WW.Cities.stock(sim, fuelC);
+    tr.slow = false;
     if (typeof sfu.coal === 'number' && sfu.coal >= C.FUEL) { sfu.coal -= C.FUEL; tr.coal = true; }
     else if (sfu.wood >= C.FUEL) { sfu.wood -= C.FUEL; tr.coal = false; }
-    else return false;
+    else { tr.coal = false; tr.slow = true; }   // ohne Brennstoff: Notbetrieb mit halbem Tempo (Reste, Gestrüpp)
     tr.cargo = { food: 0, wood: 0, stone: 0, gold: 0 };
     if (tr.kind === 'freight' && line.camp != null) {
       // ab Lager: alles Erarbeitete wird abgeholt (getrenntes Lager; im Kommunismus ist es ohnehin das Reichslager)
@@ -597,7 +632,7 @@
       if (tr.kind === 'prison') {
         // Lager befreit/erobert, Strecke nicht mehr des Regimes oder Zug blockiert: die Insassen kommen frei
         const camp = sim._cities.get(tr.camp);
-        if (!camp || camp.dead || camp.kind !== 'camp' || camp.kingdomId !== tr.kingdomId || !govOk(sim, k) || (tr.t === 'blocked' && (tr.blockedT = (tr.blockedT | 0) + 1) > 60)) {
+        if (!camp || camp.dead || camp.kind !== 'camp' || camp.kingdomId !== tr.kingdomId || !govOk(sim, k) || (tr.t === 'blocked' && (tr.blockedT = (tr.blockedT | 0) + 1) > 8)) {
           if (WW.Camps) WW.Camps.trainFreed(sim, tr);
           tr.prisoners = []; tr.dead = true; gone = true; continue;
         }
@@ -607,7 +642,7 @@
       if (tr.t === 'load') {
         if (--tr.wait <= 0 && !depart(sim, tr, line)) tr.wait = C.WAIT;
       } else {
-        const np = tr.pos + tr.fw * C.SPEED * (tr.coal ? C.COAL_SPEED : 1);
+        const np = tr.pos + tr.fw * C.SPEED * (tr.coal ? C.COAL_SPEED : 1) * (tr.slow ? 0.5 : 1);
         const n = tr.fw > 0 ? Math.min(L - 1, Math.ceil(np)) : Math.max(0, Math.floor(np));
         if (!trackOk(sim, line, n)) {
           if (tr.t !== 'blocked') {

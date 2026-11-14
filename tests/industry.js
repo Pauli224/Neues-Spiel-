@@ -396,7 +396,7 @@ test('12 Kachel-Meldungen nur bei sichtbarer Änderung (barren 0/85/170, murk 8e
   // „gezeichneter" Stand: wird nur bei Meldung aufgefrischt (wie der Renderer)
   sim.drainDirtyTiles();
   const drawn = new Int32Array(N); for (let i = 0; i < N; i++) drawn[i] = vis(i);
-  const ch = new Set(), marked = new Set();
+  const ch = new Set(), marked = new Set(), ter0 = st.terrain.slice();
   let pb = st.barren.slice(), pm = st.murk.slice();
   // nur Meldungen der Industrie zählen (andere Quellen: Bauten, Feuer …)
   const md = sim.markDirty, it = WW.Industry.tick; let inInd = false;
@@ -410,6 +410,8 @@ test('12 Kachel-Meldungen nur bei sichtbarer Änderung (barren 0/85/170, murk 8e
     pb.set(st.barren); pm.set(st.murk);
   }
   } finally { WW.Industry.tick = it; delete sim.markDirty; }
+  // Geländewechsel (Bäume sterben, Aschefeld) sind echte Änderungen und zählen nicht mit
+  for (const i of [...marked]) if (st.terrain[i] !== ter0[i]) marked.delete(i);
   let stale = 0, bad = 0;
   for (let i = 0; i < N; i++) {
     if (drawn[i] === vis(i)) continue;

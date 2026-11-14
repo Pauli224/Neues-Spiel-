@@ -183,7 +183,9 @@
     // mit Gleisanschluss: erst zum Bahnhof der Mutterstadt, dann im Gefangenenzug zur Rampe
     if (o.march && place.kind === 'camp' && WW.Rail && WW.Rail.campTownStation) {
       const ts = WW.Rail.campTownStation(sim, place);
-      if (ts && dist2(u.x, u.y, ts.x + 1, ts.y + 1) < dist2(u.x, u.y, place.cx, place.cy)) u.campVia = ts.id;
+      // aus der Stadt des Bahnhofs (deren Gebiet) oder näher am Bahnhof als am Lager: zum Zug
+      const st0 = sim.state, ui = Math.floor(u.y) * st0.W + Math.floor(u.x);
+      if (ts && (st0.owner[ui] === ts.cityId || st0.inRing[ui] === ts.cityId || dist2(u.x, u.y, ts.x + 1, ts.y + 1) < dist2(u.x, u.y, place.cx, place.cy))) u.campVia = ts.id;
     }
     if (place.kind === 'camp') { place.inmates = (place.inmates | 0) + 1; if (pow) place.pows = (place.pows | 0) + 1; }
     else place.inmates = (place.inmates | 0) + 1;
@@ -285,7 +287,7 @@
   // ---------------------------------------------------------------------------
   function unit(sim, u) {
     if (u.role !== 'prisoner') { u.ind = null; return false; }
-    if (u.kingdomId !== -1) u.kingdomId = -1;   // alte Stände: Insassen trugen das Reich des Regimes
+    if (u.kingdomId !== -1 && u.campState !== 'train') u.kingdomId = -1;   // alte Stände: Insassen trugen das Reich des Regimes
     if (u.hp < u.maxHp && ((sim.state.tick + u.id) & 63) === 0) u.hp++;   // Gefangene werden versorgt und erholen sich
     if (u.campState === 'home') { goHome(sim, u); return true; }
     const h = holdOf(sim, u);
@@ -368,8 +370,16 @@
   }
   function onTrain(sim, u) {
     const tr = sim.state.trains.find((t) => t.id === u.train && t.kind === 'prison');
-    if (!tr) { u.campState = 'march'; u.campVia = 0; u.train = 0; u.marchT = sim.state.tick; return; }
-    u.x = tr.x; u.y = tr.y; u.moving = false;
+    if (!tr) { u.campState = 'march'; u.campVia = 0; u.train = 0; u.marchT = sim.state.tick; u.kingdomId = -1; unstick(sim, u); return; }
+    // im Zug unter der Aufsicht des Regimes (fährt durch dessen Gleistore); Reich nur für die Fahrt
+    u.x = tr.x; u.y = tr.y; u.moving = false; u.kingdomId = tr.kingdomId;
+  }
+  // nie auf Mauer/Tor stehen bleiben (nach Aussteigen, Befreiung, Ankunft)
+  function unstick(sim, u) {
+    const st = sim.state, W = st.W, i = Math.floor(u.y) * W + Math.floor(u.x);
+    if (!sim.block[i] || WW.Path.passable(sim, i, u.kingdomId)) return;
+    const n = WW.Path.nearestFree(sim, i, u.kingdomId, 6);
+    if (n >= 0) { u.x = (n % W) + 0.5; u.y = Math.floor(n / W) + 0.5; u.path = null; }
   }
   // Haken aus rail.js: Gefangenenzug an der Rampe angekommen -> aussteigen, bewacht durchs Tor
   function unload(sim, tr) {
@@ -378,6 +388,7 @@
       const u = sim._units.get(id);
       if (!u || u.dead || u.role !== 'prisoner' || u.campState !== 'train' || u.train !== tr.id) continue;
       u.campState = 'march'; u.campVia = 0; u.train = 0; u.x = tr.x; u.y = tr.y; u.marchT = sim.state.tick; u.fails = 0; u.path = null;
+      u.kingdomId = -1; unstick(sim, u);
       n++;
     }
     if (n) sim.fx({ type: 'campgate', x: tr.x, y: tr.y });
@@ -389,8 +400,9 @@
     for (const id of tr.prisoners || []) {
       const u = sim._units.get(id);
       if (!u || u.dead || u.role !== 'prisoner' || u.campState !== 'train' || u.train !== tr.id) continue;
-      u.x = tr.x; u.y = tr.y; u.train = 0; u.campVia = 0;
+      u.x = tr.x; u.y = tr.y; u.train = 0; u.campVia = 0; u.kingdomId = -1;
       release(sim, u, null);
+      unstick(sim, u);
       list.push(u);
     }
     if (list.length) {
@@ -525,6 +537,7 @@
     u.ind = null; u.campState = null; u.camp = 0; u.work = -1; u.pow = -1; u.powC = -1; u.powUntil = 0;
     u.cityId = c ? c.id : -1; u.kingdomId = c ? c.kingdomId : -1;
     WW.Units.setRole(sim, u, 'farmer');
+    unstick(sim, u);
   }
   // Freilassung: Kriegsgefangene gehen heim, politische werden Bürger von city (bzw. ihrer Herkunft)
   function release(sim, u, city, rebel) {
@@ -532,6 +545,7 @@
     const k = sim._kingdoms.get(u.pow);
     if (u.pow >= 0 && k && !k.dead && (!city || city.kingdomId !== u.pow)) {
       u.campState = 'home'; u.kingdomId = -1; u.work = -1;
+      unstick(sim, u);
       WW.Units.bubble(u, 'heart', 50);
       return 'home';
     }
@@ -580,7 +594,7 @@
       if (x < 9 || y < 9 || x >= W - 9 || y >= H - 9) continue;
       if (cap && dist2(cap.cx, cap.cy, x, y) < cfg.MIN_CAP_DIST * cfg.MIN_CAP_DIST) continue;
       if (!WW.Cities.canFoundAt(sim, x, y, undefined, cfg.CITY_DIST, k.id)) continue;
-      let walk = 0, wood = 0, stone = 0, dep = 0, rail = 0, foreign = 0;
+      let walk = 0, wood = 0, stone = 0, dep = 0, rail = 0, foreign = 0, own = 0;
       for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) {
         const i = (y + dy) * W + x + dx, t = st.terrain[i];
         if (LUT.walk[t] > 0 && !LUT.water[t]) walk++;
@@ -592,16 +606,16 @@
         if (st.inRing[i] !== -1) foreign += 3;
         const s = sim._structs.get(st.structAt[i]);
         if (s && s.type === 'rail') rail++;
-        else if (s && s.cityId >= 0 && s.type !== 'field' && s.type !== 'ruin') foreign++;
+        else if (s && s.cityId >= 0 && s.type !== 'field' && s.type !== 'ruin') own++;
       }
-      if (walk < 170 || foreign > 0) continue;
+      if (walk < 160 || foreign > 0 || own > 8) continue;   // fremdes Land/Ringe nie; eigene Bauten (Hütten, Minen) wenige
       // Kommandantur + Baracken-Plätze bebaubar?
       if (!rectFree(sim, x - 1, y - 1, 3, 3, -1)) continue;
       let slots = 0;
       for (const sl of SLOTS) if (rectFree(sim, x + sl[0], y + sl[1], 2, 2, -1)) slots++;
       if (slots < 4) continue;
       const score = Math.min(25, wood) * 0.4 + Math.min(25, stone) * 0.6 + Math.min(6, dep) * 3 + Math.min(4, rail) * 6 + slots * 2
-        - Math.abs(r - 20) * 0.4 - foreign * 4 + hh(seed(sim) ^ k.id, x * 977 + y) * 2;
+        - Math.abs(r - 20) * 0.4 - own * 3 + hh(seed(sim) ^ k.id, x * 977 + y) * 2;
       if (score > bs) { bs = score; best = { x: x, y: y }; }
     }
     return best;

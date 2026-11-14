@@ -284,12 +284,14 @@ function uprisingCase() {
     for (let t = 0; t < TPY; t += 10) { for (const g of guards()) { g.cityId = o.c.id; g.order = { kind: 'home' }; } run(sim, 10); }
     if (camp.kind !== 'camp') nk = sim._kingdoms.get(camp.kingdomId);
   }
-  const free = cand.filter((u) => !u.dead && u.role !== 'prisoner' && u.cityId === camp.id).length;
-  log('Aufstand:', camp.name, 'ist', camp.kind, '| Reich', nk ? nk.name + ' (' + nk.gov + ')' : '-', '| freie Bürger', free, '/ 10 | Einheiten', n0, '->', sim.state.units.filter((u) => !u.dead).length);
+  const free = cand.filter((u) => !u.dead && u.role !== 'prisoner').length;   // (wer vorher beim Aufruhr entkam, ist auch frei)
+  const stay = cand.filter((u) => !u.dead && u.role !== 'prisoner' && u.cityId === camp.id).length;
+  log('Aufstand:', camp.name, 'ist', camp.kind, '| Reich', nk ? nk.name + ' (' + nk.gov + ')' : '-', '| frei', free, '/', cand.length + ', davon Bürger der neuen Stadt', stay, '| Einheiten', n0, '->', sim.state.units.filter((u) => !u.dead).length);
   assert(nk && nk.id !== o.k.id, 'kein eigenes Reich');
   assert(nk.gov === 'democracy' || nk.gov === 'anarchy', 'falsche Regierung: ' + nk.gov);
   assert(camp.kind === 'town' && camp.centerId >= 0 && !sim.state.structs.some((s) => !s.dead && s.cityId === camp.id && s.mat === 'fence'), 'Lager nicht zur Stadt geworden');
-  assert(free >= 8, 'Insassen nicht frei');
+  if (!(free === cand.length && stay >= 3)) log('  Stand:', cand.map((u) => [u.dead ? 'tot' : u.role, u.campState, u.cityId, u.camp, (WW.Camps.holdOf(sim, u) || {}).type || (WW.Camps.holdOf(sim, u) || {}).kind].join('/')).join(' '));
+  assert(cand.length >= 5 && free === cand.length && stay >= 3, 'Insassen nicht frei');
   assert(sim.state.structs.some((s) => !s.dead && s.type === 'memorial'), 'kein Mahnmal');
   assert(evs(sim, /^campUprising$/).length, 'keine Chronik zum Aufstand');
   assert(!sim._deaths || !(sim._deaths.camp > 0), 'Todesfälle im Lager');
@@ -462,8 +464,15 @@ test('11 Gleisanschluss: Rampe vor dem Tor, Güterzug liefert ab, Gefangenenzug 
   let tr = null;
   for (let i = 0; i < 3000 && !(tr = st.trains.find((x) => x.kind === 'prison' && x.t === 'run')); i++) sim.tick();
   assert(tr, 'zweiter Gefangenenzug fährt nicht');
-  const ahead = Math.round(tr.pos) + tr.fw * 4, idx = Math.max(1, Math.min(line.tiles.length - 2, ahead));
-  const piece = sim._structs.get(st.structAt[line.tiles[idx]]);
+  // ein echtes Gleisstück (kein Gleistor) kurz vor dem Zug
+  let piece = null;
+  for (let d = 2; d < line.tiles.length && !piece; d++) {
+    const q = Math.round(tr.pos) + tr.fw * d;
+    if (q <= 0 || q >= line.tiles.length - 1) break;
+    const r = sim._structs.get(st.structAt[line.tiles[q]]);
+    if (r && r.type === 'rail' && r.built) piece = r;
+  }
+  assert(piece, 'kein Gleisstück vor dem Zug');
   const aboard = tr.prisoners.map((id) => sim._units.get(id));
   WW.Structs.destroy(sim, piece);
   run(sim, 200);

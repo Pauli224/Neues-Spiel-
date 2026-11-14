@@ -202,6 +202,7 @@
     let t = WW.T.ASH;
     if (band >= 7) t = WW.T.SNOW; else if (band === 6) t = WW.T.MOUNTAIN; else if (band === 5) t = WW.T.HILL;
     st.terrain[i] = t;
+    if (WW.Wild && WW.Wild.markRescue) WW.Wild.markRescue(sim, i);
     st.flora[i] = t === WW.T.ASH ? FL_ASH : 0; st.graze[i] = t === WW.T.ASH ? 1 : 0;
     sim.markDirty(i);
     sim.terrainChanged();
@@ -257,7 +258,7 @@
       }
       if (sim.rng.next() < p * (nb ? 1 : 0.3)) ch.push(i, to);
     });
-    for (let k = 0; k < ch.length; k += 2) { st.terrain[ch[k]] = ch[k + 1]; sim.markDirty(ch[k]); }
+    for (let k = 0; k < ch.length; k += 2) { st.terrain[ch[k]] = ch[k + 1]; sim.markDirty(ch[k]); if (WW.Wild && WW.Wild.markRescue) WW.Wild.markRescue(sim, ch[k]); }
   }
 
   function updateFields(sim) {

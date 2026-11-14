@@ -184,7 +184,7 @@
     for (let k = 0; k < e.saved.length; k += 2) {
       const i = e.saved[k], t = e.saved[k + 1];
       if (test && !test(i)) { keep.push(i, t); continue; }
-      if (st.terrain[i] === e.into && st.structAt[i] === -1) { st.terrain[i] = t; sim.markDirty(i); ch = true; }
+      if (st.terrain[i] === e.into && st.structAt[i] === -1) { st.terrain[i] = t; sim.markDirty(i); W_().markRescue(sim, i); ch = true; }
     }
     e.saved = keep;
     if (ch) sim.terrainChanged();
@@ -264,7 +264,7 @@
       });
       for (const i of add) {
         e.saved.push(i, st.terrain[i]);
-        st.terrain[i] = WW.T.SHALLOW; sim.markDirty(i);
+        st.terrain[i] = WW.T.SHALLOW; sim.markDirty(i); W_().markRescue(sim, i);
         WW.Env.extinguish(sim, i);
       }
       if (add.length) sim.terrainChanged();
@@ -554,7 +554,7 @@
         if (t === T.SNOWFIELD || t === T.DEEP || t === T.LAVA || WW.TERRAIN_LUT.rank[t] >= 5) return;
         if (s) return;
         e.saved.push(i, t);
-        st.terrain[i] = T.SNOWFIELD; sim.markDirty(i);
+        st.terrain[i] = T.SNOWFIELD; sim.markDirty(i); W_().markRescue(sim, i);
         if (st.flora[i] === 1 || st.flora[i] === 2) st.flora[i] = 0;
       });
       unitsIn(sim, x, y, 5, (u) => WW.Units.bubble(u, 'question', 30));
@@ -716,6 +716,7 @@
       if (WW.TERRAIN_LUT.walk[t] <= 0 || !WW.TERRAIN_LUT.wall[t] || st.structAt[i] !== -1) return false;
       const s = WW.Structs.create(sim, 'wall', fx, fy, -1, { built: true, level: 2, mat: 'stone', style: 'tribe' });
       if (!s) return false;
+      W_().markRescue(sim, i);   // Tiere auf der neuen Mauerkachel weichen aus
       sim.fx({ type: 'dust', x: fx + 0.5, y: fy + 0.5 });
       return true;
     },

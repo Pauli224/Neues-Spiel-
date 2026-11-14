@@ -17,9 +17,10 @@
 //
 // HAFEN = Bauwerk type 'harbor' (2×2, WW.STRUCT_INFO.harbor), auf Land direkt an Meer/Flachwasser/Tiefsee
 //   Felder zusätzlich zu den üblichen: dock (Kachel-Index der Anlegestelle IM WASSER, 4-Nachbar der Grundfläche),
-//   dockDir 0 O | 1 S | 2 W | 3 N (Richtung Grundfläche -> Wasser; Steg zeigt dorthin), style (Regierung, wie alle
+//   dockDir 0 O | 1 S | 2 W | 3 N (Richtung Grundfläche -> Wasser; Steg zeigt dorthin), side 'e'|'s'|'w'|'n' (dasselbe als
+//   Buchstabe = 3. Parameter von S.harborKey(gov, culture, dir)), style (Regierung, wie alle
 //   Bauwerke), culture (Kultur der Stadt beim Bau), prod (Schiffsart im Bau | null), prog 0..1, made (gebaute Schiffe).
-//   Sprite: S.harborKey(gov, culture) -> 's_harbor_*' (2×2 mit Steg zum dock). Baustelle wie jedes Bauwerk (!built).
+//   Sprite: S.harborKey(style, culture, side) -> 's_harbor_<stil>_<side>' (2×2 mit Steg zum dock). Baustelle wie jedes Bauwerk (!built).
 //   Wer: Städte mit Küste ab Stufe „Dorf" (tier ≥ NAVAL.GOVS[gov].minTier, pop ≥ minPop; Handelsrepublik schon im Lager
 //   ab 6 Einw.), je Stadt einer. Platz: außerhalb des Mauerrings (mit Gasse, nie auf Ring-Kacheln, ohne Ring mit Abstand
 //   für den künftigen Ring) oder ganz innerhalb des Rings – der Ring wird nie angetastet und bleibt dicht. Wird der Hafen
@@ -67,6 +68,8 @@
 //
 // ZUSTAND state.naval = { seq, harbors [Hafen-IDs], colony { [kid]: Jahr }, invade { [kid]: Jahr }, noHarbor { [cityId]: Jahr },
 //   first { [kid]: 1 }, ledger { [cityId]: Gold aus Seehandel insgesamt (Info-Fenster) },
+//   mask (Base64-Bitmaske der Wasserkacheln, alle 60 Ticks erneuert; Grundlage von Zusammenhang und Routen-Zwischenspeicher),
+//   maskVer (zählt bei Änderung),
 //   stats { built, sunk, fish, trades, colonies, landings, wrecks } }
 //
 // FX (sim.drainFx), Koordinaten in Kacheln:
@@ -148,6 +151,8 @@
     n.noHarbor = n.noHarbor && typeof n.noHarbor === 'object' ? n.noHarbor : {};
     n.first = n.first && typeof n.first === 'object' ? n.first : {};
     n.ledger = n.ledger && typeof n.ledger === 'object' ? n.ledger : {};
+    n.mask = typeof n.mask === 'string' ? n.mask : '';   // Wasser-Schnappschuss (siehe seaInfo); leer = beim ersten Bedarf
+    n.maskVer = n.maskVer | 0;
     const S = n.stats && typeof n.stats === 'object' ? n.stats : {};
     for (const k of ['built', 'sunk', 'fish', 'trades', 'colonies', 'landings', 'wrecks']) S[k] = +S[k] || 0;
     n.stats = S;
@@ -178,37 +183,55 @@
   // ---------------------------------------------------------------------------
   // Wasser: Zusammenhang, Wegsuche (A*), begrenzte Breitensuche. Zwischenspeicher hängt nur am Wasser-Gelände.
   // ---------------------------------------------------------------------------
+  // Wasser-Schnappschuss: state.naval.mask = Bitmaske (Base64) der Wasserkacheln, maskVer zählt bei Änderung.
+  // Zusammenhang und Routen-Zwischenspeicher hängen NUR an diesem gespeicherten Schnappschuss (deterministisch auch nach
+  // dem Laden); erneuert wird er alle 60 Ticks aus dem Gelände. Fahrende Schiffe prüfen jede Kachel am echten Gelände.
+  function maskBytes(st) {
+    const N = st.W * st.H, ter = st.terrain, L = seaLut(), out = new Uint8Array((N + 7) >> 3);
+    for (let i = 0; i < N; i++) if (L[ter[i]]) out[i >> 3] |= 1 << (i & 7);
+    return out;
+  }
+  function refreshMask(sim, force) {
+    const st = sim.state, n = st.naval;
+    const m = maskBytes(st);
+    const old = sim._navMask && sim._navMaskVer === n.maskVer ? sim._navMask : (n.mask ? WW.SimUtil.decodeArray(n.mask, Uint8Array, m.length) : null);
+    let same = !!old && old.length === m.length && !force;
+    if (same) for (let i = 0; i < m.length; i++) if (old[i] !== m[i]) { same = false; break; }
+    if (same) { sim._navMask = old; sim._navMaskVer = n.maskVer; return; }
+    n.mask = WW.SimUtil.encodeArray(m); n.maskVer = (n.maskVer | 0) + 1;
+    sim._navMask = m; sim._navMaskVer = n.maskVer;
+  }
   function seaInfo(sim) {
-    const st = sim.state;
-    if (sim._navInfo && sim._navTick === st.tick) return sim._navInfo;
-    const W = st.W, H = st.H, N = W * H, ter = st.terrain, L = seaLut();
-    let h = 0x811c9dc5 | 0, cnt = 0;
-    for (let i = 0; i < N; i++) if (L[ter[i]]) { h = Math.imul(h ^ i, 16777619); cnt++; }
-    h = (h ^ cnt) | 0;
-    sim._navTick = st.tick;
-    if (sim._navInfo && sim._navInfo.sig === h) return sim._navInfo;
+    const st = sim.state, n = st.naval;
+    if (!n.mask) refreshMask(sim, true);
+    if (sim._navInfo && sim._navInfo.ver === n.maskVer) return sim._navInfo;
+    const W = st.W, H = st.H, N = W * H;
+    const mb = sim._navMask && sim._navMaskVer === n.maskVer ? sim._navMask : WW.SimUtil.decodeArray(n.mask, Uint8Array, (N + 7) >> 3);
+    sim._navMask = mb; sim._navMaskVer = n.maskVer;
+    const sea = new Uint8Array(N);
+    for (let i = 0; i < N; i++) sea[i] = (mb[i >> 3] >> (i & 7)) & 1;
     const comp = new Int32Array(N).fill(-1), size = [];
     const q = new Int32Array(N);
     let label = 0;
-    for (let s = 0; s < N; s++) {
-      if (comp[s] !== -1 || !L[ter[s]]) continue;
-      let qh = 0, qt = 0, n = 0;
-      q[qt++] = s; comp[s] = label;
+    for (let s0 = 0; s0 < N; s0++) {
+      if (comp[s0] !== -1 || !sea[s0]) continue;
+      let qh = 0, qt = 0, cnt = 0;
+      q[qt++] = s0; comp[s0] = label;
       while (qh < qt) {
         const i = q[qh++], x = i % W, y = (i - x) / W;
-        n++;
+        cnt++;
         for (let d = 0; d < 8; d++) {
           const nx = x + DX8[d], ny = y + DY8[d];
           if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
           const j = ny * W + nx;
-          if (comp[j] !== -1 || !L[ter[j]]) continue;
-          if (d >= 4 && (!L[ter[y * W + nx]] || !L[ter[ny * W + x]])) continue;
+          if (comp[j] !== -1 || !sea[j]) continue;
+          if (d >= 4 && (!sea[y * W + nx] || !sea[ny * W + x])) continue;
           comp[j] = label; q[qt++] = j;
         }
       }
-      size.push(n); label++;
+      size.push(cnt); label++;
     }
-    sim._navInfo = { sig: h, comp: comp, size: size, cache: new Map() };
+    sim._navInfo = { ver: n.maskVer, sea: sea, comp: comp, size: size, cache: new Map() };
     return sim._navInfo;
   }
   function scratch(sim) {
@@ -224,7 +247,7 @@
   }
   // A* über Wasser (8 Richtungen, keine Abkürzung über Landecken). Rückgabe: Kacheln ohne Start, mit Ziel | null
   function astar(sim, from, to, limit) {
-    const st = sim.state, W = st.W, H = st.H, ter = st.terrain, L = seaLut();
+    const st = sim.state, W = st.W, H = st.H, sea = seaInfo(sim).sea;
     const A = scratch(sim), stamp = A.stamp, g = A.g, came = A.came, seen = A.seen, closed = A.closed, heap = A.heap, hf = A.hf;
     const tx = to % W, ty = (to - tx) / W;
     const hfun = (i) => { const x = i % W, y = (i - x) / W, dx = Math.abs(x - tx), dy = Math.abs(y - ty); return dx > dy ? dx + 0.41421356 * dy : dy + 0.41421356 * dx; };
@@ -275,8 +298,8 @@
         const nx = x + DX8[d], ny = y + DY8[d];
         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
         const j = ny * W + nx;
-        if (!L[ter[j]] || closed[j] === stamp) continue;
-        if (d >= 4 && (!L[ter[y * W + nx]] || !L[ter[ny * W + x]])) continue;
+        if (!sea[j] || closed[j] === stamp) continue;
+        if (d >= 4 && (!sea[y * W + nx] || !sea[ny * W + x])) continue;
         const ng = g[i] + (d >= 4 ? SQ2 : 1);
         if (seen[j] !== stamp || ng < g[j]) { seen[j] = stamp; g[j] = ng; came[j] = i; push(j, ng + hfun(j)); }
       }
@@ -450,7 +473,7 @@
     const k = sim._kingdoms.get(city.kingdomId);
     const s = WW.Cities.placeStruct(sim, city, 'harbor', spot.x, spot.y, { style: k ? k.gov : 'tribe', built: !!built });
     if (!s) return null;
-    s.dock = spot.dock; s.dockDir = spot.dockDir; s.culture = city.culture || 'mitte';
+    s.dock = spot.dock; s.dockDir = spot.dockDir; s.side = 'eswn'[spot.dockDir]; s.culture = city.culture || 'mitte';
     s.prod = null; s.prog = 0; s.made = 0; s.opened = built ? 1 : 0;
     sim.state.naval.harbors.push(s.id);
     if (!built) city.sites.push(s.id);
@@ -908,6 +931,50 @@
     }
   }
 
+  // Gestrandete (gescheiterte Gründung, Schiffbruch): Leute auf einer anderen Landmasse als ihre Stadt schließen sich einer
+  // Stadt dort an (eigenes Reich zuerst, sonst friedliche Nachbarn) oder gründen ab drei Leuten selbst einen Ort.
+  function stranded(sim) {
+    const st = sim.state, W = st.W, comp = comps(sim);
+    const groups = new Map();
+    for (const u of st.units) {
+      if (u.dead || u.sea || u.ind || u.vehicle || u.order || u.merc) continue;
+      if (u.role === 'settler' || u.role === 'soldier' || u.role === 'leader' || u.role === 'prisoner' || u.role === 'rebel' || u.role === 'bandit') continue;
+      const c = sim._cities.get(u.cityId);
+      if (!c) continue;
+      const uc = comp[Math.floor(u.y) * W + Math.floor(u.x)];
+      if (uc < 0 || uc === comp[c.cy * W + c.cx]) continue;
+      const key = uc * 100000 + u.kingdomId;
+      let g = groups.get(key);
+      if (!g) { g = { comp: uc, k: u.kingdomId, list: [] }; groups.set(key, g); }
+      g.list.push(u);
+    }
+    for (const g of groups.values()) {
+      const u0 = g.list[0];
+      let join = null, jd = 1e9;
+      for (const c of st.cities) {
+        if (c.dead || c.kind === 'camp' || comp[c.cy * W + c.cx] !== g.comp) continue;
+        if (c.kingdomId !== g.k && WW.Path.hostileKingdoms(sim, g.k, c.kingdomId)) continue;
+        const d = Math.abs(c.cx - u0.x) + Math.abs(c.cy - u0.y) + (c.kingdomId === g.k ? 0 : 1000);
+        if (d < jd) { jd = d; join = c; }
+      }
+      if (join) { for (const u of g.list) { u.cityId = join.id; u.kingdomId = join.kingdomId; u.path = null; } continue; }
+      if (g.list.length < 3 || !sim._kingdoms.get(g.k)) continue;
+      // eigener Ort in der Nähe
+      let site = -1, bd = 1e9;
+      const x0 = Math.floor(u0.x), y0 = Math.floor(u0.y), md = CF().CITY_MIN_DIST - 4;
+      for (let dy = -12; dy <= 12; dy += 2) for (let dx = -12; dx <= 12; dx += 2) {
+        const x = x0 + dx, y = y0 + dy;
+        if (x < 3 || y < 3 || x >= W - 4 || y >= st.H - 4 || comp[y * W + x] !== g.comp) continue;
+        if (!WW.Cities.canFoundAt(sim, x, y, u0.race, md, g.k)) continue;
+        const d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; site = y * W + x; }
+      }
+      if (site < 0) continue;
+      const grp = st.nextId++;
+      for (const u of g.list) { WW.Units.setRole(sim, u, 'settler'); u.group = grp; u.site = site; u.fails = 0; }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Krieg über das Meer (Haken aus diplo.js): Truppenlandung nahe einer feindlichen Küstenstadt
   // ---------------------------------------------------------------------------
@@ -1220,7 +1287,7 @@
       if (!WW.Cities.canPay(sim, city, cost)) continue;
       // Reserve: der Bau von Häusern geht vor
       const sk = stockOf(sim, city);
-      if (sk.wood - cost.wood < 10 && kind !== 'fishboat') continue;
+      if (!war && sk.wood - cost.wood < 10 && kind !== 'fishboat') continue;
       WW.Cities.pay(sim, city, cost);
       h.prod = kind; h.prog = 0;
       return;
@@ -1245,6 +1312,7 @@
     if (!k) { if (s.t === 'dock' || s.t === 'work') scrap(sim, s); return; }
     const h = sim._structs.get(s.harborId), c = sim._cities.get(s.cityId);
     if (h && !h.dead && c && c.kingdomId === s.kingdomId && h.cityId === c.id) return;
+    const homeless = s.harborId < 0 && c && c.kingdomId === s.kingdomId;   // gesetztes Schiff ohne Hafen: Heimat = Wasserkachel
     // anderer Hafen desselben Reichs im selben Meer
     const nav = seaInfo(sim);
     let best = null, bd = 1e9;
@@ -1261,6 +1329,7 @@
       if (s.t === 'dock') { s.t = 'work'; s.wait = 1; }
       return;
     }
+    if (homeless) return;
     // Hafenstadt erobert: Schiffe im Hafen wechseln die Flagge
     if (h && !h.dead && c && s.t === 'dock' && c.kingdomId !== s.kingdomId && sim._kingdoms.get(c.kingdomId)) {
       for (const id of s.passengers) { const u = sim._units.get(id); if (u) release(sim, u); }
@@ -1278,6 +1347,7 @@
     const st = sim.state;
     if (!st.naval || !st.ships) defaults(st);
     const n = st.naval, t = st.tick;
+    if (t % 60 === 9 || !n.mask) refreshMask(sim, !n.mask);
     // Hafenplanung: jede Stadt alle HARBOR.plan Ticks
     if (t % 10 === 4) {
       const slot = (t / 10) | 0, every = Math.max(1, Math.round(NV().HARBOR.plan / 10));
@@ -1328,6 +1398,7 @@
     // jährlich: Siedler über das Meer, Wracks ohne Militär altern lassen
     if (t % CF().TPY === 120) {
       colonize(sim);
+      if (st.naval.stats.colonies || st.naval.stats.sunk) stranded(sim);
       if (!WW.Military && st.wrecks.length) {
         st.wrecks = st.wrecks.filter((w) => w.kind !== 'ship' || st.year - w.year < NV().WRECK_YEARS);
         for (const w of st.wrecks) if (w.kind === 'ship') w.rust = Math.min(3, Math.floor((st.year - w.year) / 6));
@@ -1414,7 +1485,7 @@
       const d = Math.abs(o.x - x) + Math.abs(o.y - y);
       if (d < hd && d <= 60) { hd = d; h = o; }
     }
-    let city = h ? sim._cities.get(h.cityId) : nearestCity(sim, x, y, 40, k ? k.id : null);
+    let city = h ? sim._cities.get(h.cityId) : nearestCity(sim, x, y, k ? 1e5 : 40, k ? k.id : null);
     if (!city) return null;
     if (!k) k = sim._kingdoms.get(city.kingdomId);
     if (!k) return null;
