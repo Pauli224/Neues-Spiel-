@@ -28,7 +28,7 @@
 //     city.cap        Plätze (8 je fertiger Baracke)                        city.campHome Stadt-ID, die den Ertrag bekommt
 //     city.powFrom    { [Reich-ID]: Anzahl } Herkunft der Kriegsgefangenen  city.campFounded Jahr der Gründung
 //     city.campUnrest 0..100 Spannung im Lager (Wachen zu wenige, Lager voll) – über 100 droht der Aufstand
-//     city.campOut    Ertrag seit Gründung { stone, wood } (für das Info-Fenster: „wofür das alles")
+//     city.campOut    Ertrag seit Gründung { stone, wood, rail (gebaute Gleisstücke) } (Info-Fenster: „wofür das alles")
 //   Normale Städte: city.campFree (Jahr der Befreiung, falls die Stadt früher Lagerstadt war), city.memorialId.
 // BAUWERKE (WW.STRUCT_INFO in config-industry.js; style = Regierung wie überall)
 //   laborcamp   2×2  Keimzelle: das Regime setzt sie als Baustelle (cityId = Mutterstadt); fertig -> wird zur
@@ -324,7 +324,7 @@
   function held(sim, u, h) {
     const st = sim.state, W = st.W;
     if (!u.campT || u.campT <= st.tick) {
-      u.campT = st.tick + 40 + (u.id % 20);
+      u.campT = st.tick + 150 + (u.id % 40);
       u.work = -1;
       const p = centerXY(h);
       let tx = p.x, ty = p.y;
@@ -360,13 +360,13 @@
     if (d > 0.3) {
       // Schienen-Baustellen liegen auch außerhalb des Zauns: dorthin geht es bewacht durchs Tor (eigener Weg)
       if (u.work >= 0) { walk(sim, u, Math.floor(u.ty) * W + Math.floor(u.tx), u.tx, u.ty); return; }
-      const sp = 0.03, nx = u.x + dx / d * sp, ny = u.y + dy / d * sp;
+      const sp = 0.05, nx = u.x + dx / d * sp, ny = u.y + dy / d * sp;
       const i = Math.floor(ny) * W + Math.floor(nx);
       if (nx >= 0 && ny >= 0 && nx < W && ny < st.H && WW.TERRAIN_LUT.walk[st.terrain[i]] > 0 && !sim.block[i]) { u.x = nx; u.y = ny; u.dir = dx < 0 ? -1 : 1; }
       u.moving = true;
     } else {
       u.moving = false; u.path = null;
-      if (h.kind === 'camp' && (st.tick + u.id) % 60 === 0) labor(sim, u, h);
+      if (h.kind === 'camp' && (u.workT = (u.workT | 0) + 1) >= 60) { u.workT = 0; labor(sim, u, h); }
     }
   }
   // Zwangsarbeit: Gleisbau, sonst Stein/Holz für das Regime (Arbeit tötet nicht und macht nicht krank)
@@ -376,6 +376,8 @@
       r.paid = true;
       r.progress = Math.min(1, (r.progress || 0) + C().RAIL_WORK);
       if (r.progress >= 1) WW.Structs.complete(sim, r);
+      const o = camp.campOut || (camp.campOut = { stone: 0, wood: 0 });
+      o.rail = Math.round(((o.rail || 0) + C().RAIL_WORK) * 100) / 100;   // Gleisbau (Anteile eines Gleisstücks)
       return;
     }
     const res = camp.campRes || (hh(u.id, sim.state.tick) < 0.5 ? 'stone' : 'wood');

@@ -265,9 +265,10 @@ test('3 Regierungen (Werte, Zentrum, Titel, Wahl, Erbfolge, Sperre, Anarchie)', 
     else {
       const l = sim._units.get(k.leaderId);
       assert(l && l.role === 'leader', gk + ': kein Anführer');
-      assert(k.leaderTitle === (l.female ? g.titleF : g.titleM), gk + ': Titel ' + k.leaderTitle);
+      const tt = WW.Names.title(gk, k.culture);
+      assert(k.leaderTitle === (l.female ? tt.f : tt.m), gk + ': Titel ' + k.leaderTitle);
     }
-    assert(k.name.indexOf(g.realm) === 0, gk + ': Reichsname ' + k.name);
+    assert(k.name === WW.Names.realm(gk, k.culture, k.baseName, k.id) && k.name.endsWith(' ' + k.baseName), gk + ': Reichsname ' + k.name);
     assert(!!WW.Cities.stock(sim, city) === true, 'Lager');
     if (g.sharedStock) assert(k.stock && WW.Cities.stock(sim, city) === k.stock, 'Kommunismus ohne gemeinsames Lager');
     else assert(!k.stock, gk + ': gemeinsames Lager übrig');
@@ -1180,8 +1181,10 @@ test('20 Kachel-Meldungen (nur sichtbare Änderungen, Beweidung mit Hysterese)',
   let gi = -1; for (let i = 0; i < st.terrain.length; i++) if (st.terrain[i] === WW.T.GRASS && !st.grazed[i]) { gi = i; break; }
   st.graze[gi] = WW.CONFIG.GRAZED_ON - 5; for (let t = 0; t < 40; t++) sim._sweepGrazed();
   assert(!st.grazed[gi], 'Hysterese: zu früh an');
+  sim.drainDirtyTiles();
   st.graze[gi] = WW.CONFIG.GRAZED_ON; for (let t = 0; t < 40; t++) sim._sweepGrazed();
   assert(st.grazed[gi] === 1, 'Beweidung wird nicht sichtbar');
+  assert(Array.from(sim.drainDirtyTiles()).indexOf(gi) >= 0, 'Einschalten der Beweidung nicht gemeldet');
   st.graze[gi] = WW.CONFIG.GRAZED_OFF + 2; for (let t = 0; t < 40; t++) sim._sweepGrazed();
   assert(st.grazed[gi] === 1, 'Hysterese: zu früh aus');
   st.graze[gi] = WW.CONFIG.GRAZED_OFF - 1; for (let t = 0; t < 40; t++) sim._sweepGrazed();

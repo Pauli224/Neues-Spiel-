@@ -629,7 +629,7 @@
   // ------------------------------------------------------------------ Ausbau 9: Abnahmebilder (?ausbau=<name>)
   var AGOVS = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
   var AUS = {};
-  function dsort(c, items) { items.sort(function (a, b) { return a[2] - b[2] || a[1] - b[1]; }); items.forEach(function (it) { S.draw(c, it[0], it[1], it[2], it[3] || null); }); }
+  function dsort(c, items) { items.sort(function (a, b) { return a[2] - b[2] || a[1] - b[1]; }); items.forEach(function (it) { if (S.has(it[0])) S.draw(c, it[0], it[1], it[2], it[3] || null); }); }
   AUS.zeichen = { size: [64, 30], draw: function (c, P) {
     P.groundRect(c, P.fill(T.GRASS, 64, 30), 0, 0);
     c.fillStyle = '#1d3b47'; c.fillRect(0, 0, 64 * 8, 22);
@@ -768,6 +768,75 @@
     [[36, 21], [40, 21]].forEach(function (p) { it.push([S.unitKey('human', 'soldier', 'democracy', 4), p[0] * 8, p[1] * 8, { team: 5 }]); });
     it.push([S.flagKey('pole', 3, 1, 5, 'democracy'), 41 * 8, 18 * 8, { team: 5 }]);
     it.push(['s_camphq', 28 * 8, 22 * 8, { team: 5 }]); it.push(['s_camphq_communism', 4 * 8, 22 * 8, { team: 4 }]); it.push(['s_watchtower', 8 * 8, 23 * 8, null]);
+    dsort(c, it);
+  } };
+  AUS.see = { size: [72, 44], draw: function (c, P) {
+    var rows = []; for (var y = 0; y < 44; y++) { rows.push([]); for (var x = 0; x < 72; x++) { var t = y < 24 ? T.WATER : (y < 30 ? (y === 29 && x > 30 ? T.SAND : T.GRASS) : (y === 30 ? T.SHALLOW : (y < 34 ? T.WATER : T.DEEP))); if (x >= 34 && y >= 24) { t = y < 28 ? T.GRASS : (y < 29 ? T.SAND : (y < 31 ? T.SHALLOW : (y < 38 ? T.WATER : T.DEEP))); } rows[y].push(t); } }
+    P.groundRect(c, rows, 0, 0);
+    var it = [], ST = [['tribe', null], ['monarchy', null], ['fascism', null], ['communism', null], ['monarchy', 'nord'], ['monarchy', 'sahel'], ['monarchy', 'nil']];
+    ST.forEach(function (s, j) {
+      ['fishboat', 'trader', 'transport', 'warship'].forEach(function (k, i) { ['e', 'w', 'n', 's'].forEach(function (d, q) {
+        it.push([S.shipKey(k, s[0], d, q & 1, s[1]), 10 + (i * 4 + q) * 22 + i * 16, 18 + j * 25, { team: (j * 3 + 1) % 12 }]); }); });
+    });
+    dsort(c, it);
+    var it2 = [];
+    ['mitte', 'republic', 'nord', 'sahel', 'nil', 'steam', 'tribe'].forEach(function (st, i) { it2.push(['s_harbor_' + st + '_s', 2 * 8 + i * 4 * 8, 27 * 8, { team: i + 2 }]); });
+    // Küstenszene rechts: Hafen einer Handelsrepublik, Fischerboot, Handelssegler, Dampfer, Kielwasser, Wrack
+    it2.push(['s_harbor_republic_s', 40 * 8, 26 * 8, { team: 7 }]); it2.push([S.houseKey('republic', 2, 1), 37 * 8, 26 * 8, { team: 7 }]); it2.push([S.houseKey('republic', 1, 3), 44 * 8, 26 * 8, { team: 7 }]);
+    it2.push(['s_harbor_steam_s', 56 * 8, 26 * 8, { team: 0 }]); it2.push([S.houseKey('fascism', 2, 0), 60 * 8, 26 * 8, { team: 0 }]);
+    it2.push(['fx_wake_1', 47 * 8 - 10, 34 * 8, null, false]); it2.push([S.shipKey('trader', 'republic', 'e', 0), 47 * 8, 34 * 8, { team: 7 }]);
+    it2.push([S.shipKey('fishboat', 'republic', 'w', 1), 39 * 8, 32 * 8, { team: 7 }]);
+    it2.push(['fx_wake_2', 61 * 8 + 4, 36 * 8, { flip: true }]); it2.push([S.shipKey('trader', 'fascism', 'w', 0), 59 * 8, 36 * 8, { team: 0 }]); it2.push(['fx_shipsmoke_1', 59 * 8 + 1, 36 * 8 - 17, null]);
+    it2.push([S.shipKey('warship', 'communism', 's', 1), 68 * 8, 41 * 8, { team: 4 }]);
+    it2.push(['d_wreck_ship', 52 * 8, 31 * 8, null]); it2.push(['fx_splash_1', 66 * 8, 39 * 8, null]);
+    for (var f = 0; f < 4; f++) { it2.push(['fx_wake_' + f, 2 * 8 + f * 16, 33 * 8, null]); it2.push(['fx_splash_' + f, 2 * 8 + f * 12, 36 * 8, null]); }
+    dsort(c, it2);
+    ['i_ship', 'i_harbor'].forEach(function (k, i) { c.fillStyle = '#1d3b47'; c.fillRect(2 + i * 20, 41 * 8, 18, 18); S.draw(c, k, 3 + i * 20, 41 * 8 + 1); });
+  } };
+  AUS.lagerbahn = { size: [48, 28], draw: function (c, P) {
+    var rows = []; for (var y = 0; y < 28; y++) { rows.push([]); for (var x = 0; x < 48; x++) rows[y].push(x > 36 && y < 7 ? T.HILL : T.GRASS); }
+    P.groundRect(c, rows, 0, 0);
+    for (y = 3; y < 23; y++) for (x = 3; x < 32; x++) S.draw(c, S.softKey('t_cleared', ((y > 3) ? 1 : 0) | ((x < 31) ? 2 : 0) | ((y < 22) ? 4 : 0) | ((x > 3) ? 8 : 0)), x * 8, y * 8);
+    var RL = {}; [19, 21].forEach(function (ry) { for (var rx = 0; rx < 31; rx++) RL[rx + ',' + ry] = 1; });
+    function rail(x, y) { return !!RL[x + ',' + y]; }
+    Object.keys(RL).forEach(function (k) { var p = k.split(',').map(Number), m = (rail(p[0], p[1] - 1) ? 1 : 0) | (rail(p[0] + 1, p[1]) ? 2 : 0) | (rail(p[0], p[1] + 1) ? 4 : 0) | (rail(p[0] - 1, p[1]) ? 8 : 0); if (p[0] === 30) m &= ~2; if (p[0] === 0) m |= 8; S.drawRail(c, p[0] * 8, p[1] * 8, m); });
+    var it = [], F = {};
+    for (x = 2; x <= 32; x++) { F[x + ',2'] = 1; F[x + ',23'] = 1; } for (y = 2; y <= 23; y++) { F['2,' + y] = 1; F['32,' + y] = 1; }
+    function has(x, y) { return !!F[x + ',' + y]; }
+    Object.keys(F).forEach(function (k) { var p = k.split(',').map(Number), m = (has(p[0], p[1] - 1) ? 1 : 0) | (has(p[0] + 1, p[1]) ? 2 : 0) | (has(p[0], p[1] + 1) ? 4 : 0) | (has(p[0] - 1, p[1]) ? 8 : 0);
+      var key = (p[0] === 2 && (p[1] === 19 || p[1] === 21)) ? S.gateKey('fence', 1, 'v', true) : (p[1] === 23 && p[0] === 17 ? S.gateKey('fence', 1, 'h') : S.wallKey('fence', 1, m)); it.push([key, p[0] * 8, p[1] * 8, null]); });
+    [[3, 3], [31, 3], [3, 22], [31, 22]].forEach(function (p) { it.push(['s_watchtower', p[0] * 8, p[1] * 8, null]); });
+    it.push([S.campBuildKey('camphq', 'fascism'), 16 * 8, 7 * 8, { team: 0 }]); it.push([S.flagKey('pole', 0, 1, 0, 'fascism'), 19 * 8, 9 * 8, { team: 0 }]);
+    [[5, 5], [9, 5], [23, 5], [27, 5], [5, 11], [9, 11], [23, 11], [27, 11]].forEach(function (p) { it.push(['s_barrack', p[0] * 8, p[1] * 8, null]); });
+    it.push(['s_camp_station', 12 * 8, 17 * 8, null]); it.push(['s_camp_station', 22 * 8, 17 * 8, null]);
+    it.push([S.mineKey('iron'), 38 * 8, 5 * 8, { team: 0 }]); it.push(['s_quarry', 42 * 8, 4 * 8, { team: 0 }]);
+    // Güterzug am oberen Gleis (Abholung), Gefangenenzug am unteren Gleis (Ankunft)
+    var fr = [S.trainKey('loco', null, 'e'), S.trainKey('car', 'ore', 'e'), S.trainKey('car', 'stone', 'e'), S.trainKey('car', 'timber', 'e'), S.trainKey('car', 'crates', 'e'), S.trainKey('car', 'coal', 'e')];
+    fr.forEach(function (k, i) { it.push([k, (28 - i * 2) * 8, 19 * 8, { team: 0 }]); });
+    var pr = [S.trainKey('loco', null, 'e'), S.trainKey('car', 'guard', 'e', 'fascism'), S.trainKey('car', 'prison', 'e', 'fascism'), S.trainKey('car', 'prison', 'e', 'fascism'), S.trainKey('car', 'guard', 'e', 'fascism')];
+    pr.forEach(function (k, i) { it.push([k, (22 - i * 2) * 8, 21 * 8, { team: 0 }]); });
+    // Ankunft: Gefangene steigen aus und gehen bewacht zur Baracke
+    [[17, 20, 'human', 'prisoner'], [16, 18, 'elf', 'prisoner'], [15, 16, 'human', 'pow'], [15, 14, 'dwarf', 'prisoner'], [14, 15, 'human', 'pow'], [13, 13, 'human', 'prisoner'], [12, 14, 'orc', 'pow'], [11, 15, 'human', 'pow']].forEach(function (u, k) { it.push([S.unitKey(u[2], u[3], u[3] === 'pow' ? 'communism' : 'fascism', k % 4), u[0] * 8 + (k & 1) * 3, u[1] * 8, { team: 4, flip: true }]); });
+    [[18, 17], [10, 13], [16, 12]].forEach(function (p, k) { it.push([S.unitKey('human', 'soldier', 'fascism', 4), p[0] * 8, p[1] * 8, { team: 0 }]); });
+    it.push([S.unitKey('human', 'soldier', 'fascism', 1), 25 * 8, 19 * 8 - 6, { team: 0 }]);
+    // Arbeiter an der Rampe verladen Steine
+    [[23, 17], [25, 17]].forEach(function (p, k) { it.push([S.unitKey('human', 'prisoner', 'fascism', 2 + k), p[0] * 8, p[1] * 8, null]); });
+    dsort(c, it);
+    it = []; ['tr_car_prison_fascism_e', 'tr_car_prison_communism_e', 'tr_car_prison_plain_e', 'tr_car_guard_communism_e', 'tr_car_guard_plain_e', 'tr_car_prison_fascism_s', 'tr_car_guard_fascism_s', 'tr_car_ore_n', 'tr_car_timber_s', 'tr_car_stone_e'].forEach(function (k, i) { it.push([k, 36 * 8 + (i % 5) * 18, (14 + Math.floor(i / 5) * 5) * 8, { team: [0, 4, 6][i % 3] }]); });
+    dsort(c, it);
+  } };
+  AUS.nachbesserung = { size: [60, 24], draw: function (c, P) {
+    var rows = []; for (var y = 0; y < 24; y++) { rows.push([]); for (var x = 0; x < 60; x++) rows[y].push(x >= 30 ? T.DESERT : T.GRASS); }
+    P.groundRect(c, rows, 0, 0);
+    var it = [];
+    ['fascism', 'communism', 'monarchy', 'democracy', 'republic', 'theocracy', 'anarchy'].forEach(function (gv, i) { it.push([S.unitKey('human', 'soldier', gv, 4), 6 + i * 13, 22, { team: [5, 3, 1, 4, 7, 9, 6][i] }]); it.push([S.unitKey('human', 'soldier', gv, 1), 6 + i * 13, 44, { team: 0 }]); });
+    it.push([S.unitKey('human', 'leader', 'fascism', 4), 100, 22, { team: 2 }]); it.push([S.unitKey('human', 'leader', 'communism', 4), 112, 22, { team: 2 }]);
+    ['tribe', 'monarchy', 'democracy', 'theocracy', 'republic', 'anarchy'].forEach(function (gv, i) { it.push([S.flagKey('pole', i + 1, 0, i + 2, gv), 6 + i * 20, 90, { team: i + 2 }]); });
+    ['fascism', 'communism', 'monarchy'].forEach(function (gv, j) { ['n', 's'].forEach(function (d, i) { it.push([S.vehicleKey('tank', gv, d, i), 140 + (j * 2 + i) * 16, 30, { team: j * 4 }]); }); });
+    for (var f = 0; f < 4; f++) it.push(['fx_shell_' + f, 140 + f * 18, 62, null]);
+    it.push(['s_monument_0', 32 * 8, 10 * 8, null]); it.push(['s_monument_1', 35 * 8, 10 * 8, null]); it.push(['s_monument_2', 38 * 8, 10 * 8, null]);
+    it.push(['s_caravanserai', 44 * 8, 13 * 8, { team: 1 }]);
+    it.push(['s_caravanserai', 50 * 8, 22 * 8, { team: 3 }]);
     dsort(c, it);
   } };
   WW.SpriteScene_AUS = AUS;

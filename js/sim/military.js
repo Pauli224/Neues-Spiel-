@@ -45,7 +45,11 @@
 //   state.battles[] laufende Feldschlachten: { id, x, y (Mittelpunkt, Kacheln), r (Radius), a, b (Reichs-IDs; a = Angreifer),
 //                  start (Tick), year, lossA, lossB, nA, nB (Kämpfer jetzt), peakA, peakB, vA, vB (höchstens gleichzeitig
 //                  beteiligte Fahrzeuge), state ('fight'|'retreat'|'surrender'),
-//                  breaker (Reich, das gewichen ist | -1), pows (Gefangene), quiet, dig (Reich, das sich eingräbt), name }
+//                  breaker (Reich, das gewichen ist | -1), pows (Gefangene), gaveUp (Soldaten, die aufgegeben haben), quiet,
+//                  dig (Reich, das sich eingräbt), name, base, place }
+//                  Aufgabe: WW.Camps.surrender(sim, siegerId, einheiten, schlacht) -> Anzahl, falls vorhanden, sonst je Soldat
+//                  WW.Camps.capture(sim, { id: -1, kingdomId: sieger }, u, { surrender: true }); wer nicht gefangen wird,
+//                  legt die Waffen nieder und geht heim (order home). Fahrzeuge der Aufgebenden werden erbeutet.
 //   state.sites[]  Schlachtfelder als Orte: { id, kind: 'battlefield', name ('Schlacht bei <Stadt>' | 'Schlacht <Gelände>'),
 //                  x, y, r, year, a, b, aName, bName, winner (Reichs-ID | -1 unentschieden), losses: { a, b }, pows, how
 //                  ('win'|'retreat'|'surrender'|'draw'), vehicles: { a, b } (beteiligte Fahrzeuge) } – höchstens WW.MIL.MAX_SITES,
@@ -933,7 +937,7 @@
     if (WW.Camps && typeof WW.Camps.surrender === 'function') caught = WW.Camps.surrender(sim, wk.id, soldiers, b) | 0;
     else if (WW.Camps && typeof WW.Camps.capture === 'function') {
       const att = { id: -1, kingdomId: wk.id };
-      for (const u of soldiers) if (WW.Camps.capture(sim, att, u)) caught++;
+      for (const u of soldiers) if (WW.Camps.capture(sim, att, u, { surrender: true })) caught++;   // ohne Zufall/Unterzahl-Prüfung
     }
     for (const u of soldiers) if (!u.dead && u.role !== 'prisoner') {
       // nicht gefangen genommen: legt die Waffen nieder und geht heim

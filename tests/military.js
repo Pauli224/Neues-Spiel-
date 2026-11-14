@@ -89,7 +89,7 @@ test('2 Arsenal nur bei den richtigen Regierungen, verbraucht Eisen und Kohle (s
     sk.iron = 60; sk.coal = 60; sk.gold = Math.max(sk.gold, 50); sk.wood = Math.max(sk.wood, 80); sk.stone = Math.max(sk.stone, 80);
     let y = 0;
     for (; y < 20; y++) {
-      for (let q = 0; q < 6; q++) { const s3 = WW.Cities.stock(o.sim, c); s3.iron = Math.max(s3.iron || 0, 60); s3.coal = Math.max(s3.coal || 0, 60); run(o.sim, 40); }
+      for (let q = 0; q < 6; q++) { const s3 = WW.Cities.stock(o.sim, c); s3.iron = Math.max(s3.iron || 0, 60); s3.coal = Math.max(s3.coal || 0, 60); s3.wood = Math.max(s3.wood, 150); s3.stone = Math.max(s3.stone, 150); run(o.sim, 40); }
       const done = o.sim.state.structs.filter((s) => s.type === 'arsenal' && s.built);
       if (done.length && vehicles(o.sim, o.A.id).length) {
         if (done.some((s) => s.lastPay === 'res')) break;
@@ -101,7 +101,7 @@ test('2 Arsenal nur bei den richtigen Regierungen, verbraucht Eisen und Kohle (s
     const v = vehicles(o.sim, o.A.id);
     built[g] = ars.length + '/' + v.map((u) => u.role[0]).join('');
     if (WW.MIL.GOVS[g]) {
-      assert(ars.some((s) => s.built), g + ': kein fertiges Arsenal (Stufe ' + c.tier + ', ' + c.pop + ' Einw.)');
+      assert(ars.some((s) => s.built), g + ': kein fertiges Arsenal (Stufe ' + c.tier + ', ' + c.pop + ' Einw., Baustellen ' + ars.map((s) => Math.round(s.progress * 100) + '%').join(',') + ', Werkstatt ' + o.sim.state.structs.some((s) => s.cityId === c.id && s.built && (s.type === 'smithy' || s.type === 'factory')) + ', Holz/Stein ' + Math.round(WW.Cities.stock(o.sim, c).wood) + '/' + Math.round(WW.Cities.stock(o.sim, c).stone) + ')');
       const s = ars[0];
       WW.Structs.forTiles(o.sim, s, (i) => assert(o.sim.state.inRing[i] === -1, 'Arsenal im Mauerring'));
       assert(v.length > 0, g + ': kein Fahrzeug gebaut');

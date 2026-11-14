@@ -313,7 +313,7 @@
     grazer: function (sim, a, cr, think) {
       if (think) {
         a.food -= CFG().FOOD_DECAY * (a.kind === 'cow' ? 1.3 : 1);
-        if (a.kind === 'camel') a.food += CFG().FOOD_DECAY * 0.7;   // [kultur] Kamele sind genügsam
+        if (a.kind === 'camel') a.food += CFG().FOOD_DECAY * 0.96;   // [kultur] Kamele sind genügsam (überstehen lange Wüstenwege)
         if (a.wait > 0) a.wait -= THINK;
         // Raubtiere in Sicht? fliehen
         let danger = null;

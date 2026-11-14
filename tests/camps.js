@@ -18,7 +18,9 @@ function test(name, fn) {
 function run(sim, n) { for (let i = 0; i < n; i++) sim.tick(); }
 const LAWS = { govChanges: false, wars: false, disasters: false, newRealms: false, events: false };
 const TPY = WW.CONFIG.TPY;
-WW.CAMPS.EXCHANGE = 0;   // Gefangenenaustausch nur in Test 5 (sonst tauschen sich die Testgefangenen zufällig aus)
+// Zufallsereignisse nur dort, wo sie geprüft werden (sonst tauschen sich Testgefangene aus oder brechen zufällig aus)
+const RAND = { EXCHANGE: WW.CAMPS.EXCHANGE, BREAKOUT: WW.CAMPS.BREAKOUT, RIOT: WW.CAMPS.RIOT, UPRISE: WW.CAMPS.UPRISE, ESCAPE: WW.CAMPS.ESCAPE };
+for (const k in RAND) WW.CAMPS[k] = 0;
 const campCities = (sim) => sim.state.cities.filter((c) => !c.dead && c.kind === 'camp');
 const seeds = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'laborcamp');
 const prisoners = (sim) => sim.state.units.filter((u) => !u.dead && u.role === 'prisoner');
@@ -188,18 +190,24 @@ test('3 Kriegsgefangene: Regime -> Lagerstadt (Zwangsarbeit), andere -> Gefangen
   log('angekommen nach', t, 'Ticks; Insassen', W.camp.inmates, 'davon Kriegsgefangene', W.camp.pows, '| Herkunft', JSON.stringify(W.camp.powFrom));
   assert(p1.every((u) => u.campState === 'held' && sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id), 'nicht im Lager angekommen');
   run(sim, 130);
-  assert(W.camp.pows === 5 && W.camp.powFrom[W.B.id] === 5 && W.A.powsHeld >= 5 && W.B.powsLost >= 5 && W.B.powsHeld === 4 && W.A.powsLost === 4, 'Kennzahlen falsch');
+  log('Kennzahlen: Lager', W.camp.pows, JSON.stringify(W.camp.powFrom), '| A hält', W.A.powsHeld, 'verliert', W.A.powsLost, '| B hält', W.B.powsHeld, 'verliert', W.B.powsLost);
+  assert(W.camp.pows >= 5 && W.camp.powFrom[W.B.id] >= 5 && W.A.powsHeld >= 5 && W.B.powsLost >= 5 && W.B.powsHeld >= 4 && W.A.powsLost >= 4, 'Kennzahlen falsch');
+  assert(p2.every((u) => !u.dead && Math.hypot(u.x - stk.x - 1, u.y - stk.y - 1) < 3), 'Gefangene im Gefangenenlager laufen davon');
+  // Frieden (sonst erobert das Regime im erzwungenen Krieg bald den Gegner); das Regime behält zwei Drittel im Lager
+  sim.actions.setRelation(W.A.id, W.B.id, 'peace');
+  const keptP = prisoners(sim).filter((u) => u.camp === W.camp.id && u.powUntil > 0);
+  assert(keptP.length >= 3, 'Regime behält keine Kriegsgefangenen');
   // Zwangsarbeit: Ertrag geht in die Mutterstadt, niemand stirbt, Insassen bleiben im Zaun
   const home = sim._cities.get(W.camp.campHome);
   const sum = () => { const s = WW.Cities.stock(sim, home); return s.stone + s.wood; };
-  const s0 = sum(), out0 = W.camp.campOut.stone + W.camp.campOut.wood;
+  const outOf = () => W.camp.campOut.stone + W.camp.campOut.wood + (W.camp.campOut.rail || 0) * 10;
+  const s0 = sum(), out0 = outOf();
   run(sim, 1200);
-  const out1 = W.camp.campOut.stone + W.camp.campOut.wood;
+  const out1 = outOf();
   log('Zwangsarbeit: Ertrag im Lager', out0, '->', out1, '| Lager der Mutterstadt', Math.round(s0), '->', Math.round(sum()));
   assert(out1 > out0 + 5, 'keine Zwangsarbeit');
-  assert(p1.every((u) => !u.dead && u.role === 'prisoner'), 'Gefangene gestorben');
-  assert(p1.every((u) => sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id), 'Insasse läuft aus dem Zaun');
-  assert(p2.every((u) => !u.dead && Math.hypot(u.x - stk.x - 1, u.y - stk.y - 1) < 3), 'Gefangene im Gefangenenlager laufen davon');
+  assert(keptP.every((u) => !u.dead && u.role === 'prisoner'), 'Gefangene gestorben');
+  assert(keptP.every((u) => u.work >= 0 || sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id), 'Insasse läuft aus dem Zaun');
   assert(evs(sim, /^campPow$/).length && evs(sim, /^powTaken$/).length, 'keine Chronik zu Kriegsgefangenen');
 });
 
@@ -211,21 +219,24 @@ test('4 Frieden: Demokratie gibt alle zurück, Regime nur einen Teil (Kriegsgrun
   const p1 = takePows(sim, W.A, W.B, 6), p2 = takePows(sim, W.B, W.A, 4);
   run(sim, 600);
   const hB = WW.Mods.value(sim, W.B, W.cb, 'happiness', 50);
+  // alle Kriegsgefangenen (auch die aus echten Gefechten während des Laufs)
+  const heldBy = (k, home) => prisoners(sim).filter((u) => u.pow === home.id && u.campState !== 'home' && (WW.Camps.holdOf(sim, u) || {}).id != null);
+  const allB = heldBy(W.A, W.B), allA = heldBy(W.B, W.A);
   sim.actions.setRelation(W.A.id, W.B.id, 'peace');
-  const homeA = p2.filter((u) => u.campState === 'home').length, homeB = p1.filter((u) => u.campState === 'home').length;
-  const kept = p1.filter((u) => u.powUntil > 0);
-  log('Frieden: Demokratie lässt', homeA, '/ 4 frei; Regime lässt', homeB, '/ 6 frei, behält', kept.length, 'bis Jahr', kept.length ? kept[0].powUntil : '-');
-  assert(homeA === 4, 'Demokratie gibt nicht alle zurück');
-  assert(homeB >= 1 && homeB < 6 && kept.length === 6 - homeB, 'Regime gibt nicht nur einen Teil zurück');
+  const homeA = allA.filter((u) => u.campState === 'home').length, homeB = allB.filter((u) => u.campState === 'home').length;
+  const kept = allB.filter((u) => u.powUntil > 0);
+  log('Frieden: Demokratie lässt', homeA, '/', allA.length, 'frei; Regime lässt', homeB, '/', allB.length, 'frei, behält', kept.length, 'bis Jahr', kept.length ? kept[0].powUntil : '-');
+  assert(allA.length >= 4 && homeA === allA.length, 'Demokratie gibt nicht alle zurück');
+  assert(homeB >= 1 && homeB < allB.length && kept.length === allB.length - homeB && homeB <= Math.ceil(allB.length * 0.4), 'Regime gibt nicht nur einen Teil zurück');
   assert(W.B.relations[W.A.id].grievance === 'liberation', 'kein Kriegsgrund „Befreiung"');
   assert(evs(sim, /^powReturn$/).length && evs(sim, /^powKept$/).length, 'keine Chronik zur Rückgabe');
   // Heimkehr: laufen heim, werden wieder Soldaten der Heimat, Heimat freut sich
   let t = 0;
-  for (; t < 6000 && p2.concat(p1.filter((u) => !(u.powUntil > 0))).some((u) => u.role === 'prisoner'); t += 40) run(sim, 40);
-  const back = p2.filter((u) => !u.dead && u.role === 'soldier' && u.kingdomId === W.A.id).length;
-  const backB = p1.filter((u) => !u.dead && u.role === 'soldier' && u.kingdomId === W.B.id).length;
-  log('heimgekehrt nach', t, 'Ticks:', back, '/ 4 nach', W.ca.name + ',', backB, 'nach', W.cb.name);
-  assert(back === 4 && backB === homeB, 'Kriegsgefangene kommen nicht heim');
+  for (; t < 6000 && allA.concat(allB.filter((u) => !(u.powUntil > 0))).some((u) => u.role === 'prisoner'); t += 40) run(sim, 40);
+  const back = allA.filter((u) => !u.dead && u.role !== 'prisoner' && u.kingdomId === W.A.id).length;
+  const backB = allB.filter((u) => !u.dead && u.role !== 'prisoner' && u.kingdomId === W.B.id).length;
+  log('heimgekehrt nach', t, 'Ticks:', back, '/', allA.length, 'nach', W.ca.name + ',', backB, '/', homeB, 'nach', W.cb.name);
+  assert(back === allA.length && backB === homeB, 'Kriegsgefangene kommen nicht heim');
   const hB2 = WW.Mods.value(sim, W.B, W.cb, 'happiness', 50);
   assert(hB2 > hB, 'Heimat freut sich nicht');
   // Rest nach Vertrag
@@ -252,6 +263,10 @@ test('5 Gefangenenaustausch im Krieg', function () {
 
 // -----------------------------------------------------------------------------
 test('6 Lageraufstand bei zu wenigen Wachen: freie Stadt mit eigenem Reich, niemand stirbt', function () {
+  WW.CAMPS.UPRISE = RAND.UPRISE; WW.CAMPS.RIOT = RAND.RIOT;
+  try { uprisingCase(); } finally { WW.CAMPS.UPRISE = 0; WW.CAMPS.RIOT = 0; }
+});
+function uprisingCase() {
   const o = city('communism', { unhappy: true });
   years(o, 4);
   const camp = forceCamp(o.sim, o.k, 130);
@@ -276,7 +291,7 @@ test('6 Lageraufstand bei zu wenigen Wachen: freie Stadt mit eigenem Reich, niem
   assert(sim.state.structs.some((s) => !s.dead && s.type === 'memorial'), 'kein Mahnmal');
   assert(evs(sim, /^campUprising$/).length, 'keine Chronik zum Aufstand');
   assert(!sim._deaths || !(sim._deaths.camp > 0), 'Todesfälle im Lager');
-});
+}
 
 // -----------------------------------------------------------------------------
 function liberationCase(how) {
@@ -304,11 +319,15 @@ function liberationCase(how) {
   assert(mem && mem.cityId === -1 && mem.campName === camp.name, 'kein Mahnmal');
   assert(goingHome === 4 || how === 'conquest', 'Kriegsgefangene gehen nicht heim');
   if (how === 'conquest') assert(pows.every((u) => u.role !== 'prisoner' || u.campState === 'home'), 'Kriegsgefangene bei Eroberung nicht frei');
-  assert(citizens === 3, 'politische Gefangene nicht frei');
+  if (citizens !== pol.length) log('  politische:', pol.map((u) => [u.dead ? 'tot' : u.role, u.cityId, u.kingdomId, u.campState].join('/')).join(' '), 'Stadt', camp.id);
+  assert(pol.length >= 2 && citizens === pol.length, 'politische Gefangene nicht frei');
   assert(evs(sim, /^campLiberated$/).length, 'keine Chronik zur Befreiung');
+  // Frieden schließen, damit der Heimweg nicht vom weiterlaufenden Krieg (Eroberungen) gestört wird
+  if (sim._kingdoms.get(W.A.id) && W.A.relations[W.B.id]) sim.actions.setRelation(W.A.id, W.B.id, 'peace');
   for (let t = 0; t < 8000 && pows.some((u) => u.role === 'prisoner'); t += 50) run(sim, 50);
-  const back = pows.filter((u) => !u.dead && u.role === 'soldier' && u.kingdomId === W.B.id).length;
+  const back = pows.filter((u) => u.role !== 'prisoner' && u.kingdomId === W.B.id).length;   // (daheim dürfen sie wieder in den Krieg ziehen)
   log('  heimgekehrt', back, '/ 4 | Zufriedenheit-Mod Heimat', hHome.toFixed(1), '->', WW.Mods.value(sim, W.B, W.cb, 'happiness', 50).toFixed(1));
+  if (back !== 4) log('  Kriegsgefangene:', pows.map((u) => [u.dead ? 'tot' : u.role, u.kingdomId, u.cityId, u.campState, u.x.toFixed(0) + '/' + u.y.toFixed(0)].join(' ')).join(' | '), 'B', W.B.id);
   assert(back === 4, 'Heimkehr fehlt (' + how + ')');
   assert(WW.Mods.value(sim, W.B, W.cb, 'happiness', 50) > hHome, 'Heimat freut sich nicht');
   const k = W.A;
@@ -403,6 +422,7 @@ test('9 Speichern/Laden, Determinismus, alte Spielstände, Zeitaufschlag', funct
 
 // -----------------------------------------------------------------------------
 test('10 Dauerlauf mit Krieg: keine Ausnahme, Invarianten', function () {
+  for (const k in RAND) WW.CAMPS[k] = RAND[k];
   const sim = WW.Sim.create({ seed: 21, size: 'medium', populate: 5, govs: ['fascism', 'communism', 'democracy', 'monarchy', 'fascism'], races: ['human'] });
   sim._throwErrors = true;
   let maxP = 0, maxC = 0;

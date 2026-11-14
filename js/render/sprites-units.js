@@ -1066,13 +1066,13 @@
     // (Beil links), Kommunismus rot mit goldenem Stern, übrige in Reichsfarbe mit kleinem Zeichen. Kein Kreis.
     var ABG = { 1: C.goldL, 2: C.gold, 3: C.goldD, 4: C.metalL, 7: C.white, 6: C.red, 8: C.ink };
     var ARMBAND = {
-      fascism:   { b: [HC('#3a3a42'), HC('#26262c')], c: ABG, m: ['B1B', '41B', 'B2B', 'B3B'] },
-      communism: { b: [C.red, C.redD], c: ABG, m: ['B1B', '121', 'B2B', '2B3'] },
+      fascism:   { b: [HC('#3a3a42'), HC('#26262c')], c: ABG, m: ['B11', '412', 'B12', 'B32'], rim: C.goldL },
+      communism: { b: [C.red, C.redD], c: ABG, m: ['B1B', '121', 'B2B', '2B3'], rim: C.redL },
       monarchy:  { b: ['T', 'Td'], c: ABG, m: ['BBB', '1B1', '121', 'BBB'] },
       democracy: { b: ['T', 'Td'], c: ABG, m: ['B7B', '777', '777', 'BBB'] },
       theocracy: { b: [C.white, HC('#d8d0bc')], c: ABG, m: ['BBB', 'B1B', '121', 'B2B'] },
       republic:  { b: ['T', 'Td'], c: ABG, m: ['BBB', 'B1B', '122', 'B2B'] },
-      anarchy:   { b: [HC('#3a3a42'), HC('#26262c')], c: ABG, m: ['6BB', 'B6B', 'BB6', 'BBB'] }
+      anarchy:   { b: [HC('#3a3a42'), HC('#26262c')], c: ABG, m: ['6BB', 'B6B', 'BB6', 'BBB'], rim: C.cream }
     };
     function shade3(c, x, x0, x1) { return x === x0 ? c[0] : (x === x1 ? c[2] : c[1]); }
     function figure(race, role, gov, frame, cult) {
@@ -1209,6 +1209,7 @@
       var band = ARMBAND[gov];
       if (band && role !== 'pow' && (cls === 'soldier' || (cls === 'leader' && (gov === 'fascism' || gov === 'communism')))) {
         var abx = attack ? tx1 : tx1 - 1, aby = attack ? ty0 - 2 : ay;
+        if (band.rim) { g.hline(abx, aby - 1, 3, band.rim); g.hline(abx, aby + 4, 3, band.rim); }
         for (var ab = 0; ab < 4; ab++) for (var abi = 0; abi < 3; abi++) { var ch = band.m[ab].charAt(abi); g.set(abx + abi, aby + ab, ch === 'B' ? band.b[abi === 2 ? 1 : 0] : band.c[ch]); }
       }
       if (tool) tool(g, hx, hy, A);
@@ -1934,6 +1935,7 @@
       }
       return g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
     }
+    S._camelGrid = function (f, load) { return camelGrid(f & 3, !!load); };
     L.lazyDef('c9_', function (key) {
       var m = /^c9_camel(_load)?_(\d)$/.exec(key); if (!m) return null;
       var g = camelGrid(+m[2] & 3, !!m[1]);
@@ -1989,17 +1991,22 @@
         g.vline(4, 1, 9, P[3]); g.paint(5, 1, ['TTu', 'Tt.']);
       } else {
         var front = dir === 's';
-        g = new Grid(28, 26);
-        boxP(g, 0, 10, 6, 15, [TRK[0], TRK[1], TRK[2]]); boxP(g, 22, 10, 6, 15, [TRK[0], TRK[1], TRK[2]]);
-        for (var ty = 11 + (f ? 1 : 0); ty < 25; ty += 2) { g.hline(1, ty, 4, RUB); g.hline(23, ty, 4, RUB); }
-        boxP(g, 5, 11, 18, 12, P); if (front) { g.rect(7, 19, 4, 2, C.fireY); g.rect(17, 19, 4, 2, C.fireY); g.set(7, 19, C.white); g.set(17, 19, C.white); } else { for (var gx = 8; gx < 21; gx += 2) g.vline(gx, 13, 4, P[3]); }
-        if (st === 'communism') g.ellipse(14, 9, 7.5, 5, function (px, py, nx, ny) { return nx + ny < -0.5 ? P[0] : (nx > 0.5 ? P[2] : P[1]); });
-        else { boxP(g, 7, 4, 14, 9, P); g.hline(7, 4, 14, P[0]); }
-        if (front) { g.rect(13, 9, 3, 5, P[3]); g.ellipse(14.5, 14.5, 2, 2, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.35 ? C.ink : P[3]; }); }
-        else { g.rect(13, 0, 3, 6, P[2]); g.hline(13, 0, 3, P[1]); }
-        if (st === 'fascism') S._emblem(g, 'fascism', 11, 4, 's', S._EG); else if (st === 'communism') S._star(g, 12, 6, 's', { 1: C.redL, 2: C.red, 3: C.redD }); else { g.rect(12, 6, 4, 3, 'T'); }
-        g.hline(5, 22, 18, 'T');
-        g.vline(front ? 24 : 3, 0, 10, P[3]); g.paint(front ? 25 : 4, 0, ['TTu', 'Tt.']);
+        g = new Grid(24, 24);
+        // Ketten schmal, Wanne geböscht, Turm kleiner; Rohr zeigt nach vorn (Mündung) bzw. hinten über den Turm
+        boxP(g, 0, 12, 4, 11, [TRK[0], TRK[1], TRK[2]]); boxP(g, 20, 12, 4, 11, [TRK[0], TRK[1], TRK[2]]);
+        for (var ty = 13 + (f ? 1 : 0); ty < 23; ty += 2) { g.hline(1, ty, 2, RUB); g.hline(21, ty, 2, RUB); }
+        for (var yy = 12; yy < 21; yy++) { var ins = yy < 14 ? 14 - yy : 0; for (var xx = 4 + ins; xx < 20 - ins; xx++) g.set(xx, yy, yy === 12 + (yy < 14 ? 0 : 0) && false ? P[0] : (xx < 6 + ins ? P[0] : (xx > 17 - ins ? P[2] : (yy > 18 ? P[2] : P[1])))); }
+        g.hline(6, 12, 12, P[0]);
+        if (front) { g.rect(6, 17, 3, 2, C.fireY); g.rect(15, 17, 3, 2, C.fireY); g.set(6, 17, C.white); g.set(15, 17, C.white); g.hline(9, 19, 6, P[3]); }
+        else { for (var gx = 8; gx < 17; gx += 2) g.vline(gx, 14, 3, P[3]); g.rect(9, 18, 6, 2, P[3]); }
+        if (st === 'communism') g.ellipse(12, 9.5, 5.5, 4, function (px, py, nx, ny) { return nx + ny < -0.5 ? P[0] : (nx > 0.5 ? P[2] : P[1]); });
+        else if (st === 'fascism') { for (var tj = 0; tj < 7; tj++) { var tw = 10 - Math.max(0, 2 - tj) * 2; g.hline(12 - (tw >> 1), 6 + tj, tw, tj === 0 ? P[0] : P[1]); g.set(12 + (tw >> 1) - 1, 6 + tj, P[2]); } }
+        else g.ellipse(12, 10, 5, 3.6, function (px, py, nx, ny) { return nx + ny < -0.4 ? P[0] : (nx > 0.5 ? P[2] : P[1]); });
+        if (front) { g.rect(11, 10, 2, 4, P[3]); g.ellipse(12, 14.5, 1.6, 1.6, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.4 ? C.ink : P[3]; }); }
+        else { g.rect(11, 0, 2, 7, P[2]); g.vline(11, 0, 7, P[1]); }
+        if (st === 'fascism') S._emblem(g, 'fascism', front ? 14 : 9, 7, 's', S._EG); else if (st === 'communism') S._star(g, front ? 14 : 10, 8, 's', { 1: C.redL, 2: C.red, 3: C.redD }); else { g.rect(14, 8, 3, 2, 'T'); }
+        g.hline(4, 20, 16, 'T');
+        g.vline(front ? 19 : 4, 2, 10, P[3]); g.paint(front ? 20 : 5, 2, ['TTu', 'Tt.']);
       }
       var o = g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
       return dir === 'w' ? o.flipX() : o;
@@ -2086,6 +2093,7 @@
       return g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
     }
     L.lazyDef('d_wreck_', function (key) {
+      if (key === 'd_wreck_ship') return wreckShip9();
       var m = /^d_wreck_(tank|gun)(_old)?$/.exec(key); if (!m) return null;
       var g = wreckGrid(m[1], !!m[2]);
       return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
@@ -2095,10 +2103,11 @@
     // ---------------------------------------------------------------- Granaten und Mündungsfeuer (mittig verankert)
     var SOILC = HC('#8a6a44');
     function shellFx(f) {
-      var g = new Grid(16, 16);
+      var g = new Grid(20, 20);
       if (f < 3) {
-        for (var k = 0; k < 3; k++) { var r = 1.2 + k * 0.6, cx = 8 - (k + 1) * 1.6, cy = 8 + (k + 1) * 1.2; g.ellipse(cx + ((f + k) & 1) * 0.5, cy, r, r, FXC.smoke[1 + Math.min(2, k)]); }
-        g.ellipse(9, 7, 2, 2, function (px, py, nx, ny) { return nx + ny < -0.4 ? FXC.fire[1] : HC('#2a2a30'); }); g.set(10, 6, FXC.fire[f === 1 ? 0 : 2]);
+        for (var k = 0; k < 4; k++) { var r = 1.6 + k * 0.7, cx = 9 - (k + 1) * 2.2, cy = 11 + (k + 1) * 1.5; g.ellipse(cx + ((f + k) & 1) * 0.5, cy, r, r, FXC.smoke[Math.min(3, k)]); }
+        g.ellipse(12, 8, 3.2, 3.2, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.7 ? HC('#1a1a20') : (nx + ny < -0.5 ? FXC.fire[f === 1 ? 0 : 1] : HC('#3a3a42')); });
+        g.set(11, 7, FXC.fire[0]); g.set(10, 9, FXC.fire[2]); g.set(9, 10, FXC.fire[3]);
       } else {   // Einschlag: Erdfontäne
         g = new Grid(24, 24);
         for (k = 0; k < 13; k++) { var a = -Math.PI / 2 + (k - 6) * 0.2, d = 8 + hash(k, 1, 1910) * 10; g.line(12, 20, Math.round(12 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), k & 1 ? FXC.debris[0] : SOILC); g.line(13, 20, Math.round(13 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), FXC.debris[1]); g.ellipse(12 + Math.cos(a) * d, 20 + Math.sin(a) * d, 1.4, 1.4, k % 3 ? SOILC : FXC.smoke[1]); }
@@ -2119,8 +2128,232 @@
       return { grid: g, scale: 0.5, ox: (8 - dw) / 2, oy: (8 - dh) / 2 };
     });
     for (var sf = 0; sf < 4; sf++) { L.ALIAS['fx_shell_' + sf] = 'fx9_shell_' + sf; L.ALIAS['fx_tankfire_' + sf] = 'fx9_tankfire_' + sf; }
+    // ================================================================== Seefahrt (9.9): Schiffe hs9_<kind>_<stil>_<dir>_<frame>, Kielwasser, Wrack
+    var SH = {
+      wood: [HC('#c89058'), HC('#a06a3a'), HC('#784a26'), HC('#56341a')], dark: [HC('#8a6a4a'), HC('#6a4c32'), HC('#4c3422'), HC('#36241a')],
+      papy: [HC('#e8d890'), HC('#ccb868'), HC('#a89048'), HC('#7a6a34')], steel: [HC('#7a7e88'), HC('#5a5e68'), HC('#40434c'), HC('#2c2e36')],
+      black: [HC('#4a4a52'), HC('#34343c'), HC('#24242a'), HC('#18181c')], red: HC('#a83a30'), redD: HC('#7a2a24'),
+      sail: [HC('#fbf6e8'), HC('#e8dfc8'), HC('#c8bc9e')], white: [C.white, HC('#e4e2dc'), HC('#bcbab4')], rope: HC('#5a4632')
+    };
+    var SHIPLEN = { canoe: [16, 24, 28, 32], sail: [20, 34, 38, 46], steam: [22, 36, 40, 46], longship: [24, 34, 38, 44], dhow: [20, 32, 36, 40], barque: [20, 32, 36, 38] };
+    var KINDS = ['fishboat', 'trader', 'transport', 'warship'];
+    function shipStyle(gov, culture) {
+      if (gov === 'fascism' || gov === 'communism') return 'steam';
+      if (gov === 'tribe') return 'canoe';
+      if (culture === 'nord') return 'longship'; if (culture === 'sahel') return 'dhow'; if (culture === 'nil') return 'barque';
+      return 'sail';
+    }
+    function hullSide(g, x0, yW, L, D, P, sheer, bowRake, steam) {
+      for (var i = 0; i < L; i++) {
+        var t = i / (L - 1), u = 2 * t - 1, rise = Math.round(sheer * Math.pow(Math.abs(u), 3) * (u > 0 ? 1 : 0.7));
+        var top = yW - D - rise, keel = Math.min(1 - t, t) * L;
+        var bot = yW + 1 - (keel < 2 ? 2 : (keel < 4 ? 1 : 0)) - (u > 0.6 && bowRake ? Math.round((u - 0.6) * bowRake) : 0);
+        for (var y = top; y <= bot; y++) {
+          var c = y === top ? P[0] : (y >= yW ? (steam ? (y === yW ? SH.redD : SH.red) : P[3]) : ((y - top) % 3 === 2 ? P[2] : P[1]));
+          if (y > top && i === L - 1) c = P[2];
+          g.set(x0 + i, y, c);
+        }
+      }
+    }
+    function squareSail(g, mx, top, w, h, f, stripes) {
+      for (var j = 0; j < h; j++) { var bul = Math.round(Math.sin(j / (h - 1) * Math.PI) * (f ? 1 : 2)); for (var i = 0; i < w; i++) g.set(mx - (w >> 1) + i + (i === w - 1 ? bul : 0), top + j, stripes && ((i / 3 | 0) & 1) ? 'T' : (i === 0 ? SH.sail[0] : (i >= w - 2 ? SH.sail[2] : SH.sail[1]))); }
+      g.hline(mx - (w >> 1) - 1, top - 1, w + 2, SH.wood[3]); g.hline(mx - (w >> 1) - 1, top + h, w + 2, SH.wood[3]);
+    }
+    function lateen(g, mx, yDeck, h, f) {   // Dreieckssegel an schräger Rah
+      var x0 = mx - h * 0.55, y0 = yDeck - 2, x1 = mx + h * 0.45, y1 = yDeck - h;
+      g.line(Math.round(x0), y0, Math.round(x1), y1, SH.wood[3]);
+      for (var y = y1 + 1; y < y0; y++) { var t = (y - y1) / (y0 - y1), xa = x1 + (x0 - x1) * t, xb = mx + (f ? 1 : 2) * Math.sin(t * Math.PI); for (var x = Math.round(Math.min(xa, xb)) + 1; x <= Math.round(Math.max(xa, xb)); x++) g.set(x, y, x < (xa + xb) / 2 ? SH.sail[0] : SH.sail[1]); }
+      g.vline(mx, yDeck - Math.round(h * 0.7), Math.round(h * 0.7), SH.wood[3]);
+    }
+    function pennant(g, x, y) { g.paint(x, y, ['TTTu', 'Tt..']); }
+    function shipSide(kind, st, f) {
+      var ki = KINDS.indexOf(kind), L = SHIPLEN[st][ki], W = L + 8, H = 40, g = new Grid(W, H), yW = 34 + (f ? 1 : 0), x0 = 4, mx, k;
+      if (st === 'canoe') {
+        hullSide(g, x0, yW, L, 3, SH.wood, 2, 0);
+        var n = ki + 1; for (k = 0; k < n + 1; k++) { var px = x0 + 4 + k * Math.floor((L - 8) / (n + 0.5)); g.set(px, yW - 5, K2.skin); g.set(px, yW - 4, k === 0 ? 'T' : C.woodD); g.line(px + 1, yW - 4, px + 3 + (f ? 0 : 1), yW + 1, C.woodL); }
+        if (ki === 3) for (k = x0 + 3; k < x0 + L - 3; k += 4) g.ellipse(k + 1, yW - 3, 1.6, 1.6, 'T');
+        if (ki === 2) { g.rect(x0 + 6, yW - 8, 8, 4, CC.hide[1]); g.hline(x0 + 6, yW - 8, 8, CC.hide[0]); }
+        if (ki === 1) { g.vline(x0 + (L >> 1), yW - 16, 13, C.woodD); for (var j = 0; j < 9; j++) g.hline(x0 + (L >> 1) + 1, yW - 15 + j, 7 - Math.abs(j - 4), PALM2[j & 1]); }
+        return g;
+      }
+      if (st === 'steam') {
+        var P = ki === 3 ? SH.steel : SH.black;
+        hullSide(g, x0, yW, L, 4 + (ki >> 1), P, 1, 4, true);
+        var sx = x0 + Math.round(L * 0.3), sw = Math.round(L * 0.35), dk = yW - 5 - (ki >> 1);
+        g.rect(sx, dk - 5, sw, 5, SH.white[1]); g.hline(sx, dk - 5, sw, SH.white[0]); g.vline(sx + sw - 1, dk - 5, 5, SH.white[2]);
+        for (k = sx + 1; k < sx + sw - 1; k += 3) g.set(k, dk - 3, C.ink);
+        g.rect(sx + 2, dk - 9, sw - 4, 4, SH.white[1]); g.hline(sx + 2, dk - 9, sw - 4, SH.white[0]); g.set(sx + 3, dk - 7, C.glass); g.set(sx + 5, dk - 7, C.glass);
+        var cx2 = sx + sw - 4; g.rect(cx2, dk - 16, 3, 7, SH.black[1]); g.vline(cx2, dk - 16, 7, SH.black[0]); g.hline(cx2, dk - 13, 3, 'T'); g.hline(cx2, dk - 16, 3, SH.black[3]);
+        g.vline(x0 + L - 7, dk - 9, 9, SH.black[2]); pennant(g, cx2 + 3, dk - 16);
+        S._st9 && S._st9(g, x0 + L - 12, yW - 6 - (ki >> 1), ki);
+        if (ki === 3) { [x0 + 5, x0 + L - 10].forEach(function (tx, i) { g.rect(tx, dk - 3, 5, 3, SH.steel[1]); g.hline(tx, dk - 3, 5, SH.steel[0]); g.rect(i ? tx + 5 : tx - 5, dk - 2, 5, 1, SH.steel[2]); }); }
+        if (ki === 0) { g.line(x0 + 2, yW - 5, x0 + 8, dk - 10, SH.rope); g.rect(x0 + 1, yW - 7, 3, 2, HC('#c8d0d8')); }
+        if (ki === 1 || ki === 2) { g.rect(x0 + L - 10, dk - 2, 6, 2, ki === 1 ? CC.hide[1] : K2.olive); g.rect(x0 + 6, dk - 2, 5, 2, ki === 1 ? HC('#8a6a44') : K2.olive); }
+        return g;
+      }
+      var P2 = st === 'barque' ? SH.papy : (st === 'longship' ? SH.dark : SH.wood), sheer = st === 'longship' ? 9 : (st === 'barque' ? 10 : (st === 'dhow' ? 4 : 3));
+      var D = 3 + Math.min(3, ki) + (ki === 3 && st === 'sail' ? 1 : 0);
+      hullSide(g, x0, yW, L, D, P2, sheer, st === 'dhow' ? 6 : 2, false);
+      var deck = yW - D;
+      if (st === 'longship') {
+        g.set(x0 + L - 1, deck - sheer - 1, P2[1]); g.set(x0 + L - 2, deck - sheer - 2, P2[0]); g.set(x0 - 1 + 1, deck - Math.round(sheer * 0.7) - 1, P2[1]);   // Steven
+        for (k = x0 + 4; k < x0 + L - 4; k += 4) g.ellipse(k + 1.5, deck + 1, 1.8, 1.8, function (px2, py2, nx, ny) { return nx * nx + ny * ny < 0.25 ? C.metalL : ((px2 & 1) ? 'T' : C.cream); });
+        if (ki !== 0) for (k = x0 + 5; k < x0 + L - 4; k += 4) g.line(k, deck + 3, k + (f ? -2 : 2), yW + 2, C.woodL);
+        mx = x0 + (L >> 1); g.vline(mx, deck - 18, 18, SH.wood[3]); squareSail(g, mx, deck - 17, 11 + ki, 11, f, true);
+      } else if (st === 'dhow') {
+        mx = x0 + Math.round(L * 0.45); lateen(g, mx, deck, 18 + ki * 2, f);
+        if (ki >= 2) lateen(g, x0 + Math.round(L * 0.78), deck, 11, f);
+        g.hline(x0 + 2, deck, L - 4, 'T');
+      } else if (st === 'barque') {
+        for (k = x0 + 2; k < x0 + L - 1; k += 3) g.vline(k, deck + 1, 2, P2[3]);   // Papyrusbünde
+        mx = x0 + Math.round(L * 0.45); g.vline(mx, deck - 18, 18, SH.wood[3]); squareSail(g, mx, deck - 16, 9 + ki, 13, f, false); g.hline(mx - 6, deck - 3, 12, 'T');
+        g.rect(x0 + L - 10, deck - 4, 5, 4, CC.linen[1]); g.hline(x0 + L - 10, deck - 4, 5, 'T');   // Kabine
+        g.line(x0 + 2, deck - 4, x0 + 1, yW + 1, C.woodD);   // Steuerruder
+      } else {   // Segelschiffe
+        var masts = ki === 0 ? 1 : (ki === 1 ? 2 : (ki === 2 ? 2 : 3));
+        for (k = 0; k < masts; k++) { mx = x0 + Math.round(L * (masts === 1 ? 0.5 : 0.3 + k * 0.4 / (masts - 1 || 1))); var mh = 16 + (k === masts - 1 && masts > 1 ? -2 : 2) + ki; g.vline(mx, deck - mh - 3, mh + 3, SH.wood[3]); squareSail(g, mx, deck - mh, 8 + ki, 8, f, ki >= 1); pennant(g, mx + 1, deck - mh - 4); }
+        g.rect(x0 + 1, deck - 3, 6, 3, P2[1]); g.hline(x0 + 1, deck - 3, 6, P2[0]); g.set(x0 + 3, deck - 2, C.glass);   // Achterkastell
+        g.line(x0 + L - 1, deck - 1, x0 + L + 3, deck - 5, SH.wood[3]);   // Bugspriet
+        if (ki === 3) for (k = x0 + 6; k < x0 + L - 4; k += 4) { g.rect(k, deck + 2, 2, 2, C.ink); g.set(k + 1, deck + 2, SH.wood[3]); }
+        g.hline(x0 + 1, deck + 1, L - 2, 'T');
+      }
+      if (ki === 2 && st !== 'barque') { g.rect(x0 + Math.round(L * 0.55), deck - 3, 6, 3, CC.hide[1]); g.hline(x0 + Math.round(L * 0.55), deck - 3, 6, CC.hide[0]); }
+      return g;
+    }
+    function shipEnd(kind, st, front, f) {   // Ansicht von vorn (s) oder hinten (n)
+      var ki = KINDS.indexOf(kind), B = [8, 11, 12, 14][ki] + (st === 'canoe' ? -2 : 0), W = B + 16, g = new Grid(W, 42), cx = W >> 1, yW = 36 + (f ? 1 : 0);
+      var P = st === 'steam' ? (ki === 3 ? SH.steel : SH.black) : (st === 'barque' ? SH.papy : (st === 'longship' ? SH.dark : SH.wood));
+      var D = st === 'canoe' ? 3 : 4 + (ki >> 1), top = yW - D, x, y;
+      for (y = top; y <= yW + 1; y++) { var hw = B / 2 - Math.max(0, y - yW + 1) * 1.5; for (x = Math.floor(cx - hw); x < Math.ceil(cx + hw); x++) g.set(x, y, y === top ? P[0] : (y >= yW ? (st === 'steam' ? SH.red : P[3]) : (x < cx - hw + 1 ? P[0] : (x > cx + hw - 2 ? P[2] : P[1])))); }
+      if (front) g.vline(cx, top - (st === 'longship' || st === 'barque' ? 6 : 1), yW - top + (st === 'longship' || st === 'barque' ? 7 : 2), P[2]);
+      else if (st === 'sail' && ki >= 1) { g.rect(cx - 3, top - 4, 6, 4, P[1]); g.hline(cx - 3, top - 4, 6, P[0]); g.set(cx - 2, top - 2, C.glass); g.set(cx + 1, top - 2, C.glass); }
+      if (st === 'canoe') { for (var k = 0; k < Math.min(3, ki + 1); k++) g.set(cx - 1 + (k % 2) * 2, top - 2 - k * 0, K2.skin); g.line(cx - B / 2 - 1, top, cx - B / 2 - 3 + (f ? 1 : 0), yW + 1, C.woodL); g.line(cx + B / 2, top, cx + B / 2 + 2 - (f ? 1 : 0), yW + 1, C.woodL); return g; }
+      if (st === 'steam') {
+        g.rect(cx - 4, top - 6, 8, 6, SH.white[1]); g.hline(cx - 4, top - 6, 8, SH.white[0]); g.hline(cx - 3, top - 4, 6, C.ink);
+        g.rect(cx - 1, top - 13, 3, 7, SH.black[1]); g.hline(cx - 1, top - 10, 3, 'T');
+        if (front) { if (S._st9) S._st9(g, cx - 2, top + 1, -1); } else pennant(g, cx + 3, top - 9);
+        if (ki === 3) { g.rect(cx - 3, top - 2, 6, 2, SH.steel[2]); g.vline(cx, top - 4 + (front ? 6 : -2), 3, SH.steel[3]); }
+        return g;
+      }
+      var mh = 20 + ki * 2; g.vline(cx, top - mh, mh, SH.wood[3]);
+      if (st === 'dhow') { for (y = 0; y < mh - 4; y++) { var w2 = Math.round(y * 0.35) + 1; g.hline(cx - (front ? 0 : w2), top - mh + 2 + y, w2, SH.sail[y & 1 ? 1 : 0]); } }
+      else { var sw = B + 4 + (f ? 0 : 1); for (y = 0; y < 12; y++) g.hline(cx - (sw >> 1), top - mh + 3 + y, sw, st === 'longship' && ((y >> 1) & 1) ? 'T' : (front ? SH.sail[1] : SH.sail[2])); g.hline(cx - (sw >> 1) - 1, top - mh + 2, sw + 2, SH.wood[3]); if (st === 'sail' && ki >= 1) g.hline(cx - (sw >> 1), top - mh + 9, sw, 'T'); }
+      pennant(g, cx + 1, top - mh - 1);
+      if (st === 'longship') { g.set(cx - B / 2 - 1, top + 1, 'T'); g.set(cx + B / 2, top + 1, 'T'); }
+      if (ki === 3 && st === 'sail') { g.rect(cx - 4, top + 1, 2, 2, C.ink); g.rect(cx + 2, top + 1, 2, 2, C.ink); }
+      return g;
+    }
+    var PALM2 = [HC('#c8c070'), HC('#a09a50')];
+    function shipGrid(kind, st, dir, f) {
+      var g = dir === 'e' || dir === 'w' ? shipSide(kind, st, f) : shipEnd(kind, st, dir === 's', f);
+      var o = g.pad(1, 1, 1, 1).outline();
+      // Wasserlinie: unterste Reihe leicht durchsichtig dunkel (Rumpf taucht ein)
+      return dir === 'w' ? o.flipX() : o;
+    }
+    S._st9 = function (g, x, y, ki) { g.hline(x - 2, y + 3, 8, 'T'); };   // Teamstreifen am Rumpf; das Zeichen setzt hs9_ darüber
+    L.lazyDef('hs9_', function (key) {
+      var m = /^hs9_(fishboat|trader|transport|warship)_(canoe|sail|steam|longship|dhow|barque)(?:_(fascism|communism))?_([ewns])_([01])$/.exec(key); if (!m) return null;
+      var g = shipGrid(m[1], m[2], m[4], +m[5]);
+      if (m[3]) {   // Zeichen am Rumpf
+        var side = m[4] === 'e' || m[4] === 'w', ki = KINDS.indexOf(m[1]), L0 = SHIPLEN.steam[ki], ex = side ? (m[4] === 'e' ? 5 + L0 - 15 : g.w - (5 + L0 - 15) - 6) : (g.w >> 1) - 2, ey = side ? 36 - 9 - (ki >> 1) : 36 - 3;
+        if (m[3] === 'fascism') S._emblem(g, 'fascism', ex, ey - 2, 's', S._EG); else S._star(g, ex, ey + 1, 'm', { 1: C.redL, 2: C.red, 3: C.redD });
+      }
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 6 - 37 * 0.5 };
+    });
+    var DIRS9 = { 0: 'e', 1: 's', 2: 'w', 3: 'n' };
+    S.shipKey = function (kind, gov, dir, frame, culture) {
+      kind = KINDS.indexOf(kind) >= 0 ? kind : 'trader';
+      if (typeof dir === 'number') dir = DIRS9[((dir % 4) + 4) % 4]; dir = /^[ewns]$/.test(dir) ? dir : 'e';
+      var st = shipStyle(gov, culture);
+      return 'hs9_' + kind + '_' + st + (st === 'steam' ? '_' + gov : '') + '_' + dir + '_' + ((frame | 0) & 1);
+    };
+    // Kielwasser, Spritzer, Schiffsrauch
+    var FOAM9 = [AC(null, '#ffffff', 230), AC(null, '#d8f2f8', 190), AC(null, '#b8e4f0', 140)];
+    L.lazyDef('fx9w_', function (key) {
+      var m = /^fx9w_(wake|splash)_(\d)$/.exec(key); if (!m) return null;
+      var f = +m[2] & 3, g, k;
+      if (m[1] === 'wake') {
+        g = new Grid(24, 16);
+        for (k = 0; k < 12; k++) { var x = 22 - k * 2 - (f & 1), sp = 1 + k * 0.45; if (hash(k, f, 1951) < 0.85) { g.set(x, Math.round(8 - sp), FOAM9[k < 4 ? 0 : 1]); g.set(x, Math.round(8 + sp), FOAM9[k < 4 ? 0 : 1]); } if (k < 6) g.set(x - 1, 8 + ((k + f) & 1), FOAM9[2]); }
+      } else {
+        g = new Grid(20, 20);
+        var hgt = [6, 12, 9, 3][f];
+        for (k = 0; k < 7; k++) { var a = -Math.PI / 2 + (k - 3) * 0.32; g.line(10, 17, Math.round(10 + Math.cos(a) * hgt * (0.6 + hash(k, 3, 1952) * 0.5)), Math.round(17 + Math.sin(a) * hgt), FOAM9[k & 1]); }
+        g.ellipse(10, 17, 3 + f, 1.5, function (px, py, nx, ny) { return nx * nx + ny * ny > 0.5 ? FOAM9[0] : null; });
+      }
+      return { grid: g, scale: 0.5, ox: (8 - g.w * 0.5) / 2, oy: (8 - g.h * 0.5) / 2 };
+    });
+    for (var wf = 0; wf < 4; wf++) { L.ALIAS['fx_wake_' + wf] = 'fx9w_wake_' + wf; L.ALIAS['fx_splash_' + wf] = 'fx9w_splash_' + wf; L.ALIAS['fx_shipsmoke_' + wf] = 'hx_chimney_' + wf; }
+    // Schiffswrack im Flachwasser
+    function wreckShip9() {
+      var g = new Grid(34, 28), P = SH.dark;
+      for (var i = 0; i < 26; i++) { var top = 20 - Math.round(i * 0.12) - (i > 20 ? (i - 20) : 0); for (var y = top; y < 24; y++) g.set(4 + i, y, y === top ? P[0] : ((y - top) % 3 === 2 ? P[2] : P[1])); }
+      for (i = 6; i < 28; i += 3) if (hash(i, 1, 1953) < 0.6) g.vline(4 + i, 16 - (i & 3), 4, P[2]);   // Spanten
+      g.line(14, 20, 24, 2, SH.wood[3]); g.line(15, 20, 25, 2, SH.wood[2]); g.line(18, 10, 28, 8, SH.wood[3]);   // schräger Mast mit Rah
+      g.paint(24, 3, ['cc.', 'ccc', '.c.']);
+      for (i = 0; i < 34; i += 2) g.set(i, 24 + (i & 2 ? 1 : 0), FOAM9[1]);
+      g = g.pad(1, 1, 1, 0).outline();
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    }
+    // ---------------------------------------------------------------- Ausbau 9.9: offene Güterwagen mit Ladung, Gefangenen- und Wachwagen (tr9_*)
+    var LOAD9 = { ore: [HC('#c88a62'), HC('#9a5a3a'), HC('#6e3a26')], stone: [C.stoneL, C.stone, C.stoneD], timber: [HC('#c8965a'), HC('#9a6a3a'), HC('#e8c890')], crates: [C.woodL, C.wood, C.woodD] };
+    var PRS = { fascism: [HC('#6a6e78'), HC('#4e525c'), HC('#363840')], communism: [HC('#8a9064'), HC('#686e48'), HC('#4a4e32')], plain: [HC('#6e7a6a'), HC('#525e50'), HC('#3a4438')] };
+    function load9(g, kind, x0, x1, y) {
+      var P = LOAD9[kind], x;
+      if (kind === 'ore' || kind === 'stone') { for (x = x0; x <= x1; x++) { var h = Math.round(2 + Math.sin((x - x0) / (x1 - x0) * Math.PI) * 3); for (var j = 0; j < h; j++) g.set(x, y - j, kind === 'stone' ? (((x >> 1) + j) % 3 === 0 ? P[2] : (j === h - 1 ? P[0] : P[1])) : (hash(x, j, 1961) < 0.3 ? P[0] : (hash(x, j, 1962) < 0.3 ? P[2] : P[1]))); } }
+      else if (kind === 'timber') { for (var r = 0; r < 3; r++) { g.rect(x0, y - 1 - r * 2, x1 - x0 + 1, 2, r & 1 ? P[0] : P[1]); for (x = x0 + 1; x < x1; x += 6) g.set(x, y - 1 - r * 2, P[1]); } g.vline(x0, y - 6, 6, C.woodD); g.vline(x1, y - 6, 6, C.woodD); }
+      else { for (x = x0; x + 4 <= x1 + 1; x += 5) { var hh = 3 + ((x / 5 | 0) & 1) * 2; g.rect(x, y - hh, 4, hh + 1, P[1]); g.hline(x, y - hh, 4, P[0]); g.vline(x + 3, y - hh, hh + 1, P[2]); g.line(x, y - hh, x + 3, y, P[2]); } }
+    }
+    function trainCar9(kind, style, dir) {
+      var side = dir === 'e' || dir === 'w', g, x, P = PRS[style] || PRS.plain;
+      if (side) {
+        g = new Grid(30, kind === 'guard' ? 34 : 20); var oy = g.h - 20;
+        if (kind === 'prison') {
+          boxSide(g, 1, 4 + oy, 27, 11, P); g.hline(0, 3 + oy, 29, P[2]); g.hline(1, 2 + oy, 27, P[0]);
+          [3, 21].forEach(function (wx) { g.rect(wx - 1, 5 + oy, 7, 6, P[0]); g.rect(wx, 6 + oy, 5, 4, C.ink); for (var bxx = wx; bxx < wx + 5; bxx += 2) g.vline(bxx, 6 + oy, 4, C.metalL); });
+          g.rect(11, 5 + oy, 8, 10, P[2]); g.vline(11, 5 + oy, 10, P[0]); g.hline(9, 5 + oy, 12, C.metalD); g.set(17, 10 + oy, C.metalL);   // Schiebetür mit Laufschiene
+          if (style === 'fascism') S._emblem(g, 'fascism', 13, 5 + oy, 's', S._EG); else if (style === 'communism') S._star(g, 14, 7 + oy, 's', { 1: C.redL, 2: C.red, 3: C.redD });
+          g.hline(1, 13 + oy, 27, 'T');
+        } else if (kind === 'guard') {
+          g.rect(1, 12 + oy, 27, 3, P[1]); g.hline(1, 12 + oy, 27, P[0]); g.hline(1, 14 + oy, 27, P[2]);
+          for (x = 2; x < 28; x += 3) g.vline(x, 9 + oy, 3, C.metalD); g.hline(1, 9 + oy, 27, C.metalD);   // Geländer
+          boxSide(g, 19, 3 + oy, 9, 9, P); g.hline(18, 2 + oy, 11, P[2]); g.rect(21, 5 + oy, 4, 3, C.glass);   // Wachhäuschen
+          g.hline(1, 13 + oy, 18, 'T');
+          var sold = figure('human', 'soldier', style === 'plain' ? 'monarchy' : style, 4);
+          g.blit(sold, 2, 12 + oy - sold.h + 3);
+        } else {
+          var y0 = 9; boxSide(g, 1, y0, 27, 6, P === PRS.plain ? TRC.wood : TRC.wood);
+          for (x = 4; x < 27; x += 6) g.vline(x, y0 + 1, 4, C.woodD);
+          load9(g, kind, 2, 26, y0 - 1);
+        }
+        g.rect(0, 15 + oy, 29, 2, C.ink); wheels(g, [6, 22], 17.5 + oy, 2.4);
+      } else {
+        g = new Grid(20, kind === 'guard' ? 36 : 24); var o2 = g.h - 24;
+        if (kind === 'prison') { boxSide(g, 2, 4 + o2, 16, 16, P); g.hline(1, 3 + o2, 18, P[0]); g.rect(7, 7 + o2, 6, 4, C.ink); for (x = 8; x < 13; x += 2) g.vline(x, 7 + o2, 4, C.metal); if (style === 'fascism') S._emblem(g, 'fascism', 7, 12 + o2, 's', S._EG); else if (style === 'communism') S._star(g, 8, 13 + o2, 's', { 1: C.redL, 2: C.red, 3: C.redD }); g.hline(2, 17 + o2, 16, 'T'); }
+        else if (kind === 'guard') { g.rect(2, 16 + o2, 16, 4, P[1]); g.hline(2, 16 + o2, 16, P[0]); boxSide(g, 3, 6 + o2, 14, 10, P); g.rect(7, 9 + o2, 6, 3, C.glass); var s2 = figure('human', 'soldier', style === 'plain' ? 'monarchy' : style, 4); g.blit(s2, -2, 16 + o2 - s2.h + 2); }
+        else { boxSide(g, 2, 12, 16, 8, TRC.wood); load9(g, kind, 3, 16, 11); }
+        g.rect(3, 20 + o2, 3, 3, C.ink); g.rect(14, 20 + o2, 3, 3, C.ink);
+      }
+      var o = g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
+      return dir === 'w' ? o.flipX() : o;
+    }
+    L.lazyDef('tr9_', function (key) {
+      var m = /^tr9_(ore|stone|timber|crates|prison|guard)_(fascism|communism|plain)_([ewns])$/.exec(key); if (!m) return null;
+      var g = trainCar9(m[1], m[2], m[3]);
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    });
+    ['e', 'w', 'n', 's'].forEach(function (d) {
+      ['ore', 'stone', 'timber', 'crates'].forEach(function (k) { L.ALIAS['tr_car_' + k + '_' + d] = 'tr9_' + k + '_plain_' + d; });
+      ['prison', 'guard'].forEach(function (k) { ['fascism', 'communism', 'plain'].forEach(function (s) { L.ALIAS['tr_car_' + k + '_' + s + '_' + d] = 'tr9_' + k + '_' + s + '_' + d; }); L.ALIAS['tr_car_' + k + '_' + d] = 'tr9_' + k + '_plain_' + d; });
+    });
+    var trainKeyOld = S.trainKey;
+    S.trainKey = function (part, kind, dir, gov) {
+      if (part === 'car' && /^(ore|stone|timber|crates)$/.test(kind)) return 'tr_car_' + kind + '_' + (/^[ewns]$/.test(dir) ? dir : 'e');
+      if (part === 'car' && (kind === 'prison' || kind === 'guard')) return 'tr_car_' + kind + '_' + (gov === 'fascism' || gov === 'communism' ? gov : 'plain') + '_' + (/^[ewns]$/.test(dir) ? dir : 'e');
+      return trainKeyOld(part, kind, dir);
+    };
     // Phasenzahl je Effekt für den Renderer
-    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, nuke_l: 10, bolt: 2, rain: 2, snow: 2, treefall: 5, shell: 4, tankfire: 4 }[name] || 1; };
+    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, nuke_l: 10, bolt: 2, rain: 2, snow: 2, treefall: 5, shell: 4, tankfire: 4, wake: 4, splash: 4, shipsmoke: 4 }[name] || 1; };
   });
 
   WW.SPRITE_RACES = RACES;

@@ -1080,8 +1080,8 @@
 
   // ---------------------------------------------------------------- Zufriedenheit (Pyramide)
   function happiness(sim, city) {
-    const p = city._pyramid;
-    return p ? 3 + 2 * Math.max(0, Math.min(2, (p.level || 1) - 1)) : 0;
+    const lv = city.pyramidLv | 0;   // 0 = keine fertige Pyramide, sonst Stufe 1..3 (gespeichert)
+    return lv ? 3 + 2 * Math.min(2, lv - 1) : 0;
   }
 
   // ---------------------------------------------------------------- Sonderbauten und Karawanen (alle 40 Ticks)
@@ -1101,7 +1101,8 @@
       if (city.dead) continue;
       const c = info(city.culture);
       const pyr = sp.get(city.id + ':pyramid') || null;
-      city._pyramid = pyr && pyr.built ? pyr : null;
+      const plv = pyr && pyr.built ? (pyr.level || 1) : 0;
+      if ((city.pyramidLv | 0) !== plv) city.pyramidLv = plv;
       if (pyr) {
         const stg = Math.max(0, Math.min(2, (pyr.level || 1) - 1));
         if (pyr.stage !== stg) { const up = pyr.stage != null && stg > pyr.stage; pyr.stage = stg; if (up) sim.event('pyramidStage', { city: city.name }, WW.Cities.atCity(city)); WW.Structs.forTiles(sim, pyr, (i) => sim.markDirty(i)); }

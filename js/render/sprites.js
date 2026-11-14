@@ -73,6 +73,10 @@
 //   's_camp_station' (2×2): Verladerampe mit Kisten, Kohle, Steinen, kleiner Bude; Rampe an der Südkante, das Gleis
 //     (t_rail_*) läuft in der Kachelreihe südlich davor. Offene Güterwagen mit Ladung: S.trainKey('car', kind, dir)
 //     mit kind 'ore' | 'stone' | 'timber' | 'crates' (zusätzlich zu freight/coal/troop) -> 'tr_car_<kind>_<dir>'.
+//   Gefangenenzug (Zugart 'prison'): S.trainKey('car', 'prison', dir, gov) -> 'tr_car_prison_<stil>_<dir>' (geschlossener
+//     Wagen, vergitterte Fensterchen, Schiebetür, Zeichen am Wagen), S.trainKey('car', 'guard', dir, gov) ->
+//     'tr_car_guard_<stil>_<dir>' (Plattformwagen mit Wachhäuschen und Wachposten des Reichs); stil fascism | communism
+//     | plain. Gleiche Maße und Anker wie die übrigen tr_car_* (seitlich 15×11, vorn/hinten 10×12,5).
 //   Zauntor mit Gleis: S.gateKey('fence', level, dir, true) -> 's_gate_fence_rail_h|v' (breit offen, Gleis liegt als
 //     Bodenüberlagerung darunter).
 // ============================================================================
@@ -117,7 +121,7 @@
   var C = {};
   NAMES.forEach(function (n, i) { C[n] = i + 1; });
   // Sonderindizes: Teamfarben (beim Backen ersetzt) und halbdurchsichtiger Schatten.
-  C.T = 1000; C.Td = 1001; C.Tl = 1002; C.shade = 1003; C.shadeL = 1004;
+  C.T = 4000; C.Td = 4001; C.Tl = 4002; C.shade = 4003; C.shadeL = 4004;   // Sonderindizes (Palette darf bis 3990 wachsen)
 
   // 12 gut unterscheidbare Reichsfarben (bewusst kein reines Grün: das ist die Wiese).
   var TEAM_COLORS = [
@@ -266,7 +270,7 @@
     return this;
   };
   Grid.prototype.hasTeam = function () {
-    for (var i = 0; i < this.d.length; i++) if (this.d[i] >= 1000 && this.d[i] <= 1002) return true;
+    for (var i = 0; i < this.d.length; i++) if (this.d[i] >= 4000 && this.d[i] <= 4002) return true;
     return false;
   };
 
@@ -305,7 +309,7 @@
 
   // ---------------------------------------------------------------------------
   // Backen
-  var RGBA = new Uint32Array(1024);  // Kleinendian ABGR
+  var RGBA = new Uint32Array(4096);  // Kleinendian ABGR
   function rgbaOf(hex, a) {
     var n = parseInt(hex.slice(1), 16);
     return (((a == null ? 255 : a) << 24) | ((n & 255) << 16) | (((n >> 8) & 255) << 8) | ((n >> 16) & 255)) >>> 0;
@@ -329,7 +333,7 @@
     var idx = BY_HEX[hex];
     if (!idx) {
       idx = HEX.length;
-      if (idx >= 990) throw new Error('Palette voll');
+      if (idx >= 3990) throw new Error('Palette voll');
       HEX.push(hex); BY_HEX[hex] = idx; RGBA[idx] = rgbaOf(hex);
     }
     if (name) { C[name] = idx; if (!PALETTE[name]) PALETTE[name] = hex; }
@@ -474,7 +478,7 @@
     var tab = e.team ? (TEAMTAB[t] || (TEAMTAB[t] = teamTable(t))) : NEUTRAL, g = e.grid;
     for (var y = 0; y < e.h; y++) for (var x = 0; x < e.w; x++) {
       var c = g.d[y * e.w + x];
-      if (c) px[y * e.w + (flip ? e.w - 1 - x : x)] = tab[c];
+      if (c) px[y * e.w + (flip ? e.w - 1 - x : x)] = tab[c] || RGBA[c];   // auch Farben, die erst träge angemeldet wurden
     }
     ctx.putImageData(img, 0, 0);
     return cv;

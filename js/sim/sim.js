@@ -40,7 +40,7 @@
 // GOTTESHANDLUNGEN (sim.actions.*; prüfen Eingaben selbst, werfen nie, Rückgabe false/null bei Unsinn)
 //   paintTerrain(x, y, radius, terrainId) -> bool   radius 1 = 1 Kachel, 2 = 3×3, 3 = Ø5 (UI-Pinsel 1/3/5 -> 1/2/3)
 //        Bauwerke auf unpassendem Gelände werden zerstört (Mauer nur, wenn unbegehbar); Leute auf Wasser retten sich/ertrinken
-//   spawnSettlers(x, y, count, govKeyOrNull, raceKey?) -> { kingdomId, cityId } | null
+//   spawnSettlers(x, y, count, govKeyOrNull, raceKey?, cultureKey?) -> { kingdomId, cityId } | null   (Kultur: siehe AUSBAU 9)
 //        im Gebiet einer Stadt: schließen sich ihr an; sonst neues Reich (Abstand ≥ 12 zu Städten, Suche r ≤ 5),
 //        zu nah: nächste Stadt (≤ 18). govKeyOrNull = null -> 'tribe', wählt selbst; Schlüssel ≠ 'tribe' -> govLocked.
 //        raceKey fehlt -> 'human'.
@@ -205,7 +205,7 @@
 //     (alles oder nichts; für Arsenal/Panzer, Fabriken, Züge).
 //   Vorkommen: state.deposit Uint8 (W*H), Code -> Art über WW.DEPOSITS = [null,'iron','coal','gold','crystal','fish'],
 //     WW.DEPOSIT_CODE. Gespeichert; alte Spielstände: deterministisch aus dem Weltsamen erzeugt. Erschöpfte Kacheln -> 0.
-//   Bauwerke (alle 2×2, außerhalb des Rings, Schmiede bevorzugt innen): mine { res 'iron'|'coal'|'gold'|'crystal', left (Restvorrat;
+//   Bauwerke (alle 2×2; vor der Mauer, Minen auch innerhalb, Schmiede bevorzugt innen): mine { res 'iron'|'coal'|'gold'|'crystal', left (Restvorrat;
 //     0 -> Ruine, Ereignis mineDepleted) }, smithy, fishery (am Flachwasser mit Fisch), pasture (Weide). Ereignis mineOpened.
 //   Wirkung: city.armed 0|1|2 (Schmiede mit Eisen | Eisen + Kohle): Soldaten Kampfkraft ×1,25/×1,35, Leben ×1,15
 //     (WW.Resources.armMul/armorMul). Fisch wird zuerst gegessen. Wolle: Zufriedenheit (+8 in Kälte, sonst +3), city.cold 0|1;
@@ -225,8 +225,13 @@
 //     mitte wood ×1,1, build ×1,05 · nord fish ×1,3, keine Kältenachteile · sahel gold ×1,25, kein Tempoabzug in Wüste/Sand,
 //     Karawanen · nil Felder an Flüssen ×1,5 (food), Pyramide (Zufriedenheit). sahel/nil: Bewässerungsfelder auf Wüste/Sand
 //     im Umkreis 3 um Wasser (field.irrigated = true; Darstellung: Gräben).
-//   Sonderbauten: 'caravanserai' (2×2, sahel, je Stadt 1; schickt Karawanen) und 'pyramid' (1×1, nil, je Stadt 1; level 0..2 =
-//     Ausbaustufe, Sprite s_monument_<level> laut PLAN-9 – der Typ 'monument' bleibt das Regierungsdenkmal).
+//   Sonderbauten: 'caravanserai' (2×2, sahel, je Stadt 1, in der Stadt oder vor dem Tor; schickt Karawanen) und 'pyramid'
+//     (1×1, nil, je Stadt 1; level 1..3, dazu s.stage 0..2 = level − 1 für das Sprite s_monument_<stage> laut PLAN-9 – der Typ
+//     'monument' bleibt das Regierungsdenkmal). city.pyramidLv 0..3 (fertige Stufe, Zufriedenheit +3/+5/+7). Ereignisse
+//     caravanserai, pyramid, pyramidStage, irrigation (einmal je Stadt, city.irrigated), caravanArrives (selten).
+//   Lehmbau (sahel, nil; CULTURES[k].loam): Steinmetze holen Lehm aus der Wüste (zählt als stone), Holzfäller Akazienholz aus der
+//     Savanne (Kachel bleibt, 60 % Ertrag); Bauwerke (außer Mauern) brauchen 60 % des Holzes als Lehm statt Holz.
+//     WW.Culture.resTab(city, 'wood'|'stone') = Gelände-Tabelle dieser Kultur.
 //   Karawane: Einheit role 'caravan' (Name „Karawanenführer"), u.camel = true (Kamel daneben zeichnen), läuft zwischen ihrer Stadt
 //     und einer befreundeten Stadt (eigenes Reich, Bündnis oder Frieden mit Meinung ≥ 0); Ankunft: Gold für beide Städte,
 //     Fx caravan { x, y }. Tier 'camel' (WW.CREATURES.camel, Lasttier, friedlich, Wüste/Savanne).
@@ -239,9 +244,12 @@
 //   WW.Names.person(culture, rng, female) -> Vorname; WW.Names.title(govKey, culture) -> { m, f } (Mansa, Qore/Kandake, Jarl …).
 //   kingdom.name wechselt bei Regierungswechsel die Form, baseName bleibt; Ereignis realmRenamed { old, kingdom }.
 //   Alte Aufrufe bleiben: town(rng, race, used), person(rng, race, female), realm(baseName, gov).
+//   WW.Names.realmArticle(name, cas) -> „dem Eisernen Reich X“ (cas nom|acc|dat|in); WW.Texts.withArticle nutzt es.
+//   Beinamen der Herrscher jetzt würdig („der Weise“, „die Standhafte“); Humor bleibt in Chronik, Parteien, Gottheiten.
 // KACHEL-MELDUNGEN
 //   drainDirtyTiles meldet nur noch Kacheln mit sichtbarer Änderung (Prüfsumme sim._visSig: Gelände, Variante, Höhe, Bauwerk-ID,
-//     -Art, -Maske, Brücke, Feuer, Marke, Rodung, grazed, Verödung 3 Stufen, Ruß, murk/crack/fallout in 8er-Stufen, flora, Vorkommen,
+//     -Art, -Maske, Brücke, Feuer, Marke, Rodung, grazed, Verödung 3 Stufen, Ruß, murk/crack/fallout in 8er-Stufen, trench (>0 und
+//     in 32er-Stufen), flora, Vorkommen,
 //     Gebiet, Ring). NICHT gemeldet: Stufe/Stil/Fertigstellung von Bauwerken, Feldwachstum, Baufortschritt, Lebenspunkte
 //     (Bauwerke werden in 2D und 3D ohnehin je Bild aus dem Zustand gezeichnet; Neubau/Abriss ändert die ID und wird gemeldet).
 //   state.grazed Uint8 (W*H, gespeichert): 1 = sichtbar abgeweidet, mit Hysterese (an ab CONFIG.GRAZED_ON 170, aus unter
@@ -345,7 +353,8 @@
     h = Math.imul(h ^ ((st.fire[i] ? 1 : 0) | (st.mark[i] << 1) | ((st.cleared[i] ? 1 : 0) << 9) | ((st.grazed && st.grazed[i] ? 1 : 0) << 10) |
       ((b ? (b > 170 ? 3 : b > 85 ? 2 : 1) : 0) << 11) | ((st.soot && st.soot[i] ? 1 : 0) << 13) | (st.deposit[i] << 14) |
       ((st.flora ? st.flora[i] & 15 : 0) << 18) | ((st.murk ? st.murk[i] >> 3 : 0) << 22)), 16777619);
-    h = Math.imul(h ^ ((st.crack ? st.crack[i] >> 3 : 0) | ((st.fallout ? st.fallout[i] >> 3 : 0) << 5) | ((st.fire[i] >> 4) << 10)), 16777619);
+    const tr = st.trench ? st.trench[i] : 0;   // [mil] Schützengräben (Militär), 8 Stufen
+    h = Math.imul(h ^ ((st.crack ? st.crack[i] >> 3 : 0) | ((st.fallout ? st.fallout[i] >> 3 : 0) << 5) | ((st.fire[i] >> 4) << 10) | ((tr ? 1 + (tr >> 5) : 0) << 14)), 16777619);
     h = Math.imul(h ^ st.owner[i], 16777619);
     h = Math.imul(h ^ st.inRing[i], 16777619);
     return h | 0;

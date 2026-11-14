@@ -3232,10 +3232,10 @@
         stampE(g, vertical ? Math.floor((w - 3) / 2) + (big ? -1 : 0) : ex + e2.w - 2, vertical ? ey - (big ? 5 : 4) : Math.max(0, ey - 4), STAR[big ? 'm' : 's'], EG);
       } else {
         for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var u = vertical ? j / h : i / w, v = vertical ? i / w : j / h; g.set(i, j, FPAT[p](u, v)); }
-        var es = embSize(EMB[gov] ? EMB[gov].s : EMB.tribe.s), cw = es.w + 3, ch = es.h + 3;
+        var esz = (!vertical && h >= 15) ? 'm' : 's', es = embSize((EMB[gov] || EMB.tribe)[esz]), cw = es.w + 3, ch = es.h + 3;
         var kx = vertical ? Math.floor((w - cw) / 2) : 0, ky = vertical ? 1 : 0;
         g.rect(kx, ky, cw, ch, 'Td'); g.hline(kx, ky + ch - 1, cw, 'Td'); g.vline(kx + cw - 1, ky, ch, 'Td');
-        stampE(g, kx + 1, ky + 1, (EMB[gov] || EMB.tribe).s, EG);
+        stampE(g, kx + 1, ky + 1, (EMB[gov] || EMB.tribe)[esz], EG);
       }
       return g;
     }
@@ -3281,6 +3281,7 @@
     // Ausbau 9, Teil 2: Bauten der Kulturen (sahel: Lehmbau mit Holzsparren und Zinnenkronen; nil: Sandstein, Pylone,
     // kleine steile Pyramide; nord: Holz, Torf, Langhaus), Arsenal, Lagerstadt (Kommandantur, Baracke, Wachturm,
     // Zaun, Gefangenenlager). Alles feines Raster (Maßstab 0,5), träge erzeugt (hk_*, hz_*).
+    var SH9R = HCOL('#5a4632');
     var MUD = [HCOL('#e6b07a'), HCOL('#cc915a'), HCOL('#ad7442'), HCOL('#82522c')];
     var MUDR = [HCOL('#dba878'), HCOL('#c4925e'), HCOL('#a87848')];             // Dachfläche Lehm
     var SST = [HCOL('#f2dcaa'), HCOL('#dcc086'), HCOL('#bc9c62'), HCOL('#8e7042')]; // Sandstein
@@ -3563,26 +3564,35 @@
         g.line(0, base, 9, base - H, C.woodD); g.line(1, base, 10, base - H, C.wood);   // Rampe
         for (var k = 0; k < 3; k++) { g.rect(20 + k * 3, base - 2 - (k & 1) * 2, 3, 2, SST[1]); g.hline(20 + k * 3, base - 2 - (k & 1) * 2, 3, SST[0]); }
         if (stage === 1) { g.vline(22, base - H - 8, 8, C.woodD); g.vline(26, base - H - 8, 8, C.woodD); g.hline(21, base - H - 8, 7, C.woodL); g.vline(24, base - H - 7, 5, C.stoneD); }
-        else { g.rect(5, base - 1, 20, 2, SST[2]); for (var s = 6; s < 25; s += 4) g.set(s, base - 2, C.woodD); }
+        else {   // Baustelle: abgesteckter Grundriss, erste Steinlage mit Lücken, Hebebaum, Schlitten mit Block, Steinstapel
+          for (var bx = 3; bx < 27; bx++) { g.set(bx, base - 9, (bx & 1) ? C.woodL : 0); }
+          [3, 26].forEach(function (sx) { g.vline(sx, base - 11, 12, C.woodD); });
+          for (var r2 = 0; r2 < 2; r2++) for (bx = 4 + r2 * 2; bx < 26 - r2 * 2; bx++) { if (r2 === 1 && bx > 15 && bx < 21) continue; var seam2 = (bx + r2 * 2) % 4 === 3; g.set(bx, base - 1 - r2 * 3, seam2 ? SST[3] : SST[2]); g.set(bx, base - 2 - r2 * 3, seam2 ? SST[2] : SST[1]); g.set(bx, base - 3 - r2 * 3, seam2 ? SST[2] : SST[0]); }
+          g.line(6, base - 4, 22, base - 22, C.woodD); g.line(7, base - 4, 23, base - 22, C.wood); g.vline(10, base - 10, 10, C.woodD); g.rect(4, base - 4, 4, 3, C.stoneD);   // Hebebaum mit Gegengewicht
+          g.vline(22, base - 21, 6, SH9R); g.rect(21, base - 15, 3, 3, SST[1]); g.hline(21, base - 15, 3, SST[0]);
+          g.hline(1, base + 3, 9, C.woodD); g.rect(2, base, 6, 3, SST[1]); g.hline(2, base, 6, SST[0]);   // Schlitten
+          [[24, base - 1], [27, base - 1], [25, base - 4]].forEach(function (p) { g.rect(p[0], p[1] - 2, 3, 3, SST[1]); g.hline(p[0], p[1] - 2, 3, SST[0]); g.vline(p[0] + 2, p[1] - 2, 3, SST[3]); });
+        }
       }
       return g;
     }
     // Karawanserei (3×3): Lehmgeviert mit Hof, Arkade, großem Tor, Zinnen, Brunnen und Lasten im Hof
-    function caravanserai(lit) {
-      var g = new Grid(CG, 62), x;
-      flatTop(g, 1, 6, 44, 6, MUDR, MUD[2]); mudWall(g, 1, 12, 44, 12, MUD, 71);   // Rückwand
-      for (x = 4; x < 42; x += 6) { g.rect(x, 15, 4, 9, C.plum); g.set(x, 15, MUD[2]); g.set(x + 3, 15, MUD[2]); }   // Arkade
-      crownRow(g, 1, 7, 44, MUD, 5, 4); toron(g, 1, 12, 44, 12, MUD);
-      g.rect(5, 24, 36, 18, PATHC); for (var i = 0; i < 40; i++) g.set(5 + Math.floor(hash(i, 1, 72) * 36), 24 + Math.floor(hash(i, 2, 72) * 18), PATHD);   // Hof
-      g.ellipse(23, 32, 4, 2.5, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.4 ? C.waterD : C.stone; }); g.vline(20, 26, 6, C.woodD); g.vline(26, 26, 6, C.woodD); g.hline(20, 26, 7, C.wood);
-      g.rect(8, 28, 5, 4, CC2.hide); g.hline(8, 28, 5, CC2.hideL); g.rect(33, 28, 6, 4, RUGS[1][0]); g.hline(33, 29, 6, C.gold); g.rect(10, 35, 4, 3, RUGS[0][0]);
-      [[1, 12], [41, 12]].forEach(function (s) { flatTop(g, s[0], s[1], 4, 30, MUDR, null); g.vline(s[0] + 3, s[1], 30, MUD[2]); });   // Seitenmauern (Krone)
-      flatTop(g, 1, 40, 44, 4, MUDR, MUD[2]); mudWall(g, 1, 44, 44, 14, MUD, 73); crownRow(g, 1, 41, 44, MUD, 5, 3); toron(g, 1, 44, 44, 14, MUD);
-      g.rect(17, 36, 12, 8, MUD[1]); pinnacle(g, 18, 38, 7, MUD, true); pinnacle(g, 28, 38, 7, MUD, true);
-      g.rect(19, 44, 8, 14, C.plum); g.vline(19, 44, 14, C.ink); g.rect(18, 43, 10, 1, MUD[3]); triDeco(g, 19, 41, 3, MUD[3]);
-      [[1, 34], [41, 34]].forEach(function (t) { mudWall(g, t[0], t[1], 5, 24, MUD, 74); pinnacle(g, t[0] + 2, t[1] + 1, 6, MUD, true); });
-      smallWin(g, 9, 49, 2, 3, lit); smallWin(g, 35, 49, 2, 3, lit);
-      g.hline(0, 58, 46, MUD[3]);
+    function caravanserai(lit) {   // Hof von schräg vorn: hohe Rückwand mit Arkade, Seitenflügel, niedrige Vorderwand mit Torbau
+      var g = new Grid(CG, 60), x, k;
+      flatTop(g, 1, 4, 44, 5, MUDR, MUD[2]); mudWall(g, 1, 9, 44, 13, MUD, 71); crownRow(g, 1, 5, 44, MUD, 5, 4); toron(g, 1, 9, 44, 13, MUD);
+      for (x = 5; x < 41; x += 6) { g.rect(x, 13, 4, 9, C.plum); g.set(x, 13, MUD[2]); g.set(x + 3, 13, MUD[2]); g.hline(x, 21, 4, C.ink); }
+      for (var y = 22; y < 46; y++) for (x = 6; x < 40; x++) g.set(x, y, y < 25 ? C.sandD : (hash(x, y, 72) < 0.1 ? C.sand : C.sandL));   // Hof (heller Sand, Schatten an der Rückwand)
+      for (x = 6; x < 40; x++) if (y) g.set(x, 22, C.sandD);
+      [[1, 22], [40, 22]].forEach(function (s) { flatTop(g, s[0], s[1], 5, 22, MUDR, null); g.vline(s[0] + (s[0] ? 0 : 4), s[1], 22, MUD[2]); for (k = s[1] + 2; k < s[1] + 20; k += 6) g.rect(s[0] ? s[0] - 1 : s[0] + 5, k, 1, 4, C.plum); });
+      g.ellipse(23, 30, 4, 2.4, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.4 ? C.waterD : C.stone; }); g.vline(20, 24, 6, C.woodD); g.vline(26, 24, 6, C.woodD); g.hline(20, 24, 7, C.wood);   // Brunnen
+      g.rect(9, 26, 6, 4, CC2.hide); g.hline(9, 26, 6, CC2.hideL); g.rect(31, 27, 6, 3, RUGS[1][0]); g.hline(31, 28, 6, C.gold); g.rect(11, 36, 5, 3, RUGS[0][0]); g.rect(30, 38, 4, 3, CC2.hideD);
+      [[8, 33], [27, 34], [16, 40]].forEach(function (p, k) { g.rect(p[0], p[1], 4, 3, k === 1 ? CC2.hideD : CC2.hide); g.hline(p[0], p[1], 4, CC2.hideL); g.rect(p[0] + 4, p[1] + 1, 3, 2, k ? RUGS[2][0] : RUGS[1][0]); });   // Lasten
+      flatTop(g, 1, 44, 44, 3, MUDR, MUD[2]); mudWall(g, 1, 47, 44, 8, MUD, 73); crownRow(g, 1, 45, 44, MUD, 6, 3);   // niedrige Vorderwand
+      mudWall(g, 17, 38, 12, 17, MUD, 74); pinnacle(g, 18, 40, 6, MUD, true); pinnacle(g, 27, 40, 6, MUD, true); toron(g, 17, 38, 12, 17, MUD);   // Torbau
+      g.rect(19, 45, 8, 10, C.plum); g.vline(19, 45, 10, C.ink); g.rect(18, 44, 10, 1, MUD[3]); triDeco(g, 19, 42, 3, MUD[3]);
+      [[0, 40], [40, 40]].forEach(function (t) { mudWall(g, t[0], t[1], 6, 15, MUD, 75); pinnacle(g, t[0] + 3, t[1] + 1, 6, MUD, true); });
+      smallWin(g, 10, 50, 2, 2, lit); smallWin(g, 34, 50, 2, 2, lit);
+      g.hline(0, 55, 46, MUD[3]);
       return g;
     }
     // Langhaus (3×2): lange Halle mit gewölbtem Torfdach, geschnitzten Giebeln, Schilden
@@ -3775,6 +3785,88 @@
     S.wallKey = function (gov, level, mask) { return gov === 'fence' ? 's_wall_fence_' + (mask & 15) : wallKeyOld(gov, level, mask); };
     S.gateKey = function (gov, level, dir) { return gov === 'fence' ? 's_gate_fence_' + (dir === 'v' ? 'v' : 'h') : gateKeyOld(gov, level, dir); };
     var towerKeyOld = S.towerKey; S.towerKey = function (gov, level) { return gov === 'fence' ? 's_watchtower' : towerKeyOld(gov, level); };
+    // ======================================================================
+    // Ausbau 9.9: Häfen (s_harbor_<stil>_<dir>), Verladerampe am Lager, Zauntor mit Gleis
+    var PLK = [HCOL('#c8a070'), HCOL('#a87e50'), HCOL('#7e5a34'), HCOL('#5a3e22')], BOLL = HCOL('#3a3a40');
+    function harborBuilding(st, lit) {   // Lagerhaus/Bootshaus, 28×~30 (fein)
+      var g, x;
+      if (st === 'republic') { g = new Grid(28, 36); for (var j = 0; j < 12; j++) { var ins = Math.max(0, Math.floor((10 - j) / 3) * 2); for (x = ins; x < 20 - ins; x++) g.set(x, j, x === ins ? BRK2[0] : (x === 19 - ins ? BRK2[2] : BRK2[1])); } wallFill('brick', g, 0, 12, 20, 20, BRK2, 1201); smallWin(g, 8, 4, 3, 3, lit); g.rect(6, 22, 8, 10, C.woodD); g.vline(10, 22, 10, C.wood); winH(g, 2, 15, lit); winH(g, 13, 15, lit);
+        for (x = 0; x < 20; x++) g.set(x, 20, ((x >> 1) & 1) ? 'T' : C.white);
+        g.vline(23, 2, 30, C.woodD); g.vline(24, 2, 30, C.wood); g.line(24, 3, 18, 9, C.woodD); g.hline(16, 2, 9, C.woodD); g.vline(16, 3, 8, SH9ROPE); g.rect(15, 11, 3, 3, C.woodL); return g; }
+      if (st === 'steam') { g = new Grid(28, 34); flatT(g, 0, 4, 20, 8); for (var y = 12; y < 30; y++) for (x = 0; x < 20; x++) g.set(x, y, (x % 7 === 6 || y % 6 === 5) ? DCON[2] : DCON[1]); g.rect(5, 18, 10, 12, C.ink); for (y = 19; y < 30; y += 2) g.hline(6, y, 8, DCON[3]);
+        g.vline(23, 0, 30, C.metalD); g.line(23, 1, 14, 1, C.metalD); g.line(23, 6, 15, 1, C.metal); g.vline(15, 2, 9, BOLL); g.rect(14, 11, 3, 2, C.metalD); g.hline(22, 12, 3, 'T'); return g; }
+      if (st === 'nord') { g = new Grid(28, 30); turfRoof(g, 0, 2, 24, 14, 4); crossGable(g, 1, 3); crossGable(g, 22, 3); logWall(g, 2, 16, 20, 10); g.rect(8, 18, 8, 8, C.plum); g.vline(8, 18, 8, NW[3]); stoneBase(g, 1, 26, 22); g.rect(24, 14, 3, 12, NW[1]); g.hline(24, 14, 3, NW[0]); return g; }
+      if (st === 'sahel') { g = new Grid(28, 30); flatTop(g, 1, 6, 22, 6, MUDR, MUD[2]); mudWall(g, 1, 12, 22, 14, MUD, 1203); crownRow(g, 1, 7, 22, MUD, 5, 3); toron(g, 1, 12, 22, 14, MUD); darkDoor(g, 9, 18, 6, 8, C.woodD, lit); g.ellipse(25, 23, 2, 2.6, HCOL('#c86a3a')); g.rect(23, 27, 5, 2, RUGS[1][0]); return g; }
+      if (st === 'nil') { g = new Grid(28, 30); flatTop(g, 1, 8, 22, 5, [WWASH[1], WWASH[2], WWASH[3]], WWASH[3]); cornice(g, 1, 12, 22, SST); mudWall(g, 1, 15, 22, 11, WWASH, 1204); for (x = 2; x < 23; x++) { g.set(x, 4, (x & 1) ? PALM[0] : PALM[1]); g.set(x, 5, PALM[2]); } g.vline(3, 5, 4, C.woodD); g.vline(20, 5, 4, C.woodD); darkDoor(g, 9, 18, 5, 8, SST[3], lit); g.ellipse(25, 23, 2, 2.8, HCOL('#e08a5a')); return g; }
+      if (st === 'tribe') { g = new Grid(28, 26); g.line(2, 22, 6, 8, C.woodD); g.line(20, 22, 16, 8, C.woodD); g.hline(4, 12, 15, C.wood); g.hline(5, 17, 13, C.wood);   // Kanugestell
+        g.rect(3, 10, 17, 2, C.woodL); g.hline(3, 10, 17, HCOL('#e0b070')); g.rect(4, 15, 15, 2, C.wood); g.paint(22, 16, ['.TTu', '.TTT', 'w...', 'w...', 'w...', 'w...']); return g; }
+      g = new Grid(28, 32); roofTiles(g, 0, 2, 22, 12, ['redL', 'red', 'redD'], 3); wallFill('planks', g, 1, 14, 20, 14, null, 1205);   // mitte: Holzschuppen mit Ziegeldach
+      g.rect(7, 18, 8, 10, C.woodD); g.line(8, 19, 14, 27, C.wood); g.line(14, 19, 8, 27, C.wood); g.paint(22, 22, ['.vw.', 'vwwW', 'wWWW', 'gggG', 'GgGg']); return g;
+    }
+    var SH9ROPE = HCOL('#5a4632');
+    function pier(g, x, y, w, h, vert) {   // Steg aus Planken auf Pfählen
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) g.set(x + i, y + j, vert ? ((j % 3 === 2) ? PLK[2] : (i === 0 ? PLK[0] : PLK[1])) : ((i % 3 === 2) ? PLK[2] : (j === 0 ? PLK[0] : PLK[1])));
+      if (vert) { for (j = 2; j < h; j += 5) { g.vline(x - 1, y + j, 3, PLK[3]); g.vline(x + w, y + j, 3, PLK[3]); } g.hline(x, y + h, w, PLK[3]); g.hline(x, y + h + 1, w, PLK[3]); }
+      else { for (i = 1; i < w; i += 5) { g.vline(x + i, y + h, 3, PLK[3]); } }
+      g.set(vert ? x : x + w - 2, vert ? y + h - 2 : y - 1, BOLL); g.set(vert ? x + w - 1 : x + w - 2, vert ? y + h - 2 : y + h - 1, BOLL);
+    }
+    function harbor(st, dir, lit) {
+      var b = harborBuilding(st, lit), ext = 20, W = 32 + (dir === 'e' || dir === 'w' ? ext : 0), Hb = b.h, H = Math.max(Hb, 24) + 8 + (dir === 's' || dir === 'n' ? ext : 0);
+      var g = new Grid(W, H), ox = dir === 'w' ? ext : 0, foot = H - 32 - (dir === 's' ? ext : 0) + 32;   // foot = Unterkante der 2×2-Grundfläche (fein)
+      var baseY = dir === 's' ? H - ext : H;   // Unterkante der Landfläche
+      // Kaikante (Steine) zur Wasserseite, Lagerhaus, Steg
+      if (dir === 's') { pier(g, 20, baseY - 4, 6, ext + 2, true); g.hline(ox, baseY - 3, 32, C.stoneD); g.hline(ox, baseY - 4, 32, C.stone); g.blit(b, ox + 1, baseY - 4 - b.h); }
+      else if (dir === 'n') { pier(g, 20, 0, 6, ext + 6, true); g.blit(b, ox + 1, baseY - b.h - 2); }
+      else if (dir === 'e') { g.blit(b, 0, baseY - b.h - 3); pier(g, 28, baseY - 12, ext + 4, 6, false); g.vline(31, baseY - 30, 30, C.stoneD); }
+      else { g.blit(b, ox + 3, baseY - b.h - 3); pier(g, 0, baseY - 12, ext + 4, 6, false); g.vline(ext, baseY - 30, 30, C.stoneD); }
+      // Taue, Fässer
+      g.paint(ox + (dir === 'w' ? 26 : 2), baseY - 6, ['.gg.', 'gWWg']);
+      return g;
+    }
+    var HSTY = ['mitte', 'republic', 'nord', 'sahel', 'nil', 'steam', 'tribe'];
+    L.lazyDef('hh9_', function (key) {
+      var lit = /_lit$/.test(key), m = /^hh9_([a-z]+)_([nesw])$/.exec(key.replace(/_lit$/, '')); if (!m || HSTY.indexOf(m[1]) < 0) return null;
+      var d = m[2], g = harbor(m[1], d, lit).pad(1, 1, 1, 1).outline();
+      g = g.footShade();
+      // Grundfläche 2×2 (16 Logikpixel): Wasserseite ragt hinaus
+      var ox = d === 'w' ? -10 - 0.5 : -0.5, oy = 16 - (g.h * 0.5) + (d === 's' ? 10 : 0) + 0.5;
+      return { grid: g, scale: 0.5, fw: 2, fh: 2, ox: ox, oy: oy };
+    });
+    HSTY.forEach(function (st) { ['n', 'e', 's', 'w'].forEach(function (d) { al('s_harbor_' + st + '_' + d, 'hh9_' + st + '_' + d, true); }); });
+    al('s_harbor', 'hh9_mitte_s', true);
+    S.harborKey = function (gov, culture, dir) {
+      var st = gov === 'fascism' || gov === 'communism' ? 'steam' : (gov === 'tribe' ? 'tribe' : (gov === 'republic' ? 'republic' : (CULTS9.indexOf(culture) >= 0 ? culture : 'mitte')));
+      if (typeof dir === 'number') dir = ['e', 's', 'w', 'n'][((dir % 4) + 4) % 4];
+      return 's_harbor_' + st + '_' + (/^[nesw]$/.test(dir) ? dir : 's');
+    };
+    // Verladerampe am Lager (2×2): erhöhte Rampe an der Südkante, Kisten, Kohle, Steine, Bude, Lampe; ohne Schrift
+    function campStation(lit) {
+      var g = new Grid(30, 34), x;
+      g.rect(0, 20, 30, 9, C.stone); g.hline(0, 20, 30, C.stoneL); for (x = 0; x < 30; x += 5) g.vline(x, 21, 8, C.stoneD); g.hline(0, 28, 30, C.stoneD);   // Rampe
+      g.rect(0, 29, 30, 3, C.stoneD); g.hline(0, 31, 30, C.ink);
+      g.rect(1, 6, 10, 14, BARW[1]); g.vline(1, 6, 14, BARW[0]); g.rect(4, 13, 4, 7, C.plum); smallWin(g, 4, 8, 3, 2, lit); shedT(g, 0, 1, 12, 6, TARP);   // Bude
+      g.ellipse(17, 18, 4, 3, function (px, py, nx, ny) { return py > 19 ? null : (ny < -0.3 ? TRC9B[0] : TRC9B[1]); });   // Kohlehaufen
+      for (var k = 0; k < 3; k++) { g.rect(22 + k * 2, 16 - k * 2, 4, 4, C.stone); g.hline(22 + k * 2, 16 - k * 2, 4, C.stoneL); g.vline(25 + k * 2, 16 - k * 2, 4, C.stoneD); }   // Steinblöcke
+      [[12, 22], [16, 23], [5, 23]].forEach(function (p) { g.rect(p[0], p[1] - 4, 4, 4, C.wood); g.hline(p[0], p[1] - 4, 4, C.woodL); g.vline(p[0] + 3, p[1] - 4, 4, C.woodD); });   // Kisten
+      g.vline(28, 4, 16, C.metalD); g.rect(27, 2, 3, 2, C.metal); g.set(28, 3, lit ? C.white : C.fireY);   // Lampe
+      return g;
+    }
+    var TRC9B = [HCOL('#4a4650'), HCOL('#2a2830')];
+    L.lazyDef('hcs9_', function (key) { var lit = /_lit$/.test(key); if (key.replace(/_lit$/, '') !== 'hcs9_station') return null; return lazyB(campStation(lit), 2); });
+    al('s_camp_station', 'hcs9_station', true);
+    // Zauntor mit Gleis: zwei hohe Pfosten mit Querbalken, Flügel offen, Mitte frei für das Gleis
+    function railGate(vert) {
+      var g = new Grid(16, 32), wg = new Grid(16, 32), base = 24;
+      function post(x, y, h) { g.vline(x, y - h, h + 1, C.wood); g.vline(x + 1, y - h, h + 1, C.woodD); g.set(x, y - h, C.woodL); }
+      if (!vert) { post(0, base, 14); post(14, base, 14); g.hline(0, base - 14, 16, C.woodD); g.hline(0, base - 15, 16, C.wood); g.line(2, base, 0, base - 6, C.woodD);
+        for (var k = 0; k < 3; k++) { wg.set(0, base - 3 - k * 3, WIRED); wg.set(15, base - 3 - k * 3, WIRED); } }
+      else { post(7, 6 + 12, 12); post(7, 31, 12); g.vline(8, 6, 13, C.woodD); }
+      g = g.outline(); g.blit(wg, 0, 0); return g.footShade();
+    }
+    L.lazyDef('hz9_', function (key) { var m = /^hz9_railgate_([hv])$/.exec(key); if (!m) return null; var g = railGate(m[1] === 'v'); return { grid: g, scale: 0.5, ox: 0, oy: 8 - g.h * 0.5 }; });
+    al('s_gate_fence_rail_h', 'hz9_railgate_h'); al('s_gate_fence_rail_v', 'hz9_railgate_v');
+    var gateKey9 = S.gateKey;
+    S.gateKey = function (gov, level, dir, rail) { return gov === 'fence' && rail ? 's_gate_fence_rail_' + (dir === 'v' ? 'v' : 'h') : gateKey9(gov, level, dir); };
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -55,7 +55,7 @@
   };
 
   if (WW.STRUCT_INFO && !WW.STRUCT_INFO.arsenal) {
-    WW.STRUCT_INFO.arsenal = { name: 'Arsenal', w: 3, h: 2, work: 230, hp: [320], cost: [{ wood: 16, stone: 14 }], burn: 0.4 };
+    WW.STRUCT_INFO.arsenal = { name: 'Arsenal', w: 3, h: 2, work: 230, hp: [320], cost: [{ wood: 12, stone: 10 }], burn: 0.4 };
   }
   if (WW.ROLE_NAMES && !WW.ROLE_NAMES.tank) {
     WW.ROLE_NAMES.tank = 'Panzer'; WW.ROLE_NAMES.artillery = 'Feldgeschütz';
