@@ -39,6 +39,7 @@
       sail:  { name: 'Segelschiff', speed: 0.12,  hpMul: 1,   capMul: 1 },
       steam: { name: 'Dampfschiff', speed: 0.11,  coalSpeed: 0.18, hpMul: 1.2, capMul: 1.2 }
     },
+    COAL_RESERVE: 6,      // so viel Kohle bleibt im Lager (Arsenal, Fabriken, Züge gehen vor)
     COAL_TRIP: 1,         // Kohle je Ausfahrt eines Dampfers (stock.coal); ohne Kohle fährt er langsamer und raucht nicht
     SMOKE_EMIT: 2,        // Qualm je 40 Ticks in die Verschmutzungszelle eines fahrenden Dampfers (state.pollution, falls vorhanden)
 

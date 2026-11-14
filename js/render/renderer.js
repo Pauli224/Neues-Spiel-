@@ -879,6 +879,8 @@
       if (!t || !(t.x >= -2)) continue;
       const dirOf = (d) => (typeof d === 'string' && /^[ewns]$/.test(d)) ? d : (['e', 's', 'w', 'n'][((d | 0) % 4 + 4) % 4] || 'e');
       const dir = dirOf(t.dir), v = TRAIN_DIR[dir];
+      const tk = this._kings ? this._kings.get(t.kingdomId) : null, tgov = t.gov || (tk ? tk.gov : 'tribe');
+      const tci = t.colorIndex != null ? t.colorIndex : (tk ? tk.colorIndex | 0 : 10);
       const cars = Array.isArray(t.cars) ? t.cars : (t.cars | 0) > 0 ? new Array(t.cars | 0).fill(null) : [];
       const gap = v[0] ? 2 : 1;
       const parts = [{ part: 'loco', x: t.x, y: t.y, dir: dir }];
@@ -892,11 +894,11 @@
       for (const p of order) {
         if (p.x < vt.x0 - 3 || p.x > vt.x1 + 3 || p.y < vt.y0 - 3 || p.y > vt.y1 + 3) continue;
         let key = null;
-        if (typeof S.trainKey === 'function') { try { key = S.trainKey(p.part, p.kind || 'freight', p.dir); } catch (e) { key = null; } }
+        if (typeof S.trainKey === 'function') { try { key = S.trainKey(p.part, p.kind || 'freight', p.dir, tgov); } catch (e) { key = null; } }
         const px = Math.round(p.x * 8), py = Math.round(p.y * 8);
         if (key && S.has(key)) {
           const inf = S.info(key), sc = (inf && inf.scale) || 1, w = inf ? inf.w * sc : 8, fw = inf ? inf.fw : 1;
-          S.drawFast(g, key, px - fw * 4, py - (inf ? inf.fh * 8 : 8), t.colorIndex != null ? t.colorIndex : 10, false);
+          S.drawFast(g, key, px - fw * 4, py - (inf ? inf.fh * 8 : 8), tci, false);
           void w;
         } else { g.fillStyle = '#0a1a21'; g.fillRect(px - 4, py - 6, 8, 5); g.fillStyle = p.part === 'loco' ? '#3e3150' : '#9a6233'; g.fillRect(px - 3, py - 5, 6, 3); }
         if (p.part === 'loco' && puff) this.addPlume(px + v[0] * 3, py - 16, false, -6, -14, false, 0.6);
@@ -1487,6 +1489,7 @@
     // Stadtnamen in Bildschirmpixeln
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (st.cities && opts.showNames !== false) this.drawCityLabels(ctx, cam, opts);
+    this.drawMarks(ctx, cam, opts);
     if (opts.view === 'air') this.drawWindArrow(ctx, cam);
     if (this.flash > 0) {
       ctx.fillStyle = 'rgba(255,250,230,' + Math.min(0.6, this.flash) + ')';
@@ -2495,6 +2498,56 @@
       L.box = { x: x / dpr, y: y / dpr, w: w / dpr, h: h / dpr };
     }
     this.labelBoxes = labels;
+  };
+
+  // Marken in Bildschirmpixeln: laufende Schlachten (pulsierend) und Schlachtfelder als Orte (ab mittlerer Nähe)
+  Renderer.prototype.drawMarks = function (ctx, cam, opts) {
+    const st = this.st, S = this.S, dpr = cam.dpr, marks = this._marks || (this._marks = []);
+    marks.length = 0;
+    const battles = st.battles, sites = st.sites;
+    if (!(battles && battles.length) && !(sites && sites.length && cam.zoom >= 1.4)) return;
+    const ic = S.has('i_battle') ? 'i_battle' : null;
+    const plate = (x, y, w, h, edge) => { ctx.fillStyle = 'rgba(10,26,33,0.92)'; ctx.fillRect(x - dpr, y - dpr, w + 2 * dpr, h + 2 * dpr); ctx.fillStyle = 'rgba(29,59,71,0.92)'; ctx.fillRect(x, y, w, h); if (edge) { ctx.fillStyle = edge; ctx.fillRect(x, y + h - Math.round(2 * dpr), w, Math.round(2 * dpr)); } };
+    const iconAt = (x, y, sz) => { if (!ic) return; const inf = S.info(ic); if (!inf) return; const sc = sz / inf.w; ctx.save(); ctx.imageSmoothingEnabled = false; ctx.setTransform(sc, 0, 0, sc, x - inf.ox * sc, y - inf.oy * sc); S.drawFast(ctx, ic, 0, 0, 0, false); ctx.restore(); };
+    ctx.textBaseline = 'middle';
+    if (sites && sites.length && cam.zoom >= 1.4) {
+      ctx.font = '600 ' + Math.round(11 * dpr) + 'px ' + FONT_PIXEL;
+      for (const o of sites) {
+        if (!o || !(o.x >= 0)) continue;
+        const p = cam.worldToScreen(o.x * 8 + 4, o.y * 8 + 4);
+        if (p.x < -150 || p.x > cam.viewW + 150 || p.y < -30 || p.y > cam.viewH + 30) continue;
+        const name = o.name || 'Schlachtfeld', tw = Math.ceil(ctx.measureText(name).width), isz = Math.round(12 * dpr), pad = Math.round(4 * dpr);
+        const w = tw + isz + pad * 3, h = Math.round(18 * dpr), x = Math.round(p.x * dpr - w / 2), y = Math.round(p.y * dpr - h / 2);
+        ctx.globalAlpha = 0.85; plate(x, y, w, h, null); ctx.globalAlpha = 1;
+        iconAt(x + pad, y + Math.round((h - isz) / 2), isz);
+        ctx.fillStyle = '#b9c4b8'; ctx.fillText(name, x + pad * 2 + isz, y + h / 2);
+        marks.push({ kind: 'site', id: o.id, x: o.x, y: o.y, box: { x: x / dpr, y: y / dpr, w: w / dpr, h: h / dpr } });
+      }
+    }
+    if (battles && battles.length) {
+      ctx.font = '600 ' + Math.round(12 * dpr) + 'px ' + FONT_PIXEL;
+      const pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
+      for (const b of battles) {
+        if (!b || !(b.x >= 0)) continue;
+        const p = cam.worldToScreen(b.x * 8 + 4, b.y * 8 - 6);
+        if (p.x < -150 || p.x > cam.viewW + 150 || p.y < -40 || p.y > cam.viewH + 40) continue;
+        const isz = Math.round(18 * dpr * pulse), pad = Math.round(4 * dpr);
+        const name = cam.zoom >= 1.4 ? (b.name || 'Feldschlacht') + '  ' + (b.nA | 0) + ' : ' + (b.nB | 0) : '';
+        const tw = name ? Math.ceil(ctx.measureText(name).width) : 0;
+        const h = Math.round(24 * dpr), w = Math.round(18 * dpr) + pad * 2 + (tw ? tw + pad : 0);
+        const x = Math.round(p.x * dpr - w / 2), y = Math.round(p.y * dpr - h);
+        plate(x, y, w, h, '#e2543d');
+        iconAt(x + pad + Math.round((18 * dpr - isz) / 2), y + Math.round((h - isz) / 2) - Math.round(dpr), isz);
+        if (name) { ctx.fillStyle = '#f3ead2'; ctx.fillText(name, x + pad * 2 + Math.round(18 * dpr), y + h / 2 - dpr); }
+        marks.push({ kind: 'battle', id: b.id, x: b.x, y: b.y, box: { x: x / dpr, y: y / dpr, w: w / dpr, h: h / dpr } });
+      }
+    }
+  };
+  Renderer.prototype.markAt = function (sx, sy) {
+    const m = this._marks;
+    if (!m) return null;
+    for (let i = m.length - 1; i >= 0; i--) { const b = m[i].box; if (sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) return { kind: m[i].kind, id: m[i].id, x: m[i].x, y: m[i].y }; }
+    return null;
   };
 
   // Stadtname unter dem Zeiger? (Bildschirmkoordinaten)

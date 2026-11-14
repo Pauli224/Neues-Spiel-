@@ -52,11 +52,13 @@
     else if (s.kind === 'city') obj = q.city(s.id);
     else if (s.kind === 'unit') obj = q.unit(s.id);
     else if (s.kind === 'animal') obj = q.animal ? q.animal(s.id) : null;
+    else obj = this.thingOf(s);
     if (!obj || obj.dead) {
       this.renderGone(s);
       return;
     }
-    const sig = this.signature(s.kind, obj);
+    const thing = ['battle', 'site', 'ship', 'train', 'struct'].indexOf(s.kind) >= 0;
+    const sig = thing ? this.thingSig(s, obj) : this.signature(s.kind, obj);
     if (!force && sig === this.lastSig) return;
     this.lastSig = sig;
     const body = this.$('infoBody'), top = body.scrollTop;
@@ -64,6 +66,7 @@
     if (s.kind === 'kingdom') this.renderKingdom(obj);
     else if (s.kind === 'city') this.renderCity(obj);
     else if (s.kind === 'unit') this.renderUnit(obj);
+    else if (thing) this.renderThing(s, obj);
     else this.renderAnimal(obj);
     body.scrollTop = top;
   };
@@ -76,10 +79,11 @@
     }
     if (kind === 'city') {
       const w = o.wall || {};
-      return [o.name, o.kingdomId, o.tier, o.pop, o.housing, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
+      if (o.kind === 'camp') return ['camp', o.name, o.kingdomId, o.inmates, o.pows, o.guards, o.guardsWant, o.cap, Math.round(o.campUnrest || 0), JSON.stringify(o.powFrom || {}), JSON.stringify(o.campOut || {}), o.station, o.railLine].join('|');
+      return [o.name, o.kingdomId, o.tier, o.pop, o.housing, o.culture, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
         Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), Math.round(o.pollution || 0), modSig(o, this.game.sim), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
     }
-    if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name].join('|');
+    if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name, o.campState, o.camp, o.pow].join('|');
     return [o.kind, Math.round(o.hp)].join('|');
   };
 
@@ -97,8 +101,16 @@
     if (this.lastSig === 'gone') return;
     this.lastSig = 'gone';
     D().clear(body);
-    this.title(null, s.kind === 'kingdom' ? 'Reich untergegangen' : s.kind === 'city' ? 'Stadt verschwunden' : 'Nicht mehr da');
-    body.appendChild(h('p.muted', s.kind === 'unit' ? 'Diese Figur weilt nicht mehr unter uns. Die Chronik weiß vielleicht mehr.' : 'Davon ist nur noch eine Erinnerung übrig.'));
+    if (s.kind === 'battle') {
+      // Schlacht vorbei: Schlachtfeld-Ort zeigen, falls es ihn gibt
+      const st = this.game.sim.state, site = Array.isArray(st.sites) ? st.sites.slice().reverse().find(o => o && Math.abs(o.x - (s.x || 0)) < 4 && Math.abs(o.y - (s.y || 0)) < 4) : null;
+      if (site) { this.sel = { kind: 'site', id: site.id }; this.lastSig = ''; this.refreshInfo(true); return; }
+      this.title(null, 'Die Schlacht ist vorbei');
+      body.appendChild(h('p.muted', 'Die Heere haben sich getrennt. Die Chronik nennt Sieger und Verluste.'));
+      return;
+    }
+    this.title(null, s.kind === 'kingdom' ? 'Reich untergegangen' : s.kind === 'city' ? 'Stadt verschwunden' : s.kind === 'ship' ? 'Schiff verschwunden' : 'Nicht mehr da');
+    body.appendChild(h('p.muted', s.kind === 'unit' ? 'Diese Figur weilt nicht mehr unter uns. Die Chronik weiß vielleicht mehr.' : s.kind === 'ship' ? 'Gesunken oder abgewrackt. Die Chronik weiß mehr.' : 'Davon ist nur noch eine Erinnerung übrig.'));
   };
 
   function modSig(o, sim) {
@@ -146,6 +158,14 @@
     const { h } = D();
     const p = Math.max(0, Math.min(100, v));
     return h('div.bar' + (p < 30 ? '.bad' : p < 55 ? '.warn' : ''), [h('b', { style: { width: p + '%' } })]);
+  }
+  function cultureBlock(key) {
+    const { h, icon } = D();
+    const C = WW.CULTURES && key ? WW.CULTURES[key] : null;
+    if (!C) return null;
+    return h('div.sec', [h('h3', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [WW.Sprites.has('i_culture') ? icon('i_culture', 18) : null, 'Kultur: ' + C.name]),
+      C.note ? h('div.muted', C.note) : null,
+      Array.isArray(C.bonusText) && C.bonusText.length ? h('ul.pc', C.bonusText.map(t => h('li.p', t))) : null]);
   }
   function moodWord(v) { return v >= 75 ? 'glücklich' : v >= 55 ? 'zufrieden' : v >= 35 ? 'grantig' : v >= 18 ? 'wütend' : 'kurz vorm Aufstand'; }
   function opinionWord(v) { return v >= 50 ? 'herzlich' : v >= 20 ? 'freundlich' : v > -20 ? 'neutral' : v > -50 ? 'frostig' : 'feindselig'; }
@@ -203,6 +223,7 @@
     const g = WW.GOVERNMENTS[k.gov];
     const race = WW.RACES[k.race];
     this.title(icon('banner_' + (k.bannerPattern % 8), 30, k.colorIndex), k.name, (race ? race.name : '') + ' · gegründet Jahr ' + (k.founded | 0));
+    { const em = emblem(k.gov, 18); if (em) { const t = this.$('infoTitle').querySelector('.sub'); if (t) { em.style.verticalAlign = 'middle'; em.style.marginRight = '4px'; t.insertBefore(em, t.firstChild); } } }
     const ks = sim.query.kingdomStats(k.id) || { pop: 0, cities: 0, soldiers: 0, happiness: 0 };
     // Anführer
     const leader = k.leaderId >= 0 ? sim.query.unit(k.leaderId) : null;
@@ -219,11 +240,20 @@
     if (rs && !g.noLeader) { const b = personBlock('Herrscherwerte', rs, ''); if (b) body.appendChild(b); }
     const kp = plotsFor(sim, p => p.kingdomId === k.id || ((p.type === 'war' || p.type === 'alliance') && p.targetId === k.id));
     if (kp.length) body.appendChild(h('div.sec', [h('h3', 'Vorhaben'), plotList(sim, kp)]));
+    const veh = (WW.Military && typeof WW.Military.vehiclesOf === 'function') ? (function () { try { return WW.Military.vehiclesOf(sim, k.id) || []; } catch (e) { return []; } })() : [];
+    const nTank = veh.filter(u => u.role === 'tank').length, nGun = veh.length - nTank;
+    const ns = sim.query.navalStats ? (function () { try { return sim.query.navalStats(k.id); } catch (e) { return null; } })() : null;
+    const nShips = ns && ns.ships ? Object.keys(ns.ships).reduce((a, x) => a + (ns.ships[x] | 0), 0) : 0;
     body.appendChild(h('div.sec', [
       h('dl.kv', [h('dt', 'Einwohner'), h('dd', String(ks.pop)), h('dt', 'Städte'), h('dd', String(ks.cities)), h('dt', 'Soldaten'), h('dd', String(ks.soldiers)),
+        veh.length ? h('dt', 'Fahrzeuge') : null, veh.length ? h('dd', [nTank ? nTank + ' Panzer' : '', nGun ? nGun + ' Geschütze' : ''].filter(Boolean).join(', ')) : null,
+        nShips ? h('dt', 'Schiffe') : null, nShips ? h('dd', String(nShips)) : null,
+        k.powsHeld ? h('dt', 'hält gefangen') : null, k.powsHeld ? h('dd', k.powsHeld + ' Soldaten') : null,
+        k.powsLost ? h('dt', 'in fremder Haft') : null, k.powsLost ? h('dd', k.powsLost + ' eigene Soldaten') : null,
         h('dt', 'Stimmung'), h('dd', moodWord(ks.happiness))]),
       happyBar(ks.happiness)
     ]));
+    { const cb = cultureBlock(k.culture); if (cb) body.appendChild(cb); }
     // Regierungs-Karte
     const card = h('div.govcard', [
       h('div.gh', [icon('i_gov_' + k.gov, 44), h('div', [h('div.gn', g.name), h('div.gt', (g.titleM ? g.titleM + ' / ' + g.titleF : 'ohne Anführer') + ' · ' + (g.centerName || ''))])]),
@@ -322,6 +352,7 @@
   };
 
   Panels.prototype.renderCity = function (c) {
+    if (c.kind === 'camp') { this.renderCamp(c); return; }
     const { h, icon } = D();
     const game = this.game, sim = game.sim, body = this.$('infoBody');
     const k = sim.query.kingdom(c.kingdomId);
@@ -331,6 +362,8 @@
     this.title(k ? icon('banner_' + (k.bannerPattern % 8), 30, k.colorIndex) : null, c.name, tier.name + (race ? ' · ' + race.name : '') + (k && k.capitalId === c.id ? ' · Hauptstadt' : ''));
     if (k) body.appendChild(h('div.sec', [h('div.row', [h('span.muted', 'Gehört zu'), h('button.link', { type: 'button', on: { click: () => game.selectKingdom(k.id, true) } }, k.name),
       icon('i_gov_' + k.gov, 20), h('span.muted', WW.GOVERNMENTS[k.gov].name)])]));
+    { const cb = cultureBlock(c.culture); if (cb) body.appendChild(cb); }
+    if (c.campFree) body.appendChild(h('div.sec', h('div.muted', 'War bis zum Jahr ' + c.campFree + ' eine Lagerstadt. Ein Mahnmal erinnert daran.')));
     if (c.revolt) body.appendChild(h('div.sec', h('div.hint-box', 'Aufruhr! Rebellen ziehen durch die Gassen.')));
     else if (c.hungry) body.appendChild(h('div.sec', h('div.hint-box', 'Hunger: Die Vorräte sind leer.')));
     body.appendChild(h('div.sec', [
@@ -361,6 +394,12 @@
     { const nb = natureBlock(c.nature); if (nb) body.appendChild(nb); }
     { const ab = airBlock(c.pollution); if (ab) body.appendChild(ab); }
     {
+      const stock = sim.state.structs.filter(s => s.type === 'stockade' && s.cityId === c.id && !s.dead);
+      if (stock.length) {
+        let inm = 0, cap = 0; for (const s of stock) { inm += s.inmates | 0; cap += s.cap | 0; }
+        body.appendChild(h('div.sec', [h('h3', 'Gefangenenlager'), h('dl.kv', [h('dt', 'Kriegsgefangene'), h('dd', inm + (cap ? ' von ' + cap + ' Plätzen' : ''))]),
+          h('div.muted', { style: { marginTop: '4px' } }, 'Gefangene Soldaten warten hier auf den Frieden. Sie arbeiten nicht.')]));
+      }
       const camps = sim.state.structs.filter(s => s.type === 'laborcamp' && s.cityId === c.id && !s.dead);
       if (camps.length) {
         let inm = 0, cap = 0;
@@ -407,7 +446,7 @@
     const game = this.game, sim = game.sim, body = this.$('infoBody');
     const k = sim.query.kingdom(u.kingdomId), c = sim.query.city(u.cityId);
     const race = WW.RACES[u.race];
-    const role = (u.female ? WW.ROLE_NAMES_F : WW.ROLE_NAMES)[u.role] || u.role;
+    const role = (u.female ? WW.ROLE_NAMES_F : WW.ROLE_NAMES)[u.role] || ({ prisoner: u.female ? 'Gefangene' : 'Gefangener', caravan: 'Karawane' })[u.role] || u.role;
     const key = game.renderer.unitKey(u, k ? k.gov : 'tribe', 0);
     const isLeader = k && k.leaderId === u.id;
     this.title(icon(key, 40, k ? k.colorIndex : 10), (isLeader && k.leaderName) ? (k.leaderTitle + ' ' + k.leaderName) : u.name, role + (race ? ' · ' + race.singular : ''));
@@ -421,6 +460,13 @@
       h('div.bar' + (u.hp < u.maxHp * 0.35 ? '.bad' : ''), [h('b', { style: { width: Math.round(100 * u.hp / Math.max(1, u.maxHp)) + '%' } })])
     ]));
     const links = [];
+    if (u.role === 'prisoner') {
+      const hold = WW.Camps && typeof WW.Camps.holdOf === 'function' ? (function () { try { return WW.Camps.holdOf(sim, u); } catch (e) { return null; } })() : null;
+      const CS = { march: 'wird ins Lager geführt', wait: 'wartet am Bahnhof', train: 'im Gefangenenzug', held: 'in Haft', home: 'auf dem Heimweg' };
+      links.push(h('div', { style: { marginBottom: '6px' } }, (u.pow >= 0 ? 'Kriegsgefangener aus ' + kname(sim, u.pow) : 'Politischer Gefangener') + (CS[u.campState] ? ' · ' + CS[u.campState] : '')));
+      if (hold && hold.name) links.push(h('div.row', [h('span.muted', 'Haftort'), h('button.link', { type: 'button', on: { click: () => game.selectCity(hold.id, true) } }, hold.name)]));
+    }
+    if (u.vehicle) links.push(h('div.muted', { style: { marginBottom: '6px' } }, (u.role === 'tank' ? 'Panzer' : 'Feldgeschütz') + (u.simple ? ' (einfache Bauart)' : '') + (u.parole ? ' · hat die Waffen niedergelegt' : '')));
     if (c) links.push(h('div.row', [h('span.muted', 'Wohnt in'), h('button.link', { type: 'button', on: { click: () => game.selectCity(c.id, true) } }, c.name)]));
     if (k) links.push(h('div.row', [h('span.muted', 'Reich'), h('button.link', { type: 'button', on: { click: () => game.selectKingdom(k.id, true) } }, k.name)]));
     if (!c && !k) links.push(h('div.muted', 'Heimatlos unterwegs.'));
@@ -428,6 +474,170 @@
     body.appendChild(h('div.sec', h('button.btn', { type: 'button', on: { click: () => game.follow(u.id) } }, [icon('i_inspect', 22), h('span', game.followId === u.id ? 'Folge ich' : 'Kamera folgt')])));
   };
 
+  // ------------------------------------------------------------------ Ausbau 9: Schlacht, Schlachtfeld, Schiff, Zug, Bauwerke, Lagerstadt
+  const byId = (list, id) => Array.isArray(list) ? list.find(o => o && o.id === id) || null : null;
+  function kname(sim, id) { const k = id >= 0 ? sim.query.kingdom(id) : null; return k ? k.name : 'ein vergangenes Reich'; }
+  function kIcon(sim, id, px) { const { icon } = D(); const k = id >= 0 ? sim.query.kingdom(id) : null; return k ? icon('banner_' + (k.bannerPattern % 8), px || 22, k.colorIndex) : null; }
+  function emblem(gov, px) { const { icon } = D(); const S = WW.Sprites; const k = typeof S.emblemKey === 'function' ? S.emblemKey(gov) : null; return k && S.has(k) ? icon(k, px || 20) : null; }
+  Panels.prototype.thingOf = function (s) {
+    const sim = this.game.sim, st = sim.state, q = sim.query;
+    switch (s.kind) {
+      case 'battle': return byId(st.battles, s.id);
+      case 'site': return byId(st.sites, s.id);
+      case 'ship': return (q.ship ? q.ship(s.id) : null) || byId(st.ships, s.id);
+      case 'train': return byId(st.trains, s.id);
+      case 'struct': return q.struct ? q.struct(s.id) : null;
+    }
+    return null;
+  };
+  Panels.prototype.thingSig = function (s, o) {
+    const pick = ['state', 'nA', 'nB', 'lossA', 'lossB', 'vA', 'vB', 'pows', 'hp', 't', 'kind', 'prod', 'made', 'inmates', 'cap', 'built', 'level', 'stage', 'campState', 'guards'];
+    const v = pick.map(k => typeof o[k] === 'number' ? Math.round(o[k] * 10) : o[k]);
+    if (o.cargo) v.push(JSON.stringify(o.cargo));
+    if (o.passengers) v.push(o.passengers.length);
+    if (o.prisoners) v.push(o.prisoners.length);
+    if (o.prog != null) v.push(Math.round(o.prog * 20));
+    return s.kind + '|' + v.join('|');
+  };
+  Panels.prototype.renderThing = function (s, o) {
+    if (s.kind === 'battle') this.renderBattle(o);
+    else if (s.kind === 'site') this.renderSite(o);
+    else if (s.kind === 'ship') this.renderShip(o);
+    else if (s.kind === 'train') this.renderTrain(o);
+    else this.renderStruct(o);
+  };
+  // laufende Feldschlacht: Stärken und Verluste beider Seiten
+  Panels.prototype.renderBattle = function (b) {
+    const { h, icon } = D();
+    const sim = this.game.sim, body = this.$('infoBody');
+    this.title(WW.Sprites.has('i_battle') ? icon('i_battle', 30) : null, b.name || 'Feldschlacht', b.state === 'retreat' ? 'eine Seite weicht' : b.state === 'surrender' ? 'eine Seite gibt auf' : 'tobt seit Jahr ' + (b.year | 0));
+    const side = (id, n, loss, v, role) => h('div.relrow', [h('div.rt', [kIcon(sim, id), h('button.link.nm', { type: 'button', on: { click: () => id >= 0 && this.game.selectKingdom(id, false) } }, kname(sim, id)), h('span.badge.war', role)]),
+      h('div.op', (n | 0) + ' Kämpfer im Feld' + (v ? ' · ' + v + ' Fahrzeuge' : '') + ' · ' + (loss | 0) + ' gefallen')]);
+    body.appendChild(h('div.sec', [h('h3', 'Seiten'), side(b.a, b.nA, b.lossA, b.vA, 'greift an'), side(b.b, b.nB, b.lossB, b.vB, 'verteidigt')]));
+    const tot = Math.max(1, (b.nA | 0) + (b.nB | 0)), pa = Math.round(100 * (b.nA | 0) / tot);
+    body.appendChild(h('div.sec', [h('div.barline', [h('span', 'Kräfteverhältnis'), h('b', pa + ' : ' + (100 - pa))]), h('div.bar.warn', [h('b', { style: { width: pa + '%' } })])]));
+    if (b.pows) body.appendChild(h('div.sec', h('div.muted', (b.pows | 0) + ' Soldaten sind bisher in Gefangenschaft geraten.')));
+    if (b.dig >= 0 && b.dig != null) body.appendChild(h('div.sec', h('div.muted', kname(sim, b.dig) + ' gräbt sich ein.')));
+    body.appendChild(h('div.sec', h('button.btn', { type: 'button', on: { click: () => this.game.flyTo(b.x + 0.5, b.y + 0.5) } }, [icon('i_inspect', 22), h('span', 'Zum Schlachtfeld')])));
+  };
+  // Schlachtfeld als Ort (nach der Schlacht)
+  Panels.prototype.renderSite = function (o) {
+    const { h, icon } = D();
+    const sim = this.game.sim, body = this.$('infoBody');
+    this.title(WW.Sprites.has('i_battle') ? icon('i_battle', 30) : null, o.name || 'Schlachtfeld', 'Schlachtfeld · Jahr ' + (o.year | 0));
+    const how = { win: 'gewann die Schlacht', retreat: 'behielt das Feld, der Gegner zog sich zurück', surrender: 'gewann, der Gegner gab auf', draw: '' }[o.how] || 'gewann';
+    const L = o.losses || {};
+    body.appendChild(h('div.sec', [h('dl.kv', [
+      h('dt', 'Angreifer'), h('dd', o.aName || kname(sim, o.a)), h('dt', 'Verteidiger'), h('dd', o.bName || kname(sim, o.b)),
+      h('dt', 'Ausgang'), h('dd', o.winner >= 0 ? (o.winner === o.a ? (o.aName || kname(sim, o.a)) : (o.bName || kname(sim, o.b))) + ' ' + how : 'unentschieden'),
+      h('dt', 'Gefallen'), h('dd', (L.a | 0) + ' und ' + (L.b | 0)),
+      o.pows ? h('dt', 'Gefangene') : null, o.pows ? h('dd', String(o.pows | 0)) : null,
+      o.vehicles && (o.vehicles.a || o.vehicles.b) ? h('dt', 'Fahrzeuge') : null, o.vehicles && (o.vehicles.a || o.vehicles.b) ? h('dd', ((o.vehicles.a | 0) + (o.vehicles.b | 0)) + ' beteiligt') : null])]));
+    body.appendChild(h('div.sec', h('div.muted', 'Gräben und Trichter wachsen langsam zu, die Wracks rosten noch jahrelang.')));
+  };
+  Panels.prototype.renderShip = function (sh) {
+    const { h, icon } = D();
+    const sim = this.game.sim, body = this.$('infoBody'), S = WW.Sprites;
+    const k = sim.query.kingdom(sh.kingdomId), kind = (WW.NAVAL && WW.NAVAL.KINDS && WW.NAVAL.KINDS[sh.kind]) || {};
+    let key = null; try { key = S.shipKey(sh.kind, sh.gov || (k ? k.gov : 'tribe'), 'e', 0, sh.culture); } catch (e) { key = null; }
+    this.title(key && S.has(key) ? icon(key, 40, k ? k.colorIndex : 10) : (S.has('i_ship') ? icon('i_ship', 30) : null), sh.name || kind.name || 'Schiff', (kind.name || sh.kind) + (k ? ' · ' + k.name : ''));
+    const T = { dock: 'liegt im Hafen', load: 'wartet auf Passagiere', out: 'fährt hinaus', work: sh.kind === 'fishboat' ? 'fischt' : sh.kind === 'warship' ? 'hält Wache' : 'ankert', back: 'fährt heim', sink: 'sinkt' };
+    const cargo = sh.cargo ? Object.keys(sh.cargo).filter(c => sh.cargo[c] > 0).map(c => ({ fish: 'Fisch', gold: 'Gold', goods: 'Waren' })[c] + ' ' + Math.floor(sh.cargo[c])) : [];
+    body.appendChild(h('div.sec', [h('dl.kv', [h('dt', 'Lage'), h('dd', T[sh.t] || 'unterwegs'),
+      h('dt', 'Rumpf'), h('dd', Math.round(sh.hp) + ' / ' + Math.round(sh.maxHp || sh.hp)),
+      cargo.length ? h('dt', 'Ladung') : null, cargo.length ? h('dd', cargo.join(', ')) : null,
+      sh.passengers && sh.passengers.length ? h('dt', 'An Bord') : null, sh.passengers && sh.passengers.length ? h('dd', sh.passengers.length + ' Personen') : null,
+      sh.trips ? h('dt', 'Fahrten') : null, sh.trips ? h('dd', String(sh.trips)) : null])]));
+    const c = sim.query.city(sh.cityId);
+    if (c) body.appendChild(h('div.sec', h('div.row', [h('span.muted', 'Heimathafen'), h('button.link', { type: 'button', on: { click: () => this.game.selectCity(c.id, true) } }, c.name)])));
+  };
+  // Zug; beim Gefangenenzug: Zahl und Herkunft der Insassen an Bord
+  Panels.prototype.renderTrain = function (t) {
+    const { h, icon } = D();
+    const sim = this.game.sim, body = this.$('infoBody');
+    const k = sim.query.kingdom(t.kingdomId);
+    const kindName = { freight: 'Güterzug', troop: 'Truppenzug', prison: 'Gefangenenzug' }[t.kind] || 'Zug';
+    this.title(WW.Sprites.has('i_train') ? icon('i_train', 30) : null, kindName, k ? k.name : '');
+    const rows = [h('dt', 'Lage'), h('dd', t.t === 'load' ? 'hält am Bahnhof' : t.t === 'blocked' ? 'steht vor einem Hindernis' : 'fährt'), h('dt', 'Wagen'), h('dd', String(Array.isArray(t.cars) ? t.cars.length : t.cars | 0))];
+    if (t.cargo) { const cg = Object.keys(t.cargo).filter(c => t.cargo[c] > 0).map(c => Math.floor(t.cargo[c]) + ' ' + (((WW.RESOURCES || []).find(r => r && r.key === c) || {}).name || c)); if (cg.length) rows.push(h('dt', 'Ladung'), h('dd', cg.join(', '))); }
+    body.appendChild(h('div.sec', h('dl.kv', rows)));
+    if (t.kind === 'prison') {
+      const ids = Array.isArray(t.prisoners) ? t.prisoners : [];
+      const from = {}; let pol = 0;
+      for (const id of ids) { const u = sim.query.unit(id); if (!u) continue; if (u.pow >= 0) from[u.pow] = (from[u.pow] || 0) + 1; else pol++; }
+      const lines = Object.keys(from).map(kid => from[kid] + ' Kriegsgefangene aus ' + kname(sim, +kid));
+      if (pol) lines.push(pol + ' politische Gefangene');
+      const camp = sim.query.city(t.camp);
+      body.appendChild(h('div.sec', [h('h3', 'An Bord'), h('div', ids.length + ' Gefangene' + (t.guards ? ', bewacht von ' + t.guards + ' Wachen' : '')),
+        lines.length ? h('ul.pc', lines.map(l => h('li.c', l))) : null,
+        camp ? h('div.row', [h('span.muted', 'Ziel'), h('button.link', { type: 'button', on: { click: () => this.game.selectCity(camp.id, true) } }, camp.name)]) : null,
+        h('div.muted', { style: { marginTop: '6px' } }, 'Das Regime schafft seine Gefangenen per Bahn ins Lager. Wird der Zug aufgehalten oder das Lager befreit, kommen sie frei.')]));
+    }
+  };
+  // einzelne Bauwerke mit eigener Bedeutung (Hafen, Arsenal, Gefangenenlager, Mahnmal, Rampe, Karawanserei, Pyramide)
+  Panels.prototype.renderStruct = function (s) {
+    const { h, icon } = D();
+    const game = this.game, sim = game.sim, body = this.$('infoBody'), S = WW.Sprites;
+    const info = (WW.STRUCT_INFO && WW.STRUCT_INFO[s.type]) || {};
+    const c = sim.query.city(s.cityId), k = c ? sim.query.kingdom(c.kingdomId) : null;
+    let key = null; try { key = game.renderer.structKey(s, k ? k.gov : 'tribe'); } catch (e) { key = null; }
+    const name = s.type === 'station' && s.campStation ? 'Verladerampe' : (info.name || s.type);
+    this.title(key && S.has(key) ? icon(key, 40, k ? k.colorIndex : 10) : null, name, c ? c.name : (s.type === 'memorial' ? 'gehört allen' : ''));
+    const rows = [];
+    if (!s.built) rows.push(h('dt', 'Bau'), h('dd', Math.round(100 * (s.progress || 0)) + ' %'));
+    if (s.type === 'arsenal') {
+      const P = { tank: 'Panzer', artillery: 'Feldgeschütz' };
+      rows.push(h('dt', 'Fertigung'), h('dd', s.prod ? P[s.prod] + ' · ' + Math.round(100 * (s.prog || 0)) + ' %' : 'ruht'), h('dt', 'Gebaut'), h('dd', String(s.made | 0)),
+        h('dt', 'Bezahlt mit'), h('dd', s.pay === 'alt' || s.lastPay === 'alt' ? 'Behelf (Gold, langsam)' : 'Eisen und Kohle'));
+    } else if (s.type === 'harbor') {
+      const ships = (sim.state.ships || []).filter(o => o && o.harborId === s.id);
+      rows.push(h('dt', 'Schiffe'), h('dd', String(ships.length)), h('dt', 'Werft'), h('dd', s.prod ? (((WW.NAVAL && WW.NAVAL.KINDS[s.prod]) || {}).name || s.prod) + ' · ' + Math.round(100 * (s.prog || 0)) + ' %' : 'ruht'));
+      const led = sim.state.naval && sim.state.naval.ledger && c ? sim.state.naval.ledger[c.id] : 0;
+      if (led) rows.push(h('dt', 'Seehandel'), h('dd', Math.floor(led) + ' Gold'));
+    } else if (s.type === 'stockade') {
+      rows.push(h('dt', 'Kriegsgefangene'), h('dd', (s.inmates | 0) + ' von ' + (s.cap | 0)));
+    } else if (s.type === 'barrack') {
+      rows.push(h('dt', 'Belegung'), h('dd', (s.inmates | 0) + ' von ' + (s.cap | 0)));
+    } else if (s.type === 'pyramid') {
+      rows.push(h('dt', 'Baustufe'), h('dd', ((s.stage != null ? s.stage : (s.level | 0) - 1) + 1) + ' von 3'));
+    }
+    if (rows.length) body.appendChild(h('div.sec', h('dl.kv', rows)));
+    const TXT = {
+      stockade: 'Hier sitzen gefangene Soldaten bis zum Frieden. Sie arbeiten nicht und gehen beim Friedensschluss heim.',
+      memorial: 'Ein Mahnmal' + (s.campName ? ' für das Lager ' + s.campName : '') + (s.year ? ', errichtet im Jahr ' + s.year : '') + '. Damit niemand vergisst, was hier geschah.',
+      arsenal: 'Hier entstehen Panzer und Geschütze. Eisen und Kohle aus dem Stadtlager werden dafür verbraucht.',
+      harbor: 'Von hier fahren Fischer, Händler und – wenn es sein muss – Kriegsschiffe aus.',
+      caravanserai: 'Rastplatz für Karawanen: Kamele, Wasser, Handel. Bringt beiden Städten Gold.',
+      pyramid: 'Ein steiles Grabmal nach Art der Könige von Kusch. Die Stadt ist stolz darauf.',
+      station: s.campStation ? 'Hier laden Güterzüge ab, was die Gefangenen erarbeiten, und hier kommen neue Gefangene an.' : ''
+    };
+    if (s.ruinOf === 'laborcamp') TXT.ruin = 'Ein Mahnmal am Ort eines früheren Lagers.';
+    if (TXT[s.type]) body.appendChild(h('div.sec', h('div.muted', TXT[s.type])));
+    if (c) body.appendChild(h('div.sec', h('div.row', [h('span.muted', 'Stadt'), h('button.link', { type: 'button', on: { click: () => game.selectCity(c.id, true) } }, c.name)])));
+  };
+  // Lagerstadt: Insassen, Wachen, Herkunft der Kriegsgefangenen, Folgen – sachlich
+  Panels.prototype.renderCamp = function (c) {
+    const { h, icon } = D();
+    const game = this.game, sim = game.sim, body = this.$('infoBody');
+    const k = sim.query.kingdom(c.kingdomId);
+    this.title(k ? icon('banner_' + (k.bannerPattern % 8), 30, k.colorIndex) : null, c.name, 'Lagerstadt' + (k ? ' · ' + WW.GOVERNMENTS[k.gov].name : ''));
+    if (k) body.appendChild(h('div.sec', [h('div.row', [h('span.muted', 'Betrieben von'), h('button.link', { type: 'button', on: { click: () => game.selectKingdom(k.id, true) } }, k.name), emblem(k.gov, 20)])]));
+    const inm = c.inmates | 0, pows = c.pows | 0;
+    body.appendChild(h('div.sec', [h('dl.kv', [
+      h('dt', 'Insassen'), h('dd', inm + (c.cap ? ' bei ' + (c.cap | 0) + ' Plätzen' : '')),
+      h('dt', 'davon Kriegsgefangene'), h('dd', String(pows)), h('dt', 'politische Gefangene'), h('dd', String(Math.max(0, inm - pows))),
+      h('dt', 'Wachen'), h('dd', (c.guards | 0) + (c.guardsWant ? ' (Soll ' + (c.guardsWant | 0) + ')' : '')),
+      h('dt', 'Anschluss'), h('dd', c.railLine != null && c.railLine >= 0 || c.station ? 'Bahn' : 'zu Fuß'),
+      c.campFounded ? h('dt', 'Gegründet') : null, c.campFounded ? h('dd', 'Jahr ' + c.campFounded) : null])]));
+    const from = c.powFrom || {}, fk = Object.keys(from).filter(id => from[id] > 0);
+    if (fk.length) body.appendChild(h('div.sec', [h('h3', 'Herkunft der Kriegsgefangenen'), h('div', fk.map(id => h('div.row', [kIcon(sim, +id, 18), h('span', from[id] + ' aus ' + kname(sim, +id))])))]));
+    if (typeof c.campUnrest === 'number') body.appendChild(h('div.sec', [h('h3', 'Spannung im Lager'), h('div.barline', [h('span', c.campUnrest >= 75 ? 'kurz vor dem Aufstand' : c.campUnrest >= 40 ? 'gereizt' : 'gedrückt'), h('b', Math.round(c.campUnrest) + ' %')]),
+      h('div.bar' + (c.campUnrest >= 75 ? '.bad' : '.warn'), [h('b', { style: { width: Math.max(2, Math.min(100, c.campUnrest)) + '%' } })])]));
+    const out = c.campOut || {}, home = sim.query.city(c.campHome);
+    const ol = Object.keys(out).filter(x => out[x] > 0).map(x => x === 'rail' ? out[x] + ' Gleisstücke' : Math.floor(out[x]) + ' ' + ((((WW.RESOURCES || []).find(r => r && r.key === x) || {}).name) || x));
+    body.appendChild(h('div.sec', [h('h3', 'Wofür das alles'), h('div.muted', (ol.length ? 'Erarbeitet seit der Gründung: ' + ol.join(', ') + '. ' : '') + (home ? 'Der Ertrag geht nach ' + home.name + '.' : ''))]));
+    body.appendChild(h('div.sec', [h('h3', 'Folgen'), h('div.muted', 'Die Menschen im Reich leben in Angst: Zufriedenheit und Loyalität sinken, solange das Lager besteht. Nachbarn verurteilen es, Demokratien besonders. Befreien lässt es sich durch Eroberung, einen Regierungswechsel oder das Weltgesetz „Lager".')]));
+  };
   Panels.prototype.renderAnimal = function (a) {
     const { h, icon } = D();
     const cr = (WW.CREATURES && WW.CREATURES[a.kind]) || { name: a.kind };

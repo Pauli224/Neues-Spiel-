@@ -21,12 +21,13 @@
       republic:  { name: 'Feldgeschütze (teuer)', artillery: { per: 55, max: 2 }, costMul: 1.4, speedMul: 0.8, arsenals: 1, minPop: 28 },
       democracy: { name: 'Geschütze zur Verteidigung', artillery: { per: 45, max: 3 }, costMul: 1.2, speedMul: 0.9, arsenals: 1, minPop: 28, defensive: true }
     },
+    ARSENAL_PAY: [{ wood: 22 }, { wood: 11, stone: 11 }, { stone: 22 }],   // Baukosten des Arsenals, Möglichkeiten der Reihe nach
     PEACE_SHARE: 0.6,   // Obergrenze im Frieden (Anteil; mindestens 1, wenn überhaupt erlaubt)
 
     // Panzer. armor: Faktor gegen Soldaten/Rebellen/Tiere; devLight/devHeavy: gegen leichte/schwere Mauergeräte
     // (Schuss ab devHeavyMin Schaden = Kanone, Balliste, Selbstschuss); gunMul: gegen Artillerie; tankMul: gegen Panzer
-    TANK: { hp: 600, speed: 0.09, range: 3.6, sight: 6.5, dmg: 22, splash: 1.1, reload: 24, wallDmg: 42, wallCd: 14,
-            centerDmg: 30, armor: 0.22, devLight: 0.3, devHeavy: 1.6, devHeavyMin: 15, gunMul: 1.9, tankMul: 1.0, heal: 2 },
+    TANK: { hp: 600, speed: 0.09, range: 3.6, sight: 6.5, dmg: 20, splash: 1.1, reload: 24, wallDmg: 42, wallCd: 14,
+            centerDmg: 30, armor: 0.28, devLight: 0.3, devHeavy: 1.6, devHeavyMin: 15, gunMul: 1.9, tankMul: 1.0, heal: 2 },
     // Kommunismus: einfache Panzer
     SIMPLE: { hpMul: 0.68, dmgMul: 0.85, armorMul: 1.5, costMul: 0.7 },
     // Feldgeschütz (Artillerie). minRange: darunter wehrlos; area: Flächentreffer; scatter: Streuung beim Einschlag

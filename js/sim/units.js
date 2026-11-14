@@ -634,7 +634,7 @@
     if (s.type === 'center') pr = -40;
     else if (s.built && s.restyle && !s.upgradeTo) pr = 6;
     else if (s.type === 'house') pr = -6;
-    else if (s.type === 'arsenal') pr = -8;   // [mil] Arsenal liegt weit draußen: sonst verhungert die Baustelle
+    else if (s.type === 'arsenal') { const c = sim._cities.get(s.cityId); pr = c && c.wall && (c.wall.state === 'done' || c.wall.state === 'none') ? -8 : -2; }   // [mil] Arsenal weit draußen: Vorrang erst, wenn die Mauer steht
     else if (WW.Structs.isWallish(s)) pr = s.built ? 4 : 0;
     else pr = -2;
     return distTo(u, s.x + 0.5, s.y + 0.5) + s.workers * 5 + pr;

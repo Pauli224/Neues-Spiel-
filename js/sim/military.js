@@ -246,7 +246,18 @@
     const st = sim.state;
     const cnt = countVehicles(sim);
     const ars = [];
-    for (const s of st.structs) if (!s.dead && s.type === 'arsenal' && s.built) ars.push(s);
+    for (const s of st.structs) {
+      if (s.dead || s.type !== 'arsenal') continue;
+      if (s.built) { ars.push(s); continue; }
+      // Baustelle selbst bezahlen, sobald eine der Möglichkeiten reicht (Holz, Holz + Stein, Stein) – sonst verhungert sie,
+      // wo nur einer der beiden Baustoffe da ist
+      if (!s.paid) {
+        const c = sim._cities.get(s.cityId);
+        if (!c) continue;
+        const sk = WW.Cities.stock(sim, c);
+        for (const opt of M().ARSENAL_PAY) if (canPay(sk, opt)) { pay(sk, opt); s.paid = true; break; }
+      }
+    }
     if (!ars.length) return;
     const pend = {};
     for (const s of ars) if (s.prod) {

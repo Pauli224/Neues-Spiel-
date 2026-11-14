@@ -147,7 +147,7 @@
     clear(box);
     box.classList.remove('lines');
     const chip = (label, ic, on, fn, title, team) => h('button.chip', { type: 'button', 'aria-pressed': on ? 'true' : 'false', title: title || label, on: { click: fn } },
-      [ic ? icon(ic, /^u_/.test(ic) ? 30 : 24, team) : null, label ? h('span', label) : null]);
+      [ic ? icon(ic, /^(u_|hu_|h_)/.test(ic) ? 30 : 24, team) : null, label ? h('span', label) : null]);
     if (tool.options === 'brush') {
       box.appendChild(h('span.opt-label', 'Pinsel'));
       const g = h('div.opt-group');
@@ -163,7 +163,19 @@
       const l2 = h('div.opt-line', [h('span.opt-label', 'Regierung')]);
       l2.appendChild(chip('Selbst wählen', 'b_question', !o.gov, () => { o.gov = null; this.renderOpts(); }, 'Startet als Stamm und wählt später selbst'));
       for (const gk of WW.GOV_KEYS) l2.appendChild(chip(WW.UI.Tools.get('gov_' + gk).name, 'i_gov_' + gk, o.gov === gk, () => { o.gov = gk; this.renderOpts(); }, WW.GOVERNMENTS[gk].name + ': ' + WW.GOVERNMENTS[gk].desc));
-      box.appendChild(l1); box.appendChild(l2);
+      box.appendChild(l1);
+      // Kultur (nur für Menschen; Fantasievölker haben ihre eigene)
+      if (WW.CULTURES && (o.race === 'human' || o.race === 'random')) {
+        const l3 = h('div.opt-line', [h('span.opt-label', 'Kultur')]);
+        l3.appendChild(chip('Passend', WW.Sprites.has('i_culture') ? 'i_culture' : 'i_settlers', !o.culture, () => { o.culture = null; this.renderOpts(); }, 'Kultur passend zum Gelände'));
+        for (const ck of ['mitte', 'nord', 'sahel', 'nil']) {
+          const C = WW.CULTURES[ck]; if (!C) continue;
+          let ic = null; try { ic = typeof WW.Sprites.unitKey === 'function' ? WW.Sprites.unitKey('human', 'settler', 'tribe', 0, ck === 'mitte' ? undefined : ck) : null; } catch (e) { ic = null; }
+          l3.appendChild(chip(C.name.replace(/-Reiche$/, ''), ic && WW.Sprites.has(ic) ? ic : null, o.culture === ck, () => { o.culture = ck; this.renderOpts(); }, C.name + (C.note ? ': ' + C.note : ''), 0));
+        }
+        box.appendChild(l3);
+      }
+      box.appendChild(l2);
       box.classList.add('lines');
     } else if (tool.kind === 'pair') {
       const first = this.game.pairFirst != null ? this.game.sim.query.kingdom(this.game.pairFirst) : null;

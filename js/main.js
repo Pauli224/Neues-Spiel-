@@ -120,6 +120,19 @@
     const sim = game.sim, q = sim.query;
     const lc = game.renderer.labelAt(sx, sy);
     if (lc) return game.selectCity(lc.id, false);
+    // Schlacht- und Schlachtfeld-Marken, Schiffe, Züge, besondere Bauwerke
+    const mk = game.renderer.markAt ? game.renderer.markAt(sx, sy) : null;
+    if (mk) { game.select = null; game.ui.showInfo(mk); return; }
+    const st = sim.state;
+    const nearOf = (list, rr) => { let best = null, bd = rr * rr; if (Array.isArray(list)) for (const o of list) { if (!o || o.dead || !(o.x >= 0)) continue; const dx = o.x - p.x, dy = o.y - p.y; const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } } return best; };
+    const sh = nearOf(st.ships, 0.9);
+    if (sh) { game.select = { kind: 'unit', obj: sh, animal: false, ship: true }; game.ui.showInfo({ kind: 'ship', id: sh.id }); return; }
+    const tr = nearOf(st.trains, 0.9);
+    if (tr) { game.select = null; game.ui.showInfo({ kind: 'train', id: tr.id }); return; }
+    const sp = q.structAt(p.x, p.y);
+    if (sp && !sp.dead && /^(harbor|arsenal|stockade|memorial|caravanserai|pyramid|barrack|camphq|watchtower)$/.test(sp.type) || (sp && sp.type === 'station' && sp.campStation) || (sp && sp.type === 'ruin' && sp.ruinOf === 'laborcamp')) {
+      if (!(game.ui.sel && game.ui.sel.kind === 'struct' && game.ui.sel.id === sp.id) || !(sp.cityId >= 0)) { game.select = null; game.ui.showInfo({ kind: 'struct', id: sp.id }); return; }
+    }
     const r = Math.max(0.7, 10 / (game.cam.zoom * 8));
     // genau getroffene Figur zuerst, dann Gebäude (Stadt), dann Figuren in der Nähe
     const s = q.structAt(p.x, p.y);
@@ -178,6 +191,8 @@
     game.followId = null;
   };
   game.jumpToEvent = function (e) {
+    const sites = game.sim.state.sites;
+    if (e.siteId != null && Array.isArray(sites)) { const o = sites.find(x => x && x.id === e.siteId); if (o) { game.select = null; game.ui.showInfo({ kind: 'site', id: o.id }); game.flyTo(o.x + 0.5, o.y + 0.5); return; } }
     if (e.cityId >= 0 && game.sim.query.city(e.cityId)) { game.selectCity(e.cityId, true); return; }
     game.flyTo(e.x + 0.5, e.y + 0.5);
   };
@@ -193,7 +208,7 @@
       race = pool[(Math.random() * pool.length) | 0];
     }
     if (!WW.TERRAIN_LUT.walk[sim.state.terrain[(y | 0) * sim.state.W + (x | 0)]] && !sim.query.cityAt(x, y)) { game.hud.hint('Siedler brauchen festen Boden unter den Füßen.'); return null; }
-    const res = sim.actions.spawnSettlers(x, y, 6, o.gov, race);
+    const res = sim.actions.spawnSettlers(x, y, 6, o.gov, race, race === 'human' && o.culture ? o.culture : undefined);
     if (!res) game.hud.hint('Hier können keine Siedler leben. Versuch es auf freier Wiese.');
     return res;
   };

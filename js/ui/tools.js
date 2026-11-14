@@ -128,7 +128,7 @@
       for (const k of pkeys) {
         const p = P[k] || { name: k, radius: 2 };
         if (((p.category) || 'nature') !== c) continue;
-        addTool({ id: 'power_' + k, cat: tab, icon: pickIcon(['i_' + k]), name: p.name || k, kind: 'tap', power: k,
+        addTool({ id: 'power_' + k, cat: tab, icon: pickIcon([p.icon, 'i_' + k, ({ navHarbor: 'i_harbor', navShip: 'i_ship', milTank: 'i_tank', milGun: 'i_artillery', milBattle: 'i_battle' })[k]].filter(Boolean)), name: p.name || k, kind: 'tap', power: k,
           drag: dragOf(k, p), radius: p.radius || 2, hint: PH[k] || p.desc || ((p.name || k) + ': auf die Karte tippen.'),
           apply(game, x, y) { return game.strike(x, y, k); } });
       }

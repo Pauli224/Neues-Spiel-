@@ -569,7 +569,7 @@
     const c = sim._cities.get(s.cityId);
     if (!c) return;
     const sk = stockOf(sim, c);
-    if (sk && typeof sk.coal === 'number' && sk.coal >= NV().COAL_TRIP) { sk.coal -= NV().COAL_TRIP; s.coal = true; }
+    if (sk && typeof sk.coal === 'number' && sk.coal >= NV().COAL_TRIP + (NV().COAL_RESERVE || 0)) { sk.coal -= NV().COAL_TRIP; s.coal = true; }   // Reserve bleibt für Arsenal und Fabriken
   }
   function depart(sim, s, r, mission, fromDock) {
     s.route = r; s.ri = 0; s.t = 'out'; s.mission = mission; s.moving = r.length > 0; s.wait = 0;
