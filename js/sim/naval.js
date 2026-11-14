@@ -1421,7 +1421,7 @@
   }
   function smoke(sim) {
     const st = sim.state;
-    if (!st.pollution || !WW.Industry || !WW.Industry.dims) return;
+    if (!st.pollution || !WW.Industry || !WW.Industry.dims || !(NV().SMOKE_EMIT > 0)) return;
     const d = WW.Industry.dims(st);
     let any = false;
     for (const s of st.ships) {
