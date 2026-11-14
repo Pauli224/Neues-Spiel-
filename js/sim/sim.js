@@ -290,7 +290,9 @@
 //   Eroberung: bis zum Soll bleiben Eroberer als Garnison; danach schickt die Hauptstadt (bzw. nächste eigene Stadt) Soldaten nach.
 //   sim.actions.setGarrison(cityId, n) -> bool   n ≥ 0 feste Stärke (0 = abziehen), n = null/-1 -> wieder selbst
 //   Ereignisse: garrisonSent, garrisonWithdrawn, integrated, garrisonLow.
-// FASCHISMUS STÄRKER: soldierShare 0,36, unitDmgMul/unitHpMul erhöht (Ausbildung), Wehrpflicht im Krieg; Schwächen bleiben.
+// FASCHISMUS STÄRKER: soldierShare 0,36, unitDmgMul/unitHpMul 1,2 (Ausbildung), Wehrpflicht im Krieg (wie bisher 'mass').
+//   Sturz des Regimes: nach 3 schlechten Jahren nur noch mit 20 % je Jahr, sicher nach einer im Krieg verlorenen Stadt
+//   (kingdom.lostYear, 3 Jahre); Zusammenbruch in Anarchie seltener. Schwächen bleiben (Zufriedenheit, Garnisonsbedarf).
 // =============================================================================
 (function (WW) { 'use strict';
 

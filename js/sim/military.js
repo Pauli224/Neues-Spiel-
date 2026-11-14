@@ -720,12 +720,13 @@
   // ---------------------------------------------------------------------------
   // Schlachten
   // ---------------------------------------------------------------------------
-  // Vorfeld einer ummauerten Stadt (Ringradius + BATTLE.siegeMargin): dort wird belagert, nicht im Feld geschlagen
+  // Vorfeld einer Stadt (Ringradius bzw. Kernbebauung + BATTLE.siegeMargin): dort wird belagert/angegriffen, nicht im Feld geschlagen
   function siegeZone(sim, x, y) {
     const m = M().BATTLE.siegeMargin;
     for (const c of sim.state.cities) {
-      if (!c.wall || !(c.wall.level >= 1) || !c.wall.inside) continue;
-      const r = Math.sqrt(c.wall.inside / 3.14) + m, dx = x - c.cx - 0.5, dy = y - c.cy - 0.5;
+      // ummauert: Ringradius aus der Innenfläche; offene Stadt: Kernbebauung (6 + Stufe) – Angriff auf die Stadt ist keine Feldschlacht
+      const r = (c.wall && c.wall.level >= 1 && c.wall.inside ? Math.sqrt(c.wall.inside / 3.14) : 6 + (c.tier | 0)) + m;
+      const dx = x - c.cx - 0.5, dy = y - c.cy - 0.5;
       if (dx * dx + dy * dy <= r * r) return true;
     }
     return false;

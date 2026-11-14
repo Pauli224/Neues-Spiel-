@@ -257,6 +257,7 @@
     });
     if (a === 0 || d > a) return false;
     const oldName = def.name;
+    def.lostYear = st.year;   // verlorene Stadt im Krieg (Faschismus kann danach stürzen, 9.10)
     const ag = WW.GOVERNMENTS[att.gov];
     // Demokratie befreit eroberte Städte und gibt sie dem früheren Besitzer zurück
     const prev = city.prevKingdomId != null ? sim._kingdoms.get(city.prevKingdomId) : null;

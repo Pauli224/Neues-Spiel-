@@ -452,13 +452,15 @@
         continue;
       }
       // Revolution / Sturz des Regimes
-      if (k.lowYears >= 3 && years >= 4) {
+      // Faschismus (9.10): hält sich mit Angst und Heer; fällt sicher erst nach verlorenen Kriegen, sonst nur selten
+      const fasHold = k.gov === 'fascism' && !(k.lostYear != null && st.year - k.lostYear <= 3) && !sim.rng.chance(0.2);
+      if (k.lowYears >= 3 && years >= 4 && !fasHold) {
         const ch = chooseGov(sim, k, { unhappy: true });
         applyGov(sim, k, ch.gov, { lock: false, reason: k.gov === 'fascism' ? 'regimeFall' : 'revolution', why: ch.why });
         continue;
       }
       // Zusammenbruch in Anarchie
-      if (k.gov !== 'anarchy' && hap < 18 && k.lowYears >= 2 && years >= 3 && sim.rng.chance(0.2)) {
+      if (k.gov !== 'anarchy' && hap < 18 && k.lowYears >= 2 && years >= 3 && sim.rng.chance(k.gov === 'fascism' && !(k.lostYear != null && st.year - k.lostYear <= 3) ? 0.05 : 0.2)) {
         applyGov(sim, k, 'anarchy', { lock: false, reason: 'collapse' });
         continue;
       }
