@@ -1272,7 +1272,7 @@
     const camStill = SK === this._camKey && !(this.shake > 0);
     this._camKey = SK;
     const wf = (this.time * 5) | 0;
-    this._patchBase = null;
+    this._patchBase = null; this._patchA0 = null;
     if (camStill && !missing && !opts.firstFrames && this.gfx.still !== false) {
       const mk = (c) => { if (!c) c = document.createElement('canvas'); if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; } return c; };
       const bc = this._stBase = mk(this._stBase);
@@ -1282,20 +1282,24 @@
         this.drawBase(bc.getContext('2d', { alpha: false }));
         this._bKey = bkey; this._bG = this._gver; baseNew = true;
       }
-      if (near || smogOn) {
+      // A0 = Boden + ruhende Objekte; A = A0 + Dunst
+      let a0 = bc;
+      const akey = P + '|' + (near ? 1 : 0) + '|' + (smogOn ? 1 : 0);
+      const aNew = baseNew || this._aKey !== akey || (urgent && this._aO !== this._over);
+      if (near) {
+        const oc = this._stO = mk(this._stO);
+        if (aNew) { const g = oc.getContext('2d', { alpha: false }); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.drawImage(bc, 0, 0); this.drawRegions(g, P); }
+        a0 = oc;
+      }
+      let top = a0;
+      if (smogOn) {
         const ac = this._stA = mk(this._stA);
-        const akey = P + '|' + (near ? 1 : 0) + '|' + (smogOn ? 1 : 0);
-        if (baseNew || this._aKey !== akey || (urgent && this._aO !== this._over)) {
-          const g = ac.getContext('2d', { alpha: false });
-          g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false;
-          g.drawImage(bc, 0, 0);
-          if (near) this.drawRegions(g, P);
-          if (smogOn) { this._smogSh = 4 * Math.sin(this.time * 0.2); g.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(g); g.setTransform(1, 0, 0, 1, 0, 0); }
-          this._aKey = akey; this._aO = this._over;
-        }
-        ctx.drawImage(ac, 0, 0);
-      } else ctx.drawImage(bc, 0, 0);
-      this._patchBase = bc;
+        if (aNew) { const g = ac.getContext('2d', { alpha: false }); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.drawImage(a0, 0, 0); this._smogSh = 4 * Math.sin(this.time * 0.2); g.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(g); }
+        top = ac;
+      }
+      if (aNew) { this._aKey = akey; this._aO = this._over; }
+      ctx.drawImage(top, 0, 0);
+      this._patchBase = bc; this._patchA0 = a0;
     } else {
       this._bKey = ''; this._aKey = '';
       this.drawBase(ctx);
@@ -1416,6 +1420,9 @@
         add(this.keyBox(sc), px, (s.y + s.h - (si ? si.fh : s.h)) * 8);
       }
       if (s.type === 'center' && s.stage === 0 && s.built !== false && key.indexOf('s_camp') === 0) { rc.dyn = true; rc.x0 -= 2; rc.y0 -= 8; rc.x1 += 2; }
+      // schlichte Bauwerke direkt aus dem gemerkten Schlüssel zeichnen
+      rc.key = key; rc.px = px; rc.py = py; rc.team = k ? k.colorIndex | 0 : 10;
+      rc.simple = !s.upgrading && !s.device && !rc.dyn && !(s.type === 'field' && (key === 's_field_2' || key === 's_field_3'));
     }
     if (s.device && s.built !== false) {
       const base = 's_walldev_' + s.device, dk = S.has(base + '_0') ? base + '_0' : (S.has(base) ? base : null), db = dk ? this.keyBox(dk) : null;
@@ -1556,7 +1563,11 @@
       const key = this.decoKey((code & 0xfffff) - 2, x, y, p, sway);
       S.drawFast(g, key, x * 8 + ((code >> 20) & 31) - 8, y * 8 + ((code >> 25) & 15) - 8, 0, false);
     } else if (kind === 4) this.drawDevice(g, this._anc[v]);
-    else this.drawStruct(g, this._anc[v], this._objCityK, false, OBJ_NOBARS, p);
+    else {
+      const s = this._anc[v], rc = this._rc.get(s.id);
+      if (rc && rc.simple) S.drawFast(g, rc.key, rc.px, rc.py, rc.team, false);
+      else this.drawStruct(g, s, this._objCityK, false, OBJ_NOBARS, p);
+    }
   };
   const OBJ_NOBARS = { push: function () {} };
   // Rechteck (Logikpixel) eines ruhenden Objekts in r[0..3] (x0, y0, x1, y1); false = unbekannt
@@ -1799,60 +1810,9 @@
     }
     let drawn = dyn.length;
     if (dyn.length) {
-      const items = this._dynItems || (this._dynItems = []); items.length = 0;
-      for (const o of dyn) items.push(o);
-      if (near) {
-        // ruhende Objekte, die ein bewegtes Rechteck berühren (davor und dahinter): Kacheln der Rechtecke markieren,
-        // Ankerkacheln ringsum je einmal absuchen, Treffer gegen die markierten Kacheln prüfen
-        const ext = this._objExt || 6, cov = this._cov, scan = this._scan, stS = this._stS;
-        const fr = this._stampN = ((this._stampN | 0) + 1) & 0x3fffffff;
-        const r = this._objR2 || (this._objR2 = [0, 0, 0, 0]);
-        const head = this._ancH, next = this._ancN, list = this._anc, rcm = this._rc, dk = this._dk;
-        const hit = (x0, y0, x1, y1) => {
-          const a = Math.max(0, Math.floor(x0 / 8)), b = Math.min(W - 1, Math.floor((x1 - 1) / 8)), c0 = Math.max(0, Math.floor(y0 / 8)), c1 = Math.min(H - 1, Math.floor((y1 - 1) / 8));
-          for (let yy = c0; yy <= c1; yy++) for (let xx = a; xx <= b; xx++) if (cov[yy * W + xx] === fr) return true;
-          return false;
-        };
-        const push = (kind, v, row, sub) => { const it = item(); it.t = 5; it.cls = kind; it.v = v; it.row = row; it.sub = sub; items.push(it); };
-        // bewegte Bauwerke (Lagerfeuer, feuerndes Gerät) nicht zusätzlich als ruhend zeichnen
-        for (const o of dyn) if (o.t === 4) { const s = o.u; for (let q = head[(s.y + s.h - 1) * W + s.x]; q >= 0; q = next[q]) if (list[q] === s) stS[q] = fr; }
-        for (const o of dyn) {
-          const a = Math.max(0, Math.floor(o.x0 / 8)), b = Math.min(W - 1, Math.floor((o.x1 - 1) / 8)), c0 = Math.max(0, Math.floor(o.y0 / 8)), c1 = Math.min(H - 1, Math.floor((o.y1 - 1) / 8));
-          for (let yy = c0; yy <= c1; yy++) for (let xx = a; xx <= b; xx++) cov[yy * W + xx] = fr;
-        }
-        for (const o of dyn) {
-          const ta = Math.max(0, Math.floor(o.x0 / 8) - OBJ_L), tb = Math.min(W - 1, Math.floor((o.x1 - 1) / 8) + OBJ_R);
-          const ra = Math.max(0, Math.floor(o.y0 / 8) - 1), rb = Math.min(H - 1, Math.floor((o.y1 - 1) / 8) + ext);
-          for (let y = ra; y <= rb; y++) for (let x = ta; x <= tb; x++) {
-            const i = y * W + x;
-            if (scan[i] === fr) continue;
-            scan[i] = fr;
-            for (let q = head[i]; q >= 0; q = next[q]) {
-              const s = list[q];
-              if (s.dead || stS[q] === fr) continue;
-              const rc = rcm.get(s.id);
-              if (!rc || rc.dyn) continue;
-              if (hit(rc.x0 - 1, rc.y0 - 1, rc.x1 + 1, rc.y1 + 1)) push(s.type === 'field' ? 0 : 3, q, y, x);
-              if (rc.spike && hit(rc.dx0 - 1, rc.dy0 - 1, rc.dx1 + 1, rc.dy1 + 1)) push(4, q, y + 1, x);
-            }
-            const v = dk[i] === 0 ? this.decoCode(i) : dk[i];
-            if (v > 1 && !(v & (1 << 29)) && this.objRect(2, i, P, sway, r) && hit(r[0], r[1], r[2], r[3])) push(2, i, y, x);
-          }
-        }
-      }
-      items.sort((p, q) => p.row - q.row || p.cls - q.cls || p.sub - q.sub);
-      const clip = near || smogOn;
-      if (clip) {
-        // Ausschnitt: Rechtecke der bewegten Dinge
-        ctx.save();
-        ctx.beginPath();
-        for (const o of dyn) ctx.rect(o.x0, o.y0, o.x1 - o.x0, o.y1 - o.y0);
-        ctx.clip();
-        if (this._patchBase) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchBase, 0, 0); }
-        else this.drawBase(ctx);
-        ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
-      }
-      for (const it of items) {
+      const ext = this._objExt || 6;
+      const fr = this._stampN = ((this._stampN | 0) + 1) & 0x3fffffff;
+      const drawIt = (it) => {
         if (it.t === 1) {
           S.drawFast(ctx, it.key, it.px, it.py, it.team, it.flip);
           if (it.sick) { ctx.globalAlpha = 0.6; S.drawFast(ctx, 'fx_plague', it.px, it.py - 10, 0, false); ctx.globalAlpha = 1; }
@@ -1860,12 +1820,92 @@
         else if (it.t === 3) S.drawFast(ctx, it.key, it.px, it.py, 0, false);
         else if (it.t === 4) this.drawStruct(ctx, it.u, cityK, false, OBJ_NOBARS, P);
         else { this.objDraw(ctx, it.cls, it.v, P, sway); drawn++; }
-      }
-      if (clip) {
-        if (smogOn) this.drawSmogLayer(ctx);
-        ctx.restore();
+      };
+      const order = (p, q) => p.row - q.row || p.cls - q.cls || p.sub - q.sub;
+      const clipTo = (list) => { ctx.save(); ctx.beginPath(); for (const o of list) ctx.rect(o.x0, o.y0, o.x1 - o.x0, o.y1 - o.y0); ctx.clip(); };
+      const simple = this._dynS || (this._dynS = []), complex = this._dynC || (this._dynC = []);
+      simple.length = 0; complex.length = 0;
+      if (near) {
+        const cov = this._cov, stX = this._stX && this._stX.length >= this._stS.length ? this._stX : (this._stX = new Int32Array(this._stS.length)), stS = this._stS, stD = this._stD && this._stD.length >= stS.length ? this._stD : (this._stD = new Int32Array(stS.length)), stamp = this._scan;
+        const r = this._objR2 || (this._objR2 = [0, 0, 0, 0]);
+        const head = this._ancH, next = this._ancN, list = this._anc, rcm = this._rc, dk = this._dk;
+        const ov = (x0, y0, x1, y1, o) => x1 > o.x0 && x0 < o.x1 && y1 > o.y0 && y0 < o.y1;
+        // ruhende Objekte im Suchfenster eines bewegten Dings, die sein Rechteck berühren; fn liefert true = abbrechen
+        const scanWin = (o, ra, rb, fn) => {
+          const ta = Math.max(0, Math.floor(o.x0 / 8) - OBJ_L), tb = Math.min(W - 1, Math.floor((o.x1 - 1) / 8) + OBJ_R);
+          ra = Math.max(0, ra); rb = Math.min(H - 1, rb);
+          for (let y = ra; y <= rb; y++) for (let x = ta; x <= tb; x++) {
+            const i = y * W + x;
+            for (let q = head[i]; q >= 0; q = next[q]) {
+              const s = list[q];
+              if (s.dead || stX[q] === fr) continue;
+              const rc = rcm.get(s.id);
+              if (!rc || rc.dyn) continue;
+              if (ov(rc.x0 - 1, rc.y0 - 1, rc.x1 + 1, rc.y1 + 1, o) && fn(s.type === 'field' ? 0 : 3, q, y, x)) return true;
+              if (rc.spike && ov(rc.dx0 - 1, rc.dy0 - 1, rc.dx1 + 1, rc.dy1 + 1, o) && fn(4, q, y + 1, x)) return true;
+            }
+            const v = dk[i] === 0 ? this.decoCode(i) : dk[i];
+            if (v > 1 && !(v & (1 << 29)) && this.objRect(2, i, P, sway, r) && ov(r[0], r[1], r[2], r[3], o) && fn(2, i, y, x)) return true;
+          }
+          return false;
+        };
+        // bewegte Bauwerke (Lagerfeuer, feuerndes Gerät) nicht zusätzlich als ruhend zeichnen
+        for (const o of dyn) if (o.t === 4) { const s = o.u; for (let q = head[(s.y + s.h - 1) * W + s.x]; q >= 0; q = next[q]) if (list[q] === s) stX[q] = fr; }
+        // einfach = nichts Ruhendes liegt davor (Figur auf freier Fläche); sonst wird der Ausschnitt ganz neu gemalt
+        let cur = null;
+        const inFront = (kind, v, row, sub) => {
+          if (!(row > cur.row || (row === cur.row && (kind > cur.cls || (kind === cur.cls && sub > cur.sub))))) return false;
+          // genau (ohne Sicherheitsrand) prüfen, ob das Ruhende die Figur wirklich überdeckt
+          if (!this.objRect(kind, v, P, sway, r)) return true;
+          return r[2] - 1 > tight.x0 && r[0] + 1 < tight.x1 && r[3] - 1 > tight.y0 && r[1] + 1 < tight.y1;
+        };
+        const tight = { x0: 0, y0: 0, x1: 0, y1: 0 };
+        for (const o of dyn) { cur = o; tight.x0 = o.x0 + 1; tight.y0 = o.y0 + 1; tight.x1 = o.x1 - 1; tight.y1 = o.y1 - 1; (scanWin(o, o.row - 1, Math.floor((o.y1 - 1) / 8) + ext, inFront) ? complex : simple).push(o); }
+        if (complex.length) {
+          const items = this._dynItems || (this._dynItems = []); items.length = 0;
+          const push = (kind, v, row, sub) => {
+            const arr = kind === 2 ? stamp : kind === 4 ? stD : stS;
+            if (arr[v] === fr) return false;
+            arr[v] = fr;
+            const it = item(); it.t = 5; it.cls = kind; it.v = v; it.row = row; it.sub = sub; items.push(it);
+            return false;
+          };
+          for (const o of complex) { items.push(o); scanWin(o, Math.floor(o.y0 / 8) - 1, Math.floor((o.y1 - 1) / 8) + ext, push); }
+          // einfache Dinge, die in einen Ausschnitt hineinragen, dort mitmalen
+          for (const o of complex) { const a = Math.max(0, Math.floor(o.x0 / 8)), b = Math.min(W - 1, Math.floor((o.x1 - 1) / 8)), c0 = Math.max(0, Math.floor(o.y0 / 8)), c1 = Math.min(H - 1, Math.floor((o.y1 - 1) / 8)); for (let yy = c0; yy <= c1; yy++) for (let xx = a; xx <= b; xx++) cov[yy * W + xx] = fr; }
+          for (const o of simple) {
+            const a = Math.max(0, Math.floor(o.x0 / 8)), b = Math.min(W - 1, Math.floor((o.x1 - 1) / 8)), c0 = Math.max(0, Math.floor(o.y0 / 8)), c1 = Math.min(H - 1, Math.floor((o.y1 - 1) / 8));
+            let hit = false;
+            for (let yy = c0; yy <= c1 && !hit; yy++) for (let xx = a; xx <= b; xx++) if (cov[yy * W + xx] === fr) { hit = true; break; }
+            if (hit) items.push(o);
+          }
+          this._cItems = items;
+        }
+      } else for (const o of dyn) simple.push(o);
+      // (a) einfache Dinge: direkt aufs Standbild, bei Dunst im Ausschnitt über dem Bild ohne Dunst
+      simple.sort(order);
+      if (smogOn && simple.length) {
+        clipTo(simple);
+        if (this._patchA0) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchA0, 0, 0); }
+        else { this.drawBase(ctx); if (near) { ctx.setTransform(1, 0, 0, 1, 0, 0); this.drawRegions(ctx, P); } }
         ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
+        for (const it of simple) drawIt(it);
+        this.drawSmogLayer(ctx);
+        ctx.restore(); ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
+      } else for (const it of simple) drawIt(it);
+      // (b) verdeckte Dinge: Ausschnitt vom Boden an neu malen (Ruhendes davor und dahinter in Malreihenfolge)
+      if (complex.length) {
+        const items = this._cItems;
+        items.sort(order);
+        clipTo(complex);
+        if (this._patchBase) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchBase, 0, 0); }
+        else this.drawBase(ctx);
+        ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
+        for (const it of items) drawIt(it);
+        if (smogOn) this.drawSmogLayer(ctx);
+        ctx.restore(); ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
       }
+      this.stats.dynS = simple.length; this.stats.dynC = complex.length;
     }
     // Fliegende Wesen über allem, mit Schatten am Boden
     for (const it of flyers) {

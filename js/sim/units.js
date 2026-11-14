@@ -598,7 +598,7 @@
       if (u.tt > 0) return;
       const k = sim._kingdoms.get(u.kingdomId);
       const plan = k && k.policy && k.policy.plan;
-      const loam = WW.TERRAIN_LUT[res][st.terrain[u.target]] ? 1 : 0.6;   // Lehmbau: Akazienholz der Savanne, Lehm der Wüste (weniger je Gang)
+      const loam = WW.TERRAIN_LUT[res][st.terrain[u.target]] || res === 'stone' ? 1 : 0.6;   // Lehmbau: Lehm der Wüste wie Stein, Akazienholz der Savanne weniger je Gang
       if (res === 'wood') {
         u.carrying = 'wood'; u.carryAmt = loam * C().CHOP * WW.SimUtil.mod(sim, k, city, 'wood', race.yields.wood) * (plan && plan.focus === 'wood' ? 1.5 : 1);
         // Umgang mit der Natur (care | use | exploit): Kahlschlag-Regime roden alles, Schonende gar nicht

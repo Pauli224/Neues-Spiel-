@@ -1126,8 +1126,8 @@
             }
           }
         } else if (pyr && pyr.built && !pyr.upgradeTo && (pyr.level || 1) < 3 && city.tier >= (pyr.level || 1) + 1) {
-          const cost = WW.Structs.costFor(sim, 'pyramid', (pyr.level || 1) + 1, city.id);
-          if (WW.Cities.canPay(sim, city, cost) && WW.Cities.countSites(sim, city, true) < 2 + city.tier) {
+          // nächste Stufe als Baustelle anlegen; bezahlt wird, sobald der Stein da ist (Steinmetze richten sich nach dem Bedarf)
+          if (WW.Cities.countSites(sim, city, true) < 2 + city.tier && city.sites.indexOf(pyr.id) < 0) {
             pyr.upgradeTo = (pyr.level || 1) + 1; pyr.progress = 0; pyr.paid = false; pyr.siteYear = st.year;
             city.sites.push(pyr.id);
           }

@@ -9,7 +9,7 @@
     VERSION: 1,
     TPS: 10,                  // Ticks pro Sekunde bei 1×
     TPY: 240,                 // Ticks pro Jahr (24 s bei 1×)
-    GRAZED_ON: 180, GRAZED_OFF: 110,   // state.grazed: Beweidung sichtbar ab 140, wieder grün unter 110 (Hysterese)
+    GRAZED_ON: 170, GRAZED_OFF: 90,   // state.grazed: Beweidung sichtbar ab 170, wieder grün unter 90 (Hysterese)
     MAX_UNITS: 2200,
     MAX_ANIMALS: 240,
     MAX_EVENTS: 400,

@@ -36,6 +36,7 @@
 //   Mindestabstand, langsame Schussfolge, Flächentreffer, Krater (state.mark 100..199), trifft Mauern; im Nahkampf
 //   wehrlos (schießt nicht, versucht abzurücken). Ausfall -> Wrack (state.wrecks), Fx 'wreck'.
 //   Fahrzeuge schließen sich im Krieg dem Marsch des eigenen Heeres an (state.mil.march), sonst parken sie daheim.
+//   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts von selbst.
 //
 // ZUSTAND
 //   state.trench   Uint8Array(W*H): Schützengraben 0..255 (0 = keiner; ab WW.MIL.TRENCH.cover gibt er Deckung);
@@ -246,7 +247,7 @@
       }
       const sp = govSpec(k.gov);
       s.idle = !sp;
-      if (!sp || st.laws.industry === false) continue;
+      if (!sp || st.laws.industry === false || sim._noSiegeEngines) continue;   // Testschalter: kein Kriegsgerät von selbst
       if (!s.prod) {
         const war = WW.Diplo.atWar(sim, k.id);
         const have = cnt[k.id] || { tank: 0, artillery: 0 }, p = pend[k.id] || (pend[k.id] = { tank: 0, artillery: 0 });

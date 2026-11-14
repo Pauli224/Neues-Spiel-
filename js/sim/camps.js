@@ -305,7 +305,7 @@
       if (!ok(n) || (nx !== cx && ny !== cy && (!ok(cy * W + nx) || !ok(ny * W + cx)))) { u.path = null; u.fails = (u.fails | 0) + 1; u.moving = false; return false; }
       tx = nx + 0.5; ty = ny + 0.5;
     } else if ((u.fails | 0) < 3) { u.moving = false; return false; }
-    const dx = tx - u.x, dy = ty - u.y, d = Math.sqrt(dx * dx + dy * dy), sp = 0.045;
+    const dx = tx - u.x, dy = ty - u.y, d = Math.sqrt(dx * dx + dy * dy), sp = 0.07;
     if (Math.abs(dx) > 0.02) u.dir = dx < 0 ? -1 : 1;
     u.moving = true;
     if (u.path && d <= sp) { u.x = tx; u.y = ty; u.pi++; return false; }

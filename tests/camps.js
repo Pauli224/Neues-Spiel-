@@ -77,10 +77,12 @@ function warWorld(gov, other, o) {
 // n Soldaten des Reichs home bei (x, y) aufstellen und von einem Soldaten von holder gefangen nehmen lassen
 function takePows(sim, holder, home, n) {
   const hc = sim._cities.get(home.capitalId), ac = sim._cities.get(holder.capitalId);
-  const att = WW.Units.create(sim, { x: ac.cx + 0.5, y: ac.cy + 3.5, role: 'soldier', kingdomId: holder.id, cityId: ac.id, race: 'human' });
+  const att = WW.Units.create(sim, { x: (hc.cx + ac.cx) / 2, y: (hc.cy + ac.cy) / 2 + 1, role: 'soldier', kingdomId: holder.id, cityId: ac.id, race: 'human' });
   const list = [];
   for (let i = 0; i < n; i++) {
-    const t = WW.Units.create(sim, { x: hc.cx + 0.5 + (i % 3), y: hc.cy + 4.5, role: 'soldier', kingdomId: home.id, cityId: hc.id, race: ['human', 'dwarf', 'orc', 'elf'][i % 4] });
+    // Gefecht auf halbem Weg zwischen den Hauptstädten (Feldschlacht)
+    const W0 = sim.state.W, f = WW.Path.nearestFree(sim, Math.floor((hc.cy + ac.cy) / 2) * W0 + Math.floor((hc.cx + ac.cx) / 2) + (i % 3), home.id, 8);
+    const t = WW.Units.create(sim, { x: (f % W0) + 0.5, y: Math.floor(f / W0) + 0.5, role: 'soldier', kingdomId: home.id, cityId: hc.id, race: ['human', 'dwarf', 'orc', 'elf'][i % 4] });
     if (WW.Camps.capture(sim, att, t, { surrender: true })) list.push(t);
   }
   return list;
@@ -182,7 +184,7 @@ test('3 Kriegsgefangene: Regime -> Lagerstadt (Zwangsarbeit), andere -> Gefangen
   assert(moved >= 4 && maxStep < 0.5, 'Gefangene marschieren nicht zu Fuß');
   let t = 0;
   for (; t < 3000 && !p1.every((u) => u.campState === 'held'); t += 20) run(sim, 20);
-  if (!p1.every((u) => u.campState === 'held')) log('Stand:', p1.map((u) => [u.dead ? 'tot' : u.role, u.campState, u.x.toFixed(1), u.y.toFixed(1), u.fails, u.path ? u.path.length : '-'].join(' ')).join(' | '), 'Lager', W.camp.cx, W.camp.cy, W.camp.kind);
+  if (!p1.every((u) => u.campState === 'held')) log('Stand:', p1.map((u) => [u.dead ? 'tot' : u.role, u.campState, u.x.toFixed(1), u.y.toFixed(1), u.fails, u.path ? u.path.length : '-'].join(' ')).join(' | '), 'Lager', W.camp.cx, W.camp.cy, W.camp.kind, '| Chronik', evs(sim, /^(pow|camp|peace|god)/).map((e) => e.year + ':' + e.type).join(','), '| B lebt', !!sim._kingdoms.get(W.B.id));
   log('angekommen nach', t, 'Ticks; Insassen', W.camp.inmates, 'davon Kriegsgefangene', W.camp.pows, '| Herkunft', JSON.stringify(W.camp.powFrom));
   assert(p1.every((u) => u.campState === 'held' && sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id), 'nicht im Lager angekommen');
   run(sim, 130);
@@ -282,12 +284,13 @@ function liberationCase(how) {
   const sim = W.sim, camp = W.camp, st = sim.state;
   sim.actions.setRelation(W.A.id, W.B.id, 'war');
   const pows = takePows(sim, W.A, W.B, 4);
-  for (let i = 0; i < 60 && !pows.every((u) => u.campState === 'held'); i++) run(sim, 50);
+  run(sim, 300);   // (nicht bis zur Ankunft warten: im erzwungenen Krieg erobert das Regime sonst womöglich den Gegner)
+  assert(!W.B.dead && sim._kingdoms.get(W.B.id), 'Gegner untergegangen');
   const home = sim._cities.get(camp.campHome);
   const pol = st.units.filter((u) => !u.dead && u.cityId === home.id && u.role === 'farmer').slice(0, 3);
   for (const u of pol) WW.Camps.intern(sim, u, camp);
   const hHome = WW.Mods.value(sim, W.B, W.cb, 'happiness', 50);
-  if (how === 'conquest') { WW.Cities.transferCity(sim, camp, W.B.id); log('  nach Eroberung: Reich', camp.kingdomId, 'B', W.B.id); }
+  if (how === 'conquest') WW.Cities.transferCity(sim, camp, W.B.id);
   else if (how === 'gov') sim.actions.setGovernment(W.A.id, 'democracy');
   else sim.actions.setLaw('camps', false);
   run(sim, 130);

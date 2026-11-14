@@ -55,6 +55,26 @@
 //   26×32,5 (oy -8), Langhaus und Arsenal 26×21,5/23,5 (oy -5/-7), Kommandantur 18×23,5 (oy -7), Baracke 18×16,5,
 //   Wachturm 11×27,5 (oy -19), Gefangenenlager 18×18,5 (oy -2), Kamel 19×18,5 (ox -6, oy -10,5), Wrack 17..19×12.
 //   Alle Gebäude haben Nachtfassungen über S.litKey (…_lit).
+//  Seefahrt (9.9)
+//   S.harborKey(gov, culture, dir) -> 's_harbor_<stil>_<dir>' (2×2 Land-Grundfläche), dir = Seite, auf der das Wasser
+//     liegt ('s' Standard, 'n', 'e', 'w'); der Steg ragt 10 Logikpixel (gut eine Kachel) über die Grundfläche hinaus
+//     ins Wasser (Anlegekachel dock). Stile: mitte, republic (Backsteinspeicher mit Kran), nord (Bootshaus mit Torf),
+//     sahel (Lehm mit Zinnen), nil (weiß, Palmdach), steam (Faschismus/Kommunismus: Betonkai, Stahlkran), tribe (Steg
+//     mit Kanugestell). 's_harbor' = mitte_s. Nachtfassung über S.litKey.
+//   S.shipKey(kind, gov, dir, frame, culture) -> 'hs9_<kind>_<stil>_<dir>_<frame>'; kind fishboat|trader|transport|
+//     warship, dir 'e','w','n','s' (oder 0 O,1 S,2 W,3 N wie state.ships.dir), frame 0/1 (Schaukeln, Segel/Ruder).
+//     Stile: canoe (Stamm), sail (Standard), steam (Faschismus/Kommunismus, Schlot, Zeichen am Rumpf), longship (nord),
+//     dhow (sahel), barque (nil). Mittig auf der Kachel, Wasserlinie 2 Logikpixel über der Kachelunterkante;
+//     seitlich etwa 10..22 lang (Kriegsschiff am größten). Kein Bodenschatten.
+//   'fx_wake_0..3' (Kielwasser, 12×8, mittig, für Fahrt nach rechts; flip für links), 'fx_splash_0..3' (Einschlag
+//     im Wasser), 'fx_shipsmoke_0..3' (= Schornsteinrauch). 'd_wreck_ship' (Wrack im Flachwasser, Mast schräg).
+//     Icons 'i_ship', 'i_harbor'.
+//  Zug am Lager (9.9)
+//   's_camp_station' (2×2): Verladerampe mit Kisten, Kohle, Steinen, kleiner Bude; Rampe an der Südkante, das Gleis
+//     (t_rail_*) läuft in der Kachelreihe südlich davor. Offene Güterwagen mit Ladung: S.trainKey('car', kind, dir)
+//     mit kind 'ore' | 'stone' | 'timber' | 'crates' (zusätzlich zu freight/coal/troop) -> 'tr_car_<kind>_<dir>'.
+//   Zauntor mit Gleis: S.gateKey('fence', level, dir, true) -> 's_gate_fence_rail_h|v' (breit offen, Gleis liegt als
+//     Bodenüberlagerung darunter).
 // ============================================================================
 (function (WW) { 'use strict';
 

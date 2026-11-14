@@ -244,8 +244,9 @@
 //     -Art, -Maske, Brücke, Feuer, Marke, Rodung, grazed, Verödung 3 Stufen, Ruß, murk/crack/fallout in 8er-Stufen, flora, Vorkommen,
 //     Gebiet, Ring). NICHT gemeldet: Stufe/Stil/Fertigstellung von Bauwerken, Feldwachstum, Baufortschritt, Lebenspunkte
 //     (Bauwerke werden in 2D und 3D ohnehin je Bild aus dem Zustand gezeichnet; Neubau/Abriss ändert die ID und wird gemeldet).
-//   state.grazed Uint8 (W*H, gespeichert): 1 = sichtbar abgeweidet, mit Hysterese (an ab CONFIG.GRAZED_ON 140, aus unter
-//     GRAZED_OFF 110). Darstellung bitte st.grazed[i] statt graze[i] >= 128 lesen (auch in groundSig).
+//   state.grazed Uint8 (W*H, gespeichert): 1 = sichtbar abgeweidet, mit Hysterese (an ab CONFIG.GRAZED_ON 170, aus unter
+//     GRAZED_OFF 90; nur fruchtbares Gelände). Darstellung bitte st.grazed[i] statt graze[i] >= 128 lesen (auch in groundSig),
+//     sonst passen gezeichnete Beweidung und Meldungen nicht zusammen.
 // =============================================================================
 (function (WW) { 'use strict';
 
