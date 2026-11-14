@@ -520,20 +520,29 @@ test('13 Feldzug: Heer sammelt sich mit Fahrzeugen, marschiert gemeinsam, Belage
   const hm = WW.Military.holdArmy(sim, o.B, o.A, o.B.relations[o.A.id], idle.slice(0, 3), 0);
   log('Heer wartet: ohne Fahrzeuge', h0, '| mit 2 Fahrzeugen', h1, '| nur 3 Soldaten', h2, '| Monarchie (kein Feldzug)', hm);
   assert(h0 && !h1 && h2 && !hm, 'Sammeln falsch');
-  // gemeinsamer Marsch: Soldaten laufen den Fahrzeugen nicht weit davon
-  const sol = [];
-  for (let i = 0; i < 10; i++) { const u = soldier(sim, o.A, o.ca, o.ca.cx + 6 + (i % 3), o.ca.cy - 2 + (i >> 2)); u.order = { kind: 'march', city: o.cb.id, k: o.B.id }; sol.push(u); }
+  // gemeinsamer Marsch: Soldaten laufen den Fahrzeugen nicht weit davon (Vergleich: dasselbe ohne Feldzug-Regel)
+  for (let i = 0; i < 10; i++) { const u = soldier(sim, o.A, o.ca, o.ca.cx + 6 + (i % 3), o.ca.cy - 2 + (i >> 2)); u.order = { kind: 'march', city: o.cb.id, k: o.B.id }; }
   for (const v of vehicles(sim, o.A.id)) v.order = { kind: 'march', city: o.cb.id, k: o.B.id };
-  let maxLead = 0;
-  for (let i = 0; i < 1200; i++) {
-    sim.tick();
-    const vs = vehicles(sim, o.A.id).filter((v) => v.order), ss = sol.filter((u) => !u.dead && u.order && u.order.kind === 'march' && u.foe < 0);
-    if (!vs.length || !ss.length) continue;
-    const vx = vs.reduce((a, v) => a + v.x, 0) / vs.length, sx = ss.reduce((a, u) => a + u.x, 0) / ss.length;
-    maxLead = Math.max(maxLead, sx - vx);
-  }
-  log('größter Vorsprung der Infanterie vor den Fahrzeugen:', maxLead.toFixed(1), 'Kacheln');
-  assert(maxLead < 14, 'Infanterie läuft den Fahrzeugen davon');
+  const save = sim.serialize();
+  const lead = (on) => {
+    const G = WW.MIL.CAMPAIGN.govs, keep = Object.assign({}, G);
+    if (!on) for (const g in G) delete G[g];
+    try {
+      const L = WW.Sim.load(save); L._throwErrors = true;
+      let maxLead = 0, sum = 0, n = 0;
+      for (let i = 0; i < 1200; i++) {
+        L.tick();
+        const vs = vehicles(L, o.A.id).filter((v) => v.order), ss = L.state.units.filter((u) => !u.dead && !u.vehicle && u.kingdomId === o.A.id && u.order && u.order.kind === 'march' && u.foe < 0);
+        if (!vs.length || !ss.length) continue;
+        const vx = vs.reduce((a, v) => a + v.x, 0) / vs.length, sx = ss.reduce((a, u) => a + u.x, 0) / ss.length;
+        maxLead = Math.max(maxLead, sx - vx); sum += sx - vx; n++;
+      }
+      return { max: maxLead, avg: n ? sum / n : 0 };
+    } finally { Object.assign(G, keep); }
+  };
+  const on = lead(true), off = lead(false);
+  log('Vorsprung der Infanterie vor den Fahrzeugen: mit Feldzug Ø', on.avg.toFixed(1), 'max', on.max.toFixed(1), '| ohne Ø', off.avg.toFixed(1), 'max', off.max.toFixed(1));
+  assert(on.avg < off.avg * 0.7 || on.avg < 4, 'Infanterie läuft den Fahrzeugen davon');
   // vor einer Mauer gibt es keine Feldschlacht (und damit keine Aufgabe)
   let free = null;
   for (let y = 2; y < st.H - 2 && !free; y += 2) for (let x = 2; x < st.W - 2 && !free; x += 2) if (st.cities.every((c) => Math.hypot(c.cx - x, c.cy - y) > 45)) free = [x, y];

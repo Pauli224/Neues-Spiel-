@@ -461,6 +461,14 @@
     yearlyRuins(sim);
     disasters(sim);
     if (WW.Wild) WW.Wild.yearly(sim);
+    // im Jahreswechsel neu Erschaffene (Söldner, Zuwanderer, Kinder) stehen evtl. auf einer inzwischen überfluteten
+    // Kachel (z. B. Zentrum nach Krater): sofort auf festen Boden
+    const st = sim.state, W = st.W;
+    for (const u of st.units) {
+      if (u.dead || u.ind || u.seaS) continue;
+      const i = Math.floor(u.y) * W + Math.floor(u.x);
+      if (i >= 0 && i < st.terrain.length && WW.TERRAIN_LUT.walk[st.terrain[i]] <= 0) WW.Units.rescue(sim, u);
+    }
   }
 
   WW.Env = {

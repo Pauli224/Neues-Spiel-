@@ -674,7 +674,7 @@
 
   // Haken aus units.js updateAll: true = Einheit ist hier erledigt
   function unit(sim, u) {
-    if (sim._noSiegeEngines) return true;   // Testschalter der Belagerungstests: Kriegsgerät ruht ganz (auch vorhandenes)
+    if (sim._noSiegeEngines) { u.parole = sim.state.tick + 16; return true; }   // Testschalter der Belagerungstests: Kriegsgerät ruht ganz und ist kein Ziel
     if (u.cd > 0) u.cd--;
     if (((sim.state.tick + u.id) & 7) === 0) { think(sim, u); if (u.dead) return true; }
     moveV(sim, u);
@@ -893,10 +893,13 @@
       if (!vn || !sn) continue;
       const key = g.kid + '>' + g.city;
       live[key] = 1;
-      if (hold[key] == null) hold[key] = st.tick;
-      if (st.tick - hold[key] > C.waitYears * TPY()) continue;   // nicht ewig warten
       const tx = tc.cx + 0.5, ty = tc.cy + 0.5;
       const dV = Math.hypot(vx / vn - tx, vy / vn - ty);
+      // Wartezeit zählt nur, solange die Fahrzeuge nicht vorankommen (stecken sie fest, zieht das Heer nach waitYears allein weiter)
+      let h = hold[key];
+      if (!h || typeof h !== 'object') h = hold[key] = { t: st.tick, d: Math.round(dV) };
+      if (dV < h.d - 1) { h.t = st.tick; h.d = Math.round(dV); }
+      if (st.tick - h.t > C.waitYears * TPY()) continue;   // nicht ewig warten
       const edge = cityR(tc) + C.waitR;
       for (const u of g.list) {
         if (u.vehicle || u.role !== 'soldier' || u.foe >= 0) continue;
@@ -949,6 +952,8 @@
       for (const u of list) {
         if (budget <= 0) return;
         if (u.vehicle || u.foe >= 0 || u.role !== 'soldier') continue;
+        const tc = u.order && u.order.kind === 'march' ? sim._cities.get(u.order.city) : null;
+        if (tc && Math.hypot(u.x - tc.cx, u.y - tc.cy) <= cityR(tc) + B.commitR) continue;   // kurz vor dem Ziel: Belagerung geht vor
         budget--;
         let best = null, bd = B.engageR * B.engageR;
         WW.Units.forNear(sim, u.x, u.y, B.engageR, false, (v, d2) => { if (d2 < bd && FIGHTER[v.role] && outside(v.x, v.y) && WW.Units.hostile(sim, u, v)) { bd = d2; best = v; } });   // nie hinter eine Mauer locken
