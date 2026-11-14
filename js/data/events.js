@@ -251,7 +251,8 @@
       'Ein Streit über die richtige Reihenfolge beim Händeschütteln lähmt {kingdom_acc}. Die Städte fühlen sich vergessen.',
       'Die Statthalter {kingdom_dat} zanken um {@ding}. Die Bauarbeiten ruhen derweil.'] });
   ev('putsch_versuch', 'politics', 'kingdom', 'Putschversuch', { weight: 0.5, prio: 2, cooldown: 12,
-    when: c => c.L.happy < 35 && c.gov !== 'anarchy' && c.gov !== 'democracy' && canGov(c) ? 2 : 0,
+    // 9.10: Ein faschistisches Regime wird nur in einer echten Krise weggeputscht (verlorene Stadt, belagerte Hauptstadt, Hunger)
+    when: c => c.L.happy < 35 && c.gov !== 'anarchy' && c.gov !== 'democracy' && canGov(c) && (c.gov !== 'fascism' || !(WW.Gov && WW.Gov.fascistCrisis) || WW.Gov.fascistCrisis(c.sim, c.k)) ? 2 : 0,
     effects: [{ gov: ['fascism', 'democracy', 'anarchy', 'monarchy'] }, { happy: -5 }], texts: [''],
     pickTexts: c => (c.vars.oldGov ? 'ok' : 'fail'), textsBy: {
       ok: ['Putsch {kingdom_in}! Eine Gruppe Unzufriedener stürmt den Palast. Ab heute herrscht {gov_d}, vorerst.',

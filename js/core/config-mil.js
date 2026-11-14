@@ -41,7 +41,7 @@
     // alt: Behelf ohne Rohstoffe (Möglichkeiten der Reihe nach: Gold, Holz + Stein, Holz; ohne Goldwirtschaft altNoGold), Tempo × altSpeed
     COST: { tank: { iron: 10, coal: 6, work: 260 }, artillery: { iron: 6, coal: 3, work: 200 },
             alt: [{ gold: 30 }, { wood: 30, stone: 20 }, { wood: 50 }], altNoGold: [{ wood: 25, stone: 25 }, { wood: 50 }, { stone: 50 }], altSpeed: 0.5, step: 40,
-            waitSteps: 6, noWorkshop: 0.7, keep: 40, keepCoal: 8 },   // keep: Holz/Stein, die nach Behelf/Arsenal-Baustelle übrig bleiben müssen; keepCoal: Kohle-Rest für Fabriken/Züge   // waitSteps: Prüfungen, die ein Arsenal mit eigener Mine auf Eisen/Kohle wartet; noWorkshop: Tempo ohne Werkstatt
+            waitSteps: 6, noWorkshop: 0.7, keep: 20, keepCoal: 4 },   // keep: Holz/Stein, die nach Behelf/Arsenal-Baustelle übrig bleiben müssen; keepCoal: Kohle-Rest für Fabriken/Züge   // waitSteps: Prüfungen, die ein Arsenal mit eigener Mine auf Eisen/Kohle wartet; noWorkshop: Tempo ohne Werkstatt
 
     // Feldschlacht: mindestens min Kämpfer (beide Seiten zusammen, je Seite sideMin) im Umkreis r außerhalb der Mauerringe
     BATTLE: { min: 12, sideMin: 3, r: 10, rMax: 15, check: 20, breakAt: 0.4, ratio: 2, surrenderRatio: 3, minTicks: 100,
@@ -56,7 +56,7 @@
     // Kriegsbeginn); unterwegs warten die Soldaten auf die Fahrzeuge (lag Kacheln Vorsprung) und vor dem Angriff am Rand
     // (Stadtradius + waitR), höchstens waitYears je Feldzug
     CAMPAIGN: { govs: { fascism: 1, communism: 1 }, extraDist: 30, defWeight: 1.5, minArmy: 10, wantVeh: 2, holdYears: 2,
-                lag: 6, waitR: 8, waitYears: 1.5 },
+                lag: 5, waitR: 8, waitYears: 1.5 },
     WORLD_MAX: 48,         // höchstens so viele Fahrzeuge weltweit (Arsenale warten darüber)
     ENGINE_MUL: 0.3,       // Schaden von Panzern/Geschützen an Rammböcken und Katapulten
     WRECK_YEARS: 30, MAX_WRECKS: 80, MAX_SITES: 40,

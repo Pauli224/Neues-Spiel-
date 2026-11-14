@@ -230,7 +230,8 @@
     const C = M().COST;
     const mul = sp.costMul * (kind === 'tank' && sp.simple ? M().SIMPLE.costMul : 1);
     const list = (WW.GOVERNMENTS[k.gov] || {}).goldMul > 0 ? C.alt : C.altNoGold;
-    const src = alt ? list[Math.min(list.length - 1, alt === true ? 0 : alt | 0)] : { iron: C[kind].iron, coal: C[kind].coal };
+    const isAlt = alt === true || typeof alt === 'number';
+    const src = isAlt ? list[Math.min(list.length - 1, alt === true ? 0 : alt | 0)] : { iron: C[kind].iron, coal: C[kind].coal };
     const out = {};
     for (const r in src) out[r] = Math.max(1, Math.round(src[r] * mul));
     return out;
