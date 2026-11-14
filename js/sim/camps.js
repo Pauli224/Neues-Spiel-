@@ -49,7 +49,8 @@
 //   role 'prisoner' (graue Kleidung, ohne Waffe; Kriegsgefangene in der abgetragenen Uniform ihres Reichs):
 //     u.ind 'camp' (Bewegung macht diese Datei, nicht die KI), u.camp = ID des Haftorts (Lagerstadt-ID ODER stockade-ID),
 //     u.pow = Heimatreich (Kriegsgefangener) | -1 (politischer Gefangener), u.powC = Heimatstadt | -1,
-//     u.campState 'march' (wird hingeführt) | 'held' (im Lager) | 'home' (Heimweg nach Befreiung/Freilassung),
+//     u.campState 'march' (wird hingeführt) | 'wait' (wartet am Bahnhof u.campVia auf den Gefangenenzug) | 'train'
+//     (fährt im Gefangenenzug u.train; Position = Zug) | 'held' (im Lager) | 'home' (Heimweg nach Befreiung/Freilassung),
 //     u.kingdomId = -1 und u.cityId = -1 (gehören keinem Reich, zählen nirgends mit, sind nie Ziel; Reich des Haftorts
 //     über WW.Camps.holdOf), u.origK/u.origC (Herkunft),
 //     u.work (ID der Arbeitsstätte | -1), u.tx/u.ty (Ziel), u.powUntil (Jahr der vertraglichen Freilassung | 0).
@@ -62,11 +63,16 @@
 //   campBuilt (Keimzelle gesetzt), campFounded (Lagerstadt steht), campFence (Zaun fertig), campBarrack (neue Baracke),
 //   campPickup, campIntern (Rebellen), campPow (Kriegsgefangene eingeliefert), campBreakout, campRiot (Teil entkommt),
 //   campUprising (Insassen übernehmen: freie Stadt, eigenes Reich), campProtest, campLiberated (Befreiung, why:
-//   'conquest'|'gov'|'law'|'uprising'|'fall'), campMemorial, powTaken (Kriegsgefangene, stockade), powReturn (Rückgabe
+//   'conquest'|'gov'|'law'|'uprising'|'fall'), campMemorial, campTrain (Gefangenenzug, ab 4 Insassen), campTrainFreed, powTaken (Kriegsgefangene, stockade), powReturn (Rückgabe
 //   beim Frieden), powKept (Regime behält einen Teil), powExchange (Gefangenenaustausch), powHome (Heimkehr), powEscape.
 // FX
 //   campgate { x, y } (Tor öffnet sich für einen Zug Gefangener), freed { x, y } (Befreiung: Konfetti/Freude),
 //   memorial { x, y } (Mahnmal enthüllt). Bewegung der Gefangenen ist normale Einheiten-Bewegung (moving, dir).
+// BAHN (Kopf von js/sim/rail.js): Lagerstädte von Bahn-Reichen bekommen eine Verladerampe (station.campStation, Sprite
+//   's_camp_station') vor dem Tor und ein Gleis zur Mutterstadt: Güterzug holt den Ertrag ab, Truppenzug bringt Wachen,
+//   Gefangenenzug (train.kind 'prison', train.prisoners [IDs], train.guards, train.camp) bringt Gefangene vom Bahnhof der
+//   Mutterstadt zur Rampe; ohne fertige Strecke marschieren sie. Zug liegengeblieben/Lager befreit -> Insassen frei.
+//   Felder: city.station (Rampe), city.railLine, city.campShipped (per Zug abgeholte Menge).
 // FUNKTIONEN (WW.Camps)
 //   tick(sim), defaults(st), unit(sim, u) (Haken über WW.Industry.unit), capture(sim, att, t, opts?) -> bool
 //     (Haken in units.js hitUnit und für js/sim/military.js bei Aufgabe; opts.surrender = true: ohne Zufall/Unterzahl-
@@ -173,6 +179,12 @@
     u.merc = false; u.work = -1; u.moving = false;
     u.hp = Math.max(4, Math.round(u.maxHp * 0.5));
     if (!o.march) { const p = centerXY(place); u.x = p.x; u.y = p.y; }
+    u.campVia = 0; u.train = 0;
+    // mit Gleisanschluss: erst zum Bahnhof der Mutterstadt, dann im Gefangenenzug zur Rampe
+    if (o.march && place.kind === 'camp' && WW.Rail && WW.Rail.campTownStation) {
+      const ts = WW.Rail.campTownStation(sim, place);
+      if (ts && dist2(u.x, u.y, ts.x + 1, ts.y + 1) < dist2(u.x, u.y, place.cx, place.cy)) u.campVia = ts.id;
+    }
     if (place.kind === 'camp') { place.inmates = (place.inmates | 0) + 1; if (pow) place.pows = (place.pows | 0) + 1; }
     else place.inmates = (place.inmates | 0) + 1;
     if (place.kind === 'camp' && hk) fear(sim, hk);
@@ -259,6 +271,15 @@
     return true;
   }
 
+  // Haken für js/sim/military.js: eine geschlagene Truppe ergibt sich (alle, ohne Zufall). Rückgabe: Anzahl Gefangener
+  function surrender(sim, kid, soldiers, battle) {
+    const att = { id: -1, kingdomId: kid };
+    let n = 0;
+    for (const u of soldiers || []) if (capture(sim, att, u, { surrender: true })) n++;
+    void battle;
+    return n;
+  }
+
   // ---------------------------------------------------------------------------
   // Bewegung der Gefangenen (Haken über WW.Industry.unit)
   // ---------------------------------------------------------------------------
@@ -271,6 +292,8 @@
     if (!h) { release(sim, u, null); return false; }
     if (h.type === 'laborcamp') { u.moving = false; return true; }   // alter Stand: Keimzelle wird gleich zur Lagerstadt
     if (u.campState === 'march') { marchTo(sim, u, h); return true; }
+    if (u.campState === 'wait') { waitTrain(sim, u, h); return true; }
+    if (u.campState === 'train') { onTrain(sim, u); return true; }
     held(sim, u, h);
     return true;
   }
@@ -314,12 +337,92 @@
     return false;
   }
   function marchTo(sim, u, h) {
-    const W = sim.state.W, t = targetTile(sim, u, h);
+    const W = sim.state.W;
+    if (u.campVia) {
+      const ts = sim._structs.get(u.campVia);
+      if (!ts || ts.dead || h.kind !== 'camp' || !WW.Rail || !WW.Rail.campLineOf(sim, h)) u.campVia = 0;
+      else {
+        const t = (ts.y + ((u.id >> 1) & 1)) * W + ts.x + (u.id & 1);
+        if (walk(sim, u, t, ts.x + 1, ts.y + 1)) { u.campState = 'wait'; u.waitT = sim.state.tick; u.fails = 0; }
+        return;
+      }
+    }
+    const t = targetTile(sim, u, h);
     if (walk(sim, u, t, (t % W) + 0.5, Math.floor(t / W) + 0.5)) {
       u.campState = 'held'; u.fails = 0; u.campT = 0;
       if (h.kind === 'camp') sim.fx({ type: 'campgate', x: u.x, y: u.y });
     }
   }
+  // Am Bahnhof auf den Gefangenenzug warten (bewacht, ohne Arbeit)
+  function waitTrain(sim, u, h) {
+    const ts = sim._structs.get(u.campVia);
+    if (!ts || ts.dead || !WW.Rail || !WW.Rail.campLineOf(sim, h)) { u.campVia = 0; u.campState = 'march'; u.marchT = sim.state.tick; return; }
+    u.moving = false;
+  }
+  function onTrain(sim, u) {
+    const tr = sim.state.trains.find((t) => t.id === u.train && t.kind === 'prison');
+    if (!tr) { u.campState = 'march'; u.campVia = 0; u.train = 0; u.marchT = sim.state.tick; return; }
+    u.x = tr.x; u.y = tr.y; u.moving = false;
+  }
+  // Haken aus rail.js: Gefangenenzug an der Rampe angekommen -> aussteigen, bewacht durchs Tor
+  function unload(sim, tr) {
+    let n = 0;
+    for (const id of tr.prisoners || []) {
+      const u = sim._units.get(id);
+      if (!u || u.dead || u.role !== 'prisoner' || u.campState !== 'train' || u.train !== tr.id) continue;
+      u.campState = 'march'; u.campVia = 0; u.train = 0; u.x = tr.x; u.y = tr.y; u.marchT = sim.state.tick; u.fails = 0; u.path = null;
+      n++;
+    }
+    if (n) sim.fx({ type: 'campgate', x: tr.x, y: tr.y });
+    return n;
+  }
+  // Haken aus rail.js: Gefangenenzug bleibt liegen / Lager befreit -> die Insassen kommen frei
+  function trainFreed(sim, tr) {
+    const list = [];
+    for (const id of tr.prisoners || []) {
+      const u = sim._units.get(id);
+      if (!u || u.dead || u.role !== 'prisoner' || u.campState !== 'train' || u.train !== tr.id) continue;
+      u.x = tr.x; u.y = tr.y; u.train = 0; u.campVia = 0;
+      release(sim, u, null);
+      list.push(u);
+    }
+    if (list.length) {
+      let c = null, bd = 1e18;
+      for (const t of sim.state.cities) { if (t.dead) continue; const d = dist2(t.cx, t.cy, tr.x, tr.y); if (d < bd) { bd = d; c = t; } }
+      sim.fx({ type: 'freed', x: tr.x, y: tr.y });
+      chron(sim, 'campTrainFreed', { city: c ? c.name : '', n: list.length }, c, list.length + ' Gefangene aus dem liegengebliebenen Zug sind frei');
+    }
+    return list.length;
+  }
+  // Gefangenenzüge abfertigen (alle 20 Ticks): ab 3 Wartenden oder nach 240 Ticks Wartezeit
+  function dispatch(sim) {
+    const st = sim.state;
+    let wait = null;
+    for (const u of st.units) {
+      if (u.dead || u.role !== 'prisoner' || u.campState !== 'wait') continue;
+      (wait || (wait = new Map()));
+      const l = wait.get(u.camp) || []; l.push(u); wait.set(u.camp, l);
+    }
+    if (!wait) return;
+    for (const [cid, list] of wait) {
+      const camp = sim._cities.get(cid);
+      if (!isCamp(camp)) continue;
+      const oldest = list.reduce((m, u) => Math.min(m, u.waitT | 0), st.tick);
+      if (list.length < 3 && st.tick - oldest < 240) continue;
+      list.sort((a, b) => a.id - b.id);
+      const tr = WW.Rail.prisonTrain(sim, camp, list.map((u) => u.id));
+      if (!tr) continue;
+      for (const u of list) { u.campState = 'train'; u.train = tr.id; u.moving = false; }
+      const k = sim._kingdoms.get(camp.kingdomId);
+      const from = sim._cities.get((sim._structs.get(tr.from) || {}).cityId);
+      if (list.length >= 4 && st.year - (camp.campTrainY == null ? -99 : camp.campTrainY) >= 2) {
+        camp.campTrainY = st.year;
+        chron(sim, 'campTrain', { city: camp.name, other: from ? from.name : '', n: list.length, kingdom: k ? k.name : '' }, from || camp,
+          list.length + ' Gefangene im Zug nach ' + camp.name + '; die Fahrpläne nennen ihn „Sonderzug"');
+      }
+    }
+  }
+
   // Im Haftort: Lagerstadt = Zwangsarbeit im Zaun; Gefangenenlager = warten
   function held(sim, u, h) {
     const st = sim.state, W = st.W;
@@ -359,7 +462,8 @@
     const dx = u.tx - u.x, dy = u.ty - u.y, d = Math.sqrt(dx * dx + dy * dy);
     if (d > 0.3) {
       // Schienen-Baustellen liegen auch außerhalb des Zauns: dorthin geht es bewacht durchs Tor (eigener Weg)
-      if (u.work >= 0) { walk(sim, u, Math.floor(u.ty) * W + Math.floor(u.tx), u.tx, u.ty); return; }
+      const outside = h.kind === 'camp' && h.wall && h.wall.plan && st.inRing[Math.floor(u.y) * W + Math.floor(u.x)] !== h.id;
+      if (u.work >= 0 || outside) { u.marchT = u.marchT > st.tick - 600 ? u.marchT : st.tick; walk(sim, u, Math.floor(u.ty) * W + Math.floor(u.tx), u.tx, u.ty); return; }
       const sp = 0.05, nx = u.x + dx / d * sp, ny = u.y + dy / d * sp;
       const i = Math.floor(ny) * W + Math.floor(nx);
       if (nx >= 0 && ny >= 0 && nx < W && ny < st.H && WW.TERRAIN_LUT.walk[st.terrain[i]] > 0 && !sim.block[i]) { u.x = nx; u.y = ny; u.dir = dx < 0 ? -1 : 1; }
@@ -668,7 +772,7 @@
     if ((camp.guards | 0) < camp.guardsWant) recruitGuard(sim, camp, k);
     // Ertrag geht in die Mutterstadt (Träger; mit Gleisanschluss gleicht zusätzlich der Zug aus)
     const p = payer(sim, camp);
-    if (p !== camp) {
+    if (p !== camp && !(WW.Rail && WW.Rail.campLineOf && WW.Rail.campLineOf(sim, camp))) {   // mit Gleis holt der Güterzug ab
       const a = WW.Cities.stock(sim, camp), b = WW.Cities.stock(sim, p);
       if (a !== b) for (const r of ['wood', 'stone', 'iron', 'coal', 'gold', 'crystal']) {
         const v = a[r] || 0;
@@ -738,7 +842,13 @@
       if (!pick && c === from[0] && (c.adults | 0) >= 8) {
         for (const u of st.units) if (!u.dead && u.cityId === c.id && !u.order && !u.ind && (u.role === 'farmer' || u.role === 'lumberjack' || u.role === 'miner')) { pick = u; WW.Units.setRole(sim, u, 'soldier'); break; }
       }
-      if (pick) { pick.cityId = camp.id; pick.order = { kind: 'home' }; pick.path = null; camp.guards = (camp.guards | 0) + 1; return pick; }
+      if (pick) {
+        pick.cityId = camp.id; pick.order = { kind: 'home' }; pick.path = null; camp.guards = (camp.guards | 0) + 1;
+        // mit Gleisanschluss: steigt am Bahnhof in den Truppenzug zum Lager
+        const ts = WW.Rail && WW.Rail.campTownStation ? WW.Rail.campTownStation(sim, camp) : null;
+        if (ts && dist2(pick.x, pick.y, ts.x + 1, ts.y + 1) < 14 * 14) WW.Rail.guardTrain(sim, camp, pick);
+        return pick;
+      }
     }
     return null;
   }
@@ -1118,13 +1228,14 @@
     const st = sim.state, cfg = C();
     if (st.tick % cfg.PLAN_EVERY === 97) plan(sim);
     if (st.tick % cfg.BUILD_EVERY === 17) for (const c of st.cities) if (isCamp(c)) buildStep(sim, c);
+    if (st.tick % 20 === 13 && WW.Rail && WW.Rail.prisonTrain) dispatch(sim);
     if (st.tick % TPY() === 151) yearly(sim);
   }
 
   WW.Camps = {
     tick: tick, defaults: defaults, unit: unit, capture: capture, onPeace: onPeace, cityUpdate: cityUpdate,
     campsOf: campsOf, stockadesOf: stockadesOf, inmatesOf: inmatesOf, holdOf: holdOf, liberate: liberate, intern: intern,
-    found: found, grow: grow, uprising: uprising, isRegime: isRegime, count: count
+    found: found, grow: grow, uprising: uprising, isRegime: isRegime, count: count, unload: unload, trainFreed: trainFreed, surrender: surrender
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

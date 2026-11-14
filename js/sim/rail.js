@@ -23,7 +23,7 @@
 // ZUSTAND
 //   state.rail = { lines: [{ id, kingdomId, a, b (Bahnhof-IDs), tiles [Kachel-Indizes von a nach b], done (ganz gebaut),
 //                  opened (Eröffnung in der Chronik), broken (Lücke gemeldet) }], seq, fail { 'a-b': Jahr } }
-//   state.trains[] = { id, kingdomId, kind 'freight'|'troop', x, y (Kachelkoord., Fließkomma), dir 0 O | 1 S | 2 W | 3 N,
+//   state.trains[] = { id, kingdomId, kind 'freight'|'troop'|'prison', x, y (Kachelkoord., Fließkomma), dir 0 O | 1 S | 2 W | 3 N,
 //                  cars (Wagen), cargo { food, wood, stone, gold }, from, to (Bahnhof-IDs), t ('load'|'run'|'blocked'),
 //                  line (ID), pos (Index entlang line.tiles, Fließkomma), fw (+1 a->b | -1), wait (Ticks), troops [Einheiten-IDs], coal (fährt mit Kohle: schneller) }
 //   Einheiten im Zug: u.ind = 'train', u.train = Zug-ID (laufen nicht selbst; js/sim/units.js überspringt sie, markierte Zeile)
@@ -33,7 +33,19 @@
 //   Fahrende Züge stoßen Qualm aus (WW.Industry: RAIL.EMIT in die Zelle des Zugs).
 // FX: trainsmoke { x, y } (alle 8 Ticks je fahrendem Zug), whistle { x, y } (Abfahrt)
 // EREIGNISSE (group 'economy'|'war', mit effectText): railStation, railFirst, railBroken, railRepaired, railTroops
-// SCHNITTSTELLE: WW.Rail.tick(sim), defaults(st), ride(sim, u), lineOf(sim, id), path(sim, a, b), emitters(sim)
+// LAGERSTADT (js/sim/camps.js, city.kind 'camp'): Reiche mit Bahn geben jeder Lagerstadt, sobald ihr Zaun steht, eine
+//   Verladerampe (Bauwerk 'station' mit Feld campStation: true, 2×2, vor dem Lagertor außerhalb des Zauns; Sprite
+//   's_camp_station') und ein Gleis zum Bahnhof der Mutterstadt (city.campHome; fehlt dort ein Bahnhof, wird einer gebaut).
+//   Der Zaun bleibt dicht (das Gleis endet vor dem Tor). line.camp = ID der Lagerstadt; camp.station = Rampen-ID,
+//   camp.railLine = Strecken-ID. Gebaut von Wachen und Insassen (Bautrupp der Lagerstadt) und dem Bautrupp der Strecke.
+//   Güterzug (kind 'freight') pendelt: ab Lager lädt er alles Erarbeitete (Stein, Holz, Eisen, Kohle, Gold, Kristall)
+//   und liefert es in der Mutterstadt ab; Brennstoff zahlt die Mutterstadt. Truppenzug (kind 'troop') bringt neue Wachen.
+//   Gefangenenzug (kind 'prison'): Gefangene sammeln sich am Bahnhof der Mutterstadt und fahren zur Rampe; Felder
+//   prisoners [Einheiten-IDs an Bord], guards (Zahl der mitfahrenden Wachen, nur Anzeige), camp (Lagerstadt-ID).
+//   Die Insassen steigen an der Rampe aus und gehen bewacht durchs Tor. Bleibt ein Gefangenenzug liegen (Gleis zerstört,
+//   Lager befreit oder erobert), kommen die Insassen frei (WW.Camps.trainFreed). Niemand stirbt im Zug.
+// SCHNITTSTELLE: WW.Rail.tick(sim), defaults(st), ride(sim, u), lineOf(sim, id), path(sim, a, b), emitters(sim),
+//   campLineOf(sim, camp) -> fertige Strecke | null, prisonTrain(sim, camp, ids) -> Zug | null, guardTrain(sim, camp, u) -> bool
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -323,6 +335,7 @@
         if (!buildLine(sim, line)) { const p = path(sim, a, b, k.id); if (p && p.length >= R().MIN_LEN) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year; }
       }
     }
+    campLines(sim);
     // Masken der Strecken frisch halten (zerstörte Gleise, neue Nachbarn)
     const rings = ringTiles(sim);
     for (const l of st.rail.lines) for (const i of l.tiles) {
@@ -330,6 +343,133 @@
       const r = sim._structs.get(st.structAt[i]);
       if (r && r.type === 'rail') { const g = rings.has(i); if (!!r.railGate !== g) { r.railGate = g; sim.markDirty(i); } }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lagerstadt: Verladerampe und Gleis zur Mutterstadt
+  // ---------------------------------------------------------------------------
+  function campTown(sim, camp, k) {
+    const h = sim._cities.get(camp.campHome);
+    if (h && !h.dead && h.kind !== 'camp' && h.kingdomId === k.id && h.centerOk) return h;
+    let best = null, bd = 1e9;
+    for (const id of k.cityIds) {
+      const c = sim._cities.get(id);
+      if (!c || c.dead || c.kind === 'camp' || !c.centerOk) continue;
+      const d = Math.abs(c.cx - camp.cx) + Math.abs(c.cy - camp.cy);
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+  // Verladerampe direkt vor dem Lagertor (außerhalb des Zauns)
+  function placeRamp(sim, camp, k) {
+    const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
+    const g = (camp.wall.gates || [])[0];
+    if (g == null) return null;
+    const gx = g % W, gy = Math.floor(g / W), plan = new Set(camp.wall.plan || []);
+    let best = -1, bd = 1e9;
+    for (let y = gy - 6; y <= gy + 5; y++) for (let x = gx - 6; x <= gx + 5; x++) {
+      if (x < 1 || y < 1 || x + 2 >= W || y + 2 >= H) continue;
+      let ok = true;
+      for (let dy = -1; dy <= 2 && ok; dy++) for (let dx = -1; dx <= 2 && ok; dx++) {
+        const i = (y + dy) * W + x + dx, inner = dx >= 0 && dy >= 0 && dx < 2 && dy < 2;
+        if (st.inRing[i] !== -1 || plan.has(i)) { ok = false; break; }   // samt Rand: nicht am Zaun kleben
+        if (!inner) continue;
+        const t = st.terrain[i];
+        if (!LUT.build[t] || LUT.water[t]) { ok = false; break; }
+        const o = st.owner[i];
+        if (o !== -1 && o !== camp.id) { const oc = sim._cities.get(o); if (!oc || oc.kingdomId !== k.id) { ok = false; break; } }
+        const s = sim._structs.get(st.structAt[i]);
+        if (s && s.type !== 'field' && s.type !== 'ruin') { ok = false; break; }
+      }
+      if (!ok) continue;
+      const d = Math.abs(x + 0.5 - gx) + Math.abs(y + 0.5 - gy);
+      if (d < bd) { bd = d; best = y * W + x; }
+    }
+    if (best < 0) return null;
+    const x = best % W, y = Math.floor(best / W);
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+      const o = sim._structs.get(st.structAt[(y + dy) * W + x + dx]);
+      if (o) WW.Structs.remove(sim, o);
+    }
+    const s = WW.Structs.create(sim, 'station', x, y, camp.id, { style: k.gov });
+    if (!s) return null;
+    s.campStation = true;
+    camp.sites.push(s.id);
+    chron(sim, 'railStation', { city: camp.name }, camp, 'economy', 'Verladerampe im Bau');
+    return s;
+  }
+  function selfBuild(sim, s, payer) {
+    if (!s || s.built) return;
+    if (!s.paid && WW.Cities.pay(sim, payer, WW.Structs.siteCost(sim, s, payer.id))) s.paid = true;
+    if (s.paid) { s.progress = Math.min(1, (s.progress || 0) + 0.25); if (s.progress >= 1) { WW.Structs.complete(sim, s); WW.Cities.refreshLists(sim, sim._cities.get(s.cityId) || payer); } }
+  }
+  function campLines(sim) {
+    const st = sim.state;
+    for (const camp of st.cities) {
+      if (camp.dead || camp.kind !== 'camp' || !camp.wall || camp.wall.state !== 'done') continue;
+      const k = sim._kingdoms.get(camp.kingdomId);
+      if (!govOk(sim, k)) continue;
+      const town = campTown(sim, camp, k);
+      if (!town) continue;
+      let a = stationOf(sim, camp);
+      if (!a && (camp.railNext | 0) <= st.tick) {
+        a = placeRamp(sim, camp, k);
+        if (!a) camp.railNext = st.tick + (TPY() >> 1);
+      }
+      let b = stationOf(sim, town);
+      if (!b && (town.railNext | 0) <= st.tick) { b = placeStation(sim, town, k, camp); if (!b) town.railNext = st.tick + (TPY() >> 1); }
+      selfBuild(sim, a, town); selfBuild(sim, b, town);
+      if (!a || !b) continue;
+      camp.station = a.id;
+      let line = st.rail.lines.find((l) => (l.a === a.id && l.b === b.id) || (l.a === b.id && l.b === a.id));
+      const key = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
+      if (!line) {
+        if (st.rail.fail[key] != null && st.year - st.rail.fail[key] < 3) continue;
+        const p = path(sim, a, b, k.id);
+        if (!p || p.length < 3) { st.rail.fail[key] = st.year; continue; }
+        line = { id: ++st.rail.seq, kingdomId: k.id, a: a.id, b: b.id, tiles: p, done: false, opened: false, broken: false, camp: camp.id };
+        st.rail.lines.push(line);
+      }
+      line.kingdomId = k.id; line.camp = camp.id; camp.railLine = line.id;
+      if (!buildLine(sim, line)) { const p = path(sim, a, b, k.id); if (p && p.length >= 3) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year; }
+    }
+  }
+  function campLineOf(sim, camp) {
+    const l = camp && camp.railLine != null ? lineOf(sim, camp.railLine) : null;
+    if (!l || !l.done || l.camp !== camp.id) return null;
+    const A = sim._structs.get(l.a), B = sim._structs.get(l.b);
+    return A && B && A.built && B.built && !A.dead && !B.dead ? l : null;
+  }
+  // Bahnhof der Stadt am anderen Ende der Lagerstrecke
+  function campTownStation(sim, camp) {
+    const l = campLineOf(sim, camp);
+    if (!l) return null;
+    return sim._structs.get(l.a === camp.station ? l.b : l.a) || null;
+  }
+  // Gefangenenzug vom Bahnhof der Mutterstadt zur Rampe; ids = Einheiten (campState 'wait'). Rückgabe Zug | null
+  function prisonTrain(sim, camp, ids) {
+    const l = campLineOf(sim, camp), k = sim._kingdoms.get(camp.kingdomId);
+    if (!l || !govOk(sim, k) || !ids.length) return null;
+    if (sim.state.trains.some((t) => t.line === l.id && t.kind === 'prison')) return null;
+    const tr = newTrain(sim, l, k, 'prison', l.a === camp.station ? -1 : 1);
+    tr.cars = 2; tr.camp = camp.id; tr.prisoners = ids.slice(); tr.guards = 1 + Math.ceil(ids.length / 6);
+    const from = cityOfStation(sim, tr.from), sf = from && WW.Cities.stock(sim, from);
+    if (sf && typeof sf.coal === 'number' && sf.coal >= R().FUEL) { sf.coal -= R().FUEL; tr.coal = true; }
+    else if (sf && sf.wood >= R().FUEL) sf.wood -= R().FUEL;
+    tr.t = 'run';
+    sim.fx({ type: 'whistle', x: tr.x, y: tr.y });
+    return tr;
+  }
+  // Truppenzug bringt eine neue Wache zum Lager (nur wenn keiner unterwegs ist)
+  function guardTrain(sim, camp, u) {
+    const l = campLineOf(sim, camp), k = sim._kingdoms.get(camp.kingdomId);
+    if (!l || !govOk(sim, k) || sim.state.trains.some((t) => t.line === l.id && t.kind === 'troop')) return false;
+    const tr = newTrain(sim, l, k, 'troop', l.a === camp.station ? -1 : 1);
+    tr.cars = 1;
+    u.ind = 'train'; u.train = tr.id; u.moving = false; u.path = null; tr.troops.push(u.id);
+    tr.t = 'run';
+    sim.fx({ type: 'whistle', x: tr.x, y: tr.y });
+    return true;
   }
 
   // ---------------------------------------------------------------------------
@@ -356,12 +496,21 @@
     const from = cityOfStation(sim, tr.from), to = cityOfStation(sim, tr.to);
     if (!from || !to) return false;
     const sf = WW.Cities.stock(sim, from);
-    // Brennstoff: Kohle, sonst Holz
-    if (typeof sf.coal === 'number' && sf.coal >= C.FUEL) { sf.coal -= C.FUEL; tr.coal = true; }
-    else if (sf.wood >= C.FUEL) { sf.wood -= C.FUEL; tr.coal = false; }
+    // Brennstoff: Kohle, sonst Holz (Lagerstrecke: zahlt die Mutterstadt)
+    const fuelC = from.kind === 'camp' ? to : from, sfu = WW.Cities.stock(sim, fuelC);
+    if (typeof sfu.coal === 'number' && sfu.coal >= C.FUEL) { sfu.coal -= C.FUEL; tr.coal = true; }
+    else if (sfu.wood >= C.FUEL) { sfu.wood -= C.FUEL; tr.coal = false; }
     else return false;
     tr.cargo = { food: 0, wood: 0, stone: 0, gold: 0 };
-    if (tr.kind === 'freight') {
+    if (tr.kind === 'freight' && line.camp != null) {
+      // ab Lager: alles Erarbeitete wird abgeholt (getrenntes Lager; im Kommunismus ist es ohnehin das Reichslager)
+      const stt = WW.Cities.stock(sim, to);
+      if (from.kind === 'camp' && sf !== stt) for (const r of ['wood', 'stone', 'iron', 'coal', 'gold', 'crystal']) {
+        const v = Math.min(C.CAR_CAP * tr.cars, sf[r] || 0);
+        if (v > 0.01) { sf[r] -= v; tr.cargo[r] = v; }
+      }
+      if (from.kind === 'camp') { let n = 0; for (const r in tr.cargo) n += tr.cargo[r]; from.campShipped = Math.round(((from.campShipped || 0) + n) * 10) / 10; }
+    } else if (tr.kind === 'freight') {
       const stt = WW.Cities.stock(sim, to);
       if (sf !== stt) for (const r of ['food', 'wood', 'stone']) {
         const d = sf[r] - stt[r];
@@ -377,6 +526,7 @@
     return true;
   }
   function arrive(sim, tr) {
+    if (tr.kind === 'prison') { if (WW.Camps) WW.Camps.unload(sim, tr); tr.prisoners = []; tr.dead = true; return; }
     const to = cityOfStation(sim, tr.to);
     if (to) for (const r in tr.cargo) if (tr.cargo[r] > 0) WW.Cities.addStock(sim, to, r, tr.cargo[r]);
     tr.cargo = { food: 0, wood: 0, stone: 0, gold: 0 };
@@ -440,6 +590,14 @@
     for (const tr of st.trains) {
       const line = lineOf(sim, tr.line), k = sim._kingdoms.get(tr.kingdomId);
       if (!line || !k) { gone = true; tr.dead = true; continue; }
+      if (tr.kind === 'prison') {
+        // Lager befreit/erobert, Strecke nicht mehr des Regimes oder Zug blockiert: die Insassen kommen frei
+        const camp = sim._cities.get(tr.camp);
+        if (!camp || camp.dead || camp.kind !== 'camp' || camp.kingdomId !== tr.kingdomId || !govOk(sim, k) || (tr.t === 'blocked' && (tr.blockedT = (tr.blockedT | 0) + 1) > 60)) {
+          if (WW.Camps) WW.Camps.trainFreed(sim, tr);
+          tr.prisoners = []; tr.dead = true; gone = true; continue;
+        }
+      }
       if (!govOk(sim, k)) continue;
       const L = line.tiles.length;
       if (tr.t === 'load') {
@@ -470,7 +628,7 @@
           if ((st.tick + tr.id) % 8 === 0) sim.fx({ type: 'trainsmoke', x: tr.x, y: tr.y });
           if ((tr.fw > 0 && tr.pos >= L - 1) || (tr.fw < 0 && tr.pos <= 0)) {
             arrive(sim, tr);
-            if (tr.kind === 'troop') { tr.dead = true; gone = true; }
+            if (tr.kind === 'troop' || tr.kind === 'prison') { tr.dead = true; gone = true; }
           }
         }
       }
@@ -514,6 +672,7 @@
     updateTrains(sim);
   }
 
-  WW.Rail = { tick: tick, defaults: defaults, ride: ride, lineOf: lineOf, path: path, emitters: emitters, stationOf: stationOf, plan: plan };
+  WW.Rail = { tick: tick, defaults: defaults, ride: ride, lineOf: lineOf, path: path, emitters: emitters, stationOf: stationOf, plan: plan,
+    campLineOf: campLineOf, campTownStation: campTownStation, prisonTrain: prisonTrain, guardTrain: guardTrain };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

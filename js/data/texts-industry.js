@@ -118,6 +118,14 @@
       'Aufstand in {city}! Die Gefangenen öffnen das Tor von innen, die Wachen laufen davon. {city} ist frei und gehört jetzt sich selbst: {kingdom}.',
       'In {city} übernehmen die Insassen. Kein Schuss, nur sehr viele Leute, die genug hatten. Aus dem Lager wird eine freie Stadt ({gov}).'
     ],
+    campTrain: [
+      'Ein Zug mit geschlossenen Wagen verlässt {other} Richtung {city}. An Bord: {n} Gefangene. Im Fahrplan steht „Sonderfahrt", in den Gesichtern am Bahnsteig etwas anderes.',
+      '{kingdom} schickt {n} Gefangene per Bahn nach {city}. Die Regierung lobt die Pünktlichkeit. Sonst lobt niemand etwas.'
+    ],
+    campTrainFreed: [
+      'Bei {city} bleibt ein Gefangenenzug liegen – die Türen gehen auf, {n} Menschen laufen in die Freiheit. Das Regime schickt einen Bericht, keinen Zug.',
+      'Der Gefangenenzug kommt nicht an: {n} Insassen sind frei. Bei {city} winken die Leute vom Feldrand.'
+    ],
     campMemorial: [
       'In {city} wird ein Mahnmal enthüllt. Darauf steht nur der Name des Lagers – und dass es nie wieder eines geben soll.'
     ],
