@@ -41,6 +41,8 @@
 //   GARNISON (u.garrison = Stadt-ID, Kern): solche Soldaten und Fahrzeuge zählen nicht zu Marschgruppen, Ausfällen, Abfangen
 //   oder Feldschlachten (weder Teilnehmer noch Verluste-Seite), werden von „Schlacht befehlen" nicht losgeschickt; ein
 //   stationiertes Fahrzeug folgt keinem Marsch, verteidigt aber seine Stadt.
+//   Weltobergrenze WW.MIL.WORLD_MAX (48) Fahrzeuge; eigenes Wegsuche-Teilbudget WW.MIL.PATH_SHARE (nimmt den Heeren nichts weg).
+//   Feldschlachten nie im Vorfeld einer Stadt (Ring bzw. Kernbebauung + BATTLE.siegeMargin): dort gilt die Belagerung.
 //   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts von selbst.
 //
 // ZUSTAND
@@ -250,6 +252,8 @@
   function production(sim) {
     const st = sim.state;
     const cnt = countVehicles(sim);
+    let total = 0;
+    for (const kid in cnt) total += cnt[kid].tank + cnt[kid].artillery;
     const ars = [];
     for (const s of st.structs) {
       if (s.dead || s.type !== 'arsenal') continue;
@@ -282,6 +286,7 @@
       const sp = govSpec(k.gov);
       s.idle = !sp;
       if (!sp || st.laws.industry === false || sim._noSiegeEngines) continue;   // Testschalter: kein Kriegsgerät von selbst
+      if (total >= M().WORLD_MAX && !s.prod) continue;   // Weltobergrenze (Leistung)
       if (!s.prod) {
         const war = WW.Diplo.atWar(sim, k.id);
         const have = cnt[k.id] || { tank: 0, artillery: 0 }, p = pend[k.id] || (pend[k.id] = { tank: 0, artillery: 0 });
@@ -315,7 +320,7 @@
         s.prod = null; s.prog = 0; s.pay = null;
         const u = spawnVehicle(sim, kind, k, s.x + 1.5, s.y + s.h + 0.5, city.id);
         if (!u) { s.prod = kind; s.prog = 0.95; continue; }
-        s.made = (s.made | 0) + 1;
+        s.made = (s.made | 0) + 1; total++;
         const have = cnt[k.id] || (cnt[k.id] = { tank: 0, artillery: 0 });
         have[kind]++;
         if (!k.milFirst) k.milFirst = {};

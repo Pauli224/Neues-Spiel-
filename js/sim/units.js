@@ -579,7 +579,7 @@
     if (u.phase === 0) {
       const nm = WW.Growth.natureMode(sim, sim._kingdoms.get(u.kingdomId), race);
       // Kahlschlag zieht immer weiter hinaus, Schonende lassen einen Hain um die Stadt stehen
-      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResource(sim, u, city, res, nm === 'exploit' ? 20 : 13);
+      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResourceFrom(sim, u, city, res, 2, nm === 'exploit' ? 20 : 13);   // zwischengespeichert (Leistung)
       if (i < 0) { wander(sim, u, city, 4); return; }
       const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
       if (g < 0) { wander(sim, u, city, 4); return; }
