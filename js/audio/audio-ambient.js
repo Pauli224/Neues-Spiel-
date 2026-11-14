@@ -1,7 +1,7 @@
 // =============================================================================
-// Wuselwelt – Ton, Umgebung: Dauerschichten (Wind, Meer, Fluss, Regen, Feuer, Stadt, Fabrik, Schlacht,
-// Grollen, Schneewind), Auswertung der Lage um die Bildmitte und Planung der Einzelklänge (Vögel, Grillen,
-// Frösche, Wellen, Hämmern, Knistern, Kampflärm, Tierrufe).
+// Wuselwelt – Ton, Umgebung: Dauerschleifen aus Aufnahmen (Wind, Brandung, Fluss, Waldvögel, Grillen, Regen,
+// Feuer, Stadt, Schmiede, Fabrik, Schlacht), Auswertung der Lage um die Bildmitte und Planung der
+// Einzelklänge (Möwen, Krähen, Hämmern, Holzhacken, Schwertklirren, Tierrufe).
 // WW.AudioAmbient.analyze(state, cam) -> mix; Beds(ctx, bus) -> { set(mix, t), stop() }
 // =============================================================================
 (function (WW) { 'use strict';
@@ -24,12 +24,10 @@
     return CLS;
   }
 
-  const MONSTERS = { dragon: 1, zombie: 1, skeleton: 1, slime: 1, ghost: 1, demon: 1, giantchicken: 1, yeti: 1, sandworm: 1, treant: 1, golem: 1 };
-  // Rufe je Tierart: Rezept, Rate je Tier und Sekunde
-  const CALLS = { sheep: ['sheep', 0.035], cow: ['cow', 0.025], chicken: ['chicken', 0.05], wolf: ['wolf', 0.012], bear: ['bear', 0.015],
-    dragon: ['dragon', 0.04], zombie: ['zombie', 0.05], skeleton: ['skeleton', 0.04], slime: ['slime', 0.04], ghost: ['ghost', 0.03],
-    demon: ['demon', 0.04], giantchicken: ['giantchicken', 0.05], yeti: ['yeti', 0.03], sandworm: ['sandworm', 0.02], treant: ['treant', 0.02],
-    golem: ['golem', 0.02] };
+  // Rufe je Tierart: [Klang, Rate je Tier und Sekunde, Tonhöhe]; fehlt die Art, bleibt sie stumm (z. B. Huhn: keine CC0-Aufnahme)
+  const CALLS = { sheep: ['sheep', 0.03], cow: ['cow', 0.02], wolf: ['wolf', 0.012], bear: ['bear', 0.012],
+    dragon: ['dragon', 0.03], zombie: ['snarl', 0.03, 0.8], demon: ['monster', 0.03, 0.9], yeti: ['monster', 0.025, 1.15],
+    sandworm: ['monster', 0.02, 0.7], golem: ['monster', 0.015, 0.6], treant: ['snarl', 0.015, 0.6], ghost: ['snarl', 0.02, 1.4] };
 
   // ---------------------------------------------------------------------------
   // Lage um die Bildmitte. cam = { x, y, dist } (Kacheln; dist = halbe Sichtbreite in Kacheln)
@@ -148,115 +146,77 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Dauerschichten
+  // Dauerschichten: Schleifen aus Aufnahmen (WW.AudioBank), weich überblendet, ruhen bei 0
   // ---------------------------------------------------------------------------
+  // Schicht -> Aufnahme, Grundpegel (Aufnahmen sind auf −24 LUFS angeglichen), Tiefpass
   const BEDS = {
-    wind(R, out, t) {
-      const a = R.noise('brown', t, null, true), lp = R.f('lowpass', 380, 0.5), ag = R.g(0.9); R.c(a, lp, ag, out);
-      const b = R.noise('pink', t, null, true), bp = R.f('bandpass', 600, 0.9), bg = R.g(0.35); R.c(b, bp, bg, out);
-      return { bp, bg, lp };
-    },
-    howl(R, out, t) {
-      const a = R.noise('white', t), bp = R.f('bandpass', 900, 9), ag = R.g(0.55); R.c(a, bp, ag, out); R.lfo('sine', 0.09, 250, bp.frequency, t);
-      const b = R.noise('white', t), bp2 = R.f('bandpass', 1500, 12), bg = R.g(0.35); R.c(b, bp2, bg, out); R.lfo('sine', 0.13, 400, bp2.frequency, t);
-      const am = R.lfo('sine', 0.21, 0.25, ag.gain, t);
-      return { am };
-    },
-    sea(R, out, t) {
-      const a = R.noise('pink', t, null, true), lp = R.f('lowpass', 520, 0.6), ag = R.g(0.8); R.c(a, lp, ag, out);
-      R.lfo('sine', 0.08, 0.25, ag.gain, t);
-      return {};
-    },
-    river(R, out, t) {
-      const a = R.noise('white', t, null, true), bp = R.f('bandpass', 1700, 0.6), lp = R.f('lowpass', 4500, 0.7), ag = R.g(0.35); R.c(a, bp, lp, ag, out);
-      R.lfo('sine', 0.7, 300, bp.frequency, t);
-      const b = R.noise('pink', t, null, true), lp2 = R.f('lowpass', 700, 0.7), bg = R.g(0.4); R.c(b, lp2, bg, out);
-      return {};
-    },
-    rain(R, out, t) {
-      const a = R.noise('white', t, null, true), hp = R.f('highpass', 1400, 0.6), lp = R.f('lowpass', 9000, 0.6), ag = R.g(0.45); R.c(a, hp, lp, ag, out);
-      const b = R.noise('pink', t, null, true), lp2 = R.f('lowpass', 900, 0.6), bg = R.g(0.35); R.c(b, lp2, bg, out);
-      return {};
-    },
-    fire(R, out, t) {
-      const a = R.noise('brown', t, null, true), lp = R.f('lowpass', 320, 0.7), ag = R.g(0.8); R.c(a, lp, ag, out);
-      const b = R.noise('pink', t), bp = R.f('bandpass', 1300, 0.6), bg = R.g(0.3); R.c(b, bp, bg, out); R.lfo('sine', 3.3, 0.15, bg.gain, t);
-      return {};
-    },
-    city(R, out, t) {
-      const a = R.noise('pink', t, null, true), lp = R.f('lowpass', 2600, 0.6), sum = R.g(1); R.c(sum, lp, out);
-      for (const [f, q, r, g0] of [[380, 3, 0.7, 0.9], [820, 3.5, 1.3, 0.7], [1500, 4, 2.1, 0.45], [2400, 5, 2.9, 0.2]]) {
-        const bp = R.f('bandpass', f, q), g = R.g(g0); R.c(a, bp, g, sum); R.lfo('sine', r, g0 * 0.5, g.gain, t); R.lfo('sine', r * 0.37, f * 0.08, bp.frequency, t);
-      }
-      return {};
-    },
-    factory(R, out, t) {
-      const lp = R.f('lowpass', 320, 2), am = R.g(0.7); R.c(lp, am, out);
-      for (const f of [50, 100.4, 150.9]) { const o = R.osc('sawtooth', f, t); o.connect(lp); }
-      R.lfo('square', 1.8, 0.2, am.gain, t);
-      const n = R.noise('brown', t), lp2 = R.f('lowpass', 220, 1), ng = R.g(0.6); R.c(n, lp2, ng, out);
-      return {};
-    },
-    battle(R, out, t) {
-      const lp = R.f('lowpass', 800, 0.7); lp.connect(out);
-      const a = R.noise('brown', t, null, true), ag = R.g(0.8); R.c(a, ag, lp);
-      const b = R.noise('pink', t, null, true), bp = R.f('bandpass', 900, 0.8), bg = R.g(0.5); R.c(b, bp, bg, lp); R.lfo('sine', 0.45, 0.25, bg.gain, t);
-      return { lp };
-    },
-    rumble(R, out, t) {
-      const a = R.noise('brown', t, null, true), lp = R.f('lowpass', 95, 1), ag = R.g(1); R.c(a, lp, ag, out); R.lfo('sine', 0.3, 0.3, ag.gain, t);
-      return {};
-    }
+    wind: { file: 'amb_wind', level: 0.55 },
+    sea: { file: 'amb_surf', level: 0.8 },
+    river: { file: 'amb_river', level: 0.6 },
+    birds: { file: 'amb_birds', level: 0.55 },
+    night: { file: 'amb_night', level: 0.4 },
+    rain: { file: 'amb_rain', level: 0.7 },
+    fire: { file: 'amb_fire', level: 0.7 },
+    city: { file: 'amb_town', level: 0.35, lp: 1400 },
+    forge: { file: 'amb_forge', level: 0.45 },
+    factory: { file: 'amb_factory', level: 0.35 },
+    battle: { file: 'amb_battle', level: 0.6 },
+    rumble: { file: 'amb_fire', level: 0.5, rate: 0.55, lp: 400 }
   };
-  const BED_LEVEL = { wind: 0.5, howl: 0.7, sea: 0.45, river: 0.55, rain: 0.45, fire: 0.5, city: 1.0, factory: 0.14, battle: 0.45, rumble: 0.5 };
+  const BED_LEVEL = {};
+  for (const k in BEDS) BED_LEVEL[k] = BEDS[k].level;
 
-  // Zielpegel der Schichten aus der Lage
+  // Zielpegel der Schichten (0..1) aus der Lage
   function targets(m) {
     const n = m.near, f = m.far;
+    const woods = m.forest + m.taiga * 0.8 + m.jungle;
     return {
-      wind: clamp(0.15 + 0.35 * f + 0.35 * m.cold + 0.12 * m.sea + 0.1 * m.windStr * f, 0, 0.85),
-      howl: clamp(m.cold * (0.35 + 0.65 * f) * 1.2, 0, 0.8),
-      sea: clamp(m.sea * 0.5 * (0.5 + 0.5 * f) + m.coast * 0.35, 0, 0.8),
-      river: clamp(m.river * 4 * (0.3 + 0.7 * n), 0, 0.7),
+      wind: clamp(0.25 + 0.4 * f + 0.45 * m.cold + 0.1 * m.sea + 0.1 * m.windStr * f, 0, 1),
+      sea: clamp(m.sea * 0.45 * (0.5 + 0.5 * f) + m.coast * 0.8, 0, 1),
+      river: clamp(m.river * 4 * (0.3 + 0.7 * n), 0, 0.9),
+      birds: clamp((woods * 1.3 + m.open * 0.25) * (0.15 + 0.85 * n), 0, 1),
+      night: clamp((m.dry * 1.1 + m.swamp * 0.8 + m.open * 0.15) * (0.2 + 0.8 * n), 0, 0.9),
       rain: clamp(m.rain, 0, 1),
       fire: clamp(m.fire * (0.5 + 0.5 * n) * 1.2, 0, 1),
-      city: clamp(m.city * (0.25 + 0.75 * n) * 0.8, 0, 1),
-      factory: clamp(m.factory * (0.4 + 0.6 * n), 0, 0.8),
+      city: clamp(m.city * (0.2 + 0.8 * n) * 0.9, 0, 1),
+      forge: clamp((m.sites * 0.9 + m.city * 0.2) * n, 0, 0.9),
+      factory: clamp(m.factory * (0.4 + 0.6 * n), 0, 0.9),
       battle: clamp(m.battle * 0.9, 0, 1),
       rumble: clamp(m.hot * 1.5, 0, 0.8)
     };
   }
 
-  // Schichten: starten bei Bedarf, ruhen bei 0 (sparsam), blenden weich (Zeitkonstante 1,2 s)
   function Beds(ctx, bus) {
     const live = {};
     function start(name, t) {
-      const voice = { srcs: [] }, R = C.makeR(ctx, voice), g = ctx.createGain(); g.gain.value = 0; g.connect(bus);
-      let ctl = {};
-      try { ctl = BEDS[name](R, g, t) || {}; } catch (e) { /* still */ }
-      return { voice, g, ctl, offT: 0 };
+      const B = BEDS[name], buf = WW.AudioBank && WW.AudioBank.get(B.file);
+      if (!buf) return null;
+      const g = ctx.createGain(); g.gain.value = 0;
+      let node = g;
+      if (B.lp) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = B.lp; g.connect(f); node = f; }
+      node.connect(bus);
+      const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true;
+      const lr = WW.AudioBank.loop(B.file);
+      if (lr) { s.loopStart = lr.start; s.loopEnd = lr.end; }
+      if (B.rate) s.playbackRate.value = B.rate;
+      s.connect(g);
+      // zufälliger Einstieg, damit Schichten mit gleicher Datei nicht gleichzeitig „atmen“
+      s.start(t, (lr ? lr.start : 0) + C.rnd() * buf.duration * 0.8);
+      return { s, g, node, offT: 0 };
     }
-    function stopBed(b) {
-      for (const s of b.voice.srcs) { try { s.stop(); } catch (e) { /* still */ } }
-      try { b.g.disconnect(); } catch (e) { /* still */ }
-    }
+    function stopBed(b) { try { b.s.stop(); } catch (e) { /* still */ } try { b.g.disconnect(); b.node.disconnect(); } catch (e) { /* still */ } }
     return {
       live,
       set(m, t) {
         const tg = targets(m);
         for (const name in BEDS) {
-          const v = clamp(C.fin(tg[name], 0), 0, 1) * BED_LEVEL[name];
+          const v = clamp(C.fin(tg[name], 0), 0, 1) * BEDS[name].level;
           let b = live[name];
-          if (v > 0.003 && !b) b = live[name] = start(name, t);
+          if (v > 0.004 && !b) { b = start(name, t); if (b) live[name] = b; }
           if (!b) continue;
-          b.g.gain.setTargetAtTime(v, t, 1.2);
-          if (v <= 0.003) { if (!b.offT) b.offT = t; else if (t - b.offT > 8) { stopBed(b); delete live[name]; } }
+          b.g.gain.setTargetAtTime(v, t, 1.5);
+          if (v <= 0.004) { if (!b.offT) b.offT = t; else if (t - b.offT > 10) { stopBed(b); delete live[name]; } }
           else b.offT = 0;
-          if (name === 'battle' && b.ctl.lp) b.ctl.lp.frequency.setTargetAtTime(clamp(m.battleLp, 200, 5000), t, 1);
-          if (name === 'wind' && b.ctl.bp) {   // Böen
-            b.ctl.bp.frequency.setTargetAtTime(C.rr(380, 900 + 500 * m.cold), t, 1.5);
-            b.ctl.bg.gain.setTargetAtTime(C.rr(0.15, 0.6), t, 1.2);
-          }
         }
         return tg;
       },
@@ -266,43 +226,31 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Einzelklänge der Umgebung planen: liefert Liste { name, x, y, p } für dt Sekunden
+  // Einzelklänge der Umgebung planen (Aufnahmen): Liste { name, x, y, p } für dt Sekunden
   // ---------------------------------------------------------------------------
-  function events(m, cam, dt, nextWave) {
+  function events(m, cam, dt) {
     const out = [];
     const n = m.near, cx = cam.x, cy = cam.y, D = clamp(C.fin(cam.dist, 20), 3, 400);
     function chance(rate) { return Math.random() < 1 - Math.exp(-rate * dt); }
-    function spot(sp) { return { x: cx + C.rr(-1, 1) * D * (sp || 0.8), y: cy + C.rr(-1, 1) * D * (sp || 0.6) }; }
-    function add(name, rate, p, sp) { if (rate > 0 && chance(rate)) { const s = spot(sp); out.push({ name, x: s.x, y: s.y, p: p || {}, amb: true }); } }
-    const woods = m.forest + m.taiga * 0.7 + m.jungle * 0.3;
-    add('bird', woods * 1.4 * n + m.open * 0.25 * n, { variant: Math.random() * 5 | 0 });
-    add('woodpecker', (m.taiga + m.forest * 0.5) * 0.06 * n);
-    add('jungleBird', m.jungle * 1.2 * n);
-    add('gull', m.coast * 0.12 * (0.4 + n));
-    add('cricket', (m.dry * 1.2 + m.open * 0.15) * n);
-    add('frog', m.swamp * 2 * n + m.river * 0.6 * n);
-    add('hammer', (m.city * 0.4 + m.sites * 1.5) * n, { metal: Math.random() < 0.35 }, 0.4);
-    add('crackle', m.fire * 4 * (0.4 + 0.6 * n), { amp: m.fire * 1.5 }, 0.4);
-    add('clank', m.factory * 0.6 * n, null, 0.4);
-    add('clang', m.battleNear * 4 * n, null, 0.4);
-    add('shout', m.battle * 0.5, null, 0.5);
-    add('drum', (m.war ? 0.04 : 0) + m.battle * 0.12);
-    add('boomFar', m.battle * 0.08 * (1 - m.battleNear));
-    // Wellen: gleichmäßiger Takt
-    let wave = null;
-    if (m.coast > 0.04 && cam.now >= nextWave) wave = { name: 'wave', x: cx + C.rr(-0.6, 0.6) * D, y: cy, p: { amp: clamp(m.coast * 1.6, 0.3, 1.3) }, amb: true, wave: true };
-    if (wave) out.push(wave);
+    function add(name, rate, sp) { if (rate > 0 && chance(rate)) out.push({ name, x: cx + C.rr(-1, 1) * D * (sp || 0.8), y: cy + C.rr(-1, 1) * D * (sp || 0.6), amb: true }); }
+    add('gull', m.coast * 0.06 * (0.4 + n));
+    add('crow', (m.open * 0.3 + m.forest * 0.3 + m.cold * 0.2) * 0.03 * n);
+    add('hammer', m.sites * 0.25 * n, 0.4);
+    add('chop', (m.forest + m.taiga) * m.city * 0.15 * n, 0.5);
+    add('sword', m.battleNear * 0.8 * n, 0.4);
+    add('whistle', m.factory * 0.01 * n, 0.4);
     // Tierrufe
     for (const a of m.calls) {
       const c = CALLS[a.kind];
+      if (!c) continue;
       let rate = c[1];
       if (a.kind === 'dragon' && a.state) rate *= 2;
-      if (a.kind === 'wolf' || a.kind === 'bear' || MONSTERS[a.kind]) rate *= (a.foe != null && a.foe >= 0) || a.mad ? 2 : 1;
-      if (chance(rate)) out.push({ name: c[0], x: a.x, y: a.y, p: {}, animal: true });
+      if ((a.foe != null && a.foe >= 0) || a.mad) rate *= 2;
+      if (chance(rate)) out.push({ name: c[0], x: a.x, y: a.y, animal: true, rate: c[2] || 1 });
     }
     return out;
   }
 
-  WW.AudioAmbient = { analyze, Beds, targets, events, BEDS, BED_LEVEL, MONSTERS, CALLS };
+  WW.AudioAmbient = { analyze, Beds, targets, events, BEDS, BED_LEVEL, CALLS };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

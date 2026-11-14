@@ -309,7 +309,7 @@
     texts: ['Ein Wolkenbruch über {city}! Die Felder trinken sich satt, die Wäsche leider auch.',
       'Es regnet in {city} drei Tage lang. {Person} baut eine Arche, nur zur Sicherheit.',
       'Über {city} öffnet sich der Himmel. Die Frösche feiern, die Rüben wachsen.'] });
-  ev('blitz_scheune', 'nature', 'city', 'Scheunenbrand', { weight: 0.8, cooldown: 10, when: c => c.sim.state.laws.disasters,
+  ev('blitz_scheune', 'nature', 'city', 'Scheunenbrand', { weight: 0.8, cooldown: 10, when: c => c.sim.state.laws.disasters && !!c.c && c.c.pop >= 16 && c.sim.state.year - c.c.founded >= 8,
     effects: [{ power: 'fire', off: true }, { stock: 'food', pct: -0.15 }],
     texts: ['Ein Blitz trifft eine Scheune bei {city}. Es riecht tagelang nach geröstetem Getreide.',
       'In {city} fängt eine Scheune Feuer. Schuld sind {@schuldiger}, behauptet {person}.',
@@ -755,7 +755,7 @@
     texts: ['Ein wandernder Baumeister lässt sich in {city} nieder. Die Häuser werden plötzlich gerade.',
       'In {city} zieht ein {@beruf} aus der Fremde ein und bringt neue Kniffe mit.',
       'Meister {person} kommt nach {city} und zeigt allen, wie man ein Dach deckt, ohne vom Dach zu fallen.'] });
-  ev('lagerbrand', 'economy', 'city', 'Lagerbrand', { weight: 0.7, cooldown: 10, when: c => c.sim.state.laws.disasters,
+  ev('lagerbrand', 'economy', 'city', 'Lagerbrand', { weight: 0.7, cooldown: 10, when: c => c.sim.state.laws.disasters && !!c.c && c.c.pop >= 16 && c.sim.state.year - c.c.founded >= 8,
     effects: [{ stock: 'wood', pct: -0.4 }, { power: 'fire' }],
     texts: ['Das Holzlager von {city} geht in Flammen auf. Schuld war ein Funke und {@schuldiger}.',
       'Feuer im Lager von {city}! Die Löschkette reicht bis zum Brunnen, aber nicht ganz.',

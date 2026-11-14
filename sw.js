@@ -1,6 +1,6 @@
 // Service Worker: alle Spieldateien zwischenspeichern, damit Wuselwelt offline läuft.
 // Bei Änderungen VERSION hochzählen.
-const VERSION = 'wuselwelt-npf01i';
+const VERSION = 'wuselwelt-vbret5';
 const FILES = [
   './',
   'index.html',
@@ -34,7 +34,6 @@ const FILES = [
   'js/sim/walls.js',
   'js/sim/mods.js',
   'js/sim/cities.js',
-  'js/sim/industry.js',
   'js/sim/units.js',
   'js/sim/gov.js',
   'js/sim/diplo.js',
@@ -44,10 +43,15 @@ const FILES = [
   'js/sim/env.js',
   'js/sim/powers.js',
   'js/sim/events.js',
+  'js/sim/industry.js',
+  'js/sim/rail.js',
+  'js/sim/camps.js',
   'js/sim/sim.js',
   'js/render/camera.js',
   'js/render/renderer.js',
   'js/audio/audio-core.js',
+  'js/audio/audio-manifest.js',
+  'js/audio/audio-bank.js',
   'js/audio/audio-sfx.js',
   'js/audio/audio-ambient.js',
   'js/audio/audio-music.js',

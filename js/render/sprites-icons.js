@@ -892,6 +892,23 @@
       '...GG..GGW....',
       '.........mm...',
       '.........mm...']);
+
+    // ================================================================== Menü-Icons: Ton, Musik, Nacht, Wetter
+    function speaker(g) { g.rect(1, 5, 3, 5, 'stoneL'); g.vline(3, 5, 5, 'stone'); for (var j = 0; j < 4; j++) g.vline(4 + j, 4 - j, 7 + j * 2, j === 3 ? 'stoneD' : 'stone'); g.set(4, 4, 'white'); }
+    icon('i_sound_on', function (g) { speaker(g); g.vline(9, 5, 5, 'white'); g.set(10, 4, 'white'); g.set(10, 10, 'white'); g.vline(11, 3, 9, 'snowD'); g.set(12, 2, 'snowD'); g.set(12, 12, 'snowD'); g.vline(13, 3, 9, 'snowD'); });
+    icon('i_sound_off', function (g) { speaker(g); g.line(9, 4, 13, 10, 'red'); g.line(13, 4, 9, 10, 'red'); g.line(10, 4, 13, 9, 'redD'); });
+    icon('i_music', ['......llllll..', '......lccccl..', '......l.....l.', '......l.....l.', '......l.....l.', '......l.....l.', '......l.....l.', '......l.....l.', '...llcl..llcl.', '..lcccl.lcccl.', '..lcccl.lcccl.', '...lll...lll..']);
+    icon('i_night', function (g) {
+      g.ellipse(7, 7, 6, 6, function (x, y, nx, ny) { return nx + ny < -0.4 ? 'goldL' : 'gold'; });
+      g.ellipse(10, 5, 5, 5, function () { return null; });
+      for (var y = 0; y < 14; y++) for (var x = 0; x < 14; x++) if (Math.hypot(x + 0.5 - 10, y + 0.5 - 5) < 5) g.d[y * 14 + x] = 0;
+      g.paint(9, 9, ['.j.', 'jlj', '.j.']); g.set(12, 2, 'goldL');
+    });
+    icon('i_weather', function (g) {
+      g.ellipse(4, 4, 3.5, 3.5, function (x, y, nx, ny) { return nx + ny < -0.3 ? 'goldL' : 'gold'; });
+      [[6, 7, 4, 2.6], [10, 7, 3.6, 2.6], [8, 5.5, 3, 2.4]].forEach(function (c) { g.ellipse(c[0], c[1], c[2], c[3], function (x, y, nx, ny) { return ny > 0.4 ? 'snowD' : 'white'; }); });
+      g.set(5, 11, 'glass'); g.set(4, 12, 'glass'); g.set(9, 11, 'glass'); g.set(8, 12, 'glass'); g.set(12, 11, 'glass');
+    });
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

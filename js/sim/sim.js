@@ -10,8 +10,8 @@
 //   js/sim/diplo.js, js/sim/growth.js, js/sim/creatures.js, js/sim/env.js, js/sim/powers.js, js/sim/sim.js
 //   (Wildnis-Teil, eigener Agent: js/core/config-wild.js nach config.js, js/data/texts-wild.js nach texts.js,
 //    js/sim/wild.js vor env.js – siehe tests/load.js)
-//   (Industrie: js/core/config-industry.js nach config.js, js/data/texts-industry.js nach texts.js, js/sim/industry.js vor sim.js;
-//    Doku im Kopf von js/sim/industry.js)   // [industry]
+//   (Industrie: js/core/config-industry.js nach config.js, js/data/texts-industry.js nach texts.js, js/sim/industry.js,
+//    js/sim/rail.js, js/sim/camps.js vor sim.js; Doku in deren Kopfkommentaren)   // [industry]
 //
 // ERZEUGEN
 //   const sim = WW.Sim.create(opts)          opts (alle optional):

@@ -6,8 +6,10 @@
 // save/load.
 //
 // LADEREIHENFOLGE: js/core/config-industry.js direkt nach js/core/config.js, js/data/texts-industry.js direkt
-//   nach js/data/texts.js, js/sim/industry.js nach js/sim/cities.js und vor js/sim/sim.js (in tests/load.js
-//   unmittelbar vor sim.js, also nach powers.js).
+//   nach js/data/texts.js, dann js/sim/industry.js, js/sim/rail.js, js/sim/camps.js unmittelbar vor js/sim/sim.js
+//   (nach powers.js/events.js). Bahn: Kopf von js/sim/rail.js, Arbeitslager: Kopf von js/sim/camps.js.
+// HAKEN in js/sim/units.js (markiert // [industry]): updateAll überspringt Einheiten mit u.ind ('train'|'camp') ->
+//   WW.Industry.unit; hitUnit -> WW.Camps.capture; hostile: role 'prisoner' ist nie Ziel.
 //
 // WELTGESETZ 'industry' (WW.LAW_INFO, Standard an): aus = keine neuen Fabriken, alle vorhandenen ruhen (active
 //   false, kein Rauch, kein Ertrag); sie verfallen aber nicht.
@@ -102,8 +104,7 @@
     s.any = +s.any || 0; s.murk = s.murk | 0; s.barren = s.barren | 0;
     st.industry = s;
     if (st.laws && !('industry' in st.laws) && WW.LAW_DEFAULTS && 'industry' in WW.LAW_DEFAULTS) st.laws.industry = WW.LAW_DEFAULTS.industry;
-    for (const c of st.cities || []) { if (c.pollution == null) c.pollution = 0; if (c.indActive == null) c.indActive = 0; }
-    for (const k of st.kingdoms || []) { if (k.pollution == null) k.pollution = 0; }
+    // city.pollution / kingdom.pollution ergänzt der Takt (plan); hier nichts an Städten ändern (Laden bleibt formstabil)
     if (WW.Rail) WW.Rail.defaults(st);
     if (WW.Camps) WW.Camps.defaults(st);
   }

@@ -183,6 +183,11 @@
       }
       s.campK = c.kingdomId;
       s.inmates = inmatesOf(sim, s).length;
+      // Baustelle: das Regime lässt auch Soldaten am Zaun arbeiten (Baumeister haben oft Mauern vor)
+      if (!s.built) {
+        if (!s.paid) { const cost = WW.Structs.siteCost(sim, s, c.id); if (WW.Cities.pay(sim, c, cost)) s.paid = true; }
+        if (s.paid) { s.progress = Math.min(1, (s.progress || 0) + cfg.SELF_BUILD); if (s.progress >= 1) { WW.Structs.complete(sim, s); WW.Cities.refreshLists(sim, c); } }
+      }
       if (WW.Mods && s.built) {
         WW.Mods.add(c, { key: 'happiness', add: -cfg.UNHAPPY_MOD, source: 'camp', name: 'Arbeitslager' });
         WW.Mods.add(c, { key: 'loyalty', add: -cfg.LOYALTY_MOD, source: 'camp', name: 'Arbeitslager' });

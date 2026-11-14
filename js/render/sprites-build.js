@@ -2749,6 +2749,7 @@
     });
     // Nachtfassung: leuchtende Fenster (Schlüssel bleibt gleich, Helfer liefert den passenden Nacht-Schlüssel)
     S.litKey = function (key) { return LITMAP[key] || key; };
+    S._finishH = function (g, n) { return finishH(g, n); }; S._litmap = LITMAP;
     // ======================================================================
     // Etappe 2: Materialklassen der Mauerstile, Regierungssitze neu im feinen Raster, Umleitung aller Stadtgebäude
     ['monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'player', 'tribe2', 'tribe3', 'tribe4'].forEach(function (k) {

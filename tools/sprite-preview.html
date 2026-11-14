@@ -306,6 +306,29 @@
     [true, false].forEach(function (old) { var c = document.createElement('canvas'); WW.SpriteScene.renderTownCompare(c, sc, old, gv); box.appendChild(c); });
   })();
 
+  // ---------------------------------------------------------------- Nacharbeit: Zelte, Lager, Regen, Schnee, Lichtschein, Menü-Icons (?polish=4)
+  if (Q.get('polish')) (function () {
+    var sc = +Q.get('polish') || 4, r = section('polish', 'Zelte und Lager neu, Regen und Schnee, Lichtschein, Menü-Icons (Maßstab ' + sc + ')');
+    var c = document.createElement('canvas'); c.id = 'polishcv'; c.width = 40 * 8 * sc; c.height = 12 * 8 * sc;
+    var x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(sc, sc);
+    groundRect(x, fill(WW.T.GRASS, 40, 12), 0, 0);
+    ['s_tent_a', 's_tent_b', 's_tent_c', 's_tent_d'].forEach(function (k, i) { S.draw(x, k, 4 + i * 20, 16, { team: [0, 4, 2, 9][i] }); });
+    S.draw(x, 's_camp_a_0', 88, 8, { team: 5 }); S.draw(x, 's_camp_b_1', 120, 8, { team: 3 });
+    x.fillStyle = 'rgba(16,20,48,0.65)'; x.fillRect(160, 0, 160, 96);
+    for (var yy = 0; yy < 6; yy++) for (var xx = 0; xx < 5; xx++) { S.draw(x, S.weatherKey('rain', 0, xx, yy), 160 + xx * 8, yy * 8); S.draw(x, S.weatherKey('snow', 0, xx, yy), 208 + xx * 8, yy * 8); }
+    S.draw(x, 'fx_glow_warm', 268, 20); S.draw(x, 'fx_glow_cold', 292, 20); S.draw(x, 'fx_fire_3', 268, 24);
+    ['i_sound_on', 'i_sound_off', 'i_music', 'i_night', 'i_weather'].forEach(function (k, i) { x.fillStyle = '#1d3b47'; x.fillRect(164 + i * 30, 66, 24, 24); S.draw(x, k, 168 + i * 30, 70); });
+    cell(r, '', c);
+  })();
+
+  // ---------------------------------------------------------------- Nacharbeit Küste: vorher/nachher (?topcoast=3)
+  if (Q.get('topcoast')) (function () {
+    var sc = +Q.get('topcoast') || 3, r = section('topcoast', 'Küste vorher (links) und nachher (rechts), Maßstab ' + sc);
+    var box = document.createElement('div'); box.id = 'topcoastcv'; box.style.display = 'flex'; box.style.gap = '8px'; r.appendChild(box);
+    [true, false].forEach(function (off) { S._noDisplace = off; var c = document.createElement('canvas'); WW.SpriteScene.renderLandscapeHi(c, sc, 1); box.appendChild(c); });
+    S._noDisplace = false;
+  })();
+
   // ---------------------------------------------------------------- Etappe 4: Effekte und Licht (?topfx=3)
   if (want('topfx') || Q.get('topfx')) (function () {
     var r = section('topfx', 'Etappe 4: Feuer (6), Rauch (4), Blitz (2), Explosionen klein/mittel/groß (je 8), Pilzwolke (10), Regen/Schnee, Nachtstadt mit Lichtschein und Schornsteinrauch');

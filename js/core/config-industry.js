@@ -87,7 +87,8 @@
     UNHAPPY_MOD: 10, LOYALTY_MOD: 12, FEAR: 6,   // dauerhaft −10 Zufriedenheit / −12 Loyalität; 2 Jahre „Angst" +6
     CONDEMN: 4,         // Meinungsverlust der Nachbarn je Jahr (Demokratien ×2,5)
     BREAKOUT: 0.07, RIOT: 0.08,   // je Jahr ab 4 Insassen
-    WORK_R: 16, RAIL_WORK: 0.12, YIELD: 0.6
+    WORK_R: 16, RAIL_WORK: 0.12, YIELD: 0.6,
+    SELF_BUILD: 0.1     // Baufortschritt je Planung (120 Ticks) durch Soldaten des Regimes
   };
   if (WW.STRUCT_INFO && !WW.STRUCT_INFO.laborcamp) {
     WW.STRUCT_INFO.laborcamp = { name: 'Arbeitslager', w: 2, h: 2, work: 110, hp: [180], cost: [{ wood: 10, stone: 6 }], burn: 0.6 };

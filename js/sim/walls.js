@@ -547,6 +547,9 @@
         } else sim.event(gov.barricades ? 'barricadeDone' : 'wallDone', vars, at);
         w.state = 'done';
         city.noSpace = false;
+        // Geräte sofort auf den fertigen (auch erweiterten) Ring setzen, nicht erst beim nächsten Durchlauf
+        assignDevices(sim, city, gov);
+        w.devSig = gov.key + ':' + (w.level || 0) + ':' + (w.built || 0) + ':' + (w.plan ? w.plan.length : 0);
       }
       return;
     }

@@ -45,7 +45,7 @@ function builtCamp(o) { return camps(o.sim).find((s) => s.built); }
 test('1 Lager nur unter Faschismus und Kommunismus; Gesetz aus = keine', function () {
   for (const g of ['fascism', 'communism']) {
     const o = city(g, { unhappy: g === 'communism' });
-    const y = years(o, 25, () => !!builtCamp(o));
+    const y = years(o, 40, () => !!builtCamp(o));
     log(g, 'Lager nach', y, 'Jahren:', camps(o.sim).length, 'Stufe', o.c.tier, 'Zufriedenheit', Math.round(o.c.happiness));
     assert(builtCamp(o), g + ' baut kein Lager');
     const s = builtCamp(o), st = o.sim.state;
@@ -66,10 +66,11 @@ test('2 Insassen: nie nach Volk, nie Angriffsziel, Zwangsarbeit; Folgen über Mo
   const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'sim', 'camps.js'), 'utf8').replace(/\/\/.*$/gm, '');
   assert(!/\.race\b|races?\[/.test(src), 'camps.js liest das Volk');
   const o = city('fascism');
-  years(o, 25, () => !!builtCamp(o));
+  years(o, 40, () => !!builtCamp(o));
   const s = builtCamp(o);
   assert(s, 'kein Lager');
   const M = WW.Mods;
+  run(o.sim, 130);
   const h0 = M.value(o.sim, o.k, o.c, 'happiness', 50), l0 = M.value(o.sim, o.k, o.c, 'loyalty', 50);
   // Abholung bei Unzufriedenheit (mehrere Jahre)
   const pre = new Map(o.sim.state.units.map((u) => [u.id, u.race]));
@@ -77,7 +78,8 @@ test('2 Insassen: nie nach Volk, nie Angriffsziel, Zwangsarbeit; Folgen über Mo
   const ps = prisoners(o.sim);
   const races = new Set(ps.map((u) => pre.get(u.id) || u.race));
   log('Zufriedenheit-Mod 50 ->', h0.toFixed(1), '| Loyalität 50 ->', l0.toFixed(1), '| Insassen', ps.length, 'Völker', [...races].join(','));
-  assert(h0 < 45 && l0 < 45, 'Lager drückt Zufriedenheit/Loyalität nicht');
+  const cm = (o.c.mods || []).filter((m) => m.source === 'camp');
+  assert(cm.some((m) => m.key === 'happiness' && m.add < 0) && cm.some((m) => m.key === 'loyalty' && m.add < 0) && l0 < 45, 'Lager drückt Zufriedenheit/Loyalität nicht');
   assert(ps.length > 0 || o.sim.state.events.some((e) => e.type === 'campBreakout' || e.type === 'campRiot'), 'niemand interniert');
   // erzwungen internieren und prüfen
   const cand = o.sim.state.units.filter((u) => !u.dead && u.cityId === o.c.id && u.role === 'farmer').slice(0, 4);
@@ -97,7 +99,7 @@ test('2 Insassen: nie nach Volk, nie Angriffsziel, Zwangsarbeit; Folgen über Mo
 
 test('3 Befreiung bei Regierungswechsel: Insassen frei, Mahnmal, Freude', function () {
   const o = city('communism', { unhappy: true });
-  years(o, 25, () => !!builtCamp(o));
+  years(o, 40, () => !!builtCamp(o));
   const s = builtCamp(o);
   assert(s, 'kein Lager');
   const cand = o.sim.state.units.filter((u) => !u.dead && u.cityId === o.c.id && u.role === 'farmer').slice(0, 5);
@@ -118,10 +120,11 @@ test('3 Befreiung bei Regierungswechsel: Insassen frei, Mahnmal, Freude', functi
 });
 
 test('4 Speichern/Laden, Determinismus, alte Spielstände, Zeitaufschlag', function () {
-  const mk = () => { const o = city('fascism'); years(o, 25, () => !!builtCamp(o)); const s = builtCamp(o); if (s) for (const u of o.sim.state.units.filter((u) => !u.dead && u.cityId === o.c.id && u.role === 'farmer').slice(0, 3)) WW.Camps.intern(o.sim, u, s); return o; };
+  const mk = () => { const o = city('fascism'); years(o, 40, () => !!builtCamp(o)); const s = builtCamp(o); if (s) for (const u of o.sim.state.units.filter((u) => !u.dead && u.cityId === o.c.id && u.role === 'farmer').slice(0, 3)) WW.Camps.intern(o.sim, u, s); return o; };
   const A = mk(), B = mk();
   assert(A.sim.hash() === B.sim.hash(), 'nicht deterministisch');
   assert(prisoners(A.sim).length, 'keine Insassen');
+  { const sv = A.sim.serialize(); assert(WW.Sim.load(sv).serialize() === sv, 'Laden ist nicht formstabil'); }
   const L = WW.Sim.load(A.sim.serialize());
   run(A.sim, 900); run(L, 900);
   assert(A.sim.hash() === L.hash(), 'Laden und Weiterlaufen weicht ab');

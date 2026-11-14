@@ -242,6 +242,7 @@ test('7 Speichern/Laden, Determinismus, alte Spielstände', function () {
   run(A.sim, 900); run(B.sim, 900);
   assert(A.sim.hash() === B.sim.hash(), 'nicht deterministisch');
   assert(sumPol(A.sim) > 0, 'keine Verschmutzung');
+  { const sv = A.sim.serialize(); assert(WW.Sim.load(sv).serialize() === sv, 'Laden ist nicht formstabil'); }
   const L = WW.Sim.load(A.sim.serialize());
   assert(L, 'Laden fehlgeschlagen');
   assert(L.state.pollution.length === A.sim.state.pollution.length && L.state.pollution.every((v, i) => v === A.sim.state.pollution[i]), 'Raster pollution nicht gespeichert');

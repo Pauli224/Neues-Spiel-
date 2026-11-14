@@ -109,6 +109,7 @@ test('4 Speichern/Laden mit Zug, Determinismus, alte Spielstände, Zeitaufschlag
   const A = mk(), B = mk();
   assert(A.sim.hash() === B.sim.hash(), 'nicht deterministisch');
   assert(A.sim.state.trains.length, 'kein Zug');
+  { const sv = A.sim.serialize(); assert(WW.Sim.load(sv).serialize() === sv, 'Laden ist nicht formstabil'); }
   const L = WW.Sim.load(A.sim.serialize());
   assert(L && L.state.trains.length === A.sim.state.trains.length, 'Züge nicht gespeichert');
   run(A.sim, 700); run(L, 700);

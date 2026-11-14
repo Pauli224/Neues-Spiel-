@@ -56,9 +56,11 @@ function r3Files() {
   }
   // Ton: Kern zuerst, dann Effekte, Umgebung, Musik, sonstige, die Schnittstelle (audio.js) zuletzt
   const au = listDir('js/audio');
-  const rank = (f) => /core/.test(f) ? 0 : /sfx/.test(f) ? 1 : /ambient/.test(f) ? 2 : /music/.test(f) ? 3 : f === 'audio.js' ? 9 : 5;
+  // audio-data.js (eingebettete Aufnahmen, ~5,6 MB) steht nicht in index.html: dort lädt die Klangbank die Dateien aus audio/.
+  // In die Einzeldateien (wuselwelt.html, artifact.html) wird sie weiter unten eingebettet.
+  const rank = (f) => /core/.test(f) ? 0 : /manifest/.test(f) ? 1 : /bank/.test(f) ? 2 : /sfx/.test(f) ? 3 : /ambient/.test(f) ? 4 : /music/.test(f) ? 5 : f === 'audio.js' ? 9 : 7;
   au.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
-  for (const f of au) out.push('js/audio/' + f);
+  for (const f of au) if (f !== 'audio-data.js') out.push('js/audio/' + f);
   return out;
 }
 {
@@ -78,12 +80,16 @@ const title = (/<title>([^<]*)<\/title>/.exec(html) || [])[1] || 'Wuselwelt';
 
 // Skripte inline; '</script' darf im Text nicht vorkommen
 const inline = (list) => list.map(f => '/* ' + f + ' */\n' + read(f).replace(/<\/script/gi, '<\\/script')).join('\n');
-const js = inline(srcs);
+// Einzeldateien: eingebettete Aufnahmen direkt vor der Klangbank
+const AUDIO_DATA = 'js/audio/audio-data.js';
+const srcsAll = srcs.slice();
+if (fs.existsSync(path.join(ROOT, AUDIO_DATA)) && srcsAll.indexOf(AUDIO_DATA) < 0) { const i = srcsAll.indexOf('js/audio/audio-bank.js'); if (i >= 0) srcsAll.splice(i, 0, AUDIO_DATA); }
+const js = inline(srcsAll);
 const scripts = '<script>\n' + js + '\n</script>';
 // Artifact: three.js vom CDN (Artifact-Regel), Rest inline
 const THREE_LOCAL = 'js/vendor/three.min.js';
 const THREE_CDN = '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>';
-const artScripts = srcs.includes(THREE_LOCAL) ? THREE_CDN + '\n<script>\n' + inline(srcs.filter(f => f !== THREE_LOCAL)) + '\n</script>' : scripts;
+const artScripts = srcs.includes(THREE_LOCAL) ? THREE_CDN + '\n<script>\n' + inline(srcsAll.filter(f => f !== THREE_LOCAL)) + '\n</script>' : scripts;
 const style = '<style>\n' + css + '\n</style>';
 
 // Kopf-Metas des Originals ohne Verweise auf Dateien (Manifest, Icons, Stylesheet)

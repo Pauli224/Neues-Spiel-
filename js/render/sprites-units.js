@@ -1601,11 +1601,11 @@
       smoke: [AC(null, '#c8c4cc', 220), AC(null, '#9a96a0', 210), AC(null, '#6e6a76', 200), AC(null, '#4a4652', 190)],
       cool: [HC('#f2c08a'), HC('#d08a5a'), HC('#9a5e4a'), HC('#6a4448')],
       spark: HC('#fff6c0'), debris: [HC('#5a4a3e'), HC('#3a302a')],
-      rain: AC(null, '#cfe8ff', 170), snow: AC(null, '#ffffff', 220), snowD: AC(null, '#d8e8f8', 180),
+      rain: AC(null, '#b8dcff', 200), rainL: AC(null, '#ffffff', 230), snow: AC(null, '#ffffff', 245), snowD: AC(null, '#b8d0ec', 220),
       bolt: [HC('#ffffff'), HC('#d8f0ff'), AC(null, '#9ad8ff', 160)]
     };
     var GLW = [], GLC2 = [];
-    [20, 35, 55, 80, 110, 140].forEach(function (a) { GLW.push(AC(null, '#ffd890', a)); GLC2.push(AC(null, '#a8d8ff', a)); });
+    [8, 16, 26, 38, 50, 64, 78, 92, 106, 120, 134, 148].forEach(function (a) { GLW.push(AC(null, '#ffd890', a)); GLC2.push(AC(null, '#a8d8ff', a)); });
     function flame(g, cx, by, w, h, f, seed) {   // züngelnde Flamme, Kern hell
       for (var y = 0; y < h; y++) {
         var t = y / h, hw = w / 2 * Math.sin(Math.PI * Math.min(1, (1 - t) * 1.1)) * (0.7 + 0.3 * Math.sin(f * 1.7 + y * 0.5 + seed));
@@ -1674,12 +1674,12 @@
       }
       return g;
     }
-    function particles(kind, f) {
-      var g = new Grid(16, 16);
-      for (var k = 0; k < (kind === 'rain' ? 5 : 6); k++) {
-        var x = Math.floor(hash(k, 1, 1170) * 16), y = (Math.floor(hash(k, 2, 1171) * 16) + f * 8) % 16;
-        if (kind === 'rain') { g.set(x, y, FXC.rain); g.set((x + 15) % 16, (y + 1) % 16, FXC.rain); g.set((x + 14) % 16, (y + 2) % 16, FXC.rain); }
-        else { g.set((x + f) % 16, y, FXC.snow); if (k % 2) g.set((x + f + 1) % 16, y, FXC.snowD); }
+    function particles(kind, f, v) {
+      var g = new Grid(16, 16); v = v || 0;
+      for (var k = 0; k < (kind === 'rain' ? 7 : 7); k++) {
+        var x = Math.floor(hash(k, 1 + v * 3, 1170) * 16), y = (Math.floor(hash(k, 2 + v * 3, 1171) * 16) + f * 8) % 16;
+        if (kind === 'rain') { for (var q = 0; q < 5; q++) g.set((x + 16 - q) % 16, (y + q) % 16, q < 2 ? FXC.rainL : FXC.rain); }
+        else { var sx = (x + f) % 16; g.set(sx, y, FXC.snow); g.set((sx + 1) % 16, y, FXC.snow); g.set(sx, (y + 1) % 16, FXC.snow); g.set((sx + 1) % 16, (y + 1) % 16, FXC.snowD); }
       }
       return g;
     }
@@ -1688,7 +1688,7 @@
       for (var y = 0; y < 48; y++) for (var x = 0; x < 48; x++) {
         var d = Math.hypot(x + 0.5 - 24, (y + 0.5 - 24) * 1.15) / 24;
         if (d >= 1) continue;
-        var k = Math.min(5, Math.floor((1 - d) * 6 + (hash(x, y, 1180) - 0.5) * 0.6));
+        var k = Math.min(11, Math.floor(Math.pow(1 - d, 1.4) * 12));
         if (k >= 0) g.set(x, y, P[k]);
       }
       return g;
@@ -1705,7 +1705,7 @@
       else if ((m = /^hx_blast_([sml])_(\d)$/.exec(key))) { g = blast(m[1], +m[2]); anchor = 'center'; }
       else if ((m = /^hx_nuke_(\d)$/.exec(key))) g = nuke(+m[1]);
       else if ((m = /^hx_bolt_(\d)$/.exec(key))) g = boltHi(+m[1]);
-      else if ((m = /^hx_(rain|snow)_(\d)$/.exec(key))) return { grid: particles(m[1], +m[2]), scale: 0.5, ox: 0, oy: 0 };
+      else if ((m = /^hx_(rain|snow)_(\d)(?:_(\d))?$/.exec(key))) return { grid: particles(m[1], +m[2], m[3] ? +m[3] : 0), scale: 0.5, ox: 0, oy: 0 };
       else if ((m = /^hx_glow_(warm|cold)$/.exec(key))) { g = glowHi(m[1] === 'cold'); anchor = 'center'; }
       else if ((m = /^hx_chimney_(\d)$/.exec(key))) g = chimneySmoke(+m[1]);
       else return null;
@@ -1720,8 +1720,68 @@
     for (fi2 = 0; fi2 < 10; fi2++) A2['fx_nuke_' + fi2] = 'hx_nuke_' + fi2;
     for (fi2 = 0; fi2 < 6; fi2++) A2['fx_mushroom_' + fi2] = 'hx_nuke_' + Math.round(fi2 * 9 / 5);
     A2.fx_bolt = 'hx_bolt_0'; A2.fx_bolt_0 = 'hx_bolt_0'; A2.fx_bolt_1 = 'hx_bolt_1';
+    for (var wv = 0; wv < 4; wv++) for (var wf = 0; wf < 2; wf++) { A2['fx_rain_' + wf + '_' + wv] = 'hx_rain_' + wf + '_' + wv; A2['fx_snow_' + wf + '_' + wv] = 'hx_snow_' + wf + '_' + wv; }
+    // Regen/Schnee: vier Kachelvarianten nach Position, damit keine Spalten entstehen
+    S.weatherKey = function (kind, frame, tx, ty) { return 'fx_' + (kind === 'snow' ? 'snow' : 'rain') + '_' + ((frame | 0) & 1) + '_' + (((tx * 3 + ty * 5) % 4 + 4) % 4); };
     A2.fx_rain_0 = 'hx_rain_0'; A2.fx_rain_1 = 'hx_rain_1'; A2.fx_snow_0 = 'hx_snow_0'; A2.fx_snow_1 = 'hx_snow_1';
     A2.fx_glow_warm = 'hx_glow_warm'; A2.fx_glow_cold = 'hx_glow_cold';
+    // ---------------------------------------------------------------- Zelte und Lager neu im feinen Raster (ht_*)
+    var TNT = { hide: [HC('#ecd2a6'), HC('#d2b07c'), HC('#a8844e'), HC('#7a5a32')], felt: [HC('#fbf4e6'), HC('#e8dcc4'), HC('#c8b898'), HC('#9a8a6a')],
+      canvas: [HC('#f2ead2'), HC('#dcd0b0'), HC('#b8a880'), HC('#8a7a56')], pole: [C.woodL, C.wood, C.woodD] };
+    function shadeTri(g, apexX, apexY, baseY, hw0, hw1, P, stripe) {
+      for (var y = apexY; y <= baseY; y++) { var t = (y - apexY) / Math.max(1, baseY - apexY), hw = hw0 + (hw1 - hw0) * t;
+        for (var x = Math.floor(apexX - hw); x <= Math.ceil(apexX + hw); x++) { var dx = (x + 0.5 - apexX) / Math.max(0.5, hw); if (Math.abs(dx) > 1) continue;
+          var c = dx < -0.45 ? P[0] : (dx < 0.25 ? P[1] : (dx < 0.75 ? P[2] : P[3])); if (stripe && Math.abs(y - stripe) <= 1) c = Math.abs(y - stripe) === 0 ? 'T' : (dx < 0 ? 'Tl' : 'Td'); g.set(x, y, c); } }
+    }
+    function tentHi(v) {
+      var g = new Grid(30, 32), x, y;
+      if (v === 0) {   // Spitzzelt mit Stangen und Bemalung
+        shadeTri(g, 15, 6, 28, 1, 12, TNT.hide, 20);
+        for (var k = -1; k <= 1; k++) g.line(15 + k * 2, 6, 15 + k * 4, 0, TNT.pole[2]);
+        for (x = 9; x < 22; x += 4) g.set(x, 24, TNT.hide[3]);
+        g.rect(13, 21, 5, 8, C.plum); g.vline(13, 21, 8, TNT.hide[3]); g.line(13, 21, 15, 18, TNT.hide[2]);
+      } else if (v === 1) {   // Firstzelt aus Segeltuch, offene Klappe
+        for (y = 8; y < 29; y++) for (x = 2; x < 28; x++) { var t = (y - 8) / 20; if (y < 18) { if (Math.abs(x - 15) > 2 + t * 26) continue; } g.set(x, y, y < 18 ? (x < 15 ? TNT.canvas[0] : TNT.canvas[1]) : (x < 6 || x > 24 ? TNT.canvas[2] : TNT.canvas[1])); }
+        g.hline(2, 18, 26, TNT.canvas[3]); g.hline(4, 12, 22, 'T'); g.hline(4, 13, 22, 'Td');
+        shadeTri(g, 15, 18, 28, 1, 7, [TNT.canvas[0], TNT.canvas[1], TNT.canvas[2], TNT.canvas[3]]);
+        shadeTri(g, 15, 21, 28, 0.5, 4, [C.plum, C.ink, C.ink, C.plum]); g.vline(15, 6, 3, TNT.pole[2]);
+        g.line(0, 28, 4, 19, TNT.pole[2]); g.line(29, 28, 25, 19, TNT.pole[2]);
+      } else if (v === 2) {   // Jurte mit Filzbahnen und Teamband
+        g.ellipse(15, 13, 13, 7, function (px, py, nx, ny) { return py > 13 ? null : (nx + ny < -0.6 ? TNT.felt[0] : (nx > 0.45 ? TNT.felt[2] : TNT.felt[1])); });
+        for (y = 13; y < 29; y++) for (x = 2; x < 28; x++) g.set(x, y, x < 5 ? TNT.felt[0] : (x > 24 ? TNT.felt[3] : ((x % 5 === 0) ? TNT.felt[2] : TNT.felt[1])));
+        g.hline(2, 16, 26, 'T'); g.hline(2, 17, 26, 'Td'); g.hline(2, 15, 26, 'Tl'); g.rect(12, 20, 6, 9, TNT.pole[2]); g.rect(13, 21, 4, 8, TNT.pole[1]);
+        g.ellipse(15, 6, 2.5, 1.5, TNT.pole[2]);
+      } else {   // Fellzelt, unregelmäßig, Knochenstangen
+        g.ellipse(15, 18, 13, 11, function (px, py, nx, ny) { if (py > 28) return null; var h = hash(px >> 1, py >> 1, 1301); return h < 0.18 ? TNT.hide[3] : (nx + ny < -0.4 ? TNT.hide[0] : (nx > 0.4 ? TNT.hide[2] : TNT.hide[1])); });
+        g.line(6, 4, 10, 12, C.cream); g.line(24, 4, 20, 12, C.cream); g.rect(11, 21, 7, 8, C.plum); g.vline(25, 5, 23, TNT.pole[2]); g.paint(26, 5, ['TTu', 'TTT', 'Tt.']);
+      }
+      return S._finishH(g, 2);
+    }
+    function campHi(v, f) {
+      var g = new Grid(46, 54), G0 = 8;   // Grundfläche ab Zeile G0
+      function log(x, y, w) { g.rect(x, y, w, 3, C.wood); g.hline(x, y, w, C.woodL); g.hline(x, y + 2, w, C.woodD); g.rect(x + w - 2, y, 2, 3, C.strawL); g.set(x + w - 1, y + 1, C.woodD); g.hline(x, y + 3, w + 1, C.shade); }
+      // Feuerstelle: Steinring, Glut, Flammen (zwei Phasen)
+      g.ellipse(23, G0 + 26, 7, 4, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.6 ? (hash(px, py, 1310) < 0.5 ? C.stone : C.stoneD) : (d > 0.3 ? C.ink : C.fireO); });
+      flame(g, 23, G0 + 26, 9, 12 + f * 2, f * 3, 0.4); flame(g, 21, G0 + 26, 5, 7, f * 3 + 2, 1.7);
+      log(8, G0 + 24, 9); log(30, G0 + 24, 9); log(17, G0 + 34, 12);
+      // Fahnenstange mit Banner in Teamfarbe
+      var fx = v ? 40 : 4; g.vline(fx, 0, G0 + 22, C.woodD); g.vline(fx + 1, 0, G0 + 22, C.wood); g.set(fx, 0, C.goldL);
+      for (var j = 0; j < 8; j++) g.hline(fx + 2, 2 + j, 10 - (j > 5 ? (j - 5) * 2 : 0), j < 2 ? 'Tl' : (j > 5 ? 'Td' : 'T'));
+      // Vorräte: Kisten und Säcke bzw. Kochtopf am Dreibein
+      if (!v) { g.paint(30, G0 + 4, ['vvvvvW..', 'vwwwwW..', 'vwWwwWcY', 'vwwwwWYY', 'WWWWWW.Y']); g.paint(9, G0 + 38, ['cYc', 'YYY']); }
+      else { g.line(30, G0 + 34, 34, G0 + 24, C.woodD); g.line(38, G0 + 34, 34, G0 + 24, C.woodD); g.paint(32, G0 + 28, ['MMMMM', 'MmmmM', '.MMM.']); g.paint(3, G0 + 8, ['cYcY..', 'YYYYvw', '.vwwWW']); }
+      return g.outline();
+    }
+    L.lazyDef('ht_', function (key) {
+      var m;
+      if ((m = /^ht_tent_([a-d])$/.exec(key))) { var g = tentHi('abcd'.indexOf(m[1])); return { grid: g, scale: 0.5, fw: 2, fh: 2, ox: 0, oy: 16 - g.h * 0.5 + 0.5 }; }
+      if ((m = /^ht_camp_([ab])_(\d)$/.exec(key))) { var c = campHi(m[1] === 'b' ? 1 : 0, +m[2] & 1); return { grid: c, scale: 0.5, fw: 3, fh: 3, ox: 0, oy: 24 - c.h * 0.5 }; }
+      return null;
+    });
+    'abcd'.split('').forEach(function (v) { L.ALIAS['s_tent_' + v] = 'ht_tent_' + v; });
+    Object.keys(S._litmap || {}).forEach(function (k) { if (/^s_(tent|camp)_/.test(k)) delete S._litmap[k]; });
+    ['a', 'b'].forEach(function (v) { L.ALIAS['s_camp_' + v] = 'ht_camp_' + v + '_0'; L.ALIAS['s_camp_' + v + '_0'] = 'ht_camp_' + v + '_0'; L.ALIAS['s_camp_' + v + '_1'] = 'ht_camp_' + v + '_1'; });
+
     // Phasenzahl je Effekt für den Renderer
     S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, bolt: 2, rain: 2, snow: 2 }[name] || 1; };
   });

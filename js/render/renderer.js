@@ -87,11 +87,18 @@
   // ------------------------------------------------------------------ Boden-Blöcke
   Renderer.prototype.chunkAt = function (tx, ty) { return this.chunks[((ty / CH) | 0) * this.cw + ((tx / CH) | 0)]; };
 
-  Renderer.prototype.drawGroundTile = function (g, x, y) {
+  Renderer.prototype.drawGroundTile = function (g, x, y, hi) {
     const st = this.st, W = st.W, H = st.H, i = y * W + x, t = st.terrain;
-    this.S.drawGround(g, x * 8, y * 8, t[i], st.variant ? st.variant[i] : 0,
-      y > 0 ? t[i - W] : -1, x < W - 1 ? t[i + 1] : -1, y < H - 1 ? t[i + W] : -1, x > 0 ? t[i - 1] : -1);
-    this.blendEdges(g, x, y);
+    const T = (xx, yy) => xx < 0 || yy < 0 || xx >= W || yy >= H ? -1 : t[yy * W + xx];
+    if (hi) {
+      // feine Kachel in Cache-Pixeln zeichnen (Kontext kurz unskaliert), Überlagerungen danach in Logikpixeln
+      g.save(); g.setTransform(1, 0, 0, 1, g.getTransform().e, g.getTransform().f);
+      this.S.drawGroundHi(g, x * 16, y * 16, t[i], st.variant ? st.variant[i] : 0, T(x, y - 1), T(x + 1, y), T(x, y + 1), T(x - 1, y), T(x + 1, y - 1), T(x + 1, y + 1), T(x - 1, y + 1), T(x - 1, y - 1));
+      g.restore();
+    } else {
+      this.S.drawGround(g, x * 8, y * 8, t[i], st.variant ? st.variant[i] : 0, T(x, y - 1), T(x + 1, y), T(x, y + 1), T(x - 1, y));
+      this.blendEdges(g, x, y);
+    }
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
     if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
     if (st.murk && st.murk[i] > 0 && this.S.has('t_murk')) { g.globalAlpha = Math.min(1, 0.4 + st.murk[i] / 200); this.S.drawFast(g, 't_murk', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
@@ -167,16 +174,33 @@
     return (y > 0 && p[i - W] ? 1 : 0) | (x < W - 1 && p[i + 1] ? 2 : 0) | (y < H - 1 && p[i + W] ? 4 : 0) | (x > 0 && p[i - 1] ? 8 : 0);
   };
 
+  // feiner Boden (16 px je Kachel), außer bei Qualität „niedrig" oder ohne Helfer
+  Renderer.prototype.useHi = function () { return typeof this.S.drawGroundHi === 'function' && this.gfx.quality !== 'low'; };
   Renderer.prototype.buildChunk = function (c) {
-    const st = this.st;
-    if (!c.ground) { c.ground = document.createElement('canvas'); c.ground.width = CPX; c.ground.height = CPX; }
+    const st = this.st, hi = this.useHi(), k = hi ? 2 : 1;
+    if (!c.ground || c.hi !== hi) { c.ground = document.createElement('canvas'); c.ground.width = CPX * k; c.ground.height = CPX * k; c.hi = hi; }
     const g = c.ground.getContext('2d');
-    g.setTransform(1, 0, 0, 1, -c.cx * CPX, -c.cy * CPX);
+    g.setTransform(k, 0, 0, k, -c.cx * CPX * k, -c.cy * CPX * k);
     const x1 = Math.min(st.W, (c.cx + 1) * CH), y1 = Math.min(st.H, (c.cy + 1) * CH);
-    for (let y = c.cy * CH; y < y1; y++) for (let x = c.cx * CH; x < x1; x++) this.drawGroundTile(g, x, y);
+    for (let y = c.cy * CH; y < y1; y++) for (let x = c.cx * CH; x < x1; x++) this.drawGroundTile(g, x, y, hi);
+    c.usedT = this.time;
+    this.trimChunks();
     c.built = true;
     c.decorDirty = true;
     c.waterDirty = true;
+  };
+
+  // Speicher: höchstens ~28 feine Blöcke behalten; lange unbenutzte geben Boden und Wasserbilder frei
+  Renderer.prototype.trimChunks = function () {
+    const hiC = this.chunks.filter(c => c.built && (c.hi || c.wGl));
+    if (hiC.length <= 28) return;
+    hiC.sort((a, b) => (a.usedT || 0) - (b.usedT || 0));
+    for (let i = 0; i < hiC.length - 28; i++) {
+      const c = hiC[i];
+      if (this.time - (c.usedT || 0) < 2) break;
+      c.ground = null; c.built = false; c.wGl = null; c.hi = false;
+      if (this.buildQueue.indexOf(c) < 0) this.buildQueue.push(c);
+    }
   };
 
   // Deko-Block für die weite Ansicht: Deko und Bauwerke des Blocks, zeilenweise, in ein Canvas
@@ -246,7 +270,7 @@
     return this.S.decorFor(st.terrain[i], st.variant ? st.variant[i] : 0);
   };
 
-  const SWAY_RE = /^d_(tree|pine|jtree|palm|acacia|mangrove|shroom|reed|deadtree)/;
+  const SWAY_RE = /^(d|hd)_(tree|pine|jtree|palm|acacia|mangrove|shroom|reed|deadtree|bush|fern|grass)/;
 
   // Fahnen je Regierung (rein optisch, deterministisch); Liste alle 2 s neu
   Renderer.prototype.flagList = function () {
@@ -445,6 +469,10 @@
       if (!(i >= 0 && i < N)) continue;
       const x = i % W, y = (i / W) | 0;
       this.groundDirty.add(i);
+      if (y > 0 && x > 0) this.groundDirty.add(i - W - 1);
+      if (y > 0 && x < W - 1) this.groundDirty.add(i - W + 1);
+      if (y < H - 1 && x > 0) this.groundDirty.add(i + W - 1);
+      if (y < H - 1 && x < W - 1) this.groundDirty.add(i + W + 1);
       if (y > 0) this.groundDirty.add(i - W);
       if (y < H - 1) this.groundDirty.add(i + W);
       if (x > 0) this.groundDirty.add(i - 1);
@@ -461,14 +489,19 @@
     if (!this.groundDirty.size) return;
     const st = this.st, W = st.W;
     const touched = new Set();
+    // Zeitbudget: feine Kacheln sind teuer, Rest im nächsten Bild
+    const t0 = performance.now(), lim = this.useHi() ? 1.5 : 4;
+    let n = 0;
     for (const i of this.groundDirty) {
+      if ((++n & 1) === 0 && performance.now() - t0 > lim) break;
+      this.groundDirty.delete(i);
       const x = i % W, y = (i / W) | 0;
       const c = this.chunkAt(x, y);
       this.updateMiniTile(i);
       if (!c.built) continue;
-      const g = c.ground.getContext('2d');
-      g.setTransform(1, 0, 0, 1, -c.cx * CPX, -c.cy * CPX);
-      this.drawGroundTile(g, x, y);
+      const g = c.ground.getContext('2d'), k = c.hi ? 2 : 1;
+      g.setTransform(k, 0, 0, k, -c.cx * CPX * k, -c.cy * CPX * k);
+      this.drawGroundTile(g, x, y, c.hi);
       touched.add(c);
       // Wasser-Masken nur neu, wenn sich an Wasser/Land dieser Kachel etwas geändert hat
       const wk = waterKind(st.terrain[i]);
@@ -479,7 +512,6 @@
     }
     for (const c of touched) c.decorDirty = c.decorDirty || c._decorTouched;
     for (const c of touched) c._decorTouched = false;
-    this.groundDirty.clear();
   };
 
   // ------------------------------------------------------------------ Trampelpfade (nur Darstellung)
@@ -516,7 +548,7 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { rock: 0.5, ward: 0.8, dud: 0.6, smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { explosion: 0.9, mushroom: 3.6, rock: 0.5, ward: 0.8, dud: 0.6, smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
@@ -740,6 +772,13 @@
     const c = this._fxF || (this._fxF = {});
     if (c[type]) return c[type];
     const out = [];
+    // feine Phasen der Grafik: Explosion -> blast_*, Pilzwolke -> nuke
+    const alias = { mushroom: 'nuke', explosion: 'blast_m', explosion_big: 'blast_l', explosion_small: 'blast_s' }[type];
+    if (alias && typeof this.S.fxFrames === 'function' && this.S.has('fx_' + alias + '_0')) {
+      const n = this.S.fxFrames(alias);
+      for (let i = 0; i < n; i++) out.push('fx_' + alias + '_' + i);
+      return (c[type] = out);
+    }
     for (let n = 0; n < 12 && this.S.has('fx_' + type + '_' + n); n++) out.push('fx_' + type + '_' + n);
     if (!out.length && this.S.has('fx_' + type)) out.push('fx_' + type);
     return (c[type] = out);
@@ -777,7 +816,7 @@
         }
         case 'bolt':
           g.globalAlpha = k < 0.5 ? 1 : (1 - k) * 2;
-          S.drawFast(g, 'fx_bolt', px - 4, py - 4, 0, (f.seed & 1) === 1);
+          S.drawFast(g, S.has('fx_bolt_0') ? 'fx_bolt_' + (((f.t * 20) | 0) & 1) : 'fx_bolt', px - 4, py - 4, 0, (f.seed & 1) === 1);
           g.globalAlpha = 1;
           break;
         case 'meteor': {
@@ -872,8 +911,10 @@
           break;
         }
         case 'mushroom': case 'explosion': {
-          let fr = this.fxFrames(f.type === 'explosion' && (f.r || 1) >= 3 && this.fxFrames('explosion_big').length ? 'explosion_big' : f.type);
-          const sc = f.type === 'explosion' ? Math.max(1, Math.min(4, (f.r || 1) / (this.fxFrames('explosion_big').length && (f.r || 1) >= 3 ? 3 : 1.2))) : Math.max(1, (f.r || 1) / 4);
+          let fr = this.fxFrames(f.type === 'explosion' ? ((f.r || 1) >= 3 ? 'explosion_big' : (f.r || 1) < 1.5 && this.S.has('fx_blast_s_0') ? 'explosion_small' : 'explosion') : f.type);
+          const fine = this.S.has('fx_blast_m_0');
+          const sc = fine ? (f.type === 'explosion' ? Math.max(1, Math.min(2.5, (f.r || 1) / 4)) : Math.max(1, (f.r || 1) / 10)) :
+            f.type === 'explosion' ? Math.max(1, Math.min(4, (f.r || 1) / (this.fxFrames('explosion_big').length && (f.r || 1) >= 3 ? 3 : 1.2))) : Math.max(1, (f.r || 1) / 4);
           if (!fr.length) {   // Ersatz: Feuerball aus vorhandenen Sprites
             const r = (f.r || 1.5) * 8 * (0.4 + k);
             g.globalAlpha = 1 - k;
@@ -1037,6 +1078,9 @@
     if (!st) { ctx.fillStyle = '#0f2a35'; ctx.fillRect(0, 0, cv.width, cv.height); return; }
 
     // Blöcke bauen (Zeitbudget), schmutzige Kacheln
+    const hiNow = this.useHi();
+    if (this._hiWas !== undefined && this._hiWas !== hiNow) this.markAll();
+    this._hiWas = hiNow;
     this.flushDirty();
     const budget = opts.firstFrames ? 40 : 7;
     const tb = performance.now();
@@ -1080,8 +1124,9 @@
       if (!c.built) continue;
       const X = cx * CPX, Y = cy * CPX;
       const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
-      const dx = rx(X), dy = ry(Y);
-      ctx.drawImage(c.ground, 0, 0, w, h, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
+      const dx = rx(X), dy = ry(Y), k = c.hi ? 2 : 1;
+      c.usedT = this.time;
+      ctx.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
     }
     // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
     if (this.gfx.water !== false) this.drawWaterLayer(ctx, cx0, cx1, cy0, cy1, rx, ry, low);
@@ -1120,10 +1165,11 @@
 
     // Feuer auf Kacheln
     if (st.fire && st.fireCount > 0) {
-      const fr = ((this.time * 8) | 0) % 3;
+      const nf = typeof S.fxFrames === 'function' ? S.fxFrames('fire') : 3;
+      const fr = ((this.time * 10) | 0) % nf;
       for (let y = vt.y0; y <= vt.y1; y++) for (let x = vt.x0; x <= vt.x1; x++) {
         const f = st.fire[y * st.W + x];
-        if (f) S.drawFast(ctx, 'fx_fire_' + ((fr + x + y) % 3), x * 8, y * 8 - 2, 0, ((x + y) & 1) === 1);
+        if (f) S.drawFast(ctx, 'fx_fire_' + ((fr + x + y) % nf), x * 8, y * 8 - 2, 0, ((x + y) & 1) === 1);
       }
     }
 
@@ -1211,6 +1257,7 @@
     const time = this.time;
     const devS = ctx.getTransform ? ctx.getTransform().a : 1;
     const sway = devS >= 2 && this.gfx.quality !== 'low' && !this.autoOff.sway;
+    const swayFn = typeof S.swayKey === 'function', swayStep = (time * 2) | 0;
     const bubbles = [];
     const bars = [];
     const flyers = [];
@@ -1247,9 +1294,12 @@
         for (let x = vt.x0; x <= vt.x1; x++) {
           const d = this.decorAt(y * W + x);
           if (d) {
-            let sw = 0;
-            if (sway && SWAY_RE.test(d.key)) { sw = Math.sin(time * 1.6 + x * 0.42 + y * 0.27) + 0.5 * Math.sin(time * 0.6 + x * 0.11); sw = Math.round(sw * 0.45 * devS) / devS; }
-            S.drawFast(ctx, d.key, x * 8 + d.dx + sw, y * 8 + d.dy, 0, false); drawn++;
+            let key = d.key, sw = 0;
+            if (sway && SWAY_RE.test(key)) {
+              if (swayFn) { const k2 = S.swayKey(key, (x + y + swayStep) % 3); if (k2 !== key && S.has(k2)) key = k2; }
+              else { sw = Math.sin(time * 1.6 + x * 0.42 + y * 0.27) + 0.5 * Math.sin(time * 0.6 + x * 0.11); sw = Math.round(sw * 0.45 * devS) / devS; }
+            }
+            S.drawFast(ctx, key, x * 8 + d.dx + sw, y * 8 + d.dy, 0, false); drawn++;
           }
         }
       }
@@ -1325,13 +1375,16 @@
     const k = cityK.get(s.cityId);
     const gov = k ? k.gov : 'tribe';
     const team = k ? k.colorIndex | 0 : 10;
-    const key = this.structKey(s, gov);
+    let key = this.structKey(s, gov);
+    if (s.type === 'field' && typeof S.swayKey === 'function' && (key === 's_field_3' || key === 's_field_2')) {
+      const k2 = S.swayKey(key, (s.x + s.y + ((this.time * 2) | 0)) % 3); if (k2 && S.has(k2)) key = k2;
+    }
     const inf = S.info(key);
     const fh = inf ? inf.fh : s.h;
     const px = s.x * 8, py = (s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
     // Kornwogen auf reifenden Feldern: helle Welle läuft über das Feld
-    if (s.type === 'field' && s.built !== false && (s.growth | 0) >= 2 && zoomBig) {
+    if (s.type === 'field' && s.built !== false && (s.growth | 0) >= 2 && zoomBig && typeof S.swayKey !== 'function') {
       const row = ((this.time * 7 + s.x * 2.3 + s.y * 1.7) | 0) % 12;
       if (row < 8) { ctx.fillStyle = 'rgba(255,240,170,0.28)'; ctx.fillRect(px, py + row, 8, 1); }
     }
@@ -1614,6 +1667,7 @@
   // Glitzer je Block einmal vorberechnen (4 Bilder, Meer und Fluss mit versetzten Mustern), dann nur noch wechseln
   const WFR = 6;
   Renderer.prototype.buildWaterGlints = function (c) {
+    if (typeof this.S.waterAnimKey === 'function') return this.buildWaterAnim(c);
     const frames = this.glintFrames();
     c.wGl = [];
     for (let f = 0; f < WFR; f++) {
@@ -1635,6 +1689,28 @@
       c.wGl.push(cv);
     }
   };
+  // Wasser aus den Animationsbildern der Grafik: je Block 4 Phasen in 16 px je Kachel, mit Brandung
+  Renderer.prototype.buildWaterAnim = function (c) {
+    const S = this.S, st = this.st, W = st.W, H = st.H, t = st.terrain;
+    const x0 = c.cx * CH, y0 = c.cy * CH, x1 = Math.min(W, x0 + CH), y1 = Math.min(H, y0 + CH);
+    const T = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? -1 : t[y * W + x];
+    c.wGl = []; c.wHi = true;
+    for (let f = 0; f < 4; f++) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = CPX * 2;
+      const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+      g.setTransform(2, 0, 0, 2, -x0 * 16, -y0 * 16);
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const id = t[y * W + x];
+        if (!waterKind(id)) continue;
+        const k = S.waterAnimKey(id, f);
+        if (k && S.has(k)) S.drawFast(g, k, x * 8, y * 8, 0, false);
+        const sk = typeof S.surfKey === 'function' ? S.surfKey(T(x, y - 1), T(x + 1, y), T(x, y + 1), T(x - 1, y), f) : null;
+        if (sk && S.has(sk)) S.drawFast(g, sk, x * 8, y * 8, 0, false);
+      }
+      c.wGl.push(cv);
+    }
+  };
+
   Renderer.prototype.drawWaterLayer = function (ctx, cx0, cx1, cy0, cy1, rx, ry, low) {
     const st = this.st, t = this.time;
     const fr = ((t * 3.5) | 0) % WFR;
@@ -1643,12 +1719,12 @@
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
       const c = this.chunks[cy * this.cw + cx];
       if (!c.built) continue;
-      if (c.waterDirty || c.hasWater == null) { this.buildWater(c); c.wGl = null; }
+      if (c.waterDirty || c.hasWater == null) { this.buildWater(c); c.wGl = null; c.wHi = false; }
       if (!c.hasWater) continue;
       const X = cx * CPX, Y = cy * CPX, w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
       const dx = rx(X), dy = ry(Y), dw = rx(X + w) - dx, dh = ry(Y + h) - dy;
-      if (!low && !c.wGl && builds-- > 0) this.buildWaterGlints(c);
-      if (!low && c.wGl) { ctx.drawImage(c.wGl[fr], 0, 0, w, h, dx, dy, dw, dh); continue; }
+      if (!low && !c.wGl && builds-- > 0) { this.buildWaterGlints(c); this.trimChunks(); }
+      if (!low && c.wGl) { c.usedT = t; const k = c.wHi ? 2 : 1; ctx.drawImage(c.wGl[c.wHi ? ((t * 4) | 0) & 3 : fr], 0, 0, w * k, h * k, dx, dy, dw, dh); continue; }
       // weite Ansicht oder noch nicht gebaut: nur die Brandung
       ctx.globalAlpha = Math.max(0, a1) * 0.9; ctx.drawImage(c.wFoam1, 0, 0, w, h, dx, dy, dw, dh);
       ctx.globalAlpha = Math.max(0, a2) * 0.6; ctx.drawImage(c.wFoam2, 0, 0, w, h, dx, dy, dw, dh);
@@ -1720,9 +1796,21 @@
       }
       if (p < 0.25 || p > 0.85) { g.fillStyle = 'rgba(232,248,250,0.8)'; const sx = p < 0.25 ? f.x : f.x + f.d * 5; g.fillRect(Math.round(sx) - 1, Math.round(f.y) + 1, 3, 1); }
     }
-    // Schornsteinrauch aus Wohnhäusern (gemächlich, wenige)
+    // Schornsteinrauch aus Wohnhäusern: feine Rauchfahne der Grafik, sonst Wölkchen
+    if (this.S.has('fx_chimney_0') && st.structs) {
+      const nc = typeof this.S.fxFrames === 'function' ? this.S.fxFrames('chimney') : 4;
+      let n = 0;
+      for (const s of st.structs) {
+        if (n > 40) break;
+        if (s.type !== 'house' || !s.built || s.dead || (s.level | 0) < 1) continue;
+        if (s.x < vt.x0 - 1 || s.x > vt.x1 || s.y < vt.y0 || s.y > vt.y1 + 1) continue;
+        if (hash2(s.id, 3, 17) > 0.45) continue;
+        n++;
+        this.S.drawFast(g, 'fx_chimney_' + (((t * 6 + s.id) | 0) % nc), s.x * 8 + 10, s.y * 8 - 12, 0, false);
+      }
+    } else
     this._chimT = (this._chimT || 0) - dt;
-    if (this._chimT <= 0 && st.structs) {
+    if (!this.S.has('fx_chimney_0') && this._chimT <= 0 && st.structs) {
       this._chimT = q === 'low' ? 1.2 : 0.45;
       const cands = [];
       for (const s of st.structs) {
@@ -1922,6 +2010,7 @@
   // warmes Licht: vorberechneter Lichtfleck, additiv an Häusern, Zentren, Lagerfeuern, Bränden
   Renderer.prototype.glowSprite = function () {
     if (this._glow) return this._glow;
+    if (this.S.has('fx_glow_warm')) { const inf = this.S.info('fx_glow_warm'); this._glow = this.S.iconCanvas('fx_glow_warm', inf && inf.scale ? Math.round(1 / inf.scale) : 1); if (this._glow) return this._glow; }
     const cv = document.createElement('canvas'); cv.width = cv.height = 32;
     const c = cv.getContext('2d'), gr = c.createRadialGradient(16, 16, 0, 16, 16, 16);
     gr.addColorStop(0, 'rgba(255,200,110,0.85)'); gr.addColorStop(0.35, 'rgba(255,160,70,0.35)'); gr.addColorStop(1, 'rgba(255,140,60,0)');
