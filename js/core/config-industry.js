@@ -60,8 +60,8 @@
   WW.RAIL = {
     GOVS: { communism: { name: 'Volksbahn' }, fascism: { name: 'Gleichschrittbahn' } },
     MIN_TIER: 2,        // Städte ab „Stadt"
-    MIN_DIST: 16,       // näher beieinander liegende Bahnhöfe bekommen keine (Mini-)Strecke
-    MIN_LEN: 12,        // kürzere Trassen werden nicht gebaut
+    MIN_DIST: 22,       // näher beieinander liegende Bahnhöfe bekommen keine (Mini-)Strecke
+    MIN_LEN: 18,        // kürzere Trassen werden nicht gebaut
     MAX_DIST: 64,       // Bahnhöfe weiter auseinander (Kacheln, Manhattan) werden nicht verbunden
     MAX_LEN: 160,       // längste Trasse
     PATH_NODES: 40000,  // Grenze der Wegsuche

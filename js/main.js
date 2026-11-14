@@ -498,7 +498,7 @@
 
   // automatische Qualitätsregelung: bei dauerhaft zu langer Bildzeit schrittweise Wolkenschatten,
   // Wetterpartikel, Wiegen abschalten; läuft es lange wieder flüssig, eins zurückholen
-  const AUTO_ORDER = ['clouds', 'precip', 'sway'];
+  const AUTO_ORDER = ['clouds', 'precip', 'sway', 'glints', 'fine'];
   let aqEma = 1 / 60, aqBad = 0, aqGood = 0;
   function autoQuality(dt) {
     const R = game.renderer;
@@ -509,7 +509,7 @@
       aqBad = 0;
       const k = AUTO_ORDER.find(x => !R.autoOff[x]);
       if (k) R.autoOff[k] = true;
-    } else if (aqGood > 25) {
+    } else if (aqGood > 90) {
       aqGood = 0;
       const k = AUTO_ORDER.slice().reverse().find(x => R.autoOff[x]);
       if (k) delete R.autoOff[k];
@@ -540,7 +540,11 @@
   let lastW = 0, lastH = 0, lastDpr = 0;
   function resize() {
     const cv = game.canvas, app = document.getElementById('app');
-    const w = app.clientWidth, h = app.clientHeight, dpr = Math.min(3, window.devicePixelRatio || 1);
+    // Leistung: Pixelkunst braucht keine volle Geräteauflösung. Ab 2-facher Dichte wird in einfacher Auflösung gezeichnet
+    // (ein Viertel bis ein Neuntel der Bildpunkte) und vom Browser pixelgenau vergrößert. „Volle Auflösung" im Grafik-Menü schaltet zurück.
+    const real = Math.min(3, window.devicePixelRatio || 1);
+    const dpr = (game.gfx && game.gfx.sharp) ? real : (real >= 2 ? 1 : real);
+    const w = app.clientWidth, h = app.clientHeight;
     if (w === lastW && h === lastH && dpr === lastDpr) return;
     lastW = w; lastH = h; lastDpr = dpr;
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
@@ -590,8 +594,8 @@
   };
   game.uiSound = function (name) { if (game.audioOn && game.audioSet.on && WW.Audio && WW.Audio.ui) { try { WW.Audio.ui(name); } catch (e) { /* egal */ } } };
   // Grafik-Einstellungen der Pixel-Ansicht (gespeichert)
-  const GFX_KEY = 'wuselwelt.gfx';
-  game.gfx = (function () { const small = window.innerWidth < 760; const d = { daynight: true, weather: true, clouds: !small, water: true, quality: small ? 'low' : 'mid' };
+  const GFX_KEY = 'wuselwelt.gfx2';
+  game.gfx = (function () { const small = window.innerWidth < 760; const d = { daynight: false, weather: false, clouds: false, water: true, sharp: false, quality: small ? 'low' : 'mid' };
     try { return Object.assign(d, JSON.parse(D().store.get(GFX_KEY) || '{}')); } catch (e) { return d; } })();
   game.applyGfx = function () { D().store.set(GFX_KEY, JSON.stringify(game.gfx)); if (game.renderer) game.renderer.gfx = game.gfx; };
   game.quality = (function () { const q = D().store.get('wuselwelt.quality'); return q || (window.innerWidth < 760 ? 'low' : 'mid'); })();

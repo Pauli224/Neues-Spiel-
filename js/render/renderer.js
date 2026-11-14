@@ -29,7 +29,7 @@
     this.teamCss = this.S.TEAM_COLORS.map(c => ({ main: c.main, dark: c.dark, light: c.light, rgb: hexRgb(c.main) }));
     this.rowU = []; this.rowS = [];
     this.labelCache = new Map();
-    this.gfx = { daynight: true, weather: true, clouds: true, water: true, quality: 'mid' };
+    this.gfx = { daynight: false, weather: false, clouds: false, water: true, quality: 'mid' };
     this.autoOff = {};   // automatische Qualitätsregelung: abgeschaltete Teile
   }
 
@@ -175,7 +175,7 @@
   };
 
   // feiner Boden (16 px je Kachel), außer bei Qualität „niedrig" oder ohne Helfer
-  Renderer.prototype.useHi = function () { return typeof this.S.drawGroundHi === 'function' && this.gfx.quality !== 'low'; };
+  Renderer.prototype.useHi = function () { return typeof this.S.drawGroundHi === 'function' && this.gfx.quality !== 'low' && !this.autoOff.fine; };
   Renderer.prototype.buildChunk = function (c) {
     const st = this.st, hi = this.useHi(), k = hi ? 2 : 1;
     if (!c.ground || c.hi !== hi) { c.ground = document.createElement('canvas'); c.ground.width = CPX * k; c.ground.height = CPX * k; c.hi = hi; }
@@ -355,7 +355,7 @@
   // Vorkommen: Deko d_deposit_<art>_<n>; Art aus state.depositKinds / WW.DEPOSIT_KEYS / WW.DEPOSITS
   Renderer.prototype.depositDecor = function (i) {
     const st = this.st, v = st.deposit[i], S = this.S;
-    const kinds = st.depositKinds || WW.DEPOSIT_KEYS || (WW.DEPOSITS ? (Array.isArray(WW.DEPOSITS) ? WW.DEPOSITS.map(d => d.key || d) : Object.keys(WW.DEPOSITS)) : null);
+    const kinds = st.depositKinds || WW.DEPOSIT_KEYS || (WW.DEPOSITS ? (Array.isArray(WW.DEPOSITS) ? WW.DEPOSITS.map(d => d && (d.key || d)) : Object.keys(WW.DEPOSITS)) : null);
     const kind = typeof v === 'string' ? v : kinds ? (kinds[v] || kinds[v - 1]) : ['iron', 'coal', 'gold', 'crystal'][v - 1];
     if (!kind) return null;
     const n = (Math.imul(i, 2654435761) >>> 28) % 3;
@@ -639,8 +639,11 @@
         if (airView) { d[o] = 90 + v * 70; d[o + 1] = 200 - v * 140; d[o + 2] = 90 - v * 50; d[o + 3] = 150; }
         else { const h = v < 0.1 ? 0 : 0.06 + (v - 0.1) / 0.9 * 0.6; d[o] = 96; d[o + 1] = 86; d[o + 2] = 70; d[o + 3] = Math.round(Math.min(0.62, h) * 255); }   // ab ~25 ein Hauch
       }
+      let any = false; for (let i = 3; i < d.length; i += 4) if (d[i] > 6) { any = true; break; }
+      this._smogAny = any;
       c.putImageData(img, 0, 0);
     }
+    if (!this._smogAny) return;   // saubere Luft: keine bildschirmfüllende Ebene
     const w = this.wind(), sh = airView ? 0 : 4 * Math.sin(this.time * 0.2);
     g.save();
     g.imageSmoothingEnabled = true;
@@ -1166,7 +1169,7 @@
       ctx.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
     }
     // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
-    if (this.gfx.water !== false) this.drawWaterLayer(ctx, cx0, cx1, cy0, cy1, rx, ry, low);
+    if (this.gfx.water !== false && !this.autoOff.glints) this.drawWaterLayer(ctx, cx0, cx1, cy0, cy1, rx, ry, low);
     // (2) Gebietstönung
     if (st.owner && opts.territory !== false) {
       for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
@@ -1189,7 +1192,7 @@
         const c = this.chunks[cy * this.cw + cx];
         if (!c.built) continue;
         if (c.decorDirty || c.decorT == null) this.buildDecor(c);
-        else if (!refreshed && this.time - c.decorT > 0.8) { this.buildDecor(c); refreshed = true; }
+        else if (!refreshed && this.time - c.decorT > 8 && this.time - (this._decorRefT || 0) > 0.5) { this.buildDecor(c); refreshed = true; this._decorRefT = this.time; }
         const X = cx * CPX - DL, Y = cy * CPX - DECOR_TOP;
         const dx = rx(X), dy = ry(Y);
         ctx.drawImage(c.decor, dx, dy, rx(X + CPX + DL + DR) - dx, ry(Y + CPX + DECOR_TOP) - dy);
@@ -1989,7 +1992,7 @@
     // Niederschlag in Bildschirmpixeln
     if ((wx.rain > 0.02 || wx.snow > 0.02) && !this.autoOff.precip) {
       const nt = (vt.x1 - vt.x0 + 1) * (vt.y1 - vt.y0 + 1);
-      if (typeof this.S.weatherKey === 'function' && nt < 4000) {
+      if (typeof this.S.weatherKey === 'function' && nt < 1200) {
         ctx.setTransform(s, 0, 0, s, ox, oy);
         this.drawWeatherTiles(ctx, vt, wx);
         ctx.setTransform(1, 0, 0, 1, 0, 0);

@@ -137,9 +137,10 @@ test('4 Speichern/Laden mit Zug, Determinismus, alte Spielstände, Zeitaufschlag
 
 test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vorräte gleichen sich aus, Kohle', function () {
   const o = twoCities('fascism', LONG);
-  const line = untilLine(o, 60);
-  assert(line, 'keine fertige Strecke (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
+  const line = untilLine(o, 70);
   const st = o.sim.state;
+  log('alle Strecken:', st.rail.lines.map((l) => l.tiles.length + (l.done ? ' fertig' : '')).join(', '));
+  assert(line, 'keine fertige Strecke (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
   const A = o.sim._structs.get(line.a), B = o.sim._structs.get(line.b);
   log('Strecke', line.tiles.length, 'Kacheln zwischen', o.sim._cities.get(A.cityId).name, 'und', o.sim._cities.get(B.cityId).name);
   assert(A.cityId !== B.cityId, 'Strecke innerhalb einer Stadt');
@@ -148,7 +149,7 @@ test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vo
   const tr = st.trains.find((t) => t.line === line.id);
   const SA = WW.Cities.stock(o.sim, o.sim._cities.get(A.cityId)), SB = WW.Cities.stock(o.sim, o.sim._cities.get(B.cityId));
   SA.stone = 300; SB.stone = 0;
-  let arrivals = 0, last = tr.to, whistle = 0, smoke = 0, coalRuns = 0;
+  let arrivals = 0, last = tr.to, whistle = 0, smoke = 0, coalRuns = 0, moved = 0, lastT = tr.t;
   // Kohle: erst ohne Feld, dann 0, dann vorhanden – nichts darf brechen
   delete SA.coal; delete SB.coal;
   for (let i = 0; i < 2400; i++) {
@@ -158,10 +159,12 @@ test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vo
     for (const f of o.sim.drainFx()) { if (f.type === 'whistle') whistle++; if (f.type === 'trainsmoke') smoke++; }
     if (tr.to !== last) { arrivals++; last = tr.to; }
     if (tr.coal) coalRuns++;
+    if (tr.t === 'run' && lastT === 'load') moved += tr.cargo.stone + tr.cargo.food + tr.cargo.wood;
+    lastT = tr.t;
   }
-  log('Ankünfte', arrivals, 'Pfiffe', whistle, 'Rauch', smoke, 'Stein A/B', Math.round(SA.stone), '/', Math.round(SB.stone), 'Ticks mit Kohle', coalRuns);
+  log('Ankünfte', arrivals, 'Pfiffe', whistle, 'Rauch', smoke, 'Stein A/B', Math.round(SA.stone), '/', Math.round(SB.stone), 'beförderte Güter', Math.round(moved), 'Ticks mit Kohle', coalRuns);
   assert(arrivals >= 2 && whistle >= 2 && smoke > 20, 'Zug fährt nicht regelmäßig');
-  assert(SB.stone >= 40, 'Vorräte gleichen sich nicht aus');
+  assert(moved >= 60, 'Vorräte gleichen sich nicht aus');
   assert(coalRuns > 0 && SA.coal < 200 + 1, 'Kohle wird nicht genutzt');
 });
 

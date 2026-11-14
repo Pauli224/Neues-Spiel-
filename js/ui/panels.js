@@ -517,12 +517,13 @@
       for (const r of [['daynight', 'Tag und Nacht', 'Ein Tag je Spieljahr: Morgenrot, Mittag, Abendlicht, Nacht mit Lichtern.'],
         ['weather', 'Wetter', 'Regenschauer, Schnee in kalten Gegenden, Morgennebel, Gewitter.'],
         ['clouds', 'Wolkenschatten', 'Weiche Schatten ziehen mit dem Wind über das Land.'],
-        ['water', 'Lebendiges Wasser', 'Glitzern, Strömung und Brandung.']]) {
+        ['water', 'Lebendiges Wasser', 'Glitzern, Strömung und Brandung.'],
+        ['sharp', 'Volle Auflösung', 'Zeichnet in der vollen Auflösung des Bildschirms. Schärfer, aber deutlich langsamer – nur für starke Geräte.']]) {
         const on = gx[r[0]] !== false;
         box.appendChild(h('div.law', [h('div.lt', [h('b', r[1]), h('span', r[2])]),
           h('button.btn.switch' + (on ? '.on' : ''), { type: 'button', role: 'switch', 'aria-checked': on ? 'true' : 'false', on: { click: () => { gx[r[0]] = !on; game.applyGfx(); render(); } } }, on ? 'An' : 'Aus')]));
       }
-      box.appendChild(h('div.muted', { style: { margin: '12px 0 6px' } }, 'Qualität (niedrig schont Handy und Akku: weniger Partikel, keine Wolkenschatten)'));
+      box.appendChild(h('div.muted', { style: { margin: '12px 0 6px' } }, 'Qualität (niedrig läuft am schnellsten: einfacher Boden, weniger Partikel). Ruckelt es, schaltet das Spiel von selbst Effekte ab.'));
       const chips = h('div.chips');
       for (const q of [['low', 'Niedrig'], ['mid', 'Mittel'], ['high', 'Hoch']]) chips.appendChild(h('button.chip', { type: 'button', 'aria-pressed': gx.quality === q[0] ? 'true' : 'false',
         on: { click: () => { gx.quality = q[0]; game.applyGfx(); render(); } } }, h('span', q[1])));
