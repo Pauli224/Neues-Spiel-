@@ -1237,6 +1237,12 @@ test('21 Faschismus 9.10: keine Dörfer, Megastufen, Garnisonen (halten, abziehe
   // B: Megastufen nur im Faschismus
   assert(WW.tierAllowed(6, 'fascism') && WW.tierAllowed(7, 'fascism') && !WW.tierAllowed(6, 'monarchy') && WW.tierAllowed(5, 'monarchy'), 'Megastufen-Regel');
   assert(WW.Cities.HOUSE_CAP.length === 5 && WW.Cities.HOUSE_CAP[4] > WW.Cities.HOUSE_CAP[2] * 2, 'Wohnblöcke fehlen');
+  // Sturz nur in harter Krise
+  fk.lowYears = 5; fk.lostYear = null; fk.hungerYears = 0;
+  assert(!WW.Gov.fascistCrisis(fw, fk), 'schlechte Jahre allein sind schon Krise');
+  fk.lostYear = fw.state.year;
+  assert(WW.Gov.fascistCrisis(fw, fk), 'verlorene Stadt ist keine Krise');
+  fk.lostYear = null; fk.lowYears = 0;
   // C: Garnisonen
   const fh = garrisonScenario('fascism', 0, 30);
   log('Faschismus hält Eroberung:', fh.ok, '· verloren im Jahr', fh.lost, '· kleinste Garnison', fh.minG, '· Loyalität', Math.round(fh.city.loyalty), '· besetzt', !!fh.city.occupied);

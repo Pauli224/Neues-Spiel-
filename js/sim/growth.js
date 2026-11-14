@@ -417,7 +417,8 @@
         if (!b || !r || r.status !== 'peace') { removePlot(sim, p); continue; }
         const ruler = a.ruler || { war: 3, diplo: 3 };
         if (p.type === 'war') {
-          if (!st.laws.wars || WW.GOVERNMENTS[a.gov].neverWar || r.opinion > -5) { p.progress -= 0.08; if (p.progress <= 0) { removePlot(sim, p); sim.event('plotWarOff', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: p.cityId, x: p.x, y: p.y }); } continue; }
+          const fasPush = a.gov === 'fascism' && WW.Diplo.strength(sim, a) > WW.Diplo.strength(sim, b) * 1.1;   // 9.10: Regime rüstet ohne Groll
+          if (!st.laws.wars || WW.GOVERNMENTS[a.gov].neverWar || (r.opinion > -5 && !fasPush)) { p.progress -= 0.08; if (p.progress <= 0) { removePlot(sim, p); sim.event('plotWarOff', { kingdom: a.name, other: b.name }, { kingdomId: a.id, cityId: p.cityId, x: p.x, y: p.y }); } continue; }
           p.progress += (0.04 + ruler.war * 0.012) * (WW.GOVERNMENTS[a.gov].war === 'mass' ? 1.5 : 1);
           if (p.progress >= 1) { removePlot(sim, p); WW.Diplo.declareWar(sim, a, b, p.holy ? 'holyWar' : 'war'); }
         } else {
@@ -479,9 +480,11 @@
   function emigrate(sim, city, n, type) {
     const st = sim.state;
     if (!st.laws.newRealms || !city._members) return null;
-    const site = freeSite(sim, city.cx + 0.5, city.cy + 0.5, city.race, 14, 38);
-    if (!site) return null;
     const old = sim._kingdoms.get(city.kingdomId);
+    // Megastadt (9.10): Auswanderer siedeln weit weg, damit der Ring der Großstadt wachsen kann
+    const far = old && WW.GOVERNMENTS[old.gov] && WW.GOVERNMENTS[old.gov].megaHousing && city.tier >= 2;
+    const site = freeSite(sim, city.cx + 0.5, city.cy + 0.5, city.race, far ? 45 : 14, far ? 70 : 38);
+    if (!site) return null;
     const cul = WW.Culture.pick(sim, site.x, site.y, city.race);   // neues Land, neue Kultur nach dem Gelände
     const k = WW.Gov.createKingdom(sim, { race: city.race, gov: 'tribe', culture: cul, baseName: WW.Names.place(cul, sim.rng, WW.TERRAIN[sim.state.terrain[site.y * sim.state.W + site.x]].key, sim._usedNames) });
     const group = st.nextId++;

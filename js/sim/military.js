@@ -43,7 +43,7 @@
 //   stationiertes Fahrzeug folgt keinem Marsch, verteidigt aber seine Stadt.
 //   Weltobergrenze WW.MIL.WORLD_MAX (48) Fahrzeuge; eigenes Wegsuche-Teilbudget WW.MIL.PATH_SHARE (nimmt den Heeren nichts weg).
 //   Feldschlachten nie im Vorfeld einer Stadt (Ring bzw. Kernbebauung + BATTLE.siegeMargin): dort gilt die Belagerung.
-//   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts von selbst.
+//   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts, vorhandene Fahrzeuge ruhen ganz.
 //
 // ZUSTAND
 //   state.trench   Uint8Array(W*H): Schützengraben 0..255 (0 = keiner; ab WW.MIL.TRENCH.cover gibt er Deckung);
@@ -236,7 +236,8 @@
     return out;
   }
   function altCount(k) { const C = M().COST; return ((WW.GOVERNMENTS[k.gov] || {}).goldMul > 0 ? C.alt : C.altNoGold).length; }
-  function canPay(sk, cost) { for (const r in cost) if (!((sk[r] || 0) >= cost[r])) return false; return true; }
+  // keep: so viel Holz/Stein muss danach noch übrig sein (Behelf und Arsenal-Baustelle nehmen der Stadt nicht das Letzte)
+  function canPay(sk, cost, keep) { for (const r in cost) if (!((sk[r] || 0) >= cost[r] + (keep && (r === 'wood' || r === 'stone') ? keep : 0))) return false; return true; }
   function pay(sk, cost) { for (const r in cost) sk[r] = (sk[r] || 0) - cost[r]; }
 
   function countVehicles(sim) {
@@ -265,7 +266,7 @@
         const c = sim._cities.get(s.cityId);
         if (!c) continue;
         const sk = WW.Cities.stock(sim, c);
-        for (const opt of M().ARSENAL_PAY) if (canPay(sk, opt)) { pay(sk, opt); s.paid = true; break; }
+        for (const opt of M().ARSENAL_PAY) if (canPay(sk, opt, M().COST.keep)) { pay(sk, opt); s.paid = true; break; }
       }
     }
     if (!ars.length) return;
@@ -302,12 +303,12 @@
         if (!pick) continue;
         const sk = WW.Cities.stock(sim, city);
         let c = costOf(k, pick, false), how = 'res';
-        if (!canPay(sk, c)) {
+        if (!canPay(sk, c) || (sk.coal || 0) < c.coal + M().COST.keepCoal) {   // Kohle für Fabriken und Züge übrig lassen
           // mit eigener Eisen-/Kohlemine eine Weile auf Rohstoffe warten (die Schmiede lässt die Reserve liegen), dann Behelf
           if (hasMine(sim, city) && (s.waitRes | 0) < M().COST.waitSteps) { s.waitRes = (s.waitRes | 0) + 1; city.milRes = c.iron; continue; }
           how = 'alt';
           let ok = false;
-          for (let ai = 0; ai < altCount(k) && !ok; ai++) { c = costOf(k, pick, ai); ok = canPay(sk, c); }
+          for (let ai = 0; ai < altCount(k) && !ok; ai++) { c = costOf(k, pick, ai); ok = canPay(sk, c, M().COST.keep); }
           if (!ok) continue;
         }
         pay(sk, c);
@@ -672,6 +673,7 @@
 
   // Haken aus units.js updateAll: true = Einheit ist hier erledigt
   function unit(sim, u) {
+    if (sim._noSiegeEngines) return true;   // Testschalter der Belagerungstests: Kriegsgerät ruht ganz (auch vorhandenes)
     if (u.cd > 0) u.cd--;
     if (((sim.state.tick + u.id) & 7) === 0) { think(sim, u); if (u.dead) return true; }
     moveV(sim, u);

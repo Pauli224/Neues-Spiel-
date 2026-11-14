@@ -287,15 +287,15 @@ test('5 Feldschlacht: erkannt, Sieger, Ort, Gräben, Wracks; Rückzug oder Aufga
 });
 
 test('6 Marschgruppen fangen einander ab (Feldschlacht statt Vorbeilaufen)', function () {
-  const o = duel('monarchy', 'monarchy', { seed: 41 });
+  const o = duel('monarchy', 'monarchy', { seed: 41, W: 180 });   // breit: das Treffen liegt weit vor beiden Städten
   grow(o, 12, 44);
   const sim = o.sim, st = sim.state;
   sim.actions.setRelation(o.A.id, o.B.id, 'war');
   const W = st.W;
   // zwei Heere auf Parallelwegen, die sich nur auf 6 Kacheln nahekommen
   const ga = [], gb = [];
-  for (let i = 0; i < 8; i++) { const u = soldier(sim, o.A, o.ca, 50, 24 + (i % 2)); u.order = { kind: 'march', city: o.cb.id, k: o.B.id }; ga.push(u); }
-  for (let i = 0; i < 8; i++) { const u = soldier(sim, o.B, o.cb, 70, 30 + (i % 2)); u.order = { kind: 'march', city: o.ca.id, k: o.A.id }; gb.push(u); }
+  for (let i = 0; i < 8; i++) { const u = soldier(sim, o.A, o.ca, 80, 24 + (i % 2)); u.order = { kind: 'march', city: o.cb.id, k: o.B.id }; ga.push(u); }
+  for (let i = 0; i < 8; i++) { const u = soldier(sim, o.B, o.cb, 100, 30 + (i % 2)); u.order = { kind: 'march', city: o.ca.id, k: o.A.id }; gb.push(u); }
   let met = false, t = 0;
   for (; t < 600 && !met; t++) { sim.tick(); met = st.battles.length > 0 || st.events.some((e) => e.type === 'battleStart'); }
   log('Feldschlacht nach', t, 'Ticks:', met, '| gebundene Kämpfer', ga.concat(gb).filter((u) => !u.dead && u.foe >= 0).length);
@@ -502,6 +502,42 @@ test('12 Faschismus als Rüstungsstaat (Megastadt), Garnisonen bleiben daheim', 
   for (let i = 0; i < 400; i++) { sim.tick(); for (const u of gs) if (!u.dead) assert(!(u.order && u.order.kind === 'march'), 'Garnison marschiert mit (Tick ' + i + ', ' + u.role + ' garrison=' + u.garrison + ' set=' + o.ca.garrisonSet + ')'); }
   for (const b of sim.state.battles) for (const u of gs) assert(Math.hypot(u.x - b.x, u.y - b.y) > b.r + 3 || u.garrison == null, 'Garnison in Feldschlacht');
   log('Garnison blieb daheim:', gs.filter((u) => !u.dead).map((u) => Math.round(Math.hypot(u.x - o.ca.cx, u.y - o.ca.cy))).join(','), 'Kacheln vom Zentrum, Panzer', Math.round(Math.hypot(gv.x - o.ca.cx, gv.y - o.ca.cy)));
+});
+
+test('13 Feldzug: Heer sammelt sich mit Fahrzeugen, marschiert gemeinsam, Belagerer ergeben sich nicht vor der Mauer', function () {
+  const o = duel('fascism', 'monarchy', { seed: 91 });
+  grow(o, 12, 60);
+  const sim = o.sim, st = sim.state;
+  for (const u of vehicles(sim)) WW.Units.kill(sim, u, 'test');
+  let ars = st.structs.find((s) => s.type === 'arsenal' && s.cityId === o.ca.id) || WW.Military.tryArsenal(sim, o.ca, true);
+  if (!ars.built) WW.Structs.complete(sim, ars);
+  sim.actions.setRelation(o.A.id, o.B.id, 'war');
+  const r = o.A.relations[o.B.id];
+  const idle = Array.from({ length: 12 }, () => ({}));
+  const h0 = WW.Military.holdArmy(sim, o.A, o.B, r, idle, 0);
+  WW.Military.spawnVehicle(sim, 'tank', o.A, o.ca.cx + 5, o.ca.cy, o.ca.id); WW.Military.spawnVehicle(sim, 'artillery', o.A, o.ca.cx + 5, o.ca.cy + 1, o.ca.id);
+  const h1 = WW.Military.holdArmy(sim, o.A, o.B, r, idle, 0), h2 = WW.Military.holdArmy(sim, o.A, o.B, r, idle.slice(0, 3), 0);
+  const hm = WW.Military.holdArmy(sim, o.B, o.A, o.B.relations[o.A.id], idle.slice(0, 3), 0);
+  log('Heer wartet: ohne Fahrzeuge', h0, '| mit 2 Fahrzeugen', h1, '| nur 3 Soldaten', h2, '| Monarchie (kein Feldzug)', hm);
+  assert(h0 && !h1 && h2 && !hm, 'Sammeln falsch');
+  // gemeinsamer Marsch: Soldaten laufen den Fahrzeugen nicht weit davon
+  const sol = [];
+  for (let i = 0; i < 10; i++) { const u = soldier(sim, o.A, o.ca, o.ca.cx + 6 + (i % 3), o.ca.cy - 2 + (i >> 2)); u.order = { kind: 'march', city: o.cb.id, k: o.B.id }; sol.push(u); }
+  for (const v of vehicles(sim, o.A.id)) v.order = { kind: 'march', city: o.cb.id, k: o.B.id };
+  let maxLead = 0;
+  for (let i = 0; i < 1200; i++) {
+    sim.tick();
+    const vs = vehicles(sim, o.A.id).filter((v) => v.order), ss = sol.filter((u) => !u.dead && u.order && u.order.kind === 'march' && u.foe < 0);
+    if (!vs.length || !ss.length) continue;
+    const vx = vs.reduce((a, v) => a + v.x, 0) / vs.length, sx = ss.reduce((a, u) => a + u.x, 0) / ss.length;
+    maxLead = Math.max(maxLead, sx - vx);
+  }
+  log('größter Vorsprung der Infanterie vor den Fahrzeugen:', maxLead.toFixed(1), 'Kacheln');
+  assert(maxLead < 14, 'Infanterie läuft den Fahrzeugen davon');
+  // vor einer Mauer gibt es keine Feldschlacht (und damit keine Aufgabe)
+  let free = null;
+  for (let y = 2; y < st.H - 2 && !free; y += 2) for (let x = 2; x < st.W - 2 && !free; x += 2) if (st.cities.every((c) => Math.hypot(c.cx - x, c.cy - y) > 45)) free = [x, y];
+  assert(WW.Military.siegeZone(sim, o.cb.cx + 3, o.cb.cy) && (!free || !WW.Military.siegeZone(sim, free[0], free[1])), 'Vorfeld falsch');
 });
 
 console.log('\n--- Ergebnis');

@@ -53,7 +53,7 @@
     for (let i = 0; i < W * H; i++) this.decorSig[i] = st.structAt && st.structAt[i] >= 0 ? -2 : st.terrain[i];
     this.groundDirty.clear();
     this.fx.length = 0;
-    this._ancH = null; this._rc = null; this._dk = null; this._parade = null; this._paradeSig = null; this._objCount = 0; this._shownP = null; this._opT = null; this._bKey = this._aKey = ''; this.muzzleT = null;
+    this._ancH = null; this._rc = null; this._dk = null; this._parade = null; this._paradeSig = null; this._objCount = 0; this._shownP = null; this._opT = null; this._fKey = null; this._bStep = 0; this.muzzleT = null;
     this.labelCache.clear();
     this.buildMini();
     this.queueAll(cam);
@@ -356,7 +356,7 @@
           else if (g === 'anarchy') add('row', px, py + 4, k, s.id);
           // Faschismus: Mastreihe entlang der Achse Zentrum–Tor
           if (g === 'fascism') {
-            const c = st.cities.find(cc => cc.id === s.cityId), gates = c && c.wall && c.wall.gates;
+            const c = this._cityById ? this._cityById.get(s.cityId) : st.cities.find(cc => cc.id === s.cityId), gates = c && c.wall && c.wall.gates;
             if (Array.isArray(gates)) for (const gid of gates) {
               const gs = this.structById ? this.structById(gid) : null;
               if (!gs) continue;
@@ -682,11 +682,13 @@
   };
   // Untergrund eines Bildes (in Gerätepixeln): Boden-Blöcke, Wasser, Gebietstönung, in der weiten Ansicht die Deko-Blöcke,
   // dann Narben. Wird ins Standbild gezeichnet oder (bewegte Kamera) direkt; im Ausschnitt der Figuren auch ein zweites Mal.
-  Renderer.prototype.drawBase = function (g) {
+  // part: 1 = Grund und Boden-Blöcke, 2 = Wasser, Gebiete, Deko-Blöcke, Narben; ohne Angabe beides
+  Renderer.prototype.drawBase = function (g, part) {
     const F = this._F, st = this.st, S = this.S, cv = this.canvas, rx = F.rx, ry = F.ry, opts = F.opts;
     const cx0 = F.cx0, cx1 = F.cx1, cy0 = F.cy0, cy1 = F.cy1, vt = F.vt, low = F.low;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.imageSmoothingEnabled = false;
+    if (part !== 2) {
     g.fillStyle = this.bg || (this.bg = S.groundColor(0));
     g.fillRect(0, 0, cv.width, cv.height);
     if (F.missing) {
@@ -707,6 +709,8 @@
       if (c.late) { for (const li of c.late) this.groundDirty.add(li); c.late = null; }   // aufgeschobene Kacheln jetzt nachholen
       g.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
     }
+    }
+    if (part === 1) return;
     // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
     if (this.gfx.water !== false && !this.autoOff.glints) this.drawWaterLayer(g, cx0, cx1, cy0, cy1, rx, ry, low);
     // (2) Gebietstönung
@@ -1380,7 +1384,6 @@
     const hiNow = this.useHi();
     if (this._hiWas !== undefined && this._hiWas !== hiNow) this.markAll();
     this._hiWas = hiNow;
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('a_flush');
     this.flushDirty();
     const budget = opts.firstFrames ? 40 : 7;
     const tb = performance.now();
@@ -1403,7 +1406,6 @@
     const ntiles = (vt.x1 - vt.x0 + 1) * (vt.y1 - vt.y0 + 1);
     const low = ntiles > LOW_DETAIL_TILES;
 
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('b_pre');
     // (1) Boden
     const cx0 = Math.max(0, (vt.x0 / CH) | 0), cx1 = Math.min(this.cw - 1, (vt.x1 / CH) | 0);
     const cy0 = Math.max(0, (vt.y0 / CH) | 0), cy1 = Math.min(this.chh - 1, ((vt.y1) / CH) | 0);
@@ -1412,6 +1414,7 @@
     const rx = (wx) => Math.round(ox + wx * s), ry = (wy) => Math.round(oy + wy * s);
     this._F = { s: s, ox: ox, oy: oy, rx: rx, ry: ry, cx0: cx0, cx1: cx1, cy0: cy0, cy1: cy1, vt: vt, low: low, missing: missing, tb: tb, budget: budget, opts: opts };
     // nahe Ansicht: ruhende Objekte aus vorgebackenen Block-Bildern, Bewegtes darüber (siehe Objekt-Ebene)
+    this._selId = opts.select && opts.select.kind === 'unit' && opts.select.obj ? opts.select.obj.id : -1;
     const near = !low && this.gfx.objcache !== false;
     const urgent = !!(opts.brush || opts.held);
     const smogOn = !!(st.pollution && st.pollution.length) && this.smogUpdate(opts.view === 'air');
@@ -1424,45 +1427,49 @@
     const SK = s + '|' + ox + '|' + oy + '|' + cv.width + '|' + cv.height + '|' + (low ? 1 : 0);
     const wf = (this.time * 5) | 0;
     this._patchBase = null; this._patchA0 = null;
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('c_prep');
     const camStill = SK === this._camKey && !(this.shake > 0);
+    this._smogSh = 4 * Math.sin(this.time * 0.2);
     if (camStill && !missing && !opts.firstFrames && this.gfx.still !== false) {
+      // Standbild doppelt gepuffert: Ein neues Bild (Wasser-Takt, Wiege-Phase, Inhalt) entsteht in Schritten über
+      // drei Bilder im hinteren Puffer (Boden, Wasser/Gebiete, Objekte) und wird dann getauscht – keine Spitzen.
+      // Offscreen-Leinwände werden sofort gerastert (Hauptfaden), die sichtbare Leinwand später (Rasterfäden).
       const mk = (c) => { if (!c) c = document.createElement('canvas'); if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; } return c; };
-      const bc = this._stBase = mk(this._stBase);
-      const bkey = SK + '|' + wf;
-      let baseNew = false;
-      if (this._bKey !== bkey || (urgent && this._bG !== this._gver)) {
-        this.drawBase(bc.getContext('2d', { alpha: false }));
-        this._bKey = bkey; this._bG = this._gver; baseNew = true;
+      const want = SK + '|' + wf + '|' + P + '|' + (near ? 1 : 0) + '|' + (smogOn ? 1 : 0);
+      // je Puffer: Boden allein (Unterlage für verdeckte Figuren) und Boden + Objekte (nahe Ansicht)
+      this._stF = this._stF || {}; this._stB = this._stB || {};
+      for (const B of [this._stF, this._stB]) { B.base = mk(B.base); if (near) B.obj = mk(B.obj); if (smogOn) B.top = mk(B.top); }
+      const front = this._stF, back = this._stB;
+      const content = urgent && (this._fG !== this._gver || this._fO !== this._over);
+      const build = (B, step) => {
+        const gb = B.base.getContext('2d', { alpha: false });
+        if (step === 1) this.drawBase(gb, 1);
+        else if (step === 2) this.drawBase(gb, 2);
+        else if (step === 3) { if (near) { const go = B.obj.getContext('2d', { alpha: false }); go.setTransform(1, 0, 0, 1, 0, 0); go.imageSmoothingEnabled = false; go.drawImage(B.base, 0, 0); this.drawRegions(go, P); } }
+        else if (smogOn) { const gt = B.top.getContext('2d', { alpha: false }); gt.setTransform(1, 0, 0, 1, 0, 0); gt.imageSmoothingEnabled = false; gt.drawImage(near ? B.obj : B.base, 0, 0); B.sh = this._smogSh; gt.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(gt); }
+      };
+      if (this._fKey == null || this._fKey.split('|').slice(0, 6).join('|') !== SK || content) {
+        // erstes Standbild an dieser Stelle oder Malen mit dem Werkzeug: sofort ganz
+        build(front, 1); build(front, 2); build(front, 3); build(front, 4);
+        this._fKey = want; this._fG = this._gver; this._fO = this._over; this._bStep = 0;
+      } else if (this._fKey !== want || this._bStep) {
+        if (!this._bStep || this._bWant !== want) { this._bStep = 1; this._bWant = want; this._bG = this._gver; this._bO = this._over; }
+        build(back, this._bStep);
+        if (++this._bStep > 4) { this._stF = back; this._stB = front; this._fKey = want; this._fG = this._bG; this._fO = this._bO; this._bStep = 0; }
       }
-      // A0 = Boden + ruhende Objekte; A = A0 + Dunst
-      let a0 = bc;
-      const akey = P + '|' + (near ? 1 : 0) + '|' + (smogOn ? 1 : 0);
-      const aNew = baseNew || this._aKey !== akey || (urgent && this._aO !== this._over);
-      if (near) {
-        const oc = this._stO = mk(this._stO);
-        if (aNew) { const g = oc.getContext('2d', { alpha: false }); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.drawImage(bc, 0, 0); this.drawRegions(g, P); }
-        a0 = oc;
-      }
-      let top = a0;
-      if (smogOn) {
-        const ac = this._stA = mk(this._stA);
-        if (aNew) { const g = ac.getContext('2d', { alpha: false }); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.drawImage(a0, 0, 0); this._smogSh = 4 * Math.sin(this.time * 0.2); g.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(g); }
-        top = ac;
-      }
-      if (aNew) { this._aKey = akey; this._aO = this._over; }
-      ctx.drawImage(top, 0, 0);
-      this._patchBase = bc; this._patchA0 = a0;
+      const F0 = this._stF;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(smogOn ? F0.top : near ? F0.obj : F0.base, 0, 0);
+      if (smogOn) this._smogSh = F0.sh || 0;   // Ausschnitte nutzen denselben Dunstversatz wie das Standbild
+      this._patchBase = F0.base; this._patchA0 = near ? F0.obj : F0.base; this._stillOn = true;
       this._camKey = SK;
     } else {
-      this._bKey = ''; this._aKey = '';
+      this._fKey = null; this._bStep = 0; this._stillOn = false;
       this._camKey = SK;
       this.drawBase(ctx);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       if (near) this.drawRegions(ctx, P);
-      if (smogOn) { this._smogSh = 4 * Math.sin(this.time * 0.2); ctx.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(ctx); }
+      if (smogOn) { ctx.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(ctx); }
     }
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('d_still');
     ctx.setTransform(s, 0, 0, s, ox, oy);
     let drawn;
     if (low && (opts.scale || 1) < 0.9) drawn = this.drawDots(ctx, vt, opts);
@@ -1470,7 +1477,6 @@
     else drawn = this.drawObjects(ctx, vt, low, opts);
     if (!low && typeof S.flagKey === 'function') this.drawFlags(ctx, vt);
 
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('e_dyn');
     // Feuer auf Kacheln
     if (st.fire && st.fireCount > 0) {
       const nf = typeof S.fxFrames === 'function' ? S.fxFrames('fire') : 3;
@@ -1481,12 +1487,10 @@
       }
     }
 
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('f_fire');
     // Leben: Vögel, Schmetterlinge, springende Fische, Schornsteinrauch
     if (!low) this.drawLife(ctx, vt, dt, opts);
     // Rauch aus Fabriken, Dunst
     if (st.structs) this.updatePlumes(ctx, vt, dt);
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('g_life');
     // (4) Effekte, Flugzeuge
     this._lastDt = dt;
     this.drawFx(ctx, dt);
@@ -1494,21 +1498,18 @@
     if (st.trains && st.trains.length) this.drawTrains(ctx, st.trains, vt);
     if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
 
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('h_fx');
     this.drawParticles(ctx, dt);
     // Wolkenschatten, Wetter, Tageszeit (Nacht und Wolken in einer Ebene niedriger Auflösung)
     this._dayPhase = opts.dayPhase; this._dpr = cam.dpr;
     this.drawAtmosphere(ctx, cam, vt, dt, opts, s, ox, oy);
     ctx.setTransform(s, 0, 0, s, ox, oy);
 
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('i_atmo');
     // (5) Auswahl und Pinsel
     if (opts.select) this.drawSelection(ctx, opts.select, opts);
     if (opts.brush) this.drawBrush(ctx, opts.brush);
     if (opts.held) this.drawHeld(ctx, opts.held);
     if (st.plots && st.plots.length) this.drawPlots(ctx, vt);
 
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('j_sel');
     // Stadtnamen in Bildschirmpixeln
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (st.cities && opts.showNames !== false) this.drawCityLabels(ctx, cam, opts);
@@ -1519,7 +1520,6 @@
       ctx.fillRect(0, 0, cv.width, cv.height);
       this.flash -= dt;
     }
-    if (typeof window !== 'undefined' && window.__rp) window.__rp('k_labels');
     this.stats.drawn = drawn;
     this.stats.low = low;
     this.stats.frameMs = this.stats.frameMs * 0.9 + (performance.now() - t0) * 0.1;
@@ -1722,8 +1722,8 @@
     // Bauwerke ändern die freien Plätze: bei geänderten Stadtdaten oder alle 2 s neu bestimmen
     if (sig === this._paradeSig && this.time - (this._paradeT || 0) < 2) return;
     this._paradeSig = sig; this._paradeT = this.time;
-    const old = this._parade && this._parade.length === N ? this._parade : null;
-    const P = new Uint8Array(N);
+    const old = this._parade && this._parade.length === N ? this._parade : null, oldList = old ? (this._paradeList || []) : [];
+    const P = new Uint8Array(N), list = [];
     if (sig) {
       const LUT = WW.TERRAIN_LUT, ring = st.inRing;
       const free = (x, y, c) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const i = y * W + x; return st.structAt[i] < 0 && LUT.build[st.terrain[i]] && st.owner[i] === c.id && (!ring || ring[i] === c.id || ring[i] < 0); };
@@ -1735,22 +1735,23 @@
           for (let d = 2; d <= L; d++) {
             const x = c.cx + dx * d, y = c.cy + dy * d;
             if (!free(x, y, c)) break;   // die Achse endet am ersten Gebäude
-            P[y * W + x] = 1;
+            P[y * W + x] = 1; list.push(y * W + x);
             // Seiten: im Wechsel Laterne, Mast, Säule
             if (d % 2 === 0) for (const sgn of [-1, 1]) {
               const sx = x + dy * sgn, sy = y + dx * sgn;
-              if (free(sx, sy, c) && !this.path[sy * W + sx]) P[sy * W + sx] = 2 + ((d >> 1) + (sgn > 0 ? 1 : 0)) % 3;
+              if (free(sx, sy, c) && !this.path[sy * W + sx]) { P[sy * W + sx] = 2 + ((d >> 1) + (sgn > 0 ? 1 : 0)) % 3; list.push(sy * W + sx); }
             }
           }
         }
         // Tribüne am Platz südlich vor dem Zentrum (2×1)
         const tx = c.cx + 2, ty = c.cy + 2;
-        if (free(tx, ty, c) && free(tx + 1, ty, c) && !P[ty * W + tx] && !P[ty * W + tx + 1]) { P[ty * W + tx] = 5; P[ty * W + tx + 1] = 6; }
+        if (free(tx, ty, c) && free(tx + 1, ty, c) && !P[ty * W + tx] && !P[ty * W + tx + 1]) { P[ty * W + tx] = 5; P[ty * W + tx + 1] = 6; list.push(ty * W + tx, ty * W + tx + 1); }
       }
     }
-    this._parade = P;
-    if (!old) { if (sig) for (let i = 0; i < N; i++) if (P[i]) { this.markTiles([i]); this.objForget(i % W, (i / W) | 0, i % W, (i / W) | 0); const dc = this.chunkAt(i % W, (i / W) | 0); if (dc) dc.decorDirty = true; } return; }
-    for (let i = 0; i < N; i++) if (P[i] !== old[i]) { const x = i % W, y = (i / W) | 0; if (P[i] === 1 || old[i] === 1) this.markTiles([i]); this.objForget(x, y, x, y); const dc = this.chunkAt(x, y); if (dc) dc.decorDirty = true; }
+    this._parade = P; this._paradeList = list;
+    const touch = (i) => { const x = i % W, y = (i / W) | 0; if (P[i] === 1 || (old && old[i] === 1)) this.markTiles([i]); this.objForget(x, y, x, y); const dc = this.chunkAt(x, y); if (dc) dc.decorDirty = true; };
+    for (const i of list) if (!old || old[i] !== P[i]) touch(i);
+    for (const i of oldList) if (P[i] !== old[i]) touch(i);
   };
 
   // geordnete Objekte einer Kachelzeile (Felder, Deko, Bauwerke, Stacheln der Zeile darüber) in out schreiben
@@ -1782,11 +1783,16 @@
     }
   };
   const OBJ_NOBARS = { push: function () {} };
+  const CROWD = 180;   // ab so vielen Figuren im Bild werden deckungsgleiche nur einmal gezeichnet
+  const DENSE = 150, DENSE_C = 90;   // ab so vielen bewegten Dingen höchstens so viele (die mittigsten) mit genauer Verdeckung
   // Rechteck (Logikpixel) eines ruhenden Objekts in r[0..3] (x0, y0, x1, y1); false = unbekannt
   Renderer.prototype.objRect = function (kind, v, p, sway, r) {
     if (kind === 2) {
       const code = this._dk[v], W = this.st.W, x = v % W, y = (v / W) | 0;
-      const bx = this.keyBox(this.decoKey((code & 0xfffff) - 2, x, y, p, sway));
+      // Rechteck je Schlüssel und Wiege-Phase zwischengespeichert (ohne Zeichenketten-Suche)
+      const ki = (code & 0xfffff) - 2, ph = sway ? (x + y + p) % 3 : 3, bc = this._dkBox || (this._dkBox = []);
+      let bx = bc[ki * 4 + ph];
+      if (bx === undefined) bx = bc[ki * 4 + ph] = this.keyBox(this.decoKey(ki, x, y, p, sway)) || null;
       if (!bx) return false;
       const px = x * 8 + ((code >> 20) & 31) - 8 + bx[0], py = y * 8 + ((code >> 25) & 15) - 8 + bx[1];
       r[0] = px - 1; r[1] = py - 1; r[2] = px + bx[2] + 1; r[3] = py + bx[3] + 1;
@@ -2005,6 +2011,20 @@
       dyn.push(o);
     };
     if (st.units) for (const u of st.units) if (!u.dead && u.ind !== 'train') addU(u, false);
+    // dichte Menge (Megastadt): Figuren, die fast auf demselben Fleck stehen, nur einmal zeichnen
+    if (dyn.length > CROWD) {
+      const seen = this._crowdSeen || (this._crowdSeen = new Map()); seen.clear();
+      let w = 0;
+      for (const o of dyn) {
+        if (o.t === 1 && !o.u.vehicle && !(o.u.bubble && o.u.bubble.icon) && this._selId !== o.u.id) {
+          const key = ((o.px >> 2) << 16) ^ (o.py >> 2);
+          if (seen.has(key)) continue;
+          seen.set(key, 1);
+        }
+        dyn[w++] = o;
+      }
+      this.stats.crowdHidden = dyn.length - w; dyn.length = w;
+    } else this.stats.crowdHidden = 0;
     if (st.animals) for (const an of st.animals) if (!an.dead && !an.buried) addU(an, true);
     // Schiffe: wie Figuren, mit weicher Bewegung zwischen den Schritten
     const box = (o) => { const bx = S.has(o.key) ? this.keyBox(o.key) : null; if (!bx) return false; const ox = o.flip ? bx[4] : bx[0]; o.x0 = o.px + ox - 1; o.y0 = o.py + bx[1] - 1; o.x1 = o.px + ox + bx[2] + 1; o.y1 = o.py + bx[1] + bx[3] + 1; return true; };
@@ -2082,13 +2102,15 @@
       const clipTo = (list) => { ctx.save(); ctx.beginPath(); for (const o of list) ctx.rect(o.x0, o.y0, o.x1 - o.x0, o.y1 - o.y0); ctx.clip(); };
       const simple = this._dynS || (this._dynS = []), complex = this._dynC || (this._dynC = []);
       simple.length = 0; complex.length = 0;
+      // sehr dichte Menge: Verdeckung nur für die vordersten Figuren genau, der Rest wird schlicht gezeichnet
+      const dense = near && dyn.length > DENSE;
       if (near) {
         const cov = this._cov, stX = this._stX && this._stX.length >= this._stS.length ? this._stX : (this._stX = new Int32Array(this._stS.length)), stS = this._stS, stD = this._stD && this._stD.length >= stS.length ? this._stD : (this._stD = new Int32Array(stS.length)), stamp = this._scan;
         const r = this._objR2 || (this._objR2 = [0, 0, 0, 0]);
         const head = this._ancH, next = this._ancN, list = this._anc, rcm = this._rc, dk = this._dk;
         const ov = (x0, y0, x1, y1, o) => x1 > o.x0 && x0 < o.x1 && y1 > o.y0 && y0 < o.y1;
         // ruhende Objekte im Suchfenster eines bewegten Dings, die sein Rechteck berühren; fn liefert true = abbrechen
-        const scanWin = (o, ra, rb, fn) => {
+        const scanWin = (o, ra, rb, fn, pre) => {
           const ta = Math.max(0, Math.floor(o.x0 / 8) - OBJ_L), tb = Math.min(W - 1, Math.floor((o.x1 - 1) / 8) + OBJ_R);
           ra = Math.max(0, ra); rb = Math.min(H - 1, rb);
           for (let y = ra; y <= rb; y++) for (let x = ta; x <= tb; x++) {
@@ -2098,9 +2120,11 @@
               if (s.dead || stX[q] === fr) continue;
               const rc = rcm.get(s.id);
               if (!rc || rc.dyn) continue;
-              if (ov(rc.x0 - 1, rc.y0 - 1, rc.x1 + 1, rc.y1 + 1, o) && fn(s.type === 'field' ? 0 : 3, q, y, x)) return true;
-              if (rc.spike && ov(rc.dx0 - 1, rc.dy0 - 1, rc.dx1 + 1, rc.dy1 + 1, o) && fn(4, q, y + 1, x)) return true;
+              const sk = s.type === 'field' ? 0 : 3;
+              if ((!pre || pre(sk, y, x)) && ov(rc.x0 - 1, rc.y0 - 1, rc.x1 + 1, rc.y1 + 1, o) && fn(sk, q, y, x)) return true;
+              if (rc.spike && (!pre || pre(4, y + 1, x)) && ov(rc.dx0 - 1, rc.dy0 - 1, rc.dx1 + 1, rc.dy1 + 1, o) && fn(4, q, y + 1, x)) return true;
             }
+            if (pre && !pre(2, y, x)) continue;
             const v = dk[i] === 0 ? this.decoCode(i) : dk[i];
             if (v > 1 && !(v & (1 << 29)) && this.objRect(2, i, P, sway, r) && ov(r[0], r[1], r[2], r[3], o) && fn(2, i, y, x)) return true;
           }
@@ -2110,14 +2134,16 @@
         for (const o of dyn) if (o.t === 4) { const s = o.u; for (let q = head[(s.y + s.h - 1) * W + s.x]; q >= 0; q = next[q]) if (list[q] === s) stX[q] = fr; }
         // einfach = nichts Ruhendes liegt davor (Figur auf freier Fläche); sonst wird der Ausschnitt ganz neu gemalt
         let cur = null;
+        const ahead = (kind, row, sub) => row > cur.row || (row === cur.row && (kind > cur.cls || (kind === cur.cls && sub > cur.sub)));
         const inFront = (kind, v, row, sub) => {
-          if (!(row > cur.row || (row === cur.row && (kind > cur.cls || (kind === cur.cls && sub > cur.sub))))) return false;
           // genau (ohne Sicherheitsrand) prüfen, ob das Ruhende die Figur wirklich überdeckt
           if (!this.objRect(kind, v, P, sway, r)) return true;
           return r[2] - 1 > tight.x0 && r[0] + 1 < tight.x1 && r[3] - 1 > tight.y0 && r[1] + 1 < tight.y1;
         };
         const tight = { x0: 0, y0: 0, x1: 0, y1: 0 };
-        for (const o of dyn) { cur = o; tight.x0 = o.x0 + 1; tight.y0 = o.y0 + 1; tight.x1 = o.x1 - 1; tight.y1 = o.y1 - 1; (scanWin(o, o.row - 1, Math.floor((o.y1 - 1) / 8) + ext, inFront) ? complex : simple).push(o); }
+        let nC = 0;
+        if (dense) { const mx = (vt.x0 + vt.x1) * 4, my = (vt.y0 + vt.y1) * 4; dyn.sort((p, q) => Math.abs(p.px - mx) + Math.abs(p.py - my) - Math.abs(q.px - mx) - Math.abs(q.py - my)); }
+        for (const o of dyn) { if (dense && nC >= DENSE_C) { simple.push(o); continue; } cur = o; tight.x0 = o.x0 + 1; tight.y0 = o.y0 + 1; tight.x1 = o.x1 - 1; tight.y1 = o.y1 - 1; if (scanWin(o, o.row - 1, Math.floor((o.y1 - 1) / 8) + ext, inFront, ahead)) { complex.push(o); nC++; } else simple.push(o); }
         if (complex.length) {
           const items = this._dynItems || (this._dynItems = []); items.length = 0;
           const push = (kind, v, row, sub) => {
@@ -2142,7 +2168,7 @@
       // (a) einfache Dinge: direkt aufs Standbild, bei Dunst im Ausschnitt über dem Bild ohne Dunst
       simple.sort(order);
       // bewegte Kamera (keine Zwischenbilder): Verdecktes ohne Bodenkopie (nur ruhend genau)
-      const exact = !!this._patchBase;
+      const exact = !!this._stillOn;
       const haze = smogOn && !this._smogAir && this._smogAlpha;
       for (const it of simple) {
         drawIt(it);

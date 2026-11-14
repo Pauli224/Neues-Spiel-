@@ -646,6 +646,8 @@
   // bleibt es bei Vorstädten (wall.maxed).
   function megaRing(sim, city) {
     const w = city.wall, st = sim.state;
+    if (!gov(sim, city).megaHousing) return;
+    if (w.maxed && st.year - (w.plannedYear || 0) >= 8 && gov(sim, city).megaHousing) w.maxed = false;   // später erneut versuchen
     if (!w.plan || (w.state !== 'done' && w.state !== 'upgrading') || w.maxed || !city.noSpace || city.tier < 3 || !gov(sim, city).megaHousing) return;   // Erweiterung geht vor weiteren Mauerstufen
     if (st.year - (w.plannedYear || 0) < 3) return;
     let out = 0;

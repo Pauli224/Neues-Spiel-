@@ -260,6 +260,7 @@
     if (a === 0 || d > a) return false;
     const oldName = def.name;
     def.lostYear = st.year;   // verlorene Stadt im Krieg (Faschismus kann danach stürzen, 9.10)
+    att.wonYear = st.year;    // gewonnene Stadt (Friedensbedingung des Faschismus)
     const ag = WW.GOVERNMENTS[att.gov];
     // Demokratie befreit eroberte Städte und gibt sie dem früheren Besitzer zurück
     const prev = city.prevKingdomId != null ? sim._kingdoms.get(city.prevKingdomId) : null;
@@ -357,7 +358,7 @@
       secede(sim, city, newGov === k.gov ? 'anarchy' : newGov);
       return;
     }
-    if (st.laws.govChanges && !k.govLocked) {
+    if (st.laws.govChanges && !k.govLocked && !(k.gov === 'fascism' && !WW.Gov.fascistCrisis(sim, k))) {   // Faschismus: Aufstand siegt nur in der Krise (9.10)
       WW.Gov.applyGov(sim, k, newGov === k.gov ? 'democracy' : newGov, { lock: false, reason: k.gov === 'fascism' ? 'regimeFall' : 'revolution' });
     } else {
       sim.event('revoltFizzle', { city: city.name, kingdom: k.name, leader: WW.Gov.leaderFull(k) }, WW.Cities.atCity(city));
@@ -373,7 +374,7 @@
       const ra = a.relations[b.id], rb = b.relations[a.id];
       if (!ra || !rb) continue;
       const pair = nearestCities(sim, a, b);
-      const close = pair && pair.d < 40;
+      const close = pair && pair.d < ((a.gov === 'fascism' || b.gov === 'fascism') ? 60 : 40);   // Faschismus greift weiter aus (9.10)
       let drift = WW.govCompat(a.gov, b.gov);
       if (a.gov === 'theocracy' && b.gov === 'theocracy') drift += (a.deity === b.deity ? 3 : -4);
       if (a.race === b.race) drift += 1;
@@ -402,8 +403,13 @@
           if (!forced && sk.gold >= 40 && years >= 1) { sk.gold -= 40; makePeace(sim, p, q, 'buyPeace', { gold: 40 }); break; }
         }
         if (ra.status !== 'war') continue;
-        if (!forced && years >= 3 && ra.weariness > 80 + sim.rng.next() * 60) { makePeace(sim, a, b); continue; }
-        if (!forced && years >= 14) { makePeace(sim, a, b); continue; }
+        // Faschismus (9.10): Frieden erst nach Gewinn (eroberte Stadt) oder klarer Niederlage (verlorene Stadt), spätestens nach 20 Jahren
+        const fas = a.gov === 'fascism' ? a : (b.gov === 'fascism' ? b : null);
+        const foe = fas && (fas === a ? b : a);
+        const fasDone = !fas || (fas.wonYear != null && fas.wonYear >= ra.since) || (fas.lostYear != null && fas.lostYear >= ra.since) || years >= 20 ||
+          strength(sim, fas) < strength(sim, foe) * 0.7;   // klare Unterlegenheit: dann doch Frieden
+        if (!forced && fasDone && years >= 3 && ra.weariness > 80 + sim.rng.next() * 60) { makePeace(sim, a, b); continue; }
+        if (!forced && fasDone && years >= 14) { makePeace(sim, a, b); continue; }
         // Söldner
         for (const p of [a, b]) {
           const g = WW.GOVERNMENTS[p.gov];
@@ -449,7 +455,7 @@
         let need = -40;
         let holy = false;
         if (p.gov === 'theocracy' && (q.gov !== 'theocracy' || q.deity !== p.deity)) { need = -20; holy = true; }
-        if (p.gov === 'fascism' && sp > sq * 1.2) need = -10;   // aggressiv gegen Schwächere
+        if (p.gov === 'fascism' && sp > sq * 1.2 && WW.Gov.kingdomPop(sim, p) >= 40) need = 30;    // aggressiv gegen Schwächere, auch ohne Groll – sobald gefestigt (9.10)
         if (p.gov === 'tribe') need = -30;                       // Raubzüge
         // Demokratie greift nur Angreifer an (Krieg gegen Verbündete, eroberte eigene Städte)
         if (p.gov === 'democracy' && !isAggressorAgainst(sim, q, p)) continue;
@@ -521,7 +527,7 @@
   // Soll-Stärke einer Stadt
   function want(sim, city, k) {
     const g = G(k), gs = g.garrison;
-    if (!gs || !gs.share) return 0;
+    if (!gs || !gs.share || city.kind === 'camp') return 0;   // Lagerstädte haben Wachen [industry], keine Garnison
     if (city.garrisonSet != null && city.garrisonSet >= 0) return city.garrisonSet | 0;
     let w = 0;
     if (city.occupied) w = Math.max(3, Math.ceil(city.pop * gs.share) + 1);
@@ -547,7 +553,7 @@
     return l;
   }
 
-  function soldierOk(u) { return !u.dead && u.role === 'soldier' && !u.merc && !u.vehicle && !u.campState && !(u.pow >= 0) && !(u.order && u.order.kind === 'march'); }   // Heimkehrer/Gefangene [industry] nie
+  function soldierOk(u) { return !u.dead && u.role === 'soldier' && !u.merc && !u.vehicle && !u.ind && !u.campState && !(u.pow >= 0) && !(u.order && u.order.kind === 'march'); }   // Heimkehrer/Gefangene [industry] nie
 
   function assign(sim, u, city, walk) {
     u.garrison = city.id; u.cityId = city.id;
@@ -566,13 +572,13 @@
     for (const u of st.units) {
       if (u.garrison == null) continue;
       const c = sim._cities.get(u.garrison);
-      if (u.dead || !c || c.kingdomId !== u.kingdomId || (u.role !== 'soldier' && !u.vehicle)) { if (!u.dead) release(u); continue; }   // Fahrzeuge [mil] dürfen stationiert sein
+      if (u.dead || !c || c.kind === 'camp' || c.kingdomId !== u.kingdomId || (u.role !== 'soldier' && !u.vehicle)) { if (!u.dead) release(u); continue; }   // Fahrzeuge [mil] dürfen stationiert sein
       cnt.set(c.id, (cnt.get(c.id) || 0) + 1);
     }
     const halls = new Set();
     for (const s of st.structs) if (!s.dead && s.built && s.type === 'garrison') halls.add(s.cityId);
     for (const city of st.cities) {
-      if (city.dead) continue;
+      if (city.dead || city.kind === 'camp') continue;   // Lagerstädte [industry] ausgenommen
       const k = sim._kingdoms.get(city.kingdomId);
       city.garrisonHall = halls.has(city.id);
       const w = want(sim, city, k);
@@ -665,6 +671,38 @@
     }
   }
 
-  WW.Garrison = { want: want, loyalty: loyalty, update: update, onConquest: onConquest, setGarrison: setGarrison, defaults: defaults, release: release, OCC_BASE: OCC_BASE };
+  // jährlich (9.10): Faschismus – Städte des Reichs liefern an die Hauptstadt (Megastadt): Überschüsse an Nahrung und
+  // Rohstoffen, dazu Zwangsumsiedlung von Erwachsenen, solange die Hauptstadt Wohnraum hat. Lagerstädte ausgenommen.
+  function yearly(sim) {
+    const st = sim.state;
+    for (const k of st.kingdoms) {
+      if (k.gov !== 'fascism' || k.cityIds.length < 2) continue;
+      const cap = sim._cities.get(k.capitalId);
+      if (!cap || cap.dead) continue;
+      const csk = WW.Cities.stock(sim, cap);
+      let moved = 0, sent = 0;
+      for (const id of k.cityIds) {
+        const c = sim._cities.get(id);
+        if (!c || c === cap || c.kind === 'camp') continue;
+        const sk = WW.Cities.stock(sim, c);
+        if (sk === csk) continue;   // gemeinsames Lager
+        const f = Math.max(0, sk.food - c.pop * 3) * 0.25;
+        if (f > 0) { sk.food -= f; WW.Cities.addStock(sim, cap, 'food', f); sent += f; }
+        for (const r of ['wood', 'stone', 'iron', 'coal']) {
+          const v = Math.max(0, (sk[r] || 0) - c.pop * 0.5) * 0.25;
+          if (v > 0) { sk[r] -= v; WW.Cities.addStock(sim, cap, r, v); sent += v; }
+        }
+        let m = 0;
+        if (c.pop > 12) for (const u of st.units) {
+          if (m >= 2 || cap.housing <= cap.pop + 2 + moved) break;
+          if (u.dead || u.cityId !== c.id || u.role !== 'farmer' || u.carrying || u.order || u.garrison != null) continue;
+          u.cityId = cap.id; u.path = null; u.task = null; u.phase = 0; u.target = -1; m++; moved++;
+        }
+      }
+      if ((sent > 20 || moved) && (k.tributeYear | 0) + 5 <= st.year) { k.tributeYear = st.year; sim.event('tribute', { kingdom: k.name, city: cap.name, n: moved }, WW.Cities.atCity(cap)); }
+    }
+  }
+
+  WW.Garrison = { yearly: yearly, want: want, loyalty: loyalty, update: update, onConquest: onConquest, setGarrison: setGarrison, defaults: defaults, release: release, OCC_BASE: OCC_BASE };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

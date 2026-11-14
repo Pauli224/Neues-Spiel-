@@ -291,8 +291,19 @@
 //   sim.actions.setGarrison(cityId, n) -> bool   n ≥ 0 feste Stärke (0 = abziehen), n = null/-1 -> wieder selbst
 //   Ereignisse: garrisonSent, garrisonWithdrawn, integrated, garrisonLow.
 // FASCHISMUS STÄRKER: soldierShare 0,36, unitDmgMul/unitHpMul 1,2 (Ausbildung), Wehrpflicht im Krieg (wie bisher 'mass').
-//   Sturz des Regimes: nach 3 schlechten Jahren nur noch mit 20 % je Jahr, sicher nach einer im Krieg verlorenen Stadt
-//   (kingdom.lostYear, 3 Jahre); Zusammenbruch in Anarchie seltener. Schwächen bleiben (Zufriedenheit, Garnisonsbedarf).
+//   Sturz des Regimes (Revolution, Zusammenbruch, siegreicher Aufstand in der Hauptstadt) nur noch in harter Krise:
+//   WW.Gov.fascistCrisis(sim, k) = im Krieg verlorene Stadt (kingdom.lostYear, 3 Jahre) | Hauptstadt gerade belagert bei ≥ 2 schlechten Jahren
+//   | Hunger in der Hauptstadt seit ≥ 3 Jahren (kingdom.hungerYears). Spieler-Eingriff (setGovernment) geht immer.
+//   [events] Bitte Putsch-/Umsturz-Ereignisse gegen Faschismus nur bei WW.Gov.fascistCrisis(sim, k) zünden.
+//   Krieg: Faschismus plant Kriege gegen Schwächere (Stärke > 1,2×) ohne Groll (Meinung bis +30), Reichweite 60 statt 40
+//   Kacheln; Kriegsvorhaben verfallen nicht, solange es stärker ist. Frieden erst nach Gewinn (kingdom.wonYear ≥ Kriegsbeginn)
+//   oder Verlust einer Stadt, spätestens nach 20 Jahren.
+//   Abgaben (jährlich, WW.Garrison.yearly): andere Städte liefern 25 % ihrer Überschüsse (Nahrung über 3 × Einw.,
+//   Holz/Stein/Eisen/Kohle über 0,5 × Einw.) an die Hauptstadt und bis zu 2 Bauern je Stadt ziehen in die Megastadt.
+//   Ereignis tribute.
+// MEGASTADT-RING: Stehen ≥ 3 Häuser vor der Mauer, erweitert die Stadt ihren Ring (WW.Walls.plan expanding) vor weiteren
+//   Mauerstufen, frühestens 3 Jahre nach der letzten Planung; ist kein Platz (Nachbarstadt), bleibt wall.maxed.
+//   Wohnblöcke ab Großstadt aus Beton: Holzkosten werden zu Stein. Bahnbaustellen zählen nicht gegen die Stadtplanung.
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -507,6 +518,7 @@
       WW.Cities.yearly(this);
       WW.Gov.yearly(this);
       WW.Diplo.yearly(this);
+      WW.Garrison.yearly(this);   // 9.10: Abgaben an die Megastadt
       WW.Growth.yearly(this);
       WW.Env.yearly(this);
     }

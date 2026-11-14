@@ -453,14 +453,15 @@
       }
       // Revolution / Sturz des Regimes
       // Faschismus (9.10): hält sich mit Angst und Heer; fällt sicher erst nach verlorenen Kriegen, sonst nur selten
-      const fasHold = k.gov === 'fascism' && !(k.lostYear != null && st.year - k.lostYear <= 3) && !sim.rng.chance(0.2);
+      if (k.gov === 'fascism') k.hungerYears = (cap && cap.hungry) ? (k.hungerYears | 0) + 1 : 0;   // Hunger in der Hauptstadt zählt
+      const fasHold = k.gov === 'fascism' && !fascistCrisis(sim, k);   // 9.10: Sturz nur in echter Krise
       if (k.lowYears >= 3 && years >= 4 && !fasHold) {
         const ch = chooseGov(sim, k, { unhappy: true });
         applyGov(sim, k, ch.gov, { lock: false, reason: k.gov === 'fascism' ? 'regimeFall' : 'revolution', why: ch.why });
         continue;
       }
       // Zusammenbruch in Anarchie
-      if (k.gov !== 'anarchy' && hap < 18 && k.lowYears >= 2 && years >= 3 && sim.rng.chance(k.gov === 'fascism' && !(k.lostYear != null && st.year - k.lostYear <= 3) ? 0.05 : 0.2)) {
+      if (k.gov !== 'anarchy' && !fasHold && hap < 18 && k.lowYears >= 2 && years >= 3 && sim.rng.chance(0.2)) {
         applyGov(sim, k, 'anarchy', { lock: false, reason: 'collapse' });
         continue;
       }
@@ -490,6 +491,15 @@
     }
   }
 
+  // Faschismus (9.10) stürzt nur in einer harten Krise: Stadt im Krieg verloren (3 Jahre), Hauptstadt belagert
+  // (im letzten Jahr) oder Hunger seit mindestens 2 Jahren. Sonst halten Angst, Heer und Garnison das Regime.
+  function fascistCrisis(sim, k) {
+    const st = sim.state;
+    if (k.lostYear != null && st.year - k.lostYear <= 3) return true;
+    const cap = capital(sim, k);
+    if (cap && cap.besieged && cap.besieged > st.tick && (k.lowYears | 0) >= 2) return true;   // Hauptstadt gerade belagert und das Volk am Ende
+    return (k.hungerYears | 0) >= 3;
+  }
   function anyHungry(sim, k) {
     for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && c.hungry) return true; }
     return false;
@@ -543,7 +553,7 @@
     createKingdom: createKingdom, removeKingdom: removeKingdom, applyGov: applyGov, appointLeader: appointLeader,
     onLeaderDeath: onLeaderDeath, update: update, yearly: yearly, election: election, fiveYearPlan: fiveYearPlan,
     shamElection: shamElection, miracle: miracle, pickGovForRace: pickGovForRace, leaderFull: leaderFull,
-    avgHappiness: avgHappiness, kingdomPop: kingdomPop, capital: capital, titleFor: titleFor, restyleCity: restyleCity,
+    avgHappiness: avgHappiness, kingdomPop: kingdomPop, fascistCrisis: fascistCrisis, capital: capital, titleFor: titleFor, restyleCity: restyleCity,
     chooseGov: chooseGov, TRAITS: TRAITS
   };
 

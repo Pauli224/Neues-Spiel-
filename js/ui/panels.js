@@ -469,7 +469,7 @@
     }
     if (u.garrison != null && u.garrison >= 0) { const gc = sim.query.city(u.garrison); links.push(h('div.row', [h('span.muted', 'Garnison von'), gc ? h('button.link', { type: 'button', on: { click: () => game.selectCity(gc.id, true) } }, gc.name) : h('span', '—')])); }
     else if (u.order && u.order.kind === 'garrison') { const gc = sim.query.city(u.order.city); if (gc) links.push(h('div.muted', 'Unterwegs zur Garnison von ' + gc.name)); }
-    if (u.ind === 'escort') { const to = sim.query.city(u.escortTo); links.push(h('div.muted', { style: { marginBottom: '6px' } }, 'Begleitwache eines Gefangenenmarschs' + (to ? ' nach ' + to.name : '') + (u.escortN ? ' (' + u.escortN + ' Gefangene)' : ''))); }
+    if (u.ind === 'escort') { const to = sim.query.city(u.escortTo); links.push(h('div.muted', { style: { marginBottom: '6px' } }, 'Begleitwache eines Gefangenenmarschs' + (to ? ' nach ' + to.name : '') + (u.escortN ? ' (' + (u.escortN === 1 ? 'ein Gefangener' : u.escortN + ' Gefangene') + ')' : ''))); }
     if (u.vehicle) links.push(h('div.muted', { style: { marginBottom: '6px' } }, (u.role === 'tank' ? 'Panzer' : 'Feldgeschütz') + (u.simple ? ' (einfache Bauart)' : '') + (u.parole ? ' · hat die Waffen niedergelegt' : '')));
     if (c) links.push(h('div.row', [h('span.muted', 'Wohnt in'), h('button.link', { type: 'button', on: { click: () => game.selectCity(c.id, true) } }, c.name)]));
     if (k) links.push(h('div.row', [h('span.muted', 'Reich'), h('button.link', { type: 'button', on: { click: () => game.selectKingdom(k.id, true) } }, k.name)]));
@@ -546,7 +546,7 @@
     const sim = this.game.sim, body = this.$('infoBody');
     this.title(WW.Sprites.has('i_battle') ? icon('i_battle', 30) : null, b.name || 'Feldschlacht', b.state === 'retreat' ? 'eine Seite weicht' : b.state === 'surrender' ? 'eine Seite gibt auf' : 'tobt seit Jahr ' + (b.year | 0));
     const side = (id, n, loss, v, role) => h('div.relrow', [h('div.rt', [kIcon(sim, id), h('button.link.nm', { type: 'button', on: { click: () => id >= 0 && this.game.selectKingdom(id, false) } }, kname(sim, id)), h('span.badge.war', role)]),
-      h('div.op', (n | 0) + ' Kämpfer im Feld' + (v ? ' · ' + v + ' Fahrzeuge' : '') + ' · ' + (loss | 0) + ' gefallen')]);
+      h('div.op', (n | 0) + ' Kämpfer im Feld' + (v ? ' · ' + v + (v === 1 ? ' Fahrzeug' : ' Fahrzeuge') : '') + ' · ' + (loss | 0) + ' gefallen')]);
     body.appendChild(h('div.sec', [h('h3', 'Seiten'), side(b.a, b.nA, b.lossA, b.vA, 'greift an'), side(b.b, b.nB, b.lossB, b.vB, 'verteidigt')]));
     const tot = Math.max(1, (b.nA | 0) + (b.nB | 0)), pa = Math.round(100 * (b.nA | 0) / tot);
     body.appendChild(h('div.sec', [h('div.barline', [h('span', 'Kräfteverhältnis'), h('b', pa + ' : ' + (100 - pa))]), h('div.bar.warn', [h('b', { style: { width: pa + '%' } })])]));

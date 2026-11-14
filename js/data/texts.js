@@ -406,6 +406,10 @@
       'Die Garnison in {city} ist zu klein. Die Leute merken es zuerst an den unbewachten Toren.',
       'In {city} fehlen Soldaten. An den Hauswänden tauchen erste Parolen gegen {kingdom_acc} auf.'
     ],
+    tribute: [
+      'Aus den Provinzen rollen Wagen nach {city}: Korn, Stein und Leute, die nicht gefragt wurden. {kingdom_nom} nennt es Aufbau.',
+      'Die Hauptstadt {city} verschlingt, was die Provinzen hergeben. Dort heißt es Abgabe, hier heißt es Hunger.'
+    ],
     integrated: [
       '{city} gehört nun wirklich zu {kingdom_dat}. Man hat sich an die neuen Fahnen gewöhnt, wenn auch nicht an die Steuern.',
       'Die Besatzungszeit in {city} ist vorbei. Die Kinder kennen die alten Grenzen nur noch aus Erzählungen.'
