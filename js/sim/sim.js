@@ -285,7 +285,7 @@
 //     Kommunismus 15, Faschismus 60 = praktisch nie). Danach city.occupied = null (Ereignis integrated).
 //   Wirkung: Loyalität + cap × Ist/Soll (Faschismus 45, Kommunismus 35, Monarchie 30, Theokratie 25, Handelsrepublik 20, Stamm 15,
 //     Demokratie 12, Anarchie 0); fehlende Garnison in besetzter Stadt -20 × Fehlanteil; Aufstands- und Abspaltungs-Vorhaben
-//     wachsen mit Garnison langsamer (Abspaltung: × (1 − Ist/Soll × 0,6), Faschismus × 0,95).
+//     wachsen mit Garnison langsamer (Abspaltung nur in besetzten Städten: × (1 − Ist/Soll × 0,6), Faschismus × 0,95).
 //   Bauwerk 'garrison' („Garnisonskaserne“, 2×2, core): +50 % Wirkung, Soll +4. Wird in besetzten Städten mit Soll ≥ 6 gebaut.
 //   Eroberung: bis zum Soll bleiben Eroberer als Garnison; danach schickt die Hauptstadt (bzw. nächste eigene Stadt) Soldaten nach.
 //   sim.actions.setGarrison(cityId, n) -> bool   n ≥ 0 feste Stärke (0 = abziehen), n = null/-1 -> wieder selbst
