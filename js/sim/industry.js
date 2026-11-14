@@ -50,7 +50,8 @@
 //   state.wind       { dx, dy (Einheitsvektor aus 16 Richtungen), dir 0..15 (0 = Osten, im Uhrzeigersinn, 4 = Süden),
 //                    str 0.6..1 } – dreht sich langsam (alle 120 Ticks evtl. um 1/16).
 //   state.industry   { any (Summe der Verschmutzung beim letzten Schritt, 0 = alles sauber), murk (Anzahl trüber Kacheln),
-//                    barren (Anzahl ausgelaugter Kacheln), soot (Anzahl berußter Kacheln) }
+//                    barren (Anzahl ausgelaugter Kacheln), soot (Anzahl berußter Kacheln),
+//                    dc (1 = Folgen-Durchlauf nötig, 0 = alles sauber und abgeräumt) }
 //
 // KENNZAHLEN
 //   city.pollution 0..100 (Luft über der Stadt), city.indActive (aktive Fabriken), city.indNext (Tick der nächsten
@@ -106,7 +107,7 @@
     const D = WW.Cities.DIRS16[w.dir]; w.dx = D[0]; w.dy = D[1];
     st.wind = w;
     const s = st.industry && typeof st.industry === 'object' ? st.industry : {};
-    s.any = +s.any || 0; s.murk = s.murk | 0; s.barren = s.barren | 0; s.soot = s.soot | 0;
+    s.any = +s.any || 0; s.murk = s.murk | 0; s.barren = s.barren | 0; s.soot = s.soot | 0; s.dc = s.dc === 0 ? 0 : 1;
     st.industry = s;
     if (st.laws && !('industry' in st.laws) && WW.LAW_DEFAULTS && 'industry' in WW.LAW_DEFAULTS) st.laws.industry = WW.LAW_DEFAULTS.industry;
     // city.pollution / kingdom.pollution ergänzt der Takt (plan); hier nichts an Städten ändern (Laden bleibt formstabil)
@@ -841,9 +842,9 @@
     if (t % C.STEP === 7) step(sim);
     if (t % 120 === 61) windTurn(sim);
     const ind = st.industry;
-    if (t % C.EFFECT_EVERY === 41 && (ind.any > 0 || ind.murk > 0 || ind.barren > 0 || ind.soot > 0 || sim._indDirtyCities !== false)) {
+    if (t % C.EFFECT_EVERY === 41 && (ind.any > 0 || ind.murk > 0 || ind.barren > 0 || ind.soot > 0 || ind.dc !== 0)) {
       effects(sim); kingdomStats(sim);
-      sim._indDirtyCities = ind.any > 0 || ind.murk > 0 || ind.barren > 0;
+      ind.dc = ind.any > 0 || ind.murk > 0 || ind.barren > 0 || ind.soot > 0 ? 1 : 0;   // gespeichert: nach dem Laden gleich weiter
     }
     if (t % TPY() === 131) neighbours(sim);
     if (WW.Rail) WW.Rail.tick(sim);

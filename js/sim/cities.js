@@ -2,7 +2,7 @@
 (function (WW) { 'use strict';
 
   const WORKERS = { farmer: 1, lumberjack: 1, miner: 1, builder: 1, soldier: 1 };
-  const HOUSE_CAP = [3, 5, 8, 14, 22];   // Stufe 4/5: Wohnblöcke der Megastadt (megaHousing)
+  const HOUSE_CAP = [3, 5, 8, 16, 28];   // Stufe 4/5: Wohnblöcke der Megastadt (megaHousing)
   // 16 Richtungen als feste Tabelle (kein sin/cos in der Simulation)
   const DIRS16 = [[1, 0], [0.924, 0.383], [0.707, 0.707], [0.383, 0.924], [0, 1], [-0.383, 0.924], [-0.707, 0.707], [-0.924, 0.383],
     [-1, 0], [-0.924, -0.383], [-0.707, -0.707], [-0.383, -0.924], [0, -1], [0.383, -0.924], [0.707, -0.707], [0.924, -0.383]];
@@ -363,13 +363,17 @@
     const inf = WW.STRUCT_INFO[type || 'house'];
     const w = inf.w, h = inf.h;
     const ringed = !!(city.wall.plan && city.wall.state !== 'none');
-    const r = Math.min(26, territoryRadius(city, sim));
+    // Megastadt (9.10): ist der Ring voll, entstehen Wohnblöcke auch in Vorstädten vor der Mauer
+    const suburb = ringed && type === 'house' && city.noSpace && city.tier >= 3 && !!gov(sim, city).megaHousing;
+    const r = Math.min(suburb ? 34 : 26, territoryRadius(city, sim));
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const owner = st.owner, inRing = st.inRing, id = city.id;
-    const area = ringed
+    const area = suburb
+      ? (i) => inRing[i] === id || (owner[i] === id && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i))))
+      : ringed
       ? (i) => inRing[i] === id
       : (i) => owner[i] === id && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i)));
-    const o = { area: area, fieldOk: true, race: city.race, cityId: id, needWalkBorder: true };
+    const o = { area: area, fieldOk: !suburb, race: city.race, cityId: id, needWalkBorder: true };
     let best = -1, bs = -1e9;
     const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
     const y0 = Math.max(1, Math.floor(py - r)), y1 = Math.min(st.H - 2 - h, Math.ceil(py + r));
@@ -381,6 +385,11 @@
       if (nb < 0) continue;
       // ohne Mauer: dicht am Bestand bleiben
       if (!ringed && nb === 0) continue;
+      if (suburb && inRing[y * W + x] !== id && nb === 0) {   // Vorstadt wächst am Bestand oder an der Mauer entlang
+        let nearRing = false;
+        for (let dy = -4; dy <= h + 3 && !nearRing; dy++) for (let dx = -4; dx <= w + 3; dx++) { const yy = y + dy, xx = x + dx; if (xx >= 0 && yy >= 0 && xx < W && yy < st.H && inRing[yy * W + xx] === id) { nearRing = true; break; } }
+        if (!nearRing) continue;
+      }
       let score = -d + nb * 0.9 + sim._hashNoise(y * W + x) * 0.6;
       if (WW.TERRAIN_LUT.wood[st.terrain[y * W + x]]) score -= 0.8;
       if (score > bs) { bs = score; best = y * W + x; }
@@ -534,6 +543,8 @@
     const maxOpen = 2 + city.tier;
     // Häuser
     const houseCap = 2 + Math.floor((city.flurs || 1) * (g.housesPerFlur || WW.CONFIG.HOUSES_PER_FLUR));
+    // Megastadt (9.10): dicht bauen – zuerst aufstocken (Wohnblöcke), dann neu bauen
+    if (g.megaHousing && city.tier >= 3 && open < maxOpen && city.pop + 4 >= city.housing && sim.rng.chance(0.6)) upgradeHouse(sim, city, sk);
     if (open < maxOpen && city.pop + 2 >= city.housing && city.houses >= houseCap) {
       // wer wachsen will, muss Land nehmen; bis dahin Häuser aufstocken
       city.needLand = true;
@@ -633,7 +644,7 @@
     let best = null;
     for (const s of sim.state.structs) {
       if (s.dead || s.cityId !== city.id || s.type !== 'house' || !s.built || s.upgradeTo) continue;
-      if (s.level >= 3 && !(megaOk && (s.level === 3 ? city.tier >= 4 : (s.level === 4 && city.tier >= 6)))) continue;   // Wohnblöcke
+      if (s.level >= 3 && !(megaOk && (s.level === 3 ? city.tier >= 3 : (s.level === 4 && city.tier >= 4)))) continue;   // Wohnblöcke ab Großstadt/Metropole
       if (s.level === 0 && stage < 1) continue;          // Zelte erst mit der Dorfhalle aufwerten
       if (s.level >= 1 && city.tier < 1) continue;
       if (s.level === 2 && city.tier < 2) continue;
@@ -643,7 +654,9 @@
     const cost = WW.Structs.costFor(sim, 'house', best.level + 1, city.id);
     if (!canPay(sim, city, cost)) return false;
     // nicht mehrere Ausbauten gleichzeitig beginnen, die das Lager nicht trägt
-    for (const id of city.sites) { const o = sim._structs.get(id); if (o && o.type === 'house' && o.upgradeTo && !o.paid) return false; }
+    let unpaid = 0;
+    for (const id of city.sites) { const o = sim._structs.get(id); if (o && o.type === 'house' && o.upgradeTo && !o.paid) unpaid++; }
+    if (unpaid >= (megaOk && city.tier >= 3 ? 3 : 1)) return false;
     best.upgradeTo = best.level + 1; best.progress = 0; best.paid = false; best.siteYear = sim.state.year;
     city.sites.push(best.id);
     return true;

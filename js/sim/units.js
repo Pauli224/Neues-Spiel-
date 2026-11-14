@@ -530,6 +530,7 @@
       const k = sim._kingdoms.get(u.kingdomId);
       let mul = WW.SimUtil.mod(sim, k, city, 'food', race.yields.food);
       if (k && k.policy && k.policy.bonus === 'bread') mul *= 1.25;
+      if (city.tier >= 3 && WW.GOVERNMENTS[k ? k.gov : 'tribe'].megaGrowth) mul *= 1.5;   // Megastadt: Zwangsbewirtschaftung der Felder (9.10)
       if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'food') mul *= 1.5;
       if (u.task === 'fish' || u.task === 'forage') {
         u.carrying = 'food'; u.carryAmt = (u.task === 'fish' ? C().FISH * (WW.Culture.info(city.culture).bonus.fish || 1) : C().FORAGE) * mul; u.phase = 3;

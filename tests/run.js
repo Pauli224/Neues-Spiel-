@@ -1193,6 +1193,74 @@ test('20 Kachel-Meldungen (nur sichtbare Änderungen, Beweidung mit Hysterese)',
 });
 
 // --------------------------------------------------------------------------
+// 21. Faschismus 9.10: keine Dörfer, Megastufen, Garnisonen halten Eroberungen
+// --------------------------------------------------------------------------
+function garrisonScenario(gov, withdrawYear, years) {
+  const world = meadowWorld(160, 80, { spots: [{ x: 40, y: 40 }, { x: 105, y: 40 }] });
+  const sim = makeSim({ seed: 'garn', world: world, populate: 2, govs: [gov, 'monarchy'], races: ['human', 'human'], animals: false });
+  const st = sim.state, a = st.kingdoms[0], b = st.kingdoms[1];
+  a.govLocked = b.govLocked = true; sim.actions.setLaw('wars', false); sim.actions.setLaw('disasters', false);
+  run(sim, 20 * WW.CONFIG.TPY);
+  const ca = sim._cities.get(a.cityIds[0]), cb = sim._cities.get(b.cityIds[0]);
+  for (let n = 0; n < 14; n++) { const u = WW.Units.create(sim, { x: cb.cx + 0.5 + (n % 3) - 1, y: cb.cy + 2.5, role: 'soldier', kingdomId: a.id, cityId: ca.id, race: 'human', age: 22 }); if (u) WW.Units.setRole(sim, u, 'soldier'); }
+  for (const u of st.units) if (u.kingdomId === b.id && u.role === 'soldier') WW.Units.kill(sim, u, 'battle');
+  const ctr = sim._structs.get(cb.centerId); ctr.built = false; ctr.hp = 1;
+  sim.actions.setRelation(a.id, b.id, 'war');
+  WW.Units.buildBuckets(sim);
+  const ok = WW.Diplo.tryCapture(sim, cb, a.id);
+  sim.actions.setRelation(a.id, b.id, 'peace');
+  const r = { sim: sim, city: cb, att: a, ok: ok, lost: -1, integrated: -1, minG: 1e9 };
+  for (let y = 1; y <= years; y++) {
+    if (withdrawYear && y === withdrawYear) sim.actions.setGarrison(cb.id, 0);
+    run(sim, WW.CONFIG.TPY);
+    if (cb.dead || cb.kingdomId !== a.id) { r.lost = y; break; }
+    if (!cb.occupied && r.integrated < 0) r.integrated = y;
+    if (y > 2 && !withdrawYear) r.minG = Math.min(r.minG, cb.garrison);
+  }
+  return r;
+}
+test('21 Faschismus 9.10: keine Dörfer, Megastufen, Garnisonen (halten, abziehen, eingliedern)', function () {
+  // A: Faschismus gründet keine Dörfer
+  assert(WW.govNoSettle('fascism') && !WW.govNoSettle('monarchy'), 'noSettle-Marke');
+  const fw = makeSim({ seed: 'dorf', world: meadowWorld(200, 120, { spots: [{ x: 100, y: 60 }] }), populate: 1, govs: ['fascism'], races: ['human'], animals: false });
+  fw.state.kingdoms[0].govLocked = true; fw.actions.setLaw('disasters', false);
+  run(fw, 40 * WW.CONFIG.TPY);
+  const fk = fw.state.kingdoms.find(k => k.gov === 'fascism');
+  log('Faschismus nach 40 Jahren: Städte des Reichs', fk.cityIds.length, '· Tochterstadt-Ereignisse', countEvents(fw, 'daughter', fk.id), '· Hauptstadt', fw._cities.get(fk.capitalId).pop, 'Einw.');
+  const own = fk.cityIds.map(id => fw._cities.get(id)).filter(c => c.conqueredYear == null && c.kind !== 'camp');   // eroberte und Lagerstädte zählen nicht
+  assert(own.length === 1 && countEvents(fw, 'daughter', fk.id) === 0, 'Faschismus gründet Dörfer (' + own.map(c => c.name).join(',') + ')');
+  // B: Megastufen nur im Faschismus
+  assert(WW.tierAllowed(6, 'fascism') && WW.tierAllowed(7, 'fascism') && !WW.tierAllowed(6, 'monarchy') && WW.tierAllowed(5, 'monarchy'), 'Megastufen-Regel');
+  assert(WW.Cities.HOUSE_CAP.length === 5 && WW.Cities.HOUSE_CAP[4] > WW.Cities.HOUSE_CAP[2] * 2, 'Wohnblöcke fehlen');
+  // C: Garnisonen
+  const fh = garrisonScenario('fascism', 0, 30);
+  log('Faschismus hält Eroberung:', fh.ok, '· verloren im Jahr', fh.lost, '· kleinste Garnison', fh.minG, '· Loyalität', Math.round(fh.city.loyalty), '· besetzt', !!fh.city.occupied);
+  assert(fh.ok && fh.lost < 0 && fh.minG >= 3 && fh.city.occupied, 'Faschismus hält die eroberte Stadt nicht 30 Jahre');
+  const fx = garrisonScenario('fascism', 3, 30);
+  log('Faschismus ohne Garnison (abgezogen im Jahr 3): verloren im Jahr', fx.lost, '· Chronik garrisonWithdrawn', countEvents(fx.sim, 'garrisonWithdrawn'));
+  assert(fx.lost > 0, 'ohne Garnison wird die Stadt nicht verloren');
+  const dm = garrisonScenario('democracy', 0, 12);
+  log('Demokratie: eingegliedert nach', dm.integrated, 'Jahren · verloren', dm.lost, '· Loyalität', Math.round(dm.city.loyalty));
+  assert(dm.lost < 0 && dm.integrated > 0 && dm.integrated <= 6 && countEvents(dm.sim, 'integrated') >= 1, 'Demokratie gliedert nicht in wenigen Jahren ein');
+  // Garnisonssoldaten marschieren nicht, Speichern/Laden trägt alles
+  const s = fh.sim;
+  const gs = s.state.units.filter(u => u.garrison === fh.city.id);
+  assert(gs.length >= 3 && gs.every(u => !u.order || u.order.kind === 'garrison'), 'Garnison auf dem Marsch');
+  const L = WW.Sim.load(s.serialize());
+  assert(L.hash() === s.hash(), 'Garnison: Laden ändert den Stand');
+  run(s, 400); run(L, 400);
+  assert(L.hash() === s.hash(), 'Garnison: nach Laden nicht deterministisch');
+  assert(s.actions.setGarrison(fh.city.id, 2) === true && s.actions.setGarrison(-5, 2) === false && s.actions.setGarrison(fh.city.id, null) === true, 'setGarrison');
+  // alte Stände: Felder werden nachgerüstet
+  const o = JSON.parse(s.serialize());
+  for (const c of o.cities) { delete c.occupied; delete c.garrison; delete c.garrisonWant; delete c.garrisonSet; }
+  for (const u of o.units) delete u.garrison;
+  const old = WW.Sim.load(JSON.stringify(o));
+  assert(old.state.cities.every(c => c.occupied !== undefined && c.garrisonSet === null), 'alte Stände ohne Garnisonsfelder');
+  run(old, 600); checkInvariants(old, 'alter Stand Garnison');
+});
+
+// --------------------------------------------------------------------------
 // 7. Leistung
 // --------------------------------------------------------------------------
 test('7 Leistung (~800 Einheiten auf 144×96)', function () {

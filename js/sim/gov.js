@@ -62,7 +62,11 @@
     for (const o of st.kingdoms) delete o.relations[k.id];
     st.kingdoms = st.kingdoms.filter(x => x !== k);
     sim._kingdoms.delete(k.id);
-    for (const u of st.units) if (!u.dead && u.kingdomId === k.id && u.cityId < 0) WW.Units.kill(sim, u, 'gone');
+    if (WW.Camps && WW.Camps.trainFreed && st.trains) for (const tr of st.trains) if (tr.kingdomId === k.id && tr.prisoners && tr.prisoners.length) WW.Camps.trainFreed(sim, tr);   // [industry] Gefangene im Zug kommen frei
+    for (const u of st.units) if (!u.dead && u.kingdomId === k.id && u.cityId < 0) {
+      if (u.role === 'prisoner' || (u.pow != null && u.pow >= 0)) { u.kingdomId = -1; continue; }   // [industry] Gefangene sterben nicht mit dem Reich
+      WW.Units.kill(sim, u, 'gone');
+    }
     if (!silent) sim.event('kingdomGone', { kingdom: k.name }, { kingdomId: -1, cityId: -1, x: 0, y: 0 });
   }
 

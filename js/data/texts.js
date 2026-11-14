@@ -393,6 +393,23 @@
       'Bei {city} beginnt jetzt {other_nom}. Die Bauern beider Seiten winken sich misstrauisch zu.',
       '{kingdom_nom} und {other_nom} sind jetzt Nachbarn. Erste Streitfrage: Wem gehört der Apfelbaum an der Grenze?'
     ],
+    // ---------------------------------------------------------------- Garnisonen (9.10)
+    garrisonSent: [
+      'Aus {other} marschieren {n} Soldaten nach {city}, um dort Garnison zu halten. Begeisterung hält sich in Grenzen.',
+      '{kingdom_nom} verstärkt die Garnison in {city}. Die Kasernenbetten werden knapp.'
+    ],
+    garrisonWithdrawn: [
+      'Die Garnison zieht aus {city} ab. Auf dem Marktplatz wird es auffällig still, dann auffällig laut.',
+      '{kingdom_nom} holt {n} Soldaten aus {city} zurück. Die Stadt atmet auf und beginnt zu tuscheln.'
+    ],
+    garrisonLow: [
+      'Die Garnison in {city} ist zu klein. Die Leute merken es zuerst an den unbewachten Toren.',
+      'In {city} fehlen Soldaten. An den Hauswänden tauchen erste Parolen gegen {kingdom_acc} auf.'
+    ],
+    integrated: [
+      '{city} gehört nun wirklich zu {kingdom_dat}. Man hat sich an die neuen Fahnen gewöhnt, wenn auch nicht an die Steuern.',
+      'Die Besatzungszeit in {city} ist vorbei. Die Kinder kennen die alten Grenzen nur noch aus Erzählungen.'
+    ],
     // ---------------------------------------------------------------- Kulturen und Namen (Ausbau 9)
     realmRenamed: [
       'Aus {old} wird {kingdom}. An den Grenzen werden die Schilder übermalt, die alten heizen den Winter.',

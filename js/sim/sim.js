@@ -265,9 +265,13 @@
 //   WW.CITY_TIERS[6] = { key 'megacity', name 'Megastadt', minPop 350, govs ['fascism'] }, [7] = { key 'gigacity', 'Riesenstadt',
 //     minPop 550, govs ['fascism'] }. Stufen mit govs gelten nur für diese Regierungen (WW.tierAllowed(tier, govKey)); city.tier 0..7.
 //     Fällt die Regierung, sinkt die Stufe auf höchstens 5.
-//   Wohnblöcke: house.level 4 und 5 (nur Regierungen mit megaHousing, also Faschismus; ab Stufe Metropole bzw. Megastadt),
-//     Plätze je Haus WW.Cities.HOUSE_CAP = [3, 5, 8, 14, 22]. Sprites: s_house_<gov>_4/5 (bis dahin zeigt die Grafik Stufe 3).
-//   Faschismus: gov.megaGrowth (Geburten/Zuzug ×1,4 ab Großstadt), gov.housesPerFlur (mehr Häuser je Flur).
+//   Wohnblöcke: house.level 4 und 5 (nur Regierungen mit megaHousing, also Faschismus; ab Stufe Großstadt bzw. Metropole),
+//     Plätze je Haus WW.Cities.HOUSE_CAP = [3, 5, 8, 16, 28]. Sprites: s_house_<gov>_4/5 (bis dahin zeigt die Grafik Stufe 3).
+//     Bis zu 3 Ausbauten gleichzeitig; zuerst aufstocken, dann neu bauen.
+//   Vorstädte: Ist der Ring voll (city.noSpace) und die Stadt mindestens Großstadt, baut eine megaHousing-Stadt Häuser auch vor
+//     der Mauer (an der Mauer bzw. am Bestand entlang, nicht auf Feldern). [walls] Bitte: Ringplanung/Erweiterung bei dieser
+//     Größe (Ring mit 200+ Innenkacheln, Vorstadt davor) prüfen; bisher erweitert sich der Ring der Megastadt kaum (expansions 0).
+//   Faschismus: gov.megaGrowth (Geburten ×1,4 ab Großstadt), gov.housesPerFlur 2,6, Ernte ×1,5 ab Großstadt (Zwangsbewirtschaftung).
 //   Weltobergrenze Einwohner WW.CONFIG.MAX_UNITS (siehe Messwerte im Bericht).
 // GARNISONEN (alle Regierungen außer Anarchie; Werte WW.GOVERNMENTS[g].garrison { cap (Loyalität max.), integ (Jahre bis zur
 //   Eingliederung), share (Soll-Anteil besetzt) })

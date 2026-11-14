@@ -478,6 +478,32 @@ test('11 Schlachtnamen abwechslungsreich, Aufgebende kämpfen nicht mehr', funct
   assert(b.hp >= hp && !b.dead, 'Aufgebender wird angegriffen');
 });
 
+test('12 Faschismus als Rüstungsstaat (Megastadt), Garnisonen bleiben daheim', function () {
+  const fake = (gov, pop) => ({ sim: { _cities: new Map([[1, { pop: pop }]]) }, k: { gov: gov, cityIds: [1] } });
+  const caps = {};
+  for (const pop of [60, 200, 600]) for (const g of ['fascism', 'communism', 'monarchy']) {
+    const f = fake(g, pop);
+    caps[g + pop] = WW.Military.capOf(f.sim, f.k, 'tank', true) + '+' + WW.Military.capOf(f.sim, f.k, 'artillery', true);
+  }
+  log('Obergrenzen im Krieg (Panzer+Geschütze):', JSON.stringify(caps));
+  const n = (k) => caps[k].split('+').reduce((a, v) => a + +v, 0);
+  assert(n('fascism600') >= 25 && n('fascism600') > n('communism600') && n('fascism60') >= n('communism60'), 'Faschismus nicht der stärkste Rüstungsstaat');
+  assert(n('monarchy600') <= 3, 'Monarchie wächst mit');
+  assert(WW.Military.costOf({ gov: 'fascism' }, 'tank', false).iron <= WW.Military.costOf({ gov: 'communism' }, 'tank', false).iron + 1, 'Faschismus-Panzer zu teuer');
+  // Garnisonen: nicht in Marsch, Feldschlacht oder „Schlacht befehlen"
+  const o = duel('fascism', 'monarchy', { seed: 81 });
+  grow(o, 6, 40);
+  const sim = o.sim;
+  const gs = [];
+  o.ca.garrisonSet = 10;   // Spieler-Vorgabe: der Kern zieht die Garnison nicht ab
+  for (let i = 0; i < 4; i++) { const u = soldier(sim, o.A, o.ca, o.ca.cx + 2, o.ca.cy + i - 2); u.garrison = o.ca.id; gs.push(u); }
+  const gv = WW.Military.spawnVehicle(sim, 'tank', o.A, o.ca.cx + 3, o.ca.cy, o.ca.id); gv.garrison = o.ca.id;
+  assert(sim.actions.orderBattle(o.A.id, o.B.id), 'orderBattle');
+  for (let i = 0; i < 400; i++) { sim.tick(); for (const u of gs) if (!u.dead) assert(!(u.order && u.order.kind === 'march'), 'Garnison marschiert mit (Tick ' + i + ', ' + u.role + ' garrison=' + u.garrison + ' set=' + o.ca.garrisonSet + ')'); }
+  for (const b of sim.state.battles) for (const u of gs) assert(Math.hypot(u.x - b.x, u.y - b.y) > b.r + 3 || u.garrison == null, 'Garnison in Feldschlacht');
+  log('Garnison blieb daheim:', gs.filter((u) => !u.dead).map((u) => Math.round(Math.hypot(u.x - o.ca.cx, u.y - o.ca.cy))).join(','), 'Kacheln vom Zentrum, Panzer', Math.round(Math.hypot(gv.x - o.ca.cx, gv.y - o.ca.cy)));
+});
+
 console.log('\n--- Ergebnis');
 for (const r of results) console.log('  ' + (r.ok ? 'ok    ' : 'FEHLER') + '  ' + r.name + '  (' + (r.ms / 1000).toFixed(1) + ' s)' + (r.ok ? '' : '  -> ' + (r.err && r.err.message)));
 const bad = results.filter((r) => !r.ok).length;

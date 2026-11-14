@@ -576,6 +576,7 @@
     if (sk && typeof sk.coal === 'number' && sk.coal >= NV().COAL_TRIP + (NV().COAL_RESERVE || 0)) { sk.coal -= NV().COAL_TRIP; s.coal = true; }   // Reserve bleibt für Arsenal und Fabriken
   }
   function depart(sim, s, r, mission, fromDock) {
+    if (mission && fromDock) mission.from = tileOf(sim, s);   // Rückweg = Hinweg rückwärts (spart die Wegsuche)
     s.route = r; s.ri = 0; s.t = 'out'; s.mission = mission; s.moving = r.length > 0; s.wait = 0;
     if (fromDock) {
       takeCoal(sim, s);
@@ -586,7 +587,13 @@
   function goHome(sim, s) {
     const cur = tileOf(sim, s);
     if (cur === s.home) { arriveHome(sim, s); return; }
-    const r = route(sim, cur, s.home);
+    const m = s.mission;
+    let r = null;
+    if (m && m.ret && m.at === cur) {
+      r = m.ret; m.ret = null;
+      for (const i of r) if (!isSea(sim.state.terrain[i])) { r = null; break; }
+    }
+    if (!r) r = route(sim, cur, s.home);
     if (!r) {
       s.fails = (s.fails | 0) + 1;
       if (s.fails > 3) scrap(sim, s); else s.wait = 120;
@@ -732,6 +739,8 @@
     if (hr(sim, s.id, st.tick + 3) < 0.06) chron(sim, 'seaTrade', { city: ca.name, otherCity: cb.name, ship: s.name }, WW.Cities.atCity(cb), 'economy', shown ? '+' + Math.round(shown) + ' Gold' : 'Waren');
   }
   function arrive(sim, s) {
+    const m0 = s.mission, r0 = s.route;
+    if (s.t === 'out' && m0 && m0.from === s.home && r0.length) { const ret = r0.slice(0, -1).reverse(); ret.push(m0.from); m0.ret = ret; m0.at = r0[r0.length - 1]; }
     s.moving = false; s.route = []; s.ri = 0;
     if (s.t === 'back') { arriveHome(sim, s); return; }
     const m = s.mission;
@@ -812,7 +821,7 @@
       u.seaS = 'aboard'; u.path = null; u.moving = false; u.x = gx; u.y = gy;
       return true;
     }
-    if (((st.tick + u.id) & 7) === 0 || !u.path) {
+    if (((st.tick + u.id) & 7) === 0) {   // Weg höchstens alle 8 Ticks suchen (spart Wegsuche, wenn das Budget knapp ist)
       const r = WW.Units.goTo(sim, u, goal, { limit: CF().PATH_LIMIT_LONG });
       if (r === null && u.fails > 3) { s.passengers.splice(s.passengers.indexOf(u.id), 1); release(sim, u); return false; }
     }
@@ -886,6 +895,7 @@
     for (const k of st.kingdoms) {
       if (k.dead || !k.cityIds.length) continue;
       const spec = govSpec(k.gov);
+      if ((k.id + st.year) % 3 !== 0) continue;   // jedes Reich nur jedes dritte Jahr prüfen (Platzsuche ist teuer)
       if (!spec.colonize || noSettle(k.gov) || WW.Diplo.atWar(sim, k.id)) continue;
       if (n.colony[k.id] != null && n.colony[k.id] + S.every > st.year) continue;
       if (k.cityIds.length >= WW.Growth.cityLimit(sim, k) + 2) continue;
@@ -1021,6 +1031,10 @@
     const list = idle.filter((u) => !u.dead && !u.order && !u.sea && !u.ind && !(u.garrison != null && u.garrison >= 0) && comp[Math.floor(u.y) * W + Math.floor(u.x)] === hc);   // Garnison bleibt
     if (list.length < I.min) return false;
     list.sort((a, b) => (Math.abs(a.x - bx) + Math.abs(a.y - by)) - (Math.abs(b.x - bx) + Math.abs(b.y - by)) || a.id - b.id);
+    // erreichen die Soldaten den Hafen überhaupt? (Ufer kann durch Wasser oder Mauern abgeschnitten sein)
+    const tryP = WW.Path.find(sim, Math.floor(list[0].y) * W + Math.floor(list[0].x), board, { k: k.id, race: list[0].race, limit: CF().PATH_LIMIT_LONG });
+    if (tryP === false) return false;   // Wegsuch-Budget dieses Ticks verbraucht: später nochmal
+    if (tryP === null) { n.invade[k.id] = st.year - I.every + 1; return false; }
     const keep = marching > 0 ? 0 : Math.floor(list.length * 0.25);
     const send = Math.min(capOf(s), list.length - keep);
     if (send < I.min) return false;
@@ -1243,6 +1257,29 @@
       if (w.cd <= 0) w.cd = 10;   // nichts zu tun: etwas seltener prüfen
     }
   }
+  // Küstenabwehr: fertige Türme des Feindes in Reichweite beschießen Transporter auf Landungsfahrt (je 30 Ticks)
+  function coastGuns(sim) {
+    const st = sim.state, W = st.W, H = st.H, R = NV().INVADE.towerR, dmg = NV().INVADE.towerDmg;
+    for (const s of st.ships) {
+      if (s.dead || s.kind !== 'transport' || s.t !== 'out' || !s.mission || s.mission.kind !== 'invade') continue;
+      if (((st.tick + s.id) % 30) >= 10) continue;
+      const x0 = Math.floor(s.x), y0 = Math.floor(s.y);
+      let hit = null;
+      for (let dy = -R; dy <= R && !hit; dy++) for (let dx = -R; dx <= R; dx++) {
+        const x = x0 + dx, y = y0 + dy;
+        if (x < 0 || y < 0 || x >= W || y >= H || dx * dx + dy * dy > R * R) continue;
+        const t = sim._structs.get(st.structAt[y * W + x]);
+        if (!t || !t.built || t.type !== 'tower') continue;
+        const c = sim._cities.get(t.cityId);
+        if (c && WW.Path.hostileKingdoms(sim, s.kingdomId, c.kingdomId)) { hit = t; break; }
+      }
+      if (!hit) continue;
+      const hx = hit.x + 0.5, hy = hit.y + 0.5, ok = hr(sim, s.id, st.tick + 9) < 0.6;
+      sim.fx({ type: 'shipfire', x: hx, y: hy, x2: s.x, y2: s.y, hit: ok });
+      sim.fx({ type: 'splash', x: s.x, y: s.y });
+      if (ok) { s.hp -= dmg; if (s.hp <= 0) sink(sim, s, null); else evade(sim, s, { x: hx, y: hy }); }
+    }
+  }
   function bombard(sim, w) {
     const st = sim.state, W = st.W, H = st.H, K = NV().KINDS.warship;
     const R = Math.ceil(K.shoreRange), x0 = Math.floor(w.x), y0 = Math.floor(w.y);
@@ -1420,7 +1457,7 @@
         if (s.wait > 0) { s.wait--; if (s.t !== 'load') continue; }
         decide(sim, s);
       }
-      if (t % 10 === 2 && sim._hostileWorld) combat(sim);
+      if (t % 10 === 2 && sim._hostileWorld) { combat(sim); coastGuns(sim); }
       if (t % 40 === 21) smoke(sim);
       // Aufräumen
       if (sim._shipsDead) {

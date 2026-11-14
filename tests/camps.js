@@ -430,6 +430,20 @@ test('9 Speichern/Laden, Determinismus, alte Spielstände, Zeitaufschlag', funct
   assert(camp ? inm.every((u) => u.role === 'prisoner' && u.camp === camp.id) : inm.every((u) => u.role !== 'prisoner'), 'alte Insassen hängen in der Luft');
   run(O, 1200);
   // Zeitaufschlag (Krieg mit Gefangenen, Lagerstadt im Bau/Betrieb)
+  // Zeitaufschlag ohne Krieg: faschistische Welt mit Lagerstadt (eager), Abholungen, Zwangsarbeit
+  {
+    const P = city('fascism', { unhappy: true, seed: 17 });
+    years(P, 30, () => campCities(P.sim).some((c) => c.cap > 0));
+    run(P.sim, 600);
+    const ot = WW.Camps.tick, ouu = WW.Camps.unit, oc = WW.Camps.cityUpdate, oe = WW.Camps.escort;
+    let q = 0n;
+    const wrap = (f) => function () { const t0 = process.hrtime.bigint(); const r = f.apply(this, arguments); q += process.hrtime.bigint() - t0; return r; };
+    WW.Camps.tick = wrap(ot); WW.Camps.unit = wrap(ouu); WW.Camps.cityUpdate = wrap(oc); WW.Camps.escort = wrap(oe);
+    try { run(P.sim, 4000); } finally { WW.Camps.tick = ot; WW.Camps.unit = ouu; WW.Camps.cityUpdate = oc; WW.Camps.escort = oe; }
+    const msP = Number(q) / 1e6 / 4000;
+    log('Lager-Anteil ohne Krieg', msP.toFixed(4), 'ms/Tick (Lagerstädte', campCities(P.sim).length + ', Gefangene ' + prisoners(P.sim).length + ', Kriege', WW.Diplo.atWar(P.sim, P.k.id) ? 'ja' : 'nein', ')');
+    assert(msP < 0.03, 'Lager ohne Krieg zu langsam: ' + msP.toFixed(4));
+  }
   const orig = WW.Camps.tick, ou = WW.Camps.unit, ocu = WW.Camps.cityUpdate;
   let ns = 0n;
   WW.Camps.tick = function (s) { const t0 = process.hrtime.bigint(); orig(s); ns += process.hrtime.bigint() - t0; };
