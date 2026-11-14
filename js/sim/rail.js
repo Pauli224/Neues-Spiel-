@@ -15,8 +15,9 @@
 //            mask  Bit0 N, Bit1 O, Bit2 S, Bit3 W: Nachbar ist Gleis oder Bahnhof (Kurven/Kreuzungen zeichnen)
 //            bridge true = auf Fluss (Brücke zeichnen)
 //            line  ID der Strecke (state.rail.lines[].id)
-//            railGate true = Gleis kreuzt einen Mauerring (Mauer lässt dort eine Lücke; als Gleistor zeichnen). BEKANNTE
-//            SCHWÄCHE: die Lücke sperrt Feinde nicht (Sperr-Raster gehört structs.js/walls.js).
+//            railGate true = Gleis liegt auf einem Mauerverlauf ohne Stück (Altbestand/Übergang).
+//   Gleistor: wird ein Mauerring über ein Gleis geplant, macht js/sim/walls.js das Stück zum Tor mit Gleis (struct type
+//   'gate', rail: true, line). Es zählt als Gleis (Masken, Fahrt, Trasse) und sperrt Feinde wie jedes Tor – keine Lücke.
 //   Gleise entstehen Stück für Stück als Baustellen (höchstens RAIL.SITES je Strecke gleichzeitig) und werden von den
 //   Baumeistern gebaut (Lager-Insassen helfen, siehe js/sim/camps.js). Wald auf der Trasse wird gerodet (state.cleared).
 //   Zerstörtes Gleis (Krieg, Kräfte) = Lücke: Züge halten davor, die Stadt setzt eine neue Baustelle (Reparatur).
@@ -81,8 +82,9 @@
   }
   function stepCost(sim, i, kid, rings) {
     const st = sim.state, T = WW.T, LUT = WW.TERRAIN_LUT, t = st.terrain[i];
-    if (st.inRing[i] !== -1 || rings.has(i)) return -1;
     const sid = st.structAt[i];
+    if (sid !== -1) { const s0 = sim._structs.get(sid); if (s0 && s0.type === 'gate' && s0.rail) return 4; }   // vorhandenes Gleistor
+    if (st.inRing[i] !== -1 || rings.has(i)) return -1;
     let c = 10;
     if (sid !== -1) {
       const s = sim._structs.get(sid);
@@ -167,7 +169,8 @@
   // ---------------------------------------------------------------------------
   // Bauen
   // ---------------------------------------------------------------------------
-  function isTrack(sim, i) { const s = sim._structs.get(sim.state.structAt[i]); return !!(s && (s.type === 'rail' || s.type === 'station')); }
+  const railish = (s) => !!(s && (s.type === 'rail' || (s.type === 'gate' && s.rail)));   // Gleistor (walls.js) zählt als Gleis
+  function isTrack(sim, i) { const s = sim._structs.get(sim.state.structAt[i]); return !!(s && (railish(s) || s.type === 'station')); }
   function updateMask(sim, i) {
     const st = sim.state, W = st.W, s = sim._structs.get(st.structAt[i]);
     if (!s || s.type !== 'rail') return;
@@ -211,6 +214,7 @@
     const need = [];
     for (let n = 0; n < line.tiles.length; n++) {
       const i = line.tiles[n], s = sim._structs.get(st.structAt[i]);
+      if (s && s.type === 'gate' && s.rail) continue;   // Gleistor: bauen die Baumeister der Stadt
       if (s && s.type === 'rail') { if (!s.built) open++; continue; }
       if (s && s.type !== 'field' && s.type !== 'ruin') return false;   // etwas anderes steht im Weg
       missing++;
@@ -228,7 +232,7 @@
         if (s.built) continue;
         const x = i % W;
         const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W];
-        if (!nb.some((j) => { const o = j >= 0 && sim._structs.get(st.structAt[j]); return o && o.built && (o.type === 'rail' || o.type === 'station'); })) break;
+        if (!nb.some((j) => { const o = j >= 0 && sim._structs.get(st.structAt[j]); return o && o.built && (railish(o) || o.type === 'station'); })) break;
         const c = sim._cities.get(s.cityId);
         if (!s.paid && c && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
         if (!s.paid) break;
@@ -477,7 +481,7 @@
   // ---------------------------------------------------------------------------
   function trackOk(sim, line, n) {
     const s = sim._structs.get(sim.state.structAt[line.tiles[n]]);
-    return !!(s && s.type === 'rail' && s.built);
+    return !!(s && railish(s) && s.built);
   }
   function setPos(sim, tr, line) {
     const W = sim.state.W, L = line.tiles.length;

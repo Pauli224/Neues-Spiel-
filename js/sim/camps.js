@@ -307,7 +307,7 @@
   // true = angekommen
   function walk(sim, u, goal, gx, gy) {
     const st = sim.state, W = st.W;
-    if (dist2(u.x, u.y, gx, gy) < 2.2) { u.path = null; u.moving = false; return true; }
+    if (dist2(u.x, u.y, gx, gy) < 2.2 && sim.block[Math.floor(u.y) * W + Math.floor(u.x)] === 0) { u.path = null; u.moving = false; return true; }
     if (st.tick - (u.marchT || st.tick) > C().MARCH_MAX) { u.x = gx; u.y = gy; u.path = null; u.moving = false; return true; }   // Notausgang
     const cur = Math.floor(u.y) * W + Math.floor(u.x);
     if (!u.path && ((st.tick + u.id) & 15) === 0) {
@@ -321,11 +321,18 @@
     }
     const LUT = WW.TERRAIN_LUT, blk = sim.block;
     const ok = (i) => i >= 0 && i < W * st.H && LUT.walk[st.terrain[i]] > 0 && blk[i] !== 1;
+    const free = (i) => ok(i) && blk[i] !== 2;   // auf Toren bleibt niemand stehen
     let tx = gx, ty = gy;
     if (u.path) {
       if (u.pi >= u.path.length) { u.path = null; u.moving = false; return false; }
       const n = u.path[u.pi], nx = n % W, ny = (n - nx) / W, cx = cur % W, cy = (cur - cx) / W;
-      if (!ok(n) || (nx !== cx && ny !== cy && (!ok(cy * W + nx) || !ok(ny * W + cx)))) { u.path = null; u.fails = (u.fails | 0) + 1; u.moving = false; return false; }
+      if (!ok(n) || (nx !== cx && ny !== cy && (!free(n) || !free(cy * W + nx) || !free(ny * W + cx)))) { u.path = null; u.fails = (u.fails | 0) + 1; u.moving = false; return false; }
+      if (blk[n] === 2) {
+        // das Tor wird für den Zug geöffnet: in einem Schritt hindurch auf die Kachel dahinter
+        const m = u.pi + 1 < u.path.length ? u.path[u.pi + 1] : -1;
+        if (m >= 0 && free(m)) { u.x = (m % W) + 0.5; u.y = Math.floor(m / W) + 0.5; u.pi += 2; u.moving = true; return false; }
+        u.path = null; u.fails = (u.fails | 0) + 1; u.moving = false; return false;
+      }
       tx = nx + 0.5; ty = ny + 0.5;
     } else if ((u.fails | 0) < 3) { u.moving = false; return false; }
     const dx = tx - u.x, dy = ty - u.y, d = Math.sqrt(dx * dx + dy * dy), sp = 0.07;
@@ -333,7 +340,7 @@
     u.moving = true;
     if (u.path && d <= sp) { u.x = tx; u.y = ty; u.pi++; return false; }
     const nx = u.x + dx / d * sp, ny = u.y + dy / d * sp, i = Math.floor(ny) * W + Math.floor(nx);
-    if (u.path || ok(i)) { u.x = nx; u.y = ny; } else u.moving = false;
+    if (i === cur || (u.path ? ok(i) : free(i))) { u.x = nx; u.y = ny; } else u.moving = false;
     return false;
   }
   function marchTo(sim, u, h) {

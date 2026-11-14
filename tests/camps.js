@@ -206,6 +206,7 @@ test('3 Kriegsgefangene: Regime -> Lagerstadt (Zwangsarbeit), andere -> Gefangen
   run(sim, 1200);
   const out1 = outOf();
   log('Zwangsarbeit: Ertrag im Lager', out0, '->', out1, '| Lager der Mutterstadt', Math.round(s0), '->', Math.round(sum()));
+  if (!(out1 > out0 + 5)) log('  Insassen:', keptP.map((u) => [u.campState, u.work, u.workT, (u.tx - u.x).toFixed(1), (u.ty - u.y).toFixed(1), u.moving ? 1 : 0, sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id ? 'in' : 'out', u.camp === W.camp.id].join(':')).join(' '), W.camp.kind, JSON.stringify(W.camp.campOut));
   assert(out1 > out0 + 5, 'keine Zwangsarbeit');
   assert(keptP.every((u) => !u.dead && u.role === 'prisoner'), 'Gefangene gestorben');
   assert(keptP.every((u) => u.work >= 0 || sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id), 'Insasse läuft aus dem Zaun');

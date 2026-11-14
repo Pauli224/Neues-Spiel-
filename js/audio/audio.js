@@ -289,6 +289,7 @@
     govchange: () => ['bells', 1, 'gov'], restyle: () => ['bell', 1, 'restyle'], centerStage: () => ['bells', 1, 'center'],
     whistle: () => ['whistle'],
     shell: () => ['cannon', 0.9, 'shell'], tankfire: () => ['cannon', 1.25, 'tankfire'], dig: () => ['build', 0.7, 'dig', 3, 0.4],   // [mil]
+    shipfire: () => ['cannon', 1.1, 'shipfire'], shipsink: () => ['splash', 0.6, 'shipsink'], horn: () => ['whistle', 0.55, 'horn', 4, 0.5],   // [see]
     // Baumfällen: leises Holzknacken, höchstens eins alle 2 s
     treeFall: () => ['chop', 0.8, 'treeFall', 2, 0.5]
   };

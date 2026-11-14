@@ -13,6 +13,7 @@
 //   (Industrie: js/core/config-industry.js nach config.js, js/data/texts-industry.js nach texts.js, js/sim/industry.js,
 //    js/sim/rail.js, js/sim/camps.js vor sim.js; Doku in deren Kopfkommentaren)   // [industry]
 //   (Militär: js/core/config-mil.js, js/data/texts-mil.js, js/sim/military.js nach camps.js; Doku im Kopf von military.js)   // [mil]
+//   (Seefahrt: js/core/config-naval.js, js/data/texts-naval.js, js/sim/naval.js nach military.js; state.ships, Häfen – Doku im Kopf von naval.js)   // [see]
 //
 // ERZEUGEN
 //   const sim = WW.Sim.create(opts)          opts (alle optional):
@@ -328,6 +329,7 @@
     const sim = this;
     this.actions = makeActions(sim);
     this.query = makeQuery(sim);
+    if (WW.Naval) Object.assign(this.query, WW.Naval.queries(sim));   // [see] ship, shipNear, ships, harborOf, navalStats
   }
 
   Sim.prototype.markDirty = function (i) {
@@ -451,6 +453,7 @@
     if (WW.Events) WW.Events.tick(this);   // [events]
     if (WW.Industry) WW.Industry.tick(this);   // [industry]
     if (WW.Military) WW.Military.tick(this);   // [mil] Arsenale, Schlachten, Gräben (js/sim/military.js)
+    if (WW.Naval) WW.Naval.tick(this);   // [see] Häfen, Schiffe, Seegefechte (js/sim/naval.js)
     if (st.tick % 10 === 0) WW.Cities.updateAll(this);
     if (st.tick % 20 === 5) WW.Gov.update(this);
     if (st.tick % 40 === 15) { WW.Cities.stats(this); WW.Diplo.update(this); }
@@ -554,6 +557,7 @@
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
     if (WW.Industry) WW.Industry.defaults(st);   // [industry]
     if (WW.Military) WW.Military.defaults(st);   // [mil]
+    if (WW.Naval) WW.Naval.defaults(st);   // [see] Schiffe, Häfen (alte Spielstände: leer)
     if (WW.Events) WW.Events.defaults(st);   // [events] mods, laws, Ereignis-Zustand
     WW.Culture.defaults(st);   // Kulturen nachrüsten (nach den Mods)
   }
@@ -597,6 +601,7 @@
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
     if (WW.Industry) WW.Industry.defaults(st);   // [industry]
     if (WW.Military) WW.Military.defaults(st);   // [mil]
+    if (WW.Naval) WW.Naval.defaults(st);   // [see]
     const sim = new Sim(st, null);
     WW.Growth.ensure(sim);
     WW.Resources.generate(sim);
@@ -856,6 +861,7 @@
     }   // [events]
     if (WW.Wild) Object.assign(acts, WW.Wild.actions(sim, safe));   // [wild] grab, drop, held, aimAircraft, placeLair, spawnBandits
     if (WW.Military) Object.assign(acts, WW.Military.actions(sim, safe));   // [mil] placeVehicle, orderBattle
+    if (WW.Naval) Object.assign(acts, WW.Naval.actions(sim, safe));   // [see] placeHarbor, placeShip
     return acts;   // [wild]
   }
 

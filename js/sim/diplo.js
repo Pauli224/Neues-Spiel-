@@ -124,6 +124,7 @@
         if (idle.length < minArmy && !(idle.length >= 1 && marching > 0)) continue;
         // Ziel: nächste erreichbare Feindstadt
         const pair = nearestCities(sim, k, e);
+        if (pair && WW.Naval && !sameLand(sim, pair.a, pair.b)) { WW.Naval.seaWar(sim, k, e, idle, marching); continue; }   // [see] Ziele über das Meer: Truppenlandung
         if (!pair || !sameLand(sim, pair.a, pair.b)) continue;
         const keep = marching > 0 ? 0 : Math.floor(idle.length * 0.25);
         const send = idle.length - keep;
@@ -432,7 +433,7 @@
         }
         continue;
       }
-      if (!st.laws.wars || !close || !pair || !sameLand(sim, pair.a, pair.b)) continue;
+      if (!st.laws.wars || !close || !pair || (!sameLand(sim, pair.a, pair.b) && !(WW.Naval && WW.Naval.seaReach(sim, a, b)))) continue;   // [see] Nachbarn über das Meer (beide mit Hafen am selben Meer)
       if (st.year - ra.since < 3) continue;
       for (const [p, q] of [[a, b], [b, a]]) {
         const g = WW.GOVERNMENTS[p.gov];

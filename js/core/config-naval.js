@@ -30,7 +30,7 @@
       fishboat:  { name: 'Fischerboot',   hp: 40,  cost: { wood: 6 },             work: 240, cap: 0 },
       trader:    { name: 'Handelsschiff', hp: 70,  cost: { wood: 12, gold: 8 },   work: 380, cap: 0 },
       transport: { name: 'Transporter',   hp: 90,  cost: { wood: 14, stone: 4 },  work: 420, cap: 10 },
-      warship:   { name: 'Kriegsschiff',  hp: 150, cost: { wood: 16, stone: 8 },  work: 600, cap: 0, steamCost: { iron: 2 },
+      warship:   { name: 'Kriegsschiff',  hp: 150, cost: { wood: 16, stone: 8 },  work: 600, cap: 0,
                    dmg: 13, range: 4.5, reload: 30, sight: 9, hit: 0.75, wallDmg: 36, shoreRange: 6.5 }
     },
     KIND_KEYS: ['fishboat', 'trader', 'transport', 'warship'],

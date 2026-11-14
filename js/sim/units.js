@@ -136,6 +136,7 @@
   function hostile(sim, a, b) {
     if (a === b || a.dead || b.dead) return false;
     if (a.role === 'prisoner' || b.role === 'prisoner') return false;   // [industry] Lager-Insassen sind nie Ziel
+    if (a.seaS === 'aboard' || b.seaS === 'aboard' || a.seaS === 'swim' || b.seaS === 'swim') return false;   // [see] an Bord / schwimmt
     // Wildnis: Räuber sind allen feind, Wahnsinnige ebenso
     if (a.role === 'bandit' || b.role === 'bandit') return a.role !== b.role;
     const t = sim.state.tick;
@@ -1039,6 +1040,7 @@
       if (u.dead) continue;
       if (u.ind && WW.Industry && WW.Industry.unit(sim, u)) continue;   // [industry] im Zug / im Arbeitslager
       if (u.vehicle && WW.Military && WW.Military.unit(sim, u)) continue;   // [mil] Panzer, Geschütze
+      if (u.sea && WW.Naval && WW.Naval.unit(sim, u)) continue;   // [see] zum Hafen, an Bord, Schiffbrüchige
       if (u.cd > 0) u.cd--;
       if (((tick + u.id) & 7) === 0) { think(sim, u); if (u.dead) continue; }
       move(sim, u);

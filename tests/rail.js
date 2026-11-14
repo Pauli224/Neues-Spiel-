@@ -15,7 +15,7 @@ function test(name, fn) {
 }
 function run(sim, n) { for (let i = 0; i < n; i++) sim.tick(); }
 const LONG = { seed: 12, w: 128, h: 80, dist: [52, 70] };   // zwei Städte weit genug auseinander für eine echte Strecke
-const LAWS = { govChanges: false, wars: false, disasters: false, newRealms: false, events: false };
+const LAWS = { govChanges: false, wars: false, disasters: false, newRealms: false, events: false, camps: false };   // Lagerstädte (eigene Lagerstrecken) prüft tests/camps.js
 const rails = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'rail');
 const stations = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'station');
 

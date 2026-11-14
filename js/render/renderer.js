@@ -105,7 +105,7 @@
       h = Math.imul(h ^ v, 16777619);
     }
     h = Math.imul(h ^ (st.variant ? st.variant[i] : 0), 16777619);
-    h = Math.imul(h ^ ((st.graze && st.graze[i] >= 128 ? 1 : 0) | (st.murk ? (st.murk[i] >> 3) << 1 : 0)), 16777619);
+    h = Math.imul(h ^ ((st.grazed ? (st.grazed[i] ? 1 : 0) : st.graze && st.graze[i] >= 128 ? 1 : 0) | (st.murk ? (st.murk[i] >> 3) << 1 : 0)), 16777619);
     h = Math.imul(h ^ ((st.crack ? st.crack[i] >> 3 : 0) | (st.fallout ? (st.fallout[i] >> 3) << 8 : 0) | (st.mark ? st.mark[i] << 16 : 0)), 16777619);
     if (st.structAt && st.structAt[i] >= 0 && this.structById) {
       const rs = this.structById(st.structAt[i]);
@@ -127,7 +127,7 @@
       this.blendEdges(g, x, y);
     }
     if (this.path[i]) this.S.drawPath(g, x * 8, y * 8, this.pathMask(x, y));
-    if (st.graze && st.graze[i] >= 128 && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
+    if ((st.grazed ? st.grazed[i] : st.graze && st.graze[i] >= 128) && this.S.has('t_grazed') && (WW.TERRAIN[st.terrain[i]] || {}).fertile > 0) this.S.drawFast(g, 't_grazed', x * 8, y * 8, 0, false);
     if (st.murk && st.murk[i] > 0 && this.S.has('t_murk')) { g.globalAlpha = Math.min(1, 0.4 + st.murk[i] / 200); this.S.drawFast(g, 't_murk', x * 8, y * 8, 0, false); g.globalAlpha = 1; }
     // Rodung, Verödung, Ruß mit weichen Rändern (softKey + Nachbarmaske), sonst einfache Kachel
     if (st.cleared && st.cleared[i] > 0) this.softOverlay(g, x, y, st.cleared, 't_cleared', null);
@@ -1264,7 +1264,8 @@
     const urgent = !!(opts.brush || opts.held);
     const smogOn = !!(st.pollution && st.pollution.length) && this.smogUpdate(opts.view === 'air');
     let P = 0;
-    if (near) { this.objPass(); P = this.objPrepare(cx0, cx1, cy0, cy1, s, urgent); }
+    if (st.structs) this.objPass();   // auch in der weiten Ansicht: geänderte Bauwerke erneuern dort die Deko-Blöcke
+    if (near) P = this.objPrepare(cx0, cx1, cy0, cy1, s, urgent);
     // Standbild: ruht die Kamera, wird der Boden (Gelände, Wasser, Gebiete, Narben, Deko der weiten Ansicht) nur 5-mal je
     // Sekunde neu zusammengesetzt, mit Werkzeug in der Hand sofort bei jeder Bodenänderung. Darüber liegt ein zweites Bild mit
     // den ruhenden Objekten und dem Dunst; je Bild wird nur dieses kopiert und Bewegtes darübergelegt.
@@ -1524,6 +1525,9 @@
       let rc = rcm.get(s.id);
       if (!rc || rc.h !== vh) {
         const old = rc;
+        // Deko-Block der weiten Ansicht (enthält Bauwerke nach Anker) neu
+        const dc = this.chunkAt(s.x, by); if (dc) dc.decorDirty = true;
+        if (old) { const oc = this.chunkAt(old.x, Math.min(H - 1, old.y + old.hh - 1)); if (oc) oc.decorDirty = true; }
         if (old) this.objDirtyRc(old);
         rc = this.structRect(s, k, vh); rc.built = s.built !== false; rcm.set(s.id, rc);
         this.objDirtyRc(rc);
@@ -1537,7 +1541,7 @@
       if ((s.built === false && s.progress > 0) || s.upgrading || (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin')) barC.push(s);
     }
     // verschwundene Bauwerke
-    if ((pass & 3) === 0 || rcm.size > list.length) for (const [id, rc] of rcm) if (rc.seen !== pass) { this.objDirtyRc(rc); this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1); rcm.delete(id); }
+    if ((pass & 3) === 0 || rcm.size > list.length) for (const [id, rc] of rcm) if (rc.seen !== pass) { this.objDirtyRc(rc); { const oc = this.chunkAt(Math.min(W - 1, rc.x), Math.min(H - 1, rc.y + rc.hh - 1)); if (oc) oc.decorDirty = true; } this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1); rcm.delete(id); }
     if (this._objExtGrew) { this._objExtGrew = false; const seq = this._oseq = (this._oseq | 0) + 1; for (const c of this.chunks) { c.objV = seq; c.fullV = seq; if (c.dl) c.dl.length = 0; } }
   };
 
@@ -1665,6 +1669,7 @@
   // Vor dem Zeichnen: Block-Bilder der sichtbaren Blöcke bereitstellen; liefert die anzuzeigende Wiege-Phase
   Renderer.prototype.objPrepare = function (cx0, cx1, cy0, cy1, devS, urgent) {
     const S = this.S;
+    // Auflösung der Block-Bilder: feines Raster (2 je Logikpixel), bei einfacher Vergrößerung 1
     const k = devS >= 1.25 ? 2 : 1;
     const sway = devS >= 2 && this.gfx.quality !== 'low' && !this.autoOff.sway;
     const cfg = k + (sway ? 's' : 'n');
@@ -1916,6 +1921,7 @@
       this.drawAnimal(ctx, u, px, py - 14 - Math.round(Math.sin(time * 3 + u.id) * 2), frame);
     }
     if (near) {
+      if (bubbles.length > 1) bubbles.sort((p, q) => p.y - q.y);
       for (const b of bubbles) {
         if (!S.has('b_' + b.icon)) continue;
         S.drawFast(ctx, 'b_frame', b.x, b.y - 19, 0, false);

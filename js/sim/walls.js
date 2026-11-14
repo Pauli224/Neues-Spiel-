@@ -17,6 +17,9 @@
 //   Ereignisse: wallLevel / wallLevelDone { city, name } (Ausbau auf Stufe 4–6 bzw. Holzstufen von Stamm/Anarchie),
 //   selfshotSheep { city } (Selbstschussanlage trifft ein Schaf), trapOops { city } (Falle trifft die eigenen Leute).
 //
+// [walls] GLEISTOR: liegt ein Gleis (eigenes Reich) auf dem geplanten Mauerverlauf, wird das Stück zum Tor mit Gleis
+//   (struct type 'gate', rail: true, line = Strecken-ID; als Tor mit Schienen zeichnen). Gilt als Tor der Stadt
+//   (city.wall.gates), sperrt Feinde wie jedes Tor; Züge fahren durch, sobald es fertig gebaut ist.
 // [walls] LAGERZAUN (Lagerstadt city.kind 'camp', js/sim/camps.js): WW.Walls.planFence(sim, city, reserve, margin, toward)
 //   plant einen Ring wie eine Mauer, aber mit genau EINEM Tor (das zur Richtung toward {x,y} nächste), ohne Türme und
 //   Geräte; Stücke type 'wall'/'gate', mat 'fence', level 1; city.wall.style 'fence'. WW.Walls.fenceUpdate(sim, city)
@@ -387,9 +390,10 @@
       let s = sim._structs.get(st.structAt[t]);
       const wantType = isGate ? 'gate' : ((level >= 2 && towerSet.has(t) && !gov.barricades) ? 'tower' : 'wall');
       if (s && s.cityId === city.id && WW.Structs.isWallish(s)) {
-        if (s.type === wantType || (wantType === 'wall' && s.type === 'tower')) continue;
+        if (s.type === wantType || (wantType === 'wall' && s.type === 'tower') || (s.type === 'gate' && s.rail)) continue;   // [walls] Gleistor bleibt
         WW.Structs.remove(sim, s); s = null;
       } else if (s) {
+        if (railGate(sim, city, s, t, level, style, newSet)) { gateSet.add(t); continue; }   // [walls] Gleis im Ring -> Gleistor (dicht für Feinde)
         // Felder, Hütten, Ruinen weichen der Mauer (Kerngebäude kommen hier praktisch nie vor)
         if (s.cityId !== -1 && s.cityId !== city.id) continue;
         if ((CORE[s.type] && s.type !== 'house') || KEEP[s.type]) continue;   // [walls] Industrie bleibt stehen
@@ -411,6 +415,7 @@
     w.plan = ring.all.slice();
     w.gaps = gaps;
     w.gates = ring.gates.slice();
+    for (const t of ring.tiles) { const g = sim._structs.get(st.structAt[t]); if (g && g.type === 'gate' && g.rail && w.gates.indexOf(t) < 0) w.gates.push(t); }   // [walls] Gleistore
     w.towers = ring.towers.filter(t => newSet.has(t));
     w.old = old;
     w.target = level;
@@ -475,6 +480,8 @@
       const s = sim._structs.get(st.structAt[t]);
       if (s && s.cityId === city.id && WW.Structs.isWallish(s)) continue;
       if (s) {
+        const lv0 = w.state === 'upgrading' ? w.target : Math.max(1, w.level || w.target || 1);
+        if (railGate(sim, city, s, t, lv0, w.style === 'fence' ? 'fence' : wallStyle(gov, lv0), new Set(w.plan))) { if (w.gates && w.gates.indexOf(t) < 0) w.gates.push(t); continue; }   // [walls] Gleistor
         if (s.cityId !== -1 && s.cityId !== city.id) continue;
         if ((CORE[s.type] && s.type !== 'house') || KEEP[s.type]) continue;   // [walls] Industrie bleibt stehen
         WW.Structs.remove(sim, s);
@@ -522,6 +529,21 @@
     }
     w.old = [];
     return n;
+  }
+
+  // [walls] Gleis auf dem Mauerverlauf: das Gleisstück wird zum Gleistor (type 'gate', rail: true, line = Strecke).
+  // Züge fahren hindurch (js/sim/rail.js zählt es als Gleis), Eigene/Verbündete gehen durch, Feinde nicht – keine Lücke.
+  function railGate(sim, city, s, t, level, mat, ringSet) {
+    if (!s || s.type !== 'rail') return false;
+    const oc = sim._cities.get(s.cityId);
+    if (s.cityId !== -1 && s.cityId !== city.id && !(oc && oc.kingdomId === city.kingdomId)) return false;
+    const W = sim.state.W, x = t % W, y = (t - x) / W, line = s.line, bridge = !!s.bridge;
+    WW.Structs.remove(sim, s);
+    const orient = ringSet.has(t - 1) && ringSet.has(t + 1) ? 'h' : 'v';
+    const g = WW.Structs.create(sim, 'gate', x, y, city.id, { level: level || 1, built: false, mat: mat, orient: orient });
+    if (!g) return false;
+    g.rail = true; g.line = line; if (bridge) g.bridge = true;
+    return true;
   }
 
   // [walls] Lagerzaun: Ring mit genau einem Tor, ohne Türme/Geräte, mat 'fence', Stufe 1
