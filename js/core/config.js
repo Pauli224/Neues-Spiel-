@@ -93,7 +93,7 @@
 
   const G = {
     tribe: {
-      name: 'Stammesrat', titleM: 'Häuptling', titleF: 'Häuptlingin', realm: 'Stamm',
+      name: 'Stammesrat', titleM: 'Häuptling', titleF: 'Häuptlingin', realm: 'Stamm von',
       centerName: 'Langhaus mit Lagerfeuer', monumentName: 'Hinkelstein',
       desc: 'Man sitzt ums Feuer, bis jemand eine Entscheidung trifft oder das Holz ausgeht.',
       pros: ['Zufriedenheit +5', 'Entwickelt sich ab Stadtgröße weiter'],
@@ -129,7 +129,7 @@
       nature: 'use', landSpeed: 1.0
     },
     fascism: {
-      name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Strammstaat',
+      name: 'Faschismus', titleM: 'Diktator', titleF: 'Diktatorin', realm: 'Einheitsstaat',
       centerName: 'Kommandantur', monumentName: 'Propagandaturm',
       desc: 'Alles ist geregelt, sogar die Freude, und die ist leider gestrichen.',
       pros: ['Sehr viele Soldaten', 'Mauern ab 6 Einw. und +50 % schneller', 'Arbeit +15 % (Zwang)'],
@@ -165,7 +165,7 @@
       nature: 'care', landSpeed: 0.9
     },
     republic: {
-      name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsrepublik',
+      name: 'Handelsrepublik', titleM: 'Doge', titleF: 'Dogin', realm: 'Handelsbund',
       centerName: 'Kontor', monumentName: 'Goldene Waage',
       desc: 'Jedes Problem hat einen Preis, und der Rat kennt ihn auswendig.',
       pros: ['Gold ×2', 'Händler zwischen den Städten', 'Söldner und Freikauf aus Kriegen'],
@@ -308,6 +308,43 @@
   WW.STRUCT_INFO.smithy  = { name: 'Schmiede', w: 2, h: 2, core: true, inside: true, work: 110, hp: [140], cost: [{ wood: 6, stone: 8 }], burn: 0.5 };
   WW.STRUCT_INFO.fishery = { name: 'Fischerei', w: 2, h: 2, work: 60, hp: [70], cost: [{ wood: 8 }], burn: 1 };
   WW.STRUCT_INFO.pasture = { name: 'Weide', w: 2, h: 2, work: 40, hp: [40], cost: [{ wood: 6 }], burn: 0.6 };
+  // Kultur-Sonderbauten (Ausbau 9)
+  WW.STRUCT_INFO.caravanserai = { name: 'Karawanserei', w: 2, h: 2, core: true, inside: true, work: 120, hp: [150], cost: [{ wood: 6, stone: 8 }], burn: 0.3, culture: 'sahel' };
+  WW.STRUCT_INFO.pyramid = { name: 'Pyramide', w: 1, h: 1, core: true, inside: true, work: 140, hp: [180, 300, 450], cost: [{ stone: 10 }, { stone: 14 }, { stone: 20 }], burn: 0, culture: 'nil' };   // level 1..3, stage 0..2
+
+  // ---------------------------------------------------------------------------
+  // Kulturen (Ausbau 9): gleichwertige Kulturen mit kleinen eigenen Stärken, keine Nachteile.
+  // Menschen bekommen ihre Kultur nach dem Gelände der Gründung, Fantasievölker ihre eigene (Schlüssel = Volk).
+  // bonus: Mod-Schlüssel -> Faktor (als dauerhafte Mods an der Stadt, source 'culture')
+  // ---------------------------------------------------------------------------
+  WW.CULTURES = {
+    mitte: { name: 'Mittelländer', adj: 'mittelländisch', people: 'Mittelländer', style: 'mitte',
+      note: 'Gemäßigte Länder: Fachwerk, Burgen, Mühlen und Märkte.',
+      biomes: ['grass', 'forest', 'hill', 'flowers', 'sand', 'swamp', 'jungle', 'mushroom', 'crystal', 'ash'],
+      bonus: { wood: 1.1, build: 1.05 }, bonusText: ['Forstwirtschaft +10 %', 'Handwerk: Bauen +5 %'], special: null },
+    nord: { name: 'Nordleute', adj: 'nordisch', people: 'Nordleute', style: 'nord',
+      note: 'Schnee, Tundra und Nadelwald: Langhäuser, Pelz, Fischfang.',
+      biomes: ['snow', 'tundra', 'snowfield', 'taiga'],
+      bonus: { fish: 1.3 }, bonusText: ['Fischerei und Fischfang +30 %', 'Kälte macht nichts aus'], special: null, coldProof: true },
+    sahel: { name: 'Sahel-Reiche', adj: 'sahelisch', people: 'Leute des Sahel', style: 'sahel',
+      note: 'Vorbild: Mali, Songhai, Kanem-Bornu und die Nomaden der Sahara – Lehmbau mit Holzsparren, Karawanenhandel, Gold, Gelehrsamkeit.',
+      biomes: ['desert', 'savanna'],
+      bonus: { gold: 1.25 }, bonusText: ['Handel +25 % Gold', 'Kein Tempoverlust in Wüste und Sand', 'Karawanserei mit Karawanen', 'Bewässerte Felder im Sand', 'Lehmbau: Lehm aus der Wüste, Akazienholz aus der Savanne'],
+      special: 'caravanserai', desertWalk: true, irrigation: true, loam: true },
+    nil: { name: 'Niltal', adj: 'niltalisch', people: 'Leute vom Fluss', style: 'nil',
+      note: 'Vorbild: Kusch und Nubien am großen Fluss – Sandstein, Tempel, steile kleine Pyramiden.',
+      biomes: ['desert', 'savanna'], needRiver: 6,
+      bonus: {}, bonusText: ['Felder am Fluss +50 %', 'Pyramide (Zufriedenheit)', 'Bewässerte Felder im Sand', 'Kein Tempoverlust in Wüste und Sand', 'Lehmbau: Lehm aus der Wüste, Akazienholz aus der Savanne'],
+      special: 'pyramid', desertWalk: true, irrigation: true, loam: true, riverFields: 1.5 },
+    elf: { name: 'Elfenvolk', adj: 'elfisch', people: 'Elfen', style: 'elf', race: 'elf', note: 'Haine, Lichtungen, lange Gedächtnisse.', biomes: [], bonus: {}, bonusText: [], special: null },
+    dwarf: { name: 'Zwergenvolk', adj: 'zwergisch', people: 'Zwerge', style: 'dwarf', race: 'dwarf', note: 'Hallen im Fels, Ambosse, Bärte.', biomes: [], bonus: {}, bonusText: [], special: null },
+    orc: { name: 'Orkvolk', adj: 'orkisch', people: 'Orks', style: 'orc', race: 'orc', note: 'Laute Lager, starke Arme.', biomes: [], bonus: {}, bonusText: [], special: null },
+    gnome: { name: 'Wichtelvolk', adj: 'wichtelig', people: 'Wichtel', style: 'gnome', race: 'gnome', note: 'Kleine Häuser, große Pläne.', biomes: [], bonus: {}, bonusText: [], special: null },
+    frog: { name: 'Froschvolk', adj: 'froschig', people: 'Froschlinge', style: 'frog', race: 'frog', note: 'Teiche, Schilf, Gesang am Abend.', biomes: [], bonus: {}, bonusText: [], special: null }
+  };
+  WW.CULTURE_KEYS = Object.keys(WW.CULTURES);
+  for (const k of WW.CULTURE_KEYS) WW.CULTURES[k].key = k;
+  WW.HUMAN_CULTURES = ['mitte', 'nord', 'sahel', 'nil'];
 
   // Rohstoffe im Lager (stock) jeder Stadt: Schlüssel, Name, Icon; base = schon immer da
   WW.RESOURCES = [
@@ -332,14 +369,14 @@
   // ---------------------------------------------------------------------------
   // Rollen, Sprechblasen, Tiere
   // ---------------------------------------------------------------------------
-  WW.ROLE_KEYS = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'leader', 'child', 'trader', 'rebel', 'settler', 'ram', 'catapult'];
+  WW.ROLE_KEYS = ['farmer', 'lumberjack', 'miner', 'builder', 'soldier', 'leader', 'child', 'trader', 'rebel', 'settler', 'ram', 'catapult', 'caravan'];
   WW.ROLE_NAMES = {
     farmer: 'Bauer', lumberjack: 'Holzfäller', miner: 'Steinmetz', builder: 'Baumeister', soldier: 'Soldat',
-    leader: 'Anführer', child: 'Kind', trader: 'Händler', rebel: 'Rebell', settler: 'Siedler', ram: 'Rammbock', catapult: 'Katapult'
+    leader: 'Anführer', child: 'Kind', trader: 'Händler', rebel: 'Rebell', settler: 'Siedler', ram: 'Rammbock', catapult: 'Katapult', caravan: 'Karawanenführer'
   };
   WW.ROLE_NAMES_F = {
     farmer: 'Bäuerin', lumberjack: 'Holzfällerin', miner: 'Steinmetzin', builder: 'Baumeisterin', soldier: 'Soldatin',
-    leader: 'Anführerin', child: 'Kind', trader: 'Händlerin', rebel: 'Rebellin', settler: 'Siedlerin', ram: 'Rammbock', catapult: 'Katapult'
+    leader: 'Anführerin', child: 'Kind', trader: 'Händlerin', rebel: 'Rebellin', settler: 'Siedlerin', ram: 'Rammbock', catapult: 'Katapult', caravan: 'Karawanenführerin'
   };
   WW.BUBBLES = ['heart', 'bread', 'skull', 'exclaim', 'zzz', 'ballot', 'crown', 'angry', 'note', 'hammer', 'question'];
 

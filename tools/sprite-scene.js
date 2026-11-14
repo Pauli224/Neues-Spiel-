@@ -708,6 +708,68 @@
     [[64, 15, 'farmer'], [67, 16, 'trader'], [63, 20, 'farmer']].forEach(function (u, k) { it2.push([S.unitKey('human', u[2], 'theocracy', k, 'nil'), u[0] * 8, u[1] * 8, { team: 3 }]); });
     dsort(c, it2);
   } };
+  AUS.militaer = { size: [72, 34], draw: function (c, P) {
+    P.groundRect(c, P.fill(T.GRASS, 72, 34), 0, 0);
+    var it = [], GV = ['fascism', 'communism', 'monarchy', 'republic', 'democracy'];
+    c.fillStyle = 'rgba(29,59,71,0.85)'; c.font = '6px sans-serif';
+    GV.forEach(function (gv, j) {
+      var y = 14 + j * 22, team = [0, 4, 1, 7, 5][j];
+      if (gv === 'fascism' || gv === 'communism') ['e', 'w', 'n', 's'].forEach(function (d, i) { it.push([S.vehicleKey('tank', gv, d, i & 1), 10 + i * 22, y, { team: team }]); });
+      ['e', 'w', 'n', 's'].forEach(function (d, i) { it.push([S.vehicleKey('artillery', gv, d, (i === 0) ? 1 : 0), 108 + i * 26, y, { team: team }]); });
+      it.push([S.unitKey('human', 'soldier', gv, 4), 214, y, { team: team }]); it.push([S.unitKey('human', 'soldier', gv, 5), 224, y, { team: team }]);
+    });
+    ['e', 'w', 'n', 's'].forEach(function (d, i) { it.push([S.vehicleKey('tank', 'monarchy', d, 0), 10 + i * 22, 14 + 3 * 22, { team: 1 }]); });
+    it.push(['s_arsenal_fascism', 240, 40, { team: 0 }]); it.push(['s_arsenal_communism', 272, 40, { team: 4 }]); it.push(['s_arsenal_monarchy', 304, 40, { team: 1 }]);
+    it.push(['s_arsenal_democracy', 336, 40, { team: 5 }]); it.push(['s_arsenal_republic', 368, 40, { team: 7 }]);
+    dsort(c, it);
+    // Schlachtfeld: Grabennetz, Trichter, Wracks, Feuer
+    var TR = {}, list = [[32, 8], [33, 8], [34, 8], [35, 8], [36, 8], [36, 9], [37, 9], [38, 9], [39, 9], [40, 9], [40, 8], [41, 8], [42, 8], [43, 8], [44, 8], [38, 10], [38, 11], [30, 8], [31, 8], [47, 9]];
+    list.forEach(function (p) { TR[p[0] + ',' + p[1]] = 1; });
+    function has(x, y) { return !!TR[x + ',' + y]; }
+    var ox = 0, oy = 8;
+    c.save(); c.translate(ox, oy * 8);
+    [[33, 11], [35, 12], [37, 12], [40, 11], [43, 12], [45, 10]].forEach(function (p) { for (var dy = 0; dy < 2; dy++) for (var dx = 0; dx < 2; dx++) S.draw(c, S.softKey('t_barren_2', (dy ? 1 : 4) | (dx ? 8 : 2)), (p[0] + dx) * 8, (p[1] + dy) * 8); });
+    list.forEach(function (p) { var m = (has(p[0], p[1] - 1) ? 1 : 0) | (has(p[0] + 1, p[1]) ? 2 : 0) | (has(p[0], p[1] + 1) ? 4 : 0) | (has(p[0] - 1, p[1]) ? 8 : 0); S.draw(c, S.softKey('t_trench', m), p[0] * 8, p[1] * 8); });
+    [[34, 12], [42, 13], [46, 11], [31, 14]].forEach(function (p) { if (S.has('t_crater')) S.draw(c, 't_crater', p[0] * 8, p[1] * 8); });
+    var it3 = [];
+    it3.push([S.wreckKey('tank', 0), 36 * 8, 13 * 8, null]); it3.push([S.wreckKey('gun', 0), 44 * 8, 14 * 8, null]); it3.push([S.wreckKey('tank', 9), 30 * 8, 12 * 8, null]); it3.push([S.wreckKey('gun', 9), 48 * 8, 12 * 8, null]);
+    [[33, 8], [35, 8], [41, 8], [43, 8]].forEach(function (p, k) { it3.push([S.unitKey('human', 'soldier', 'communism', 4), p[0] * 8, p[1] * 8 + 2, { team: 4 }]); });
+    it3.push([S.vehicleKey('tank', 'fascism', 'n', 0), 39 * 8, 16 * 8, { team: 0 }]); it3.push([S.vehicleKey('artillery', 'communism', 'e', 1), 45 * 8, 6 * 8, { team: 4 }]);
+    it3.push(['fx_tankfire_1', 39 * 8, 15 * 8 - 4, null]); it3.push(['fx_shell_1', 41 * 8, 12 * 8, null]); it3.push(['fx_shell_3', 37 * 8, 10 * 8, null]); it3.push(['fx_fire_2', 36 * 8 + 4, 13 * 8 - 4, null]);
+    dsort(c, it3);
+    c.restore();
+    for (var f = 0; f < 4; f++) { S.draw(c, 'fx_shell_' + f, 420 + f * 16, 24); S.draw(c, 'fx_tankfire_' + f, 420 + f * 20, 50); }
+    for (var m = 0; m < 16; m++) S.draw(c, 't_trench_' + m, 420 + (m % 8) * 10, 70 + Math.floor(m / 8) * 10);
+    ['i_tank', 'i_artillery', 'i_battle', 'i_pow', 'i_culture'].forEach(function (k, i) { c.fillStyle = '#1d3b47'; c.fillRect(420 + i * 20, 100, 18, 18); S.draw(c, k, 421 + i * 20, 101); });
+  } };
+  AUS.lager = { size: [44, 26], draw: function (c, P) {
+    var rows = []; for (var y = 0; y < 26; y++) { rows.push([]); for (var x = 0; x < 44; x++) rows[y].push(x > 30 && y < 6 ? T.HILL : (x < 2 && y > 18 ? T.FOREST : T.GRASS)); }
+    P.groundRect(c, rows, 0, 0);
+    // kahler Boden im Lager
+    for (y = 3; y < 18; y++) for (x = 3; x < 24; x++) S.draw(c, S.softKey('t_cleared', ((y > 3) ? 1 : 0) | ((x < 23) ? 2 : 0) | ((y < 17) ? 4 : 0) | ((x > 3) ? 8 : 0)), x * 8, y * 8);
+    var it = [], F = {};
+    for (x = 2; x <= 24; x++) { F[x + ',2'] = 1; F[x + ',18'] = 1; } for (y = 2; y <= 18; y++) { F['2,' + y] = 1; F['24,' + y] = 1; }
+    function has(x, y) { return !!F[x + ',' + y]; }
+    Object.keys(F).forEach(function (k) { var p = k.split(',').map(Number), m = (has(p[0], p[1] - 1) ? 1 : 0) | (has(p[0] + 1, p[1]) ? 2 : 0) | (has(p[0], p[1] + 1) ? 4 : 0) | (has(p[0] - 1, p[1]) ? 8 : 0);
+      var key = (p[1] === 18 && p[0] === 13) ? S.gateKey('fence', 1, 'h') : (p[0] === 24 && p[1] === 10 ? S.gateKey('fence', 1, 'v') : S.wallKey('fence', 1, m)); it.push([key, p[0] * 8, p[1] * 8, null]); });
+    it.push([S.towerKey('fence', 1), 3 * 8, 3 * 8, null]); it.push(['s_watchtower', 23 * 8, 3 * 8, null]); it.push(['s_watchtower', 3 * 8, 17 * 8, null]); it.push(['s_watchtower', 23 * 8, 17 * 8, null]);
+    it.push([S.campBuildKey('camphq', 'fascism'), 12 * 8, 8 * 8, { team: 0 }]);
+    [[5, 5], [9, 5], [16, 5], [20, 5], [5, 12], [17, 12], [20, 12]].forEach(function (p) { it.push(['s_barrack', p[0] * 8, p[1] * 8, null]); });
+    it.push([S.flagKey('pole', 0, 0, 0, 'fascism'), 15 * 8, 10 * 8, { team: 0 }]);
+    it.push([S.mineKey('iron'), 33 * 8, 5 * 8, { team: 0 }]); it.push([S.mineKey('coal'), 37 * 8, 3 * 8, { team: 0 }]);
+    // Insassen und Wachen
+    [[9, 15], [10, 15], [11, 16], [8, 16], [28, 7], [29, 7], [30, 8]].forEach(function (p, k) { it.push([S.unitKey(['human', 'elf', 'dwarf', 'human', 'orc'][k % 5], 'prisoner', 'fascism', k % 4), p[0] * 8, p[1] * 8, null]); });
+    [[19, 15, 'communism'], [20, 15, 'communism'], [21, 16, 'monarchy'], [26, 9, 'democracy']].forEach(function (p, k) { it.push([S.unitKey('human', 'pow', p[2], k), p[0] * 8, p[1] * 8, { team: [4, 4, 1, 5][k] }]); });
+    [[13, 20], [27, 8], [7, 17], [22, 9]].forEach(function (p, k) { it.push([S.unitKey('human', 'soldier', 'fascism', 4 + (k & 1)), p[0] * 8, p[1] * 8, { team: 0 }]); });
+    it.push([S.unitKey('human', 'leader', 'fascism', 4), 13 * 8, 11 * 8, { team: 0 }]);
+    // Gefangenenlager einer Demokratie (ohne Arbeit) rechts unten
+    it.push(['s_stockade', 33 * 8, 18 * 8, { team: 5 }]); it.push(['s_stockade', 37 * 8, 18 * 8, { team: 5 }]);
+    [[34, 17], [35, 18], [38, 17]].forEach(function (p, k) { it.push([S.unitKey('human', 'pow', 'fascism', 4), p[0] * 8, p[1] * 8, { team: 0 }]); });
+    [[36, 21], [40, 21]].forEach(function (p) { it.push([S.unitKey('human', 'soldier', 'democracy', 4), p[0] * 8, p[1] * 8, { team: 5 }]); });
+    it.push([S.flagKey('pole', 3, 1, 5, 'democracy'), 41 * 8, 18 * 8, { team: 5 }]);
+    it.push(['s_camphq', 28 * 8, 22 * 8, { team: 5 }]); it.push(['s_camphq_communism', 4 * 8, 22 * 8, { team: 4 }]); it.push(['s_watchtower', 8 * 8, 23 * 8, null]);
+    dsort(c, it);
+  } };
   WW.SpriteScene_AUS = AUS;
 
   WW.SpriteScene = { renderEffects: renderEffects, renderLandscapeHi: renderLandscapeHi, renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain, ausbau: AUS };

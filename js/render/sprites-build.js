@@ -3670,9 +3670,9 @@
       return g;
     }
     // Zaun: Holzpfosten und Draht (Maske Bit0 N, Bit1 O, Bit2 S, Bit3 W), Tor h/v
-    var WIRE = HCOL('#8a8e98');
-    function fenceGrid(mask, gate) {
-      var H = 12, g = new Grid(16, 16 + H), base = H + 8, px, k;   // Pfostenfuß in Kachelmitte bei y = base
+    var WIRE = HCOL('#9a9ea8'), WIRED = HCOL('#6a6e78');
+    function fenceGrid(mask, gate, wg) {
+      var H = 12, g = new Grid(16, 16 + H), base = H + 8, px, k; wg = wg || g;   // Pfostenfuß in Kachelmitte bei y = base
       function post(x, y, h) { g.vline(x, y - h, h + 1, C.wood); g.vline(x + 1, y - h, h + 1, C.woodD); g.set(x, y - h, C.woodL); }
       var horiz = mask & 10, vert = mask & 5;
       if (gate === 'h') {
@@ -3688,14 +3688,14 @@
       // waagrechte Drahtzüge zu den Nachbarn O/W
       if (horiz || !vert) {
         var x0 = (mask & 8) ? 0 : 7, x1 = (mask & 2) ? 15 : 8;
-        for (k = 0; k < 3; k++) for (px = x0; px <= x1; px++) g.set(px, base - 2 - k * 3 + ((px & 3) === 1 && k === 1 ? 1 : 0), WIRE);
+        for (k = 0; k < 3; k++) for (px = x0; px <= x1; px++) wg.set(px, base - 2 - k * 3 + ((px & 3) === 1 && k === 1 ? 1 : 0), k === 2 ? WIRE : WIRED);
         for (px = x0 + ((x0 & 1) ? 0 : 1); px <= x1; px += 5) if (px !== 7 && px !== 8) post(px, base, 8);
       }
       // senkrechte Züge (nach N und S): Pfosten hintereinander, Draht als senkrechte Linie
       if (vert) {
         var y0 = (mask & 1) ? 0 : 8, y1 = (mask & 4) ? 15 : 8;
-        for (var yy = y0; yy <= y1; yy++) { g.set(8, yy + H - 8, WIRE); g.set(8, yy + H - 5, WIRE); g.set(8, yy + H - 2, WIRE); }
-        for (yy = y0 + 2; yy <= y1; yy += 5) if (Math.abs(yy - 8) > 1) post(7, yy + H, 8);
+        for (var yy = y0; yy <= y1; yy++) { wg.set(8, yy + H - 8, WIRE); wg.set(9, yy + H - 5, WIRED); }
+        for (yy = y0 + 1; yy <= y1; yy += 4) if (Math.abs(yy - 8) > 1) post(7, yy + H, 8);
       }
       post(7, base, 9);
       return g;
@@ -3732,8 +3732,8 @@
     });
     L.lazyDef('hz_', function (key) {
       var m = /^hz_(fence|gate)_(\w+)$/.exec(key); if (!m) return null;
-      var g = (m[1] === 'gate' ? fenceGrid(10, m[2] === 'v' ? 'v' : 'h') : fenceGrid(+m[2] & 15, null)).pad(0, 0, 0, 0);
-      g = g.outline().footShade();
+      var wg = new Grid(16, 28), g = m[1] === 'gate' ? fenceGrid(10, m[2] === 'v' ? 'v' : 'h', wg) : fenceGrid(+m[2] & 15, null, wg);
+      g = g.outline(); g.blit(wg, 0, 0); g = g.footShade();
       return { grid: g, scale: 0.5, ox: 0, oy: 8 - g.h * 0.5 };
     });
     function al(pub, tgt, lit) { L.ALIAS[pub] = tgt; if (lit) { LITMAP[pub] = tgt + '_lit'; LITMAP[tgt] = tgt + '_lit'; } }

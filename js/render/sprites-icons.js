@@ -894,6 +894,63 @@
       '.........mm...',
       '.........mm...']);
 
+    // ================================================================== Ausbau 9: Panzer, Geschütz, Schlacht, Kriegsgefangene, Kultur
+    icon('i_tank', [
+      '..............',
+      '..............',
+      '....HHHH......',
+      '...HhhhhHMMMMM',
+      '...HhhhhH.....',
+      '.HHHHHHHHHHH..',
+      'HhhhhhhhhhhhH.',
+      'HHHHHHHHHHHHH.',
+      'oGoGoGoGoGoGo.',
+      'oogoogoogoogoo',
+      '.oGoGoGoGoGo..',
+      '..............',
+      '..............',
+      '..............']);
+    icon('i_artillery', [
+      '............MM',
+      '..........MMM.',
+      '........MMm...',
+      '......MMm.....',
+      '....wMMm......',
+      '...wwwm.......',
+      '..wwWWW.......',
+      '.ww.oooo......',
+      'ww.oWvWWo.....',
+      'w..oWWWvo.....',
+      '...oWvWWo.....',
+      '....oooo......',
+      '..............',
+      '..............']);
+    icon('i_battle', function (g) {
+      g.ellipse(7, 9, 5, 3.5, function (x, y, nx, ny) { return ny < -0.2 ? 'fireY' : (nx * nx + ny * ny < 0.4 ? 'fireO' : 'stone'); });
+      g.line(1, 1, 11, 11, 'metalL'); g.line(2, 1, 12, 11, 'metal'); g.line(12, 1, 2, 11, 'metalL'); g.line(13, 1, 3, 11, 'metal');
+      g.paint(0, 10, ['wW', 'Ww']); g.paint(12, 10, ['wW', 'Ww']); g.set(4, 9, 'goldD'); g.set(9, 9, 'goldD');
+    });
+    icon('i_pow', [
+      '....HHHH......',
+      '...HhhhhH.....',
+      '....ssss......',
+      '....sSSs......',
+      '...HhhhhH.....',
+      '..HhHhhHhH....',
+      '..s.hhhh.s....',
+      '....hHhh......',
+      '....HH.HH.....',
+      'w..w..w..w..w.',
+      'mmmmmmmmmmmmmm',
+      'w..w..w..w..w.',
+      'mmmmmmmmmmmmmm',
+      'w..w..w..w..w.']);
+    icon('i_culture', function (g) {
+      // drei Bauweisen: Lehmturm mit Zinnen, kleine Pyramide, Giebelhaus mit Torfdach
+      g.rect(0, 4, 5, 10, 'sand'); g.vline(0, 4, 10, 'strawL'); g.vline(4, 4, 10, 'sandD'); g.set(1, 3, 'sand'); g.set(3, 3, 'sand'); g.vline(2, 1, 3, 'sand'); g.set(2, 0, 'white'); g.set(1, 7, 'woodD'); g.set(3, 7, 'woodD'); g.set(2, 10, 'woodD'); g.rect(2, 11, 1, 3, 'plum');
+      for (var j = 0; j < 9; j++) { var hw = Math.floor(j / 2); g.hline(7 - hw, 5 + j, 1 + hw * 2, 'gold'); g.set(7 + hw, 5 + j, 'goldD'); g.set(7 - hw, 5 + j, 'goldL'); }
+      g.paint(8, 7, ['..eee.', '.eeeee', 'eEEEEE', '.wwWw.', '.wWWw.', '.wOOw.', '.wOOw.']);
+    });
     // ================================================================== Menü-Icons: Ton, Musik, Nacht, Wetter
     function speaker(g) { g.rect(1, 5, 3, 5, 'stoneL'); g.vline(3, 5, 5, 'stone'); for (var j = 0; j < 4; j++) g.vline(4 + j, 4 - j, 7 + j * 2, j === 3 ? 'stoneD' : 'stone'); g.set(4, 4, 'white'); }
     icon('i_sound_on', function (g) { speaker(g); g.vline(9, 5, 5, 'white'); g.set(10, 4, 'white'); g.set(10, 10, 'white'); g.vline(11, 3, 9, 'snowD'); g.set(12, 2, 'snowD'); g.set(12, 12, 'snowD'); g.vline(13, 3, 9, 'snowD'); });

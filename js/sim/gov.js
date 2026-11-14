@@ -34,6 +34,7 @@
     const gov = WW.GOVERNMENTS[o.gov] ? o.gov : (o.gov === 'random' ? pickGovForRace(sim, race) : 'tribe');
     const k = {
       id: st.nextId++, baseName: o.baseName || 'Niemandsland', name: '', race: race,
+      culture: WW.Culture && WW.Culture.valid(o.culture) ? o.culture : (WW.Culture ? WW.Culture.ofRace(race) : 'mitte'),
       colorIndex: o.colorIndex != null ? o.colorIndex : freeColor(sim), bannerPattern: sim.rng.int(8),
       gov: gov, govLocked: !!o.locked, leaderId: -1, leaderName: '', leaderTitle: '', leaderTrait: null,
       cityIds: [], capitalId: -1, relations: {},
@@ -42,7 +43,7 @@
       nextElection: st.year + 2, nextPlan: st.year + 1, lastSham: st.year, govSince: st.year, lowYears: 0,
       laws: {}, mods: []   // Reichsgesetze und Modifikatoren (Ereignis-Teil)
     };
-    k.name = WW.Names.realm(k.baseName, gov);
+    k.name = WW.Names.realm(gov, k.culture, k.baseName, k.id);
     if (gov === 'theocracy') k.deity = WW.Names.deity(sim.rng);
     for (const o2 of st.kingdoms) {
       const op = Math.round(WW.govCompat(gov, o2.gov) * 3 + (o2.race === race ? 5 : 0));
@@ -78,8 +79,8 @@
   }
 
   function titleFor(k, female) {
-    const g = G(k);
-    return female ? g.titleF : g.titleM;
+    const t = WW.Names.title(k.gov, k.culture);   // je Kultur (Mansa, Qore/Kandake, Jarl …), sonst die der Regierung
+    return female ? t.f : t.m;
   }
 
   // Neuen Anführer aus der Hauptstadt bestimmen
@@ -90,7 +91,7 @@
     let best = null, bs = -1e9;
     for (const u of sim.state.units) {
       if (u.dead || u.kingdomId !== k.id) continue;
-      if (u.role === 'child' || u.role === 'rebel' || u.role === 'settler' || u.merc || u.role === 'leader' || u.order || WW.Units.isEngine(u.role)) continue;
+      if (u.role === 'child' || u.role === 'rebel' || u.role === 'settler' || u.role === 'caravan' || u.merc || u.role === 'leader' || u.order || WW.Units.isEngine(u.role)) continue;
       let sc = 0;
       if (cap && u.cityId === cap.id) sc += 50;
       if (u.role === 'soldier') sc += (k.gov === 'fascism' ? 20 : -10);
@@ -139,7 +140,8 @@
     }
     k.gov = gov;
     k.govSince = st.year;
-    k.name = WW.Names.realm(k.baseName, gov);
+    const oldName = k.name;
+    k.name = WW.Names.realm(gov, k.culture, k.baseName, k.id);   // Form wechselt, Stamm bleibt
     k.policy = { bonus: null, party: null, until: 0, plan: null, unrest: 0 };
     k.lowYears = 0;
     if (gov === 'theocracy' && !k.deity) k.deity = WW.Names.deity(sim.rng);
@@ -174,6 +176,7 @@
     }
     if (o.reason !== 'silent') {
       sim.event(o.reason || 'gov', { kingdom: k.name, gov: ng.name, oldGov: og.name, leader: leaderFull(k), deity: k.deity || '', why: o.why || '' }, atK(sim, k));
+      if (oldName && oldName !== k.name) sim.event('realmRenamed', { old: oldName, kingdom: k.name }, atK(sim, k));
     }
     st.pathVersion++;
     if (WW.Events && typeof WW.Events.onGovChange === 'function') WW.Events.onGovChange(sim, k);

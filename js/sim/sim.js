@@ -449,6 +449,7 @@
     if (st.tick % 30 === 20) WW.Growth.update(this);
     if (st.tick % 10 === 7) WW.Resources.update(this);
     if (st.tick % 40 === 25) { WW.Cities.stats(this); WW.Growth.updatePlots(this); }
+    if (st.tick % 40 === 35) WW.Culture.update(this);   // Kultur: Sonderbauten, Karawanen, Reichskultur
     if (st.tick % TPY === 0) {
       st.year++;
       WW.Units.yearly(this);
@@ -546,6 +547,7 @@
     if (WW.Industry) WW.Industry.defaults(st);   // [industry]
     if (WW.Military) WW.Military.defaults(st);   // [mil]
     if (WW.Events) WW.Events.defaults(st);   // [events] mods, laws, Ereignis-Zustand
+    WW.Culture.defaults(st);   // Kulturen nachrüsten (nach den Mods)
   }
 
   // ---------------------------------------------------------------------------
@@ -659,28 +661,30 @@
       }
       if (!gov) gov = 'tribe';   // Standard: Stamm, wählt ab Dorfgröße selbst
       usedGov[gov] = 1;
-      foundKingdom(sim, spots[i].x, spots[i].y, 6, gov, race, false);
+      const cul = Array.isArray(opts.cultures) && opts.cultures.length ? opts.cultures[i % opts.cultures.length] : null;
+      foundKingdom(sim, spots[i].x, spots[i].y, 6, gov, race, false, cul);
     }
   }
 
   // Neues Reich mit Stadt und Siedlern
-  function foundKingdom(sim, x, y, count, gov, race, locked) {
+  function foundKingdom(sim, x, y, count, gov, race, locked, culture) {
     const st = sim.state;
-    const name = WW.Names.town(sim.rng, race, sim._usedNames);
-    const k = WW.Gov.createKingdom(sim, { race: race, gov: gov, baseName: name, locked: locked });
-    const city = WW.Cities.found(sim, x, y, k.id, race, name);
+    const cul = WW.Culture.valid(culture) ? culture : WW.Culture.pick(sim, x, y, race);
+    const name = WW.Names.place(cul, sim.rng, WW.TERRAIN[st.terrain[y * st.W + x]].key, sim._usedNames);
+    const k = WW.Gov.createKingdom(sim, { race: race, gov: gov, baseName: name, locked: locked, culture: cul });
+    const city = WW.Cities.found(sim, x, y, k.id, race, name, cul);
     if (!city) { WW.Gov.removeKingdom(sim, k, true); return null; }
     const ss = WW.CONFIG.START_STOCK;
     city.stock = WW.Cities.fillStock({ food: ss.food, wood: ss.wood, stone: ss.stone, gold: ss.gold });
     if (WW.GOVERNMENTS[k.gov].sharedStock) k.stock = WW.Cities.fillStock({ food: ss.food, wood: ss.wood, stone: ss.stone, gold: 0 });
-    spawnPeople(sim, city, x + 0.5, y + 0.5, count, race);
+    spawnPeople(sim, city, x + 0.5, y + 0.5, count, race, cul);
     WW.Cities.stats(sim);
     WW.Gov.appointLeader(sim, k);
     sim.event('found', { city: city.name, kingdom: k.name, n: count, gov: WW.GOVERNMENTS[k.gov].name }, WW.Cities.atCity(city));
     return { kingdomId: k.id, cityId: city.id };
   }
 
-  function spawnPeople(sim, city, x, y, count, race) {
+  function spawnPeople(sim, city, x, y, count, race, culture) {
     const st = sim.state, W = st.W;
     let n = 0;
     for (let i = 0; i < count; i++) {
@@ -690,7 +694,7 @@
       if (t < 0) continue;
       const u = WW.Units.create(sim, {
         x: (t % W) + 0.5, y: Math.floor(t / W) + 0.5, role: 'farmer', kingdomId: city.kingdomId, cityId: city.id,
-        race: race || city.race, age: WW.CONFIG.ADULT_AGE + 4 + sim.rng.int(16)
+        race: race || city.race, culture: culture, age: WW.CONFIG.ADULT_AGE + 4 + sim.rng.int(16)
       });
       if (u) n++;
     }
@@ -751,12 +755,13 @@
       return changed > 0;
     }
 
-    function spawnSettlers(x, y, count, govKey, raceKey) {
+    function spawnSettlers(x, y, count, govKey, raceKey, cultureKey) {
       if (!inMap(x, y)) return null;
       const st = sim.state, W = st.W;
       count = isNum(count) ? Math.max(1, Math.min(30, Math.floor(count))) : 6;
       const gov = WW.GOVERNMENTS[govKey] ? govKey : null;
       const race = WW.RACES[raceKey] ? raceKey : 'human';
+      const cul = WW.Culture.valid(cultureKey) ? cultureKey : null;   // ohne Angabe: nach Volk + Gelände
       const tx = Math.floor(x), ty = Math.floor(y), i = ty * W + tx;
       // in bestehendem Gebiet: der Stadt anschließen
       let city = sim._cities.get(st.inRing[i]) || sim._cities.get(st.owner[i]);
@@ -769,7 +774,7 @@
         }
         if (spot) {
           if (sim._compDirty) WW.Path.updateComponents(sim);
-          const res = foundKingdom(sim, spot.x, spot.y, count, gov, race, !!(gov && gov !== 'tribe'));
+          const res = foundKingdom(sim, spot.x, spot.y, count, gov, race, !!(gov && gov !== 'tribe'), cul);
           if (res) WW.Cities.refreshAllLists(sim);
           return res;
         }
@@ -779,7 +784,7 @@
         if (!city) return null;
       }
       if (WW.TERRAIN_LUT.walk[st.terrain[i]] <= 0) { x = city.cx + 0.5; y = city.cy + 0.5; }
-      const n = spawnPeople(sim, city, x, y, count, race);
+      const n = spawnPeople(sim, city, x, y, count, race, cul);
       if (!n) return null;
       sim.event('joinCity', { city: city.name, n: n }, WW.Cities.atCity(city));
       return { kingdomId: city.kingdomId, cityId: city.id };

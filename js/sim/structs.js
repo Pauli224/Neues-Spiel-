@@ -43,6 +43,12 @@
     const out = { food: 0, wood: c.wood || 0, stone: c.stone || 0, gold: c.gold || 0 };
     // ohne Goldwirtschaft wird Gold durch Stein ersetzt
     if (out.gold && cityGov(sim, cityId).goldMul <= 0) { out.stone += out.gold; out.gold = 0; }
+    // Lehmbau (Kulturen sahel, nil): Mauerwerk aus Lehm, Holz nur für die Sparren
+    if (out.wood > 1 && !WALLISH[type]) {
+      const c = sim._cities.get(cityId);
+      const cu = c && c.culture && WW.CULTURES && WW.CULTURES[c.culture];
+      if (cu && cu.loam) { const w = Math.floor(out.wood * 0.6); out.wood -= w; out.stone += w; }
+    }
     return out;
   }
 

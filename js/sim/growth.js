@@ -477,7 +477,8 @@
     const site = freeSite(sim, city.cx + 0.5, city.cy + 0.5, city.race, 14, 38);
     if (!site) return null;
     const old = sim._kingdoms.get(city.kingdomId);
-    const k = WW.Gov.createKingdom(sim, { race: city.race, gov: 'tribe', baseName: WW.Names.town(sim.rng, city.race, sim._usedNames) });
+    const cul = WW.Culture.pick(sim, site.x, site.y, city.race);   // neues Land, neue Kultur nach dem Gelände
+    const k = WW.Gov.createKingdom(sim, { race: city.race, gov: 'tribe', culture: cul, baseName: WW.Names.place(cul, sim.rng, WW.TERRAIN[sim.state.terrain[site.y * sim.state.W + site.x]].key, sim._usedNames) });
     const group = st.nextId++;
     let m = 0;
     for (const u of city._members) {

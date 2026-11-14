@@ -34,7 +34,7 @@
 //  Militär
 //   S.vehicleKey('tank'|'artillery', gov, dir, frame) -> 'hv_<type>_<style>_<dir>_<frame>', dir 'e','w','n','s',
 //     frame 0/1 (Panzer: Kettenlauf; Geschütz: 0 Ruhe, 1 Rückstoß). Mittig auf der Kachel wie Figuren, ragt über
-//     die Kachel hinaus (etwa 15×11 seitlich). style: fascism (kantig-dunkel, Bündel), communism (rund-oliv,
+//     die Kachel hinaus (Panzer seitlich 20×13,5, vorn/hinten 15×14,5; Geschütz seitlich bis 24×13,5). style: fascism (kantig-dunkel, Bündel), communism (rund-oliv,
 //     Stern), sonst Feldgeschütz mit Protze (monarchy/republic/democracy) bzw. schlichter Panzer.
 //   's_arsenal_<gov>' (3×2) für alle acht Regierungen; S.arsenalKey(gov).
 //   'd_wreck_tank', 'd_wreck_gun' (frisch, verkohlt), 'd_wreck_tank_old', 'd_wreck_gun_old' (rostig, bewachsen);
@@ -49,7 +49,12 @@
 //     Gefangenenlager ohne Arbeit). S.campBuildKey(type, gov) liefert die Fassung je Regime
 //     ('s_camphq_fascism', 's_camphq_communism', sonst 's_camphq').
 //   Zaun: S.wallKey('fence', level, mask) -> 's_wall_fence_<mask>' (16 Masken), S.gateKey('fence', level, dir)
-//     -> 's_gate_fence_h|v'. Holzpfosten und Draht, schlicht.
+//     -> 's_gate_fence_h|v' (je 8×14, oy -6), S.towerKey('fence') -> 's_watchtower'. Holzpfosten und Draht, schlicht.
+//  Gemessene Maße (dw×dh, oy): Haus 2×2 18×17..22 (oy -0,5..-5,5), Zelt 18×14,5 (oy 2), Zentrum 3×3 26×33..38
+//   (oy -9..-13), Halle 26×24,5, Markt 18×16,5, Tempel 18×24,5 (oy -8), Pyramide 18×29,5 (oy -13), Karawanserei
+//   26×32,5 (oy -8), Langhaus und Arsenal 26×21,5/23,5 (oy -5/-7), Kommandantur 18×23,5 (oy -7), Baracke 18×16,5,
+//   Wachturm 11×27,5 (oy -19), Gefangenenlager 18×18,5 (oy -2), Kamel 19×18,5 (ox -6, oy -10,5), Wrack 17..19×12.
+//   Alle Gebäude haben Nachtfassungen über S.litKey (…_lit).
 // ============================================================================
 (function (WW) { 'use strict';
 

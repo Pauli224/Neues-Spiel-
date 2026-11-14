@@ -83,6 +83,7 @@
     if (!setStatus(sim, a, b, 'peace')) return false;
     const pa = capitalPt(sim, a);
     if (type !== 'silent') sim.event(type || 'peace', Object.assign({ kingdom: a.name, other: b.name }, extra || {}), { kingdomId: a.id, cityId: pa ? pa.c.id : -1, x: pa ? pa.x : 0, y: pa ? pa.y : 0 });
+    if (WW.Camps) WW.Camps.onPeace(sim, a, b);   // [industry] Kriegsgefangene gehen heim (Regime nur zum Teil)
     return true;
   }
   function makeAlliance(sim, a, b, type) {
@@ -298,7 +299,7 @@
   function secede(sim, city, gov, leaderName, silent) {
     const old = sim._kingdoms.get(city.kingdomId);
     if (!old || old.cityIds.length < 2) return null;
-    const nk = WW.Gov.createKingdom(sim, { race: city.race, gov: gov, baseName: city.name });
+    const nk = WW.Gov.createKingdom(sim, { race: city.race, gov: gov, baseName: city.name, culture: city.culture });
     WW.Cities.transferCity(sim, city, nk.id);
     nk.capitalId = city.id;
     for (const r of [nk.relations[old.id], old.relations[nk.id]]) if (r) r.opinion = -45;

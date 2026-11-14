@@ -20,7 +20,7 @@
 //   Schmiede ('smithy') in der Stadt; höchstens GOVS[gov].arsenals je Reich. Gebaut von den Baumeistern (Baustelle).
 //   Felder: style (Regierung, wie alle Bauwerke; Sprite s_arsenal_<gov>), prod ('tank'|'artillery'|null = ruht),
 //   prog 0..1 (Baufortschritt des Fahrzeugs), pay ('res' = Eisen+Kohle | 'alt' = Behelf mit Gold/Holz+Stein, langsam),
-//   made (gebaute Fahrzeuge), opened (1 = Eröffnung stand in der Chronik), idle (true = Regierung ohne Militärtabelle).
+//   made (gebaute Fahrzeuge), lastPay (Bezahlart des letzten Auftrags), opened (1 = Eröffnung stand in der Chronik), idle (true = Regierung ohne Militärtabelle).
 //   Verbrauch aus WW.Cities.stock(sim, city): iron + coal (WW.MIL.COST, × GOVS.costMul); fehlt das, Behelf
 //   (gold, ohne Goldwirtschaft wood + stone) mit Tempo × COST.altSpeed. Nichts davon da: wartet.
 //
@@ -261,7 +261,7 @@
         let c = costOf(k, pick, false), how = 'res';
         if (!canPay(sk, c)) { c = costOf(k, pick, true); how = 'alt'; if (!canPay(sk, c)) continue; }
         pay(sk, c);
-        s.prod = pick; s.prog = 0; s.pay = how; p[pick]++;
+        s.prod = pick; s.prog = 0; s.pay = how; s.lastPay = how; p[pick]++;
       }
       const C = M().COST;
       s.prog = Math.min(1, s.prog + C.step / C[s.prod].work * sp.speedMul * (s.pay === 'alt' ? C.altSpeed : 1));

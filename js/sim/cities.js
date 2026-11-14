@@ -67,7 +67,7 @@
   function releaseTerritory(sim, city) { WW.Growth.releaseCity(sim, city); }
 
   // Neue Stadt mit fertigem Zentrum, (x, y) = mittlere Kachel des Zentrums
-  function found(sim, x, y, kingdomId, race, name) {
+  function found(sim, x, y, kingdomId, race, name, culture) {
     const st = sim.state, W = st.W;
     const k = sim._kingdoms.get(kingdomId);
     if (!k) return null;
@@ -78,9 +78,12 @@
       const s = sim._structs.get(st.structAt[(y - o.oy + dy) * W + x - o.ox + dx]);
       if (s) { if (s.type === 'field' || s.type === 'ruin' || s.type === 'lumber' || s.type === 'quarry') WW.Structs.remove(sim, s); else return null; }
     }
+    race = race || k.race || 'human';
+    // Kultur aus Volk + Gelände (oder vorgegeben), danach der Name in ihrem Stil
+    const cul = WW.Culture.valid(culture) ? culture : WW.Culture.pick(sim, x, y, race);
     const city = {
-      id: st.nextId++, name: name || WW.Names.town(sim.rng, race, sim._usedNames),
-      kingdomId: kingdomId, race: race || k.race || 'human',
+      id: st.nextId++, name: name || WW.Names.place(cul, sim.rng, WW.TERRAIN[st.terrain[y * W + x]].key, sim._usedNames),
+      kingdomId: kingdomId, race: race, culture: cul,
       cx: x, cy: y, centerId: -1, tier: 0, pop: 0, adults: 0, children: 0, housing: 4,
       stock: emptyStock(), happiness: 60,
       wall: WW.Walls.emptyWall(),
@@ -91,6 +94,8 @@
       loyalty: 80, joinedYear: st.year, flurs: 0, needLand: false, governor: null
     };
     sim._usedNames.add(city.name);
+    WW.Culture.setCity(sim, city, cul);
+    city.kind = 'town';   // [industry] 'town' | 'camp' (Lagerstadt, js/sim/camps.js)
     st.cities.push(city);
     sim._cities.set(city.id, city);
     const c = WW.Structs.create(sim, 'center', x - o.ox, y - o.oy, city.id, { built: true, style: k.gov, stage: 0 });
@@ -393,6 +398,7 @@
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const ringed = !!city.wall.plan;
     const minD = ringed ? 0 : WW.CONFIG.WALL_RESERVE + WW.CONFIG.WALL_MARGIN + 1.2;
+    const irr = !!WW.Culture.info(city.culture).irrigation;   // sahel/nil: Bewässerung im Sand
     let best = -1, bs = -1e9;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
@@ -401,7 +407,7 @@
         if (st.owner[i] !== city.id && !(st.owner[i] === -1 && WW.Growth.claimableAt(sim, city, x, y))) continue;
         if (st.structAt[i] !== -1 || st.inRing[i] !== -1) continue;
         const t = st.terrain[i];
-        const fert = WW.TERRAIN_LUT.fertile[t];
+        const fert = irr ? WW.Culture.fieldFert(sim, city, i) : WW.TERRAIN_LUT.fertile[t];
         if (fert < minFert || !WW.Structs.terrainBuildable(sim, i, city.race)) continue;
         if (WW.TERRAIN_LUT.wood[t] && fert < 0.75) continue;
         const d = Math.sqrt((x + 0.5 - px) * (x + 0.5 - px) + (y + 0.5 - py) * (y + 0.5 - py));
@@ -559,13 +565,17 @@
     // Felder
     const plan = k && k.policy && k.policy.plan;
     let fsum = 0;
-    for (const id of city.fields) { const f = sim._structs.get(id); if (f) fsum += Math.max(0.2, WW.TERRAIN_LUT.fertile[st.terrain[f.y * W + f.x]]); }
+    for (const id of city.fields) { const f = sim._structs.get(id); if (f) fsum += Math.max(0.2, WW.Culture.fieldFert(sim, city, f.y * W + f.x)); }
     const avgF = city.fields.length ? fsum / city.fields.length : 1;
     const wantFields = Math.max(2, Math.ceil(city.pop / 2.3 / Math.max(0.4, avgF))) + (plan && plan.focus === 'food' ? 2 : 0);
     if (city.fields.length < wantFields) {
       const i = findFieldSpot(sim, city);
       if (i >= 0) {
         const s = WW.Structs.create(sim, 'field', i % W, Math.floor(i / W), city.id, { built: true });
+        if (s && WW.TERRAIN_LUT.fertile[st.terrain[i]] < 0.6 && WW.Culture.irrigable(sim, city, i)) {
+          s.irrigated = true;   // Bewässerungsfeld (Darstellung: Gräben)
+          if (!city.irrigated) { city.irrigated = true; sim.event('irrigation', { city: city.name }, atCity(city)); }
+        }
         if (s) {
           city.fields.push(s.id);
           if (st.owner[i] === -1) { WW.Growth.setFlur(sim, WW.Growth.flurAt(st, i % W, Math.floor(i / W)), city.id); city.flurs = (city.flurs || 0) + 1; }
@@ -670,6 +680,7 @@
     if (city.occupiedUntil && sim.state.year < city.occupiedUntil) h -= (g.war === 'mass' ? 22 : 10);
     if (city.hasMonument) h += (k && k.gov === 'theocracy') ? 14 : 5;
     if (WW.Resources) h += WW.Resources.happiness(sim, city, sk);   // Wolle (Kälte), Kristall
+    h += WW.Culture.happiness(sim, city);                             // Pyramide (Kultur nil)
     if (k && k.gov === 'fascism') h += Math.min(25, city.propaganda || 0);
     if (sim.state.tick < city.blessUntil) h += 20;
     if (k && k.policy && k.policy.bonus === 'nap') h += 8;
@@ -758,10 +769,11 @@
     const r = Math.min(30, territoryRadius(city, sim) + 5);
     const px = city.cx, py = city.cy;
     let wood = 0, stone = 0, water = 0;
+    const tw = WW.Culture.resTab(city, 'wood'), ts = WW.Culture.resTab(city, 'stone');   // Lehmbau der Wüstenkulturen
     for (let y = Math.max(0, py - r); y <= Math.min(H - 1, py + r); y++) for (let x = Math.max(0, px - r); x <= Math.min(W - 1, px + r); x++) {
       const t = st.terrain[y * W + x];
-      if (LUT.wood[t]) wood++;
-      if (LUT.stone[t]) stone++;
+      if (tw[t]) wood++;
+      if (ts[t]) stone++;
       if (LUT.water[t]) water++;
     }
     city.hasWood = wood > 0; city.hasStone = stone > 0; city.hasWater = water > 0;
@@ -890,6 +902,7 @@
     const slot = (st.tick / 10) | 0;
     for (const city of st.cities.slice()) {
       if (city.dead) continue;
+      if (city.kind === 'camp' && WW.Camps) { WW.Camps.cityUpdate(sim, city); continue; }   // [industry] Lagerstadt: eigene Regeln
       if (city.pop === 0) {
         city.empty++;
         if (city.empty >= 20) { destroyCity(sim, city, 'cityAbandoned'); continue; }
@@ -906,6 +919,7 @@
     const st = sim.state;
     for (const city of st.cities.slice()) {
       if (city.dead) continue;
+      if (city.kind === 'camp') continue;   // [industry] Lagerstadt: keine Tochterstädte, kein Unmut-Zähler
       scanResources(sim, city);
       const g = gov(sim, city);
       // Unzufriedenheit zählt für Aufstände
@@ -927,7 +941,231 @@
     updateAll: updateAll, yearly: yearly, destroyCity: destroyCity, transferCity: transferCity, atCity: atCity,
     findCoreSpot: findCoreSpot, findFieldSpot: findFieldSpot, findDropSpot: findDropSpot, placeStruct: placeStruct,
     centerOff: centerOff, emptyStock: emptyStock, fillStock: fillStock, footprintOk: footprintOk, DIRS16: DIRS16, happinessTarget: happinessTarget, scanResources: scanResources,
-    sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP
+    sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP, countSites: countSites,
+  };
+
+})(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
+
+// ============================================================================
+// Kulturen (Ausbau 9): Zuweisung, Boni über WW.Mods, Bewässerung, Sonderbauten, Karawanen
+//   Daten: WW.CULTURES (js/core/config.js). Schnittstelle: Kopfkommentar js/sim/sim.js, Abschnitt AUSBAU 9.
+// ============================================================================
+(function (WW) { 'use strict';
+
+  const COLD = { snow: 1, tundra: 1, snowfield: 1, taiga: 1 };
+  const DRY = { desert: 1, savanna: 1 };
+
+  function info(key) { return WW.CULTURES[key] || WW.CULTURES.mitte; }
+  function valid(key) { return typeof key === 'string' && !!WW.CULTURES[key]; }
+  // Kultur eines Volkes ohne Gelände (Fantasievölker: eigene, Menschen: mitte)
+  function ofRace(race) { return race && race !== 'human' && WW.CULTURES[race] ? race : 'mitte'; }
+  function of(o) { return o && valid(o.culture) ? o.culture : ofRace(o && o.race); }
+
+  function riverNear(st, x, y, r) {
+    const W = st.W, H = st.H, R = WW.T.RIVER;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      if (st.terrain[yy * W + xx] === R) return true;
+    }
+    return false;
+  }
+
+  // Kultur bei der Gründung aus Volk + Gelände im Umkreis 5 um (x, y)
+  function pick(sim, x, y, race) {
+    if (race && race !== 'human') return ofRace(race);
+    const st = sim.state, W = st.W, H = st.H;
+    x = Math.floor(x); y = Math.floor(y);
+    let cold = 0, dry = 0, desert = 0, land = 0;
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const t = WW.TERRAIN[st.terrain[yy * W + xx]];
+      if (t.water) continue;
+      land++;
+      if (COLD[t.key]) cold++;
+      if (DRY[t.key]) dry++;
+      if (t.key === 'desert') desert++;
+    }
+    if (!land) return 'mitte';
+    if (cold >= land * 0.35) return 'nord';
+    if (desert >= land * 0.22 || dry >= land * 0.45) return riverNear(st, x, y, WW.CULTURES.nil.needRiver || 6) ? 'nil' : 'sahel';
+    return 'mitte';
+  }
+
+  // Boni als dauerhafte Mods an der Stadt (source 'culture'); ohne mods.js greift WW.SimUtil.mod direkt
+  function applyMods(city) {
+    if (!WW.Mods || !city) return;
+    const c = info(city.culture);
+    WW.Mods.remove(city, 'culture');
+    for (const key in c.bonus) WW.Mods.add(city, { key: key, mul: c.bonus[key], until: 0, source: 'culture', name: 'Kultur: ' + c.name });
+  }
+  // Anzeigenamen der Mod-Schlüssel für Rohstoffe ergänzen (Mods-Liste der Oberfläche)
+  if (WW.Mods && WW.Mods.KEY_NAMES) {
+    const KN = WW.Mods.KEY_NAMES;
+    if (!KN.fish) KN.fish = 'Fischertrag';
+    if (!KN.wool) KN.wool = 'Wollertrag';
+    if (!KN.crystal) KN.crystal = 'Kristallhandel';
+    for (const r of ['iron', 'coal']) if (!KN[r]) KN[r] = (WW.Resources && WW.Resources.RES_NAME && WW.Resources.RES_NAME[r]) || r;
+  }
+
+  function setCity(sim, city, key) {
+    city.culture = valid(key) ? key : ofRace(city.race);
+    applyMods(city);
+  }
+
+  // ältere Spielstände: Kulturen nachrüsten (Menschen mitte, sonst Volksschlüssel)
+  function defaults(st) {
+    for (const c of st.cities) {
+      if (!valid(c.culture)) { c.culture = ofRace(c.race); applyMods(c); }
+      else if (WW.Mods && !(c.mods || []).some(m => m.source === 'culture') && Object.keys(info(c.culture).bonus).length) applyMods(c);
+    }
+    const byId = new Map(st.cities.map(c => [c.id, c]));
+    for (const k of st.kingdoms) if (!valid(k.culture)) { const cap = byId.get(k.capitalId) || byId.get(k.cityIds[0]); k.culture = cap ? cap.culture : ofRace(k.race); }
+    for (const u of st.units) if (!valid(u.culture)) { const c = byId.get(u.cityId); u.culture = c && c.race === u.race ? c.culture : ofRace(u.race); }
+  }
+
+  // ---------------------------------------------------------------- Felder: Bewässerung und Flussfelder
+  // sim._wet (Laufzeit): -1 unbekannt, sonst Bit0 = Wasser im Umkreis 3, Bit1 = Fluss im Umkreis 2; verworfen bei Geländeänderung
+  function wet(sim, i) {
+    const st = sim.state, N = st.W * st.H;
+    if (!sim._wet || sim._wet.length !== N || sim._wetVer !== st.pathVersion) {
+      if (!sim._wet || sim._wet.length !== N) sim._wet = new Int8Array(N);
+      sim._wet.fill(-1); sim._wetVer = st.pathVersion;
+    }
+    let v = sim._wet[i];
+    if (v >= 0) return v;
+    v = 0;
+    const W = st.W, x = i % W, y = (i - x) / W, LUT = WW.TERRAIN_LUT, R = WW.T.RIVER;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= st.H) continue;
+      const t = st.terrain[yy * W + xx];
+      if (LUT.water[t]) { v |= 1; if (t === R && Math.abs(dx) <= 2 && Math.abs(dy) <= 2) v |= 2; }
+    }
+    sim._wet[i] = v;
+    return v;
+  }
+  const IRRIGABLE = () => [WW.T.DESERT, WW.T.SAND, WW.T.SAVANNA];
+  // Darf hier bewässert werden? (Kultur mit irrigation, Wüste/Sand/Savanne, Wasser im Umkreis 3)
+  function irrigable(sim, city, i) {
+    if (!city || !info(city.culture).irrigation) return false;
+    const t = sim.state.terrain[i];
+    if (IRRIGABLE().indexOf(t) < 0) return false;
+    return (wet(sim, i) & 1) === 1;
+  }
+  // wirksame Fruchtbarkeit einer Feldkachel (Bewässerung hebt Wüste/Sand auf 0,6)
+  function fieldFert(sim, city, i) {
+    const f = WW.TERRAIN_LUT.fertile[sim.state.terrain[i]];
+    if (f < 0.6 && irrigable(sim, city, i)) return 0.6;
+    return f;
+  }
+  // Ertragsfaktor eines Feldes nach Kultur (nil: Flussfelder ×1,5)
+  function fieldMul(sim, city, i) {
+    const c = city ? info(city.culture) : null;
+    if (c && c.riverFields && (wet(sim, i) & 2)) return c.riverFields;
+    return 1;
+  }
+
+  // ---------------------------------------------------------------- Lehmbau (sahel, nil): Rohstoff-Tabellen je Kultur
+  // wood zusätzlich aus Savanne (Akazien, Dumpalmen; Kachel bleibt stehen), stone zusätzlich aus Wüste (Lehmziegel)
+  const TABS = {};
+  function resTab(city, res) {
+    const c = city && city.culture ? WW.CULTURES[city.culture] : null;
+    if (!c || !c.loam || (res !== 'wood' && res !== 'stone')) return WW.TERRAIN_LUT[res];
+    let t = TABS[res];
+    if (!t) { t = TABS[res] = Uint8Array.from(WW.TERRAIN_LUT[res]); if (res === 'wood') t[WW.T.SAVANNA] = 1; else t[WW.T.DESERT] = 1; }
+    return t;
+  }
+
+  // ---------------------------------------------------------------- Zufriedenheit (Pyramide)
+  function happiness(sim, city) {
+    const p = city._pyramid;
+    return p ? 3 + 2 * Math.max(0, Math.min(2, (p.level || 1) - 1)) : 0;
+  }
+
+  // ---------------------------------------------------------------- Sonderbauten und Karawanen (alle 40 Ticks)
+  function update(sim) {
+    const st = sim.state;
+    // Reichskultur folgt der Hauptstadt
+    for (const k of st.kingdoms) {
+      const cap = sim._cities.get(k.capitalId) || sim._cities.get(k.cityIds[0]);
+      if (cap && cap.culture && k.culture !== cap.culture) k.culture = cap.culture;
+    }
+    const sp = new Map();
+    for (const s of st.structs) {
+      if (s.dead || s.cityId < 0) continue;
+      if (s.type === 'caravanserai' || s.type === 'pyramid') sp.set(s.cityId + ':' + s.type, s);
+    }
+    for (const city of st.cities) {
+      if (city.dead) continue;
+      const c = info(city.culture);
+      const pyr = sp.get(city.id + ':pyramid') || null;
+      city._pyramid = pyr && pyr.built ? pyr : null;
+      if (pyr) {
+        const stg = Math.max(0, Math.min(2, (pyr.level || 1) - 1));
+        if (pyr.stage !== stg) { const up = pyr.stage != null && stg > pyr.stage; pyr.stage = stg; if (up) sim.event('pyramidStage', { city: city.name }, WW.Cities.atCity(city)); WW.Structs.forTiles(sim, pyr, (i) => sim.markDirty(i)); }
+      }
+      const cs = sp.get(city.id + ':caravanserai') || null;
+      if (c.special && city.centerOk && city.pop >= 18 && st.units.length < WW.CONFIG.MAX_UNITS) {
+        const have = c.special === 'pyramid' ? pyr : cs;
+        if (!have && WW.Cities.countSites(sim, city, true) < 2 + city.tier) {
+          const cost = WW.Structs.costFor(sim, c.special, 1, city.id);
+          if (WW.Cities.canPay(sim, city, cost) && !(city.specialTry > st.tick)) {
+            city.specialTry = st.tick + 400;
+            const i = WW.Cities.findCoreSpot(sim, city, c.special);
+            if (i >= 0) {
+              const k = sim._kingdoms.get(city.kingdomId);
+              const s = WW.Cities.placeStruct(sim, city, c.special, i % st.W, Math.floor(i / st.W), { style: k ? k.gov : 'tribe' });
+              if (s) {
+                city.sites.push(s.id);
+                if (c.special === 'pyramid') s.stage = 0;
+                sim.event(c.special === 'pyramid' ? 'pyramid' : 'caravanserai', { city: city.name }, WW.Cities.atCity(city));
+              }
+            }
+          }
+        } else if (pyr && pyr.built && !pyr.upgradeTo && (pyr.level || 1) < 3 && city.tier >= (pyr.level || 1) + 1) {
+          const cost = WW.Structs.costFor(sim, 'pyramid', (pyr.level || 1) + 1, city.id);
+          if (WW.Cities.canPay(sim, city, cost) && WW.Cities.countSites(sim, city, true) < 2 + city.tier) {
+            pyr.upgradeTo = (pyr.level || 1) + 1; pyr.progress = 0; pyr.paid = false; pyr.siteYear = st.year;
+            city.sites.push(pyr.id);
+          }
+        }
+      }
+      // Karawanen der Karawanserei
+      if (cs && cs.built && city._members) {
+        const want = Math.min(3, 1 + Math.floor(city.pop / 40));
+        let have = 0;
+        for (const u of city._members) if (u.role === 'caravan') have++;
+        if (have < want && partners(sim, city).length) {
+          for (const u of city._members) {
+            if (u.role === 'farmer' && !u.carrying && !u.order) { WW.Units.setRole(sim, u, 'caravan'); break; }
+          }
+        }
+      } else if (city._members) {
+        for (const u of city._members) if (u.role === 'caravan') WW.Units.setRole(sim, u, 'farmer');
+      }
+    }
+  }
+
+  // befreundete Ziel-Städte einer Karawane: eigene Städte, Bündnis, Frieden mit Meinung ≥ 0
+  function partners(sim, city) {
+    const k = sim._kingdoms.get(city.kingdomId);
+    const out = [];
+    if (!k) return out;
+    for (const id of k.cityIds) if (id !== city.id) out.push(id);
+    for (const oid in k.relations) {
+      const r = k.relations[oid];
+      if (!(r.status === 'alliance' || (r.status === 'peace' && r.opinion >= 0))) continue;
+      const ok = sim._kingdoms.get(+oid);
+      if (ok) for (const id of ok.cityIds) { const c = sim._cities.get(id); if (c && Math.abs(c.cx - city.cx) + Math.abs(c.cy - city.cy) < 90) out.push(id); }
+    }
+    return out;
+  }
+
+  WW.Culture = {
+    info: info, valid: valid, ofRace: ofRace, of: of, pick: pick, setCity: setCity, applyMods: applyMods, defaults: defaults,
+    resTab: resTab, wet: wet, irrigable: irrigable, fieldFert: fieldFert, fieldMul: fieldMul, happiness: happiness, update: update, partners: partners
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

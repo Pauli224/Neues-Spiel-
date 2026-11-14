@@ -25,13 +25,16 @@
     const female = o.female != null ? !!o.female : sim.rng.chance(0.5);
     const role = o.role || 'farmer';
     const hp = baseHp(role, race);
+    // Kultur: vorgegeben, sonst die der Geburtsstadt (gleiches Volk), sonst nach Volk
+    const bc = o.cityId != null ? sim._cities.get(o.cityId) : null;
+    const cul = WW.Culture ? (WW.Culture.valid(o.culture) ? o.culture : (bc && bc.race === race.key && bc.culture ? bc.culture : WW.Culture.ofRace(race.key))) : 'mitte';
     const u = {
       id: st.nextId++, x: o.x, y: o.y, dir: sim.rng.chance(0.5) ? 1 : -1, role: role,
       kingdomId: o.kingdomId == null ? -1 : o.kingdomId, cityId: o.cityId == null ? -1 : o.cityId,
-      race: race.key, age: o.age != null ? o.age : C().ADULT_AGE + sim.rng.int(20),
+      race: race.key, culture: cul, age: o.age != null ? o.age : C().ADULT_AGE + sim.rng.int(20),
       life: Math.round((C().LIFESPAN + sim.rng.range(-14, 14)) * race.lifespan),
       hp: hp, maxHp: hp, moving: false, carrying: null, carryAmt: 0, female: female, bubble: null, sick: false,
-      name: o.name || WW.Names.person(sim.rng, race.key, female),
+      name: o.name || WW.Names.person(cul, sim.rng, female),
       path: null, pi: 0, goal: -1, task: null, phase: 0, tt: 0, target: -1, fails: 0, cd: 0,
       foe: -1, order: null, breach: -1, merc: false, group: -1, site: -1, wait: 0, wtry: 0
     };
@@ -50,6 +53,7 @@
     const race = WW.RACES[u.race] || WW.RACES.human;
     const frac = u.maxHp > 0 ? u.hp / u.maxHp : 1;
     u.role = role;
+    if (role === 'caravan') u.camel = true; else if (u.camel) u.camel = false;
     u.maxHp = baseHp(role, race);
     if (role === 'soldier') u.maxHp = Math.round(u.maxHp * gov(sim, u).unitHpMul * (WW.Resources ? WW.Resources.armorMul(sim, u.cityId) : 1));
     u.hp = Math.max(1, Math.round(u.maxHp * frac));
@@ -304,10 +308,12 @@
     }
     const race = WW.RACES[u.race] || WW.RACES.human;
     const tab = sim._tables[race.key] || sim._tables.human;
-    let spd = C().UNIT_SPEED * race.speed * Math.max(0.3, tab.speed[t]);
+    let ts = tab.speed[t];
+    if (ts < 1 && (t === WW.T.DESERT || t === WW.T.SAND) && u.culture && WW.CULTURES[u.culture] && WW.CULTURES[u.culture].desertWalk) ts = 1;   // Wüstenkulturen
+    let spd = C().UNIT_SPEED * race.speed * Math.max(0.3, ts);
     if (u.role === 'child') spd *= 0.85;
     else if (u.role === 'ram' || u.role === 'catapult') spd *= 0.55;
-    else if (u.role === 'soldier' || u.role === 'settler' || u.role === 'trader') spd *= 1.1;
+    else if (u.role === 'soldier' || u.role === 'settler' || u.role === 'trader' || u.role === 'caravan') spd *= 1.1;
     if (u.sick) spd *= 0.7;
     const tx = nx + 0.5, ty = ny + 0.5;
     const dx = tx - u.x, dy = ty - u.y;
@@ -415,7 +421,7 @@
   // (city.resCache, im Spielstand enthalten) und alle 240 Ticks erneuert; ungültig gewordene Kacheln fallen heraus.
   function scanRes(sim, city, res, minR, maxR, want) {
     const st = sim.state, W = st.W, H = st.H;
-    const tab = WW.TERRAIN_LUT[res], ter = st.terrain, inRing = st.inRing, owner = st.owner, cid = city.id;
+    const tab = WW.Culture.resTab(city, res), ter = st.terrain, inRing = st.inRing, owner = st.owner, cid = city.id;
     const out = [];
     const test = (x, y) => {
       if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -439,7 +445,7 @@
     const rc = city.resCache || (city.resCache = {});
     let e = rc[key];
     if (!e || st.tick - e.t >= 240 || (!e.list.length && st.tick - e.t >= 60)) { e = { t: st.tick, list: scanRes(sim, city, res, minR, maxR, 24) }; rc[key] = e; }
-    const tab = WW.TERRAIN_LUT[res];
+    const tab = WW.Culture.resTab(city, res);
     for (let n = 0; n < 6 && e.list.length; n++) {
       const k = sim.rng.int(Math.min(e.list.length, 8));   // nahe Kacheln bevorzugt (Liste ist innen nach außen sortiert)
       const i = e.list[k];
@@ -524,13 +530,14 @@
       if (k && k.policy && k.policy.bonus === 'bread') mul *= 1.25;
       if (k && k.policy && k.policy.plan && k.policy.plan.focus === 'food') mul *= 1.5;
       if (u.task === 'fish' || u.task === 'forage') {
-        u.carrying = 'food'; u.carryAmt = (u.task === 'fish' ? C().FISH : C().FORAGE) * mul; u.phase = 3;
+        u.carrying = 'food'; u.carryAmt = (u.task === 'fish' ? C().FISH * (WW.Culture.info(city.culture).bonus.fish || 1) : C().FORAGE) * mul; u.phase = 3;
         return;
       }
       const f = sim._structs.get(u.target);
       if (!f || f.dead) { u.phase = 0; return; }
       if (f.growth >= 3) {
-        const fert = Math.max(0.2, WW.TERRAIN_LUT.fertile[st.terrain[f.y * W + f.x]]);
+        const fi0 = f.y * W + f.x;
+        const fert = Math.max(0.2, WW.Culture.fieldFert(sim, city, fi0)) * WW.Culture.fieldMul(sim, city, fi0);   // Bewässerung, Flussfelder
         u.carrying = 'food'; u.carryAmt = (u.carryAmt || 0) + C().HARVEST * fert * mul;
         f.growth = 0; f.gprog = 0; sim.markDirty(f.y * W + f.x);
         // ausgelaugte Felder unter Kahlschlag-Regime
@@ -577,7 +584,7 @@
       return;
     }
     if (u.phase === 1) {
-      if (!WW.TERRAIN_LUT[res][st.terrain[u.target]]) { u.phase = 0; return; }
+      if (!WW.Culture.resTab(city, res)[st.terrain[u.target]]) { u.phase = 0; return; }
       if (arrived(sim, u, u.tt)) { u.phase = 2; u.tt = res === 'wood' ? 40 : 52; return; }
       const r = goTo(sim, u, u.tt, { limit: 1500 });
       if (r === null) {
@@ -591,8 +598,9 @@
       if (u.tt > 0) return;
       const k = sim._kingdoms.get(u.kingdomId);
       const plan = k && k.policy && k.policy.plan;
+      const loam = WW.TERRAIN_LUT[res][st.terrain[u.target]] ? 1 : 0.6;   // Lehmbau: Akazienholz der Savanne, Lehm der Wüste (weniger je Gang)
       if (res === 'wood') {
-        u.carrying = 'wood'; u.carryAmt = C().CHOP * WW.SimUtil.mod(sim, k, city, 'wood', race.yields.wood) * (plan && plan.focus === 'wood' ? 1.5 : 1);
+        u.carrying = 'wood'; u.carryAmt = loam * C().CHOP * WW.SimUtil.mod(sim, k, city, 'wood', race.yields.wood) * (plan && plan.focus === 'wood' ? 1.5 : 1);
         // Umgang mit der Natur (care | use | exploit): Kahlschlag-Regime roden alles, Schonende gar nicht
         // Holzvorrat je Waldkachel: nach einigen Fällungen fällt der Wald (Lichtung mit Stümpfen).
         // Elfen ernten, ohne zu fällen; Kahlschlag-Regime fällen schneller.
@@ -608,7 +616,7 @@
           }
         }
       } else {
-        u.carrying = 'stone'; u.carryAmt = C().MINE * WW.SimUtil.mod(sim, k, city, 'stone', race.yields.stone) * (plan && plan.focus === 'stone' ? 1.5 : 1);
+        u.carrying = 'stone'; u.carryAmt = loam * C().MINE * WW.SimUtil.mod(sim, k, city, 'stone', race.yields.stone) * (plan && plan.focus === 'stone' ? 1.5 : 1);
         // Kahlschlag-Regime tragen Hügel ab
         if (st.terrain[u.target] === WW.T.HILL && WW.Growth.natureMode(sim, k, race) === 'exploit' && sim.rng.chance(0.05 * WW.Growth.natureMul(sim, k, race))) {
           st.terrain[u.target] = WW.T.GRASS; st.cleared[u.target] = C().CLEARED_MAX; sim.markDirty(u.target); sim.terrainChanged();
@@ -872,6 +880,43 @@
     if (r === null && u.fails > 2) { u.target = -1; u.fails = 0; u.wait = 60; }
   }
 
+  // Karawane (Kultur sahel): zwischen der eigenen Stadt und einer befreundeten Stadt; Ankunft bringt beiden Gold
+  function thinkCaravan(sim, u, city) {
+    const k = sim._kingdoms.get(u.kingdomId);
+    if (!k) return;
+    u.camel = true;
+    if (u.target < 0 || !sim._cities.get(u.target)) {
+      const others = WW.Culture.partners(sim, city);
+      if (!others.length) { wander(sim, u, city, 5); return; }
+      u.target = others[sim.rng.int(others.length)]; u.phase = 0;
+    }
+    const dest = u.phase === 0 ? sim._cities.get(u.target) : city;
+    if (!dest) { u.target = -1; return; }
+    const goal = WW.Cities.centerTile(sim, dest, u.id);
+    if (arrived(sim, u, goal) || distTo(u, dest.cx + 0.5, dest.cy + 0.5) < 1.5) {
+      if (u.phase === 0) {
+        const g = WW.GOVERNMENTS[k.gov];
+        const amt = WW.SimUtil.mod(sim, k, city, 'gold', 3 * Math.max(0.5, g.goldMul || 0.5));
+        WW.Cities.addStock(sim, dest, 'gold', amt);
+        WW.Cities.addStock(sim, city, 'gold', amt);
+        if (dest.kingdomId !== city.kingdomId) {
+          const r = k.relations[dest.kingdomId];
+          if (r) r.opinion = Math.min(100, r.opinion + 1);
+          const dk = sim._kingdoms.get(dest.kingdomId), r2 = dk && dk.relations[k.id];
+          if (r2) r2.opinion = Math.min(100, r2.opinion + 1);
+        }
+        sim.fx({ type: 'caravan', x: dest.cx + 0.5, y: dest.cy + 0.5 });
+        if (sim.rng.chance(0.08)) sim.event('caravanArrives', { city: city.name, other: dest.name }, WW.Cities.atCity(dest));
+        u.phase = 1;
+      } else { u.phase = 0; u.target = -1; }
+      bubble(u, 'note', 30);
+      u.wait = 30;
+      return;
+    }
+    const r = goTo(sim, u, goal, { limit: C().PATH_LIMIT_LONG });
+    if (r === null && u.fails > 2) { u.target = -1; u.fails = 0; u.wait = 80; }
+  }
+
   function thinkSettler(sim, u) {
     const st = sim.state, W = st.W;
     const k = sim._kingdoms.get(u.kingdomId);
@@ -976,6 +1021,7 @@
       case 'ram': if (u.order && u.order.kind === 'march') march(sim, u); else setRole(sim, u, 'soldier'); break;
       case 'catapult': thinkCatapult(sim, u, city); break;
       case 'trader': thinkTrader(sim, u, city); break;
+      case 'caravan': thinkCaravan(sim, u, city); break;
       case 'rebel': thinkRebel(sim, u, city); break;
       case 'settler': thinkSettler(sim, u); break;
       case 'leader': wander(sim, u, city, 3); if (sim.rng.chance(0.05)) bubble(u, 'crown', 30); break;

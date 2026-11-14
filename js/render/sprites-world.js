@@ -1184,6 +1184,25 @@
     softSet('t_barren_2', [A('#a29c8c', 135), [A('#7e786a', 160), 0.22], [A('#bab4a4', 130), 0.1]], 610, function (g, m) { if (m === 15) { g.line(1, 2, 3, 4, A('#5e5850', 170)); g.line(3, 4, 6, 3, A('#5e5850', 170)); } });
     softSet('t_barren_3', [A('#6e6860', 185), [A('#4a4440', 205), 0.25], [A('#8a8478', 175), 0.08]], 620, function (g, m) { if (m === 15) { g.set(2, 5, A('#2a2628', 220)); g.set(3, 5, A('#2a2628', 220)); g.set(6, 2, A('#2a2628', 220)); } });
     softSet('t_soot', [A('#3a363a', 120), [A('#242024', 160), 0.25], [A('#5a565a', 100), 0.1]], 630);
+    // Graben (Ausbau 9): t_trench_<maske>, Maske = Nachbarn, die auch Graben sind (Bit0 N, Bit1 O, Bit2 S, Bit3 W).
+    // Feines Raster: ausgehobene Rinne mit dunklem Grund, Erdwall und Sandsäcken am Rand; Maske 0 = Schützenloch.
+    var TRC9 = { pit: A('#3e2c1e', 235), pitD: A('#2a1e14', 240), wall: A('#7a5a3a', 225), wallL: A('#9a7650', 215), bag: A('#cdb88a', 240), bagD: A('#9e8a60', 240), plank: A('#6e4a2a', 240) };
+    function trenchGrid(m) {
+      var g = new Grid(16, 16), x, y;
+      function inCh(px, py) { var c = px >= 4 && px <= 11 && py >= 4 && py <= 11; if (c) return true; if ((m & 1) && px >= 4 && px <= 11 && py < 4) return true; if ((m & 4) && px >= 4 && px <= 11 && py > 11) return true; if ((m & 2) && py >= 4 && py <= 11 && px > 11) return true; if ((m & 8) && py >= 4 && py <= 11 && px < 4) return true; return false; }
+      if (!m) { g.ellipse(8, 8, 5, 4.2, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.55 ? (((px + py) & 1) ? TRC9.bag : TRC9.bagD) : (ny < -0.2 ? TRC9.pitD : TRC9.pit); }); return g; }
+      for (y = 0; y < 16; y++) for (x = 0; x < 16; x++) {
+        if (inCh(x, y)) { var top = !inCh(x, y - 1); g.set(x, y, top ? TRC9.pitD : (((x * 3 + y) % 7 === 0) ? TRC9.plank : TRC9.pit)); continue; }
+        var near = inCh(x + 1, y) || inCh(x - 1, y) || inCh(x, y + 1) || inCh(x, y - 1) || inCh(x + 1, y + 1) || inCh(x - 1, y - 1);
+        if (near) g.set(x, y, inCh(x, y + 1) || inCh(x, y + 2) ? TRC9.wallL : ((hash(x >> 1, y >> 1, 655) < 0.55) ? TRC9.bag : TRC9.bagD));
+        else if (inCh(x, y + 2) || inCh(x + 2, y) || inCh(x - 2, y) || inCh(x, y - 2)) { if (hash(x, y, 656) < 0.5) g.set(x, y, TRC9.wall); }
+      }
+      return g;
+    }
+    L.lazyDef('t_trench', function (key) {
+      var mm = /^t_trench(?:_(\d+))?$/.exec(key); if (!mm) return null;
+      return { grid: trenchGrid(mm[1] == null ? 15 : +mm[1] & 15), scale: 0.5, ox: 0, oy: 0 };
+    });
     softSet('t_cleared', [A('#8a6a44', 200), [A('#6e5232', 220), 0.25], [A('#a8865a', 190), 0.15]], 640, function (g, m) { if (m === 15) { g.line(1, 1, 3, 2, A('#5a3e24', 230)); g.set(6, 5, A('#4f9a3c', 220)); g.set(5, 6, A('#4f9a3c', 220)); } });
     // Dunst mit weichen Rändern (ersetzt die harten Kacheln, Schlüssel t_smog_<n> bleiben = volle Fläche)
     softSet('t_smog_1', [A('#b8b08a', 70), [A('#a49c7a', 95), 0.25], [A('#c8c0a0', 60), 0.1]], 650);
