@@ -3,6 +3,9 @@
 // Daten: WW.RAIL in js/core/config-industry.js (Regierungen, Takte, Kosten), WW.STRUCT_INFO.station/.rail.
 // Takt aus js/sim/industry.js (WW.Industry.tick ruft WW.Rail.tick). Lädt nach js/sim/industry.js, vor sim.js.
 //
+// STRECKEN verbinden Bahnhöfe verschiedener Städte (Abstand RAIL.MIN_DIST..MAX_DIST, Manhattan) desselben Reichs als
+//   Spannbaum, dazu je verbündetes Bahn-Reich das nächste Bahnhofspaar (line.ally = Reichs-ID). Ein Reich mit nur einer
+//   Stadt wartet auf die zweite. Bahnhöfe liegen auf der der Nachbarstadt zugewandten Seite.
 // WER: Reiche mit Regierung in WW.RAIL.GOVS (Standard: Kommunismus, Faschismus) und mindestens zwei Städten ab
 //   Stufe „Stadt" (tier ≥ WW.RAIL.MIN_TIER). Weltgesetz 'industry' aus = keine neuen Bahnen, Züge stehen.
 //   Wechselt die Regierung weg von der Bahn, bleiben die Gleise liegen, Züge fahren nicht mehr.
@@ -12,6 +15,8 @@
 //            mask  Bit0 N, Bit1 O, Bit2 S, Bit3 W: Nachbar ist Gleis oder Bahnhof (Kurven/Kreuzungen zeichnen)
 //            bridge true = auf Fluss (Brücke zeichnen)
 //            line  ID der Strecke (state.rail.lines[].id)
+//            railGate true = Gleis kreuzt einen Mauerring (Mauer lässt dort eine Lücke; als Gleistor zeichnen). BEKANNTE
+//            SCHWÄCHE: die Lücke sperrt Feinde nicht (Sperr-Raster gehört structs.js/walls.js).
 //   Gleise entstehen Stück für Stück als Baustellen (höchstens RAIL.SITES je Strecke gleichzeitig) und werden von den
 //   Baumeistern gebaut (Lager-Insassen helfen, siehe js/sim/camps.js). Wald auf der Trasse wird gerodet (state.cleared).
 //   Zerstörtes Gleis (Krieg, Kräfte) = Lücke: Züge halten davor, die Stadt setzt eine neue Baustelle (Reparatur).
@@ -20,7 +25,7 @@
 //                  opened (Eröffnung in der Chronik), broken (Lücke gemeldet) }], seq, fail { 'a-b': Jahr } }
 //   state.trains[] = { id, kingdomId, kind 'freight'|'troop', x, y (Kachelkoord., Fließkomma), dir 0 O | 1 S | 2 W | 3 N,
 //                  cars (Wagen), cargo { food, wood, stone, gold }, from, to (Bahnhof-IDs), t ('load'|'run'|'blocked'),
-//                  line (ID), pos (Index entlang line.tiles, Fließkomma), fw (+1 a->b | -1), wait (Ticks), troops [Einheiten-IDs] }
+//                  line (ID), pos (Index entlang line.tiles, Fließkomma), fw (+1 a->b | -1), wait (Ticks), troops [Einheiten-IDs], coal (fährt mit Kohle: schneller) }
 //   Einheiten im Zug: u.ind = 'train', u.train = Zug-ID (laufen nicht selbst; js/sim/units.js überspringt sie, markierte Zeile)
 // NUTZEN: Güterzug gleicht beim Abfahren Vorräte aus (Überschuss der Abfahrtsstadt -> Zielstadt; Kommunismus hat ohnehin ein
 //   gemeinsames Lager). Truppenzug: im Krieg steigen marschierende Soldaten am Bahnhof zu, wenn der andere Bahnhof näher am
@@ -167,8 +172,8 @@
     updateMask(sim, i); updateMask(sim, i - 1); updateMask(sim, i + 1); updateMask(sim, i - W); updateMask(sim, i + W);
   }
 
-  function placeStation(sim, city, k) {
-    const i = WW.Industry.findSpot(sim, city, 2, 2);
+  function placeStation(sim, city, k, partner) {
+    const i = WW.Industry.findSpot(sim, city, 2, 2, partner ? { toward: { x: partner.cx + 0.5, y: partner.cy + 0.5 } } : null);
     if (i < 0) return null;
     const st = sim.state, W = st.W, x = i % W, y = Math.floor(i / W);
     for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
@@ -198,6 +203,19 @@
       if (s && s.type !== 'field' && s.type !== 'ruin') return false;   // etwas anderes steht im Weg
       missing++;
       need.push(n);
+    }
+    // Gleisbautrupp: Baustellen direkt an fertigem Gleis/Bahnhof kommen zusätzlich voran (Baumeister haben oft Mauern vor)
+    for (let n = 0; n < line.tiles.length; n++) {
+      const s = sim._structs.get(st.structAt[line.tiles[n]]);
+      if (!s || s.type !== 'rail' || s.built) continue;
+      const i = line.tiles[n], x = i % W;
+      const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W];
+      if (!nb.some((j) => { const o = j >= 0 && sim._structs.get(st.structAt[j]); return o && o.built && (o.type === 'rail' || o.type === 'station'); })) continue;
+      const c = sim._cities.get(s.cityId);
+      if (!s.paid && c && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
+      if (!s.paid) continue;
+      s.progress = Math.min(1, (s.progress || 0) + R().CREW);
+      if (s.progress >= 1) { WW.Structs.complete(sim, s); open--; masksAround(sim, i); }
     }
     line.done = missing === 0 && open === 0;
     if (!missing) return true;
@@ -238,7 +256,10 @@
         let s = stationOf(sim, c);
         const g = WW.GOVERNMENTS[k.gov];
         const ringReady = !(g && g.wallMax > 0) || (c.wall && c.wall.plan && c.wall.plan.length) || c.pop >= 60;   // sonst reißt die erste Mauer ihn ab
-        if (!s && ringReady && (c.railNext | 0) <= st.tick) { s = placeStation(sim, c, k); if (!s) c.railNext = st.tick + (TPY() >> 1); }
+        // Bahnhof auf der Seite der nächsten anderen Stadt des Reichs
+        let partner = null, pd = 1e9;
+        for (const o of cities) { if (o === c) continue; const d = Math.abs(o.cx - c.cx) + Math.abs(o.cy - c.cy); if (d < pd) { pd = d; partner = o; } }
+        if (!s && ringReady && (c.railNext | 0) <= st.tick) { s = placeStation(sim, c, k, partner); if (!s) c.railNext = st.tick + (TPY() >> 1); }
         if (s) stations.push(s);
       }
       if (stations.length < 2) continue;
@@ -252,7 +273,7 @@
         }
         const a = inT[bi], b = rest[bj];
         rest.splice(bj, 1); inT.push(b);
-        if (bd > R().MAX_DIST) continue;
+        if (bd > R().MAX_DIST || bd < R().MIN_DIST || a.cityId === b.cityId) continue;   // keine Mini-Strecken
         let line = st.rail.lines.find((l) => (l.a === a.id && l.b === b.id) || (l.a === b.id && l.b === a.id));
         const key = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
         if (!line) {
@@ -269,8 +290,36 @@
         }
       }
     }
+    // Verbündete mit Bahn: nächstes Bahnhofspaar verbinden (Zug gleicht dann auch zwischen den Reichen aus)
+    for (const k of st.kingdoms) {
+      if (!govOk(sim, k)) continue;
+      for (const oid in k.relations) {
+        const o = sim._kingdoms.get(+oid);
+        if (!o || o.id < k.id || k.relations[oid].status !== 'alliance' || !govOk(sim, o)) continue;
+        const mine = st.structs.filter((s) => !s.dead && s.type === 'station' && (sim._cities.get(s.cityId) || {}).kingdomId === k.id);
+        const theirs = st.structs.filter((s) => !s.dead && s.type === 'station' && (sim._cities.get(s.cityId) || {}).kingdomId === o.id);
+        let a = null, b = null, bd = 1e9;
+        for (const p of mine) for (const q of theirs) { const d = Math.abs(p.x - q.x) + Math.abs(p.y - q.y); if (d < bd) { bd = d; a = p; b = q; } }
+        if (!a || bd > R().MAX_DIST || bd < R().MIN_DIST) continue;
+        let line = st.rail.lines.find((l) => (l.a === a.id && l.b === b.id) || (l.a === b.id && l.b === a.id));
+        const key = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
+        if (!line) {
+          if (st.rail.fail[key] != null && st.year - st.rail.fail[key] < 5) continue;
+          const p = path(sim, a, b, k.id);
+          if (!p) { st.rail.fail[key] = st.year; continue; }
+          line = { id: ++st.rail.seq, kingdomId: k.id, a: a.id, b: b.id, tiles: p, done: false, opened: false, broken: false, ally: o.id };
+          st.rail.lines.push(line);
+        }
+        if (!buildLine(sim, line)) { const p = path(sim, a, b, k.id); if (p) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year; }
+      }
+    }
     // Masken der Strecken frisch halten (zerstörte Gleise, neue Nachbarn)
-    for (const l of st.rail.lines) for (const i of l.tiles) updateMask(sim, i);
+    const rings = ringTiles(sim);
+    for (const l of st.rail.lines) for (const i of l.tiles) {
+      updateMask(sim, i);
+      const r = sim._structs.get(st.structAt[i]);
+      if (r && r.type === 'rail') { const g = rings.has(i); if (!!r.railGate !== g) { r.railGate = g; sim.markDirty(i); } }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -298,8 +347,8 @@
     if (!from || !to) return false;
     const sf = WW.Cities.stock(sim, from);
     // Brennstoff: Kohle, sonst Holz
-    if ((sf.coal | 0) >= C.FUEL) sf.coal -= C.FUEL;
-    else if (sf.wood >= C.FUEL) sf.wood -= C.FUEL;
+    if (typeof sf.coal === 'number' && sf.coal >= C.FUEL) { sf.coal -= C.FUEL; tr.coal = true; }
+    else if (sf.wood >= C.FUEL) { sf.wood -= C.FUEL; tr.coal = false; }
     else return false;
     tr.cargo = { food: 0, wood: 0, stone: 0, gold: 0 };
     if (tr.kind === 'freight') {
@@ -386,7 +435,7 @@
       if (tr.t === 'load') {
         if (--tr.wait <= 0 && !depart(sim, tr, line)) tr.wait = C.WAIT;
       } else {
-        const np = tr.pos + tr.fw * C.SPEED;
+        const np = tr.pos + tr.fw * C.SPEED * (tr.coal ? C.COAL_SPEED : 1);
         const n = tr.fw > 0 ? Math.min(L - 1, Math.ceil(np)) : Math.max(0, Math.floor(np));
         if (!trackOk(sim, line, n)) {
           if (tr.t !== 'blocked') {

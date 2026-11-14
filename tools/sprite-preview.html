@@ -623,8 +623,9 @@
       '     #G####     ',
       '                '];
     var terr = walls.map(function (row) { return row.replace(/./g, '.'); });
-    [['tribe', 1], ['monarchy', 2], ['democracy', 2], ['fascism', 3], ['communism', 2], ['theocracy', 3], ['republic', 2], ['anarchy', 1], ['player', 2]].forEach(function (st, n) {
-      var k = canvas(16 * 8, 12 * 8, 2);
+    var RSET = Q.get('ringmax') ? [['tribe', 4], ['monarchy', 6], ['democracy', 6], ['fascism', 6], ['communism', 6], ['theocracy', 6], ['republic', 6], ['anarchy', 4], ['monarchy', 2]] : [['tribe', 1], ['monarchy', 2], ['democracy', 2], ['fascism', 3], ['communism', 2], ['theocracy', 3], ['republic', 2], ['anarchy', 1], ['player', 2]];
+    RSET.forEach(function (st, n) {
+      var k = canvas(16 * 8, 12 * 8, +Q.get('ringscale') || 2);
       var rows = terr.map(function () { var a = []; for (var i = 0; i < 16; i++) a.push(WW.T.GRASS); return a; });
       groundRect(k.x, rows, 0, 0);
       function wallish(x, y) { var c = walls[y] && walls[y][x]; return c === '#' || c === 'T' || c === 'G'; }

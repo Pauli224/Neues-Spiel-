@@ -22,6 +22,7 @@
 //   level    1 | 2
 //   active   true = in Betrieb (raucht, wirkt). Nur wenn fertig, Regierung mit Industrie, Gesetz an, genug Einwohner
 //   filtered true = Filter eingebaut (halber Ausstoß; Demokratie)
+//   coal     true = läuft mit Kohle aus stock.coal (Ertrag ×1,5 je Fabrik, Ausstoß ×1,25; fehlt Kohle: Holz wie zuvor)
 //   closed   0 | Tick der Stilllegung (Regierung ohne Industrie). Nach CFG.CLOSE_YEARS Jahren -> Ruinen.
 //   opened   1, sobald die Eröffnung in der Chronik stand
 //   Baustelle wie jedes Bauwerk (!built), die Baumeister der Stadt bauen sie. Lage: außerhalb des Mauerrings am
@@ -159,7 +160,8 @@
   // ---------------------------------------------------------------------------
   // Bauplatz: außerhalb des Mauerrings am Stadtrand, bevorzugt am Fluss
   // ---------------------------------------------------------------------------
-  function findSpot(sim, city, w, h) {
+  // opt: { toward: { x, y } } – Bauplatz auf der Seite, die diesem Punkt zugewandt ist (Bahnhof Richtung Nachbarstadt)
+  function findSpot(sim, city, w, h, opt) {
     const st = sim.state, W = st.W, H = st.H, owner = st.owner, inRing = st.inRing, id = city.id;
     const T = WW.T;
     const plan = new Set((city.wall && city.wall.plan) || []);
@@ -196,7 +198,8 @@
         if (t === T.RIVER) river++;
         else if (WW.TERRAIN_LUT.wood[t]) wood++;
       }
-      const score = -Math.abs(d - want) - Math.max(0, d - want - 4) * 2 + (river ? 3 + Math.min(2, river * 0.2) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === id ? 0 : 2);
+      const tw = opt && opt.toward ? -Math.hypot(mx - opt.toward.x, my - opt.toward.y) * 0.6 : 0;
+      const score = tw - Math.abs(d - want) - Math.max(0, d - want - 4) * 2 + (river ? 3 + Math.min(2, river * 0.2) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === id ? 0 : 2);
       if (score > bs) { bs = score; best = y * W + x; }
     }
     return best;
@@ -306,12 +309,20 @@
       if (closedNow) chron(sim, 'indClose', Object.assign({ city: city.name }, kindVars(closedNow.kind)), city, k, 'Fabriken ruhen und verfallen; Luft wird besser');
       // Ertrag
       const gk = spec ? k.gov : '';
-      if (n !== (city.indActive | 0) || (n && city.indGov !== gk)) {
+      // Kohle (stock.coal, falls die Simulation sie kennt): Fabriken laufen stärker (Ertrag ×COAL_BOOST je Fabrik),
+      // qualmen aber mehr; ohne Kohle (fehlt oder 0) heizen sie mit Holz wie bisher
+      const sk = n ? WW.Cities.stock(sim, city) : null;
+      const coal = !!(sk && typeof sk.coal === 'number' && sk.coal >= n * CF().COAL_USE);
+      if (coal) sk.coal = Math.max(0, sk.coal - n * CF().COAL_USE);
+      for (const f of fs) if (!f.dead && f.coal !== (coal && !!f.active)) f.coal = coal && !!f.active;
+      if (n !== (city.indActive | 0) || (n && city.indGov !== gk) || coal !== !!city.indCoal) {
+        city.indCoal = coal;
         if (WW.Mods) {
           WW.Mods.remove(city, 'industry');
+          const e = n * (coal ? CF().COAL_BOOST : 1);
           if (n && spec) for (const m of spec.mods) {
-            const mod = { key: m.key, source: 'industry', name: n > 1 ? n + ' Fabriken' : 'Fabrik' };
-            if (m.mul) mod.mul = Math.pow(m.mul, n); if (m.add) mod.add = m.add * n;
+            const mod = { key: m.key, source: 'industry', name: (n > 1 ? n + ' Fabriken' : 'Fabrik') + (coal ? ' (Kohle)' : '') };
+            if (m.mul) mod.mul = Math.pow(m.mul, e); if (m.add) mod.add = m.add * e;
             WW.Mods.add(city, mod);
           }
         }
@@ -368,7 +379,7 @@
   // ---------------------------------------------------------------------------
   function emission(s) {
     const K = WW.INDUSTRY.KINDS[s.kind] || WW.INDUSTRY.KINDS.fabrik;
-    return K.emit * (s.level >= 2 ? 1.5 : 1) * (s.filtered ? 0.5 : 1);
+    return K.emit * (s.level >= 2 ? 1.5 : 1) * (s.filtered ? 0.5 : 1) * (s.coal ? CF().COAL_EMIT : 1);
   }
   function step(sim) {
     const st = sim.state, C = CF(), d = dims(st), pw = d.pw, ph = d.ph, N = pw * ph;

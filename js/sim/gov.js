@@ -124,8 +124,8 @@
     const og = WW.GOVERNMENTS[old], ng = WW.GOVERNMENTS[gov];
     // Lager zusammenlegen / aufteilen
     if (ng.sharedStock && !og.sharedStock) {
-      k.stock = { food: 0, wood: 0, stone: 0, gold: 0 };
-      for (const id of k.cityIds) { const c = sim._cities.get(id); if (!c) continue; for (const r in k.stock) k.stock[r] += c.stock[r]; }
+      k.stock = WW.Cities.emptyStock();
+      for (const id of k.cityIds) { const c = sim._cities.get(id); if (!c) continue; for (const r in k.stock) k.stock[r] += (c.stock[r] || 0); }
       k.stock.gold = 0;
     } else if (!ng.sharedStock && og.sharedStock && k.stock) {
       let pop = 0;
@@ -133,7 +133,7 @@
       for (const id of k.cityIds) {
         const c = sim._cities.get(id); if (!c) continue;
         const f = Math.max(1, c.pop) / Math.max(1, pop);
-        for (const r in c.stock) c.stock[r] = k.stock[r] * f;
+        for (const r in c.stock) c.stock[r] = (k.stock[r] || 0) * f;
       }
       k.stock = null;
     }

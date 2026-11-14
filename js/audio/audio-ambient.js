@@ -238,7 +238,6 @@
     add('hammer', m.sites * 0.25 * n, 0.4);
     add('chop', (m.forest + m.taiga) * m.city * 0.15 * n, 0.5);
     add('sword', m.battleNear * 0.8 * n, 0.4);
-    add('whistle', m.factory * 0.01 * n, 0.4);
     // Tierrufe
     for (const a of m.calls) {
       const c = CALLS[a.kind];

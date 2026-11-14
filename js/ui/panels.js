@@ -343,6 +343,7 @@
     const stock = (k && k.stock && WW.GOVERNMENTS[k.gov].sharedStock) ? k.stock : c.stock;
     // Rohstoffe aus WW.RESOURCES (sonst die vier Grundstoffe); kompakt als Icon-Raster
     let res = [['food', 'Essen', 'i_food'], ['wood', 'Holz', 'i_wood'], ['stone', 'Stein', 'i_stone'], ['gold', 'Gold', 'i_gold']];
+    for (const r of [['iron', 'Eisen'], ['coal', 'Kohle'], ['fish', 'Fisch'], ['crystal', 'Kristall'], ['wool', 'Wolle']]) if (stock[r[0]] != null) res.push([r[0], r[1], 'i_' + r[0]]);
     if (WW.RESOURCES) {
       const L = Array.isArray(WW.RESOURCES) ? WW.RESOURCES : Object.keys(WW.RESOURCES).map(k => Object.assign({ key: k }, WW.RESOURCES[k]));
       res = L.filter(r => r && r.key && (stock[r.key] != null || ['food', 'wood', 'stone', 'gold'].indexOf(r.key) >= 0)).map(r => [r.key, r.name || r.key, r.icon || 'i_' + r.key]);
@@ -360,10 +361,13 @@
     { const nb = natureBlock(c.nature); if (nb) body.appendChild(nb); }
     { const ab = airBlock(c.pollution); if (ab) body.appendChild(ab); }
     {
-      const camps = sim.state.structs.filter(s => s.type === 'laborcamp' && s.cityId === c.id && !s.dead).length;
-      if (camps) {
-        let pr = 0; for (const u of sim.state.units) if (!u.dead && u.role === 'prisoner' && u.cityId === c.id) pr++;
-        body.appendChild(h('div.sec', [h('h3', 'Arbeitslager'), h('div', camps + (camps === 1 ? ' Lager' : ' Lager') + ' · ' + pr + ' Insassen')]));
+      const camps = sim.state.structs.filter(s => s.type === 'laborcamp' && s.cityId === c.id && !s.dead);
+      if (camps.length) {
+        let inm = 0, cap = 0;
+        for (const s of camps) { inm += s.inmates | 0; cap += s.cap | 0; }
+        body.appendChild(h('div.sec', [h('h3', 'Arbeitslager'),
+          h('dl.kv', [h('dt', 'Lager'), h('dd', String(camps.length)), h('dt', 'Insassen'), h('dd', inm + (cap ? ' von ' + cap + ' Plätzen' : ''))]),
+          h('div.muted', { style: { marginTop: '4px' } }, 'Politische Gefangene arbeiten unter Zwang. Die Stadt lebt in Angst: Zufriedenheit und Loyalität sinken, solange das Lager steht; Nachbarn verurteilen es.')]));
       }
     }
     { const fb = factoryList(sim, s => s.cityId === c.id); if (fb) body.appendChild(fb); }
@@ -474,8 +478,8 @@
       item('i_map', 'Minikarte', 'Ein- oder ausblenden', () => { this.toggleMinimap(); this.closeModal(); }),
       game.sim && game.sim.state.pollution ? item(WW.Sprites.has('i_view_air') ? 'i_view_air' : 'i_map', 'Luftkarte', 'Verschmutzung und Wind zeigen', () => { game.toggleAirView(); this.closeModal(); }) : null,
       game.v3 && game.v3.available() ? item('i_map', 'Ansicht: ' + (game.mode === '3d' ? '3D' : 'Pixel'), 'Umschalten auf ' + (game.mode === '3d' ? 'Pixel' : '3D') + ' (Taste V)', () => { game.toggleMode(); this.closeModal(); }) : null,
-      item('i_newworld', 'Grafik', 'Tag/Nacht, Wetter, Qualität', () => this.openGraphics()),
-      WW.Audio ? item(WW.Sprites.has('i_sound') ? 'i_sound' : 'i_chronicle', 'Ton', game.audioSet.on ? 'An · Lautstärken einstellen' : 'Aus', () => this.openSound()) : null,
+      item(WW.Sprites.has('i_night') ? 'i_night' : 'i_newworld', 'Grafik', 'Tag/Nacht, Wetter, Qualität', () => this.openGraphics()),
+      WW.Audio ? item(WW.Sprites.has('i_music') ? 'i_music' : 'i_chronicle', 'Ton', game.audioSet.on ? 'An · Lautstärken einstellen' : 'Aus', () => this.openSound()) : null,
       item('i_inspect', 'Kurzanleitung', 'Die drei wichtigsten Tipps', () => this.showWelcome())
     ]);
     const keys = h('p.muted', { style: { marginTop: '12px', marginBottom: '0' } },
@@ -491,7 +495,7 @@
     const box = h('div');
     const render = () => {
       D().clear(box);
-      box.appendChild(h('div.law', [h('div.lt', [h('b', 'Ton'), h('span', 'Musik, Umgebung und Effekte, alles im Spiel erzeugt.')]),
+      box.appendChild(h('div.law', [h('div.lt', [h('b', 'Ton'), h('span', 'Neuer Ton aus echten Aufnahmen: Musik, Umgebung und Effekte. Beim ersten Start aus.')]),
         h('button.btn.switch' + (a.on ? '.on' : ''), { type: 'button', role: 'switch', 'aria-checked': a.on ? 'true' : 'false', on: { click: () => { a.on = !a.on; game.audioApply(); render(); } } }, a.on ? 'An' : 'Aus')]));
       for (const r of [['master', 'Gesamt'], ['music', 'Musik'], ['ambient', 'Umgebung'], ['effects', 'Effekte']]) {
         const val = h('em', Math.round(a[r[0]] * 100) + ' %');
@@ -501,7 +505,7 @@
       }
     };
     render();
-    this.openModal('Ton', [box], { icon: WW.Sprites.has('i_sound') ? 'i_sound' : 'i_menu' });
+    this.openModal('Ton', [box], { icon: WW.Sprites.has('i_music') ? 'i_music' : 'i_menu' });
   };
   // Grafik der Pixel-Ansicht: Tag/Nacht, Wetter, Wolkenschatten, Wasser, Qualität
   Panels.prototype.openGraphics = function () {
@@ -527,7 +531,7 @@
         h('button.btn', { type: 'button', on: { click: () => { game.toggleMode(); render(); } } }, game.mode === '3d' ? 'Pixel' : '3D')]));
     };
     render();
-    this.openModal('Grafik', [box], { icon: 'i_newworld' });
+    this.openModal('Grafik', [box], { icon: WW.Sprites.has('i_weather') ? 'i_weather' : 'i_newworld' });
   };
 
   Panels.prototype.openChronicle = function () {

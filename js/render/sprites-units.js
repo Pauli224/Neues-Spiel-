@@ -1652,16 +1652,18 @@
       }
       return g;
     }
-    function nuke(f) {   // 10 Phasen: Blitzball, Säule, Pilz, Abkühlen, Zerfasern
-      var g = new Grid(80, 96), t = f / 9;
-      var capY = 82 - Math.min(1, t * 2) * 48, capR = 9 + Math.min(1, t * 1.6) * 17;
+    function nuke(f, k) {   // 10 Phasen: Blitzball, Säule, Pilz, Abkühlen, Zerfasern; k = Größenfaktor (große Fassung 1,8)
+      k = k || 1;
+      var GWn = Math.round(80 * k), GHn = Math.round(96 * k), cxn = GWn / 2, g = new Grid(GWn, GHn), t = f / 9, ground = GHn - 6 * k;
+      var capY = ground - 4 * k - Math.min(1, t * 2) * 48 * k, capR = (9 + Math.min(1, t * 1.6) * 17) * k;
       var pal = f < 2 ? [FXC.fire[0], FXC.fire[1], FXC.fire[2], FXC.fire[3]] : (f < 4 ? [FXC.fire[1], FXC.fire[2], FXC.fire[3], FXC.fire[4]] : (f < 6 ? FXC.cool : [FXC.smoke[0], FXC.smoke[1], FXC.smoke[2], FXC.smoke[3]]));
-      if (f >= 1) for (var y = Math.round(capY + capR * 0.5); y < 92; y++) { var w2 = 4 + (y > 84 ? (y - 84) * 2.2 : 0) + Math.sin(y * 0.6 + f) * 0.8; for (var x = Math.round(40 - w2); x <= Math.round(40 + w2); x++) g.set(x, y, x < 38 ? pal[1] : (x < 42 ? pal[0] : pal[2])); }
-      if (f >= 2) g.ellipse(40, 90, 30 + t * 8, 5, function (x, yy, nx, ny) { return ny < 0 ? pal[2] : pal[3]; });
-      [[-0.55, 0.25, 0.62], [0.55, 0.25, 0.62], [0, 0, 0.8], [-0.25, -0.35, 0.5], [0.3, -0.3, 0.45]].forEach(function (b, k) {
-        g.ellipse(40 + b[0] * capR, capY + b[1] * capR, capR * b[2], capR * b[2] * 0.85, function (x, yy, nx, ny) { var s = nx * 0.6 + ny + (hash(x >> 1, yy >> 1, 1140 + k) - 0.5) * 0.4; return s < -0.6 ? pal[0] : (s < 0.1 ? pal[1] : (s < 0.6 ? pal[2] : pal[3])); });
+      if (f >= 1) for (var y = Math.round(capY + capR * 0.5); y < ground + 2 * k; y++) { var w2 = 4 * k + (y > ground - 6 * k ? (y - ground + 6 * k) * 2.2 : 0) + Math.sin(y * 0.6 / k + f) * 0.8 * k; for (var x = Math.round(cxn - w2); x <= Math.round(cxn + w2); x++) g.set(x, y, x < cxn - 2 * k ? pal[1] : (x < cxn + 2 * k ? pal[0] : pal[2])); }
+      if (f >= 2) g.ellipse(cxn, ground, (30 + t * 8) * k, 5 * k, function (x, yy, nx, ny) { return ny < 0 ? pal[2] : pal[3]; });
+      [[-0.55, 0.25, 0.62], [0.55, 0.25, 0.62], [0, 0, 0.8], [-0.25, -0.35, 0.5], [0.3, -0.3, 0.45], [-0.75, 0.05, 0.35], [0.78, 0.0, 0.35]].forEach(function (b2, kk) {
+        if (kk > 4 && k < 1.5) return;
+        g.ellipse(cxn + b2[0] * capR, capY + b2[1] * capR, capR * b2[2], capR * b2[2] * 0.85, function (x, yy, nx, ny) { var s2 = nx * 0.6 + ny + (hash(x >> 1, yy >> 1, 1140 + kk) - 0.5) * 0.4; return s2 < -0.6 ? pal[0] : (s2 < 0.1 ? pal[1] : (s2 < 0.6 ? pal[2] : pal[3])); });
       });
-      if (f >= 7) for (var i = 0; i < g.d.length; i++) if (g.d[i] && hash(i % 80 >> 1, (i / 80 | 0) >> 1, 1150 + f) < (f - 6) * 0.22) g.d[i] = 0;
+      if (f >= 7) for (var i = 0; i < g.d.length; i++) if (g.d[i] && hash((i % GWn) >> 1, ((i / GWn) | 0) >> 1, 1150 + f) < (f - 6) * 0.22) g.d[i] = 0;
       return g;
     }
     function boltHi(f) {
@@ -1703,7 +1705,8 @@
       if ((m = /^hx_fire_(\d)$/.exec(key))) g = fireHi(+m[1]);
       else if ((m = /^hx_smoke_(\d)$/.exec(key))) g = smokeHi(+m[1], 0);
       else if ((m = /^hx_blast_([sml])_(\d)$/.exec(key))) { g = blast(m[1], +m[2]); anchor = 'center'; }
-      else if ((m = /^hx_nuke_(\d)$/.exec(key))) g = nuke(+m[1]);
+      else if ((m = /^hx_nuke_(\d)$/.exec(key))) g = nuke(+m[1], 1);
+      else if ((m = /^hx_nukel_(\d)$/.exec(key))) g = nuke(+m[1], 1.8);
       else if ((m = /^hx_bolt_(\d)$/.exec(key))) g = boltHi(+m[1]);
       else if ((m = /^hx_(rain|snow)_(\d)(?:_(\d))?$/.exec(key))) return { grid: particles(m[1], +m[2], m[3] ? +m[3] : 0), scale: 0.5, ox: 0, oy: 0 };
       else if ((m = /^hx_glow_(warm|cold)$/.exec(key))) { g = glowHi(m[1] === 'cold'); anchor = 'center'; }
@@ -1717,7 +1720,7 @@
     for (fi2 = 0; fi2 < 4; fi2++) { A2['fx_smoke_' + fi2] = 'hx_smoke_' + fi2; A2['fx_chimney_' + fi2] = 'hx_chimney_' + fi2; }
     ['s', 'm', 'l'].forEach(function (sz) { for (var f = 0; f < 8; f++) A2['fx_blast_' + sz + '_' + f] = 'hx_blast_' + sz + '_' + f; });
     for (fi2 = 0; fi2 < 4; fi2++) { A2['fx_explosion_' + fi2] = 'hx_blast_m_' + fi2 * 2; A2['fx_explosion_l_' + fi2] = 'hx_blast_l_' + fi2 * 2; }
-    for (fi2 = 0; fi2 < 10; fi2++) A2['fx_nuke_' + fi2] = 'hx_nuke_' + fi2;
+    for (fi2 = 0; fi2 < 10; fi2++) { A2['fx_nuke_' + fi2] = 'hx_nuke_' + fi2; A2['fx_nuke_l_' + fi2] = 'hx_nukel_' + fi2; }
     for (fi2 = 0; fi2 < 6; fi2++) A2['fx_mushroom_' + fi2] = 'hx_nuke_' + Math.round(fi2 * 9 / 5);
     A2.fx_bolt = 'hx_bolt_0'; A2.fx_bolt_0 = 'hx_bolt_0'; A2.fx_bolt_1 = 'hx_bolt_1';
     for (var wv = 0; wv < 4; wv++) for (var wf = 0; wf < 2; wf++) { A2['fx_rain_' + wf + '_' + wv] = 'hx_rain_' + wf + '_' + wv; A2['fx_snow_' + wf + '_' + wv] = 'hx_snow_' + wf + '_' + wv; }
@@ -1783,7 +1786,7 @@
     ['a', 'b'].forEach(function (v) { L.ALIAS['s_camp_' + v] = 'ht_camp_' + v + '_0'; L.ALIAS['s_camp_' + v + '_0'] = 'ht_camp_' + v + '_0'; L.ALIAS['s_camp_' + v + '_1'] = 'ht_camp_' + v + '_1'; });
 
     // Phasenzahl je Effekt für den Renderer
-    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, bolt: 2, rain: 2, snow: 2 }[name] || 1; };
+    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, nuke_l: 10, bolt: 2, rain: 2, snow: 2, treefall: 5 }[name] || 1; };
   });
 
   WW.SPRITE_RACES = RACES;

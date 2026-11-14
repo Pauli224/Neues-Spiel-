@@ -2937,6 +2937,206 @@
       SWAP0['s_center_fascism_p' + from] = 's_center_fascism_p' + to;
     });
     L.setTeamSwap(0, SWAP0);
+    // ======================================================================
+    // Feiner Mauer-Baukasten (Maßstab 0,5): eigene Extrusion im 16er-Raster, Fasen an Ecken (keine Klotz-Treppen),
+    // Materialtexturen, Zinnen, Pfähle mit Spitzen, Schrott-Barrikaden, Wehrgang, Vormauer, Torbögen mit Laibung.
+    // Gleiche Schlüssel wie bisher (Umleitung auf wh_*).
+    var MH = 6;
+    function extrudeH(cellFn, Htot) {
+      var Wm = 16 + 2 * MH, Hm = Htot + 16 + 2 * MH, off = Htot + MH;
+      var model = new Grid(Wm, Hm), own = new Grid(Wm, Hm);
+      for (var gy = -MH; gy < 16 + MH; gy++) for (var gx = -MH; gx < 16 + MH; gx++) {
+        var c = cellFn(gx, gy); if (!c) continue;
+        var isOwn = gx >= 0 && gx < 16 && gy >= 0 && gy < 16, top = gy - c.h, bot = gy - (c.base || 0);
+        for (var wy = top; wy <= bot; wy++) {
+          var col = wy === top ? c.top(gx, gy) : c.face(gx, wy - top - 1, gy, c.h);
+          if (col == null) continue;
+          var Y = wy + off; if (Y < 0 || Y >= Hm) continue;
+          model.set(gx + MH, Y, col); if (isOwn) own.set(gx + MH, Y, col);
+        }
+      }
+      var out = new Grid(16, Htot + 16);
+      for (var Y2 = 0; Y2 < Hm; Y2++) for (var X = 0; X < Wm; X++) {
+        var ox = X - MH, oy = Y2 - off + Htot; if (ox < 0 || ox >= 16 || oy < 0 || oy >= Htot + 16) continue;
+        var v = own.get(X, Y2);
+        if (v) { out.set(ox, oy, v); continue; }
+        if (model.get(X, Y2)) continue;
+        if (own.get(X + 1, Y2) || own.get(X - 1, Y2) || own.get(X, Y2 + 1) || own.get(X, Y2 - 1)) out.set(ox, oy, C.ink);
+      }
+      return out;
+    }
+    // Belegung mit Fasen: Kern + Arme; bei zwei rechtwinkligen Armen Innenecke diagonal gefüllt, Außenecke gefast
+    function occH(mask, a, b, x, y) {
+      var inX = x >= a && x <= b, inY = y >= a && y <= b;
+      if (inX && inY) {
+        var arms = (mask & 1 ? 1 : 0) + (mask & 2 ? 1 : 0) + (mask & 4 ? 1 : 0) + (mask & 8 ? 1 : 0), k = Math.max(2, (b - a) >> 1);
+        if (arms === 2 && (mask & 5) !== 5 && (mask & 10) !== 10) {   // Knick: Außenecke abschrägen
+          var cx = (mask & 2) ? a : b, cy = (mask & 1) ? b : a;
+          if (Math.abs(x - cx) + Math.abs(y - cy) < k) return false;
+        }
+        return true;
+      }
+      if (inX && y < a && (mask & 1)) return true;
+      if (inX && y > b && (mask & 4)) return true;
+      if (inY && x > b && (mask & 2)) return true;
+      if (inY && x < a && (mask & 8)) return true;
+      var f = Math.max(2, (b - a) >> 1);   // Innenecke diagonal füllen
+      if ((mask & 1) && (mask & 2) && x > b && y < a && (x - b) + (a - y) <= f) return true;
+      if ((mask & 2) && (mask & 4) && x > b && y > b && (x - b) + (y - b) <= f) return true;
+      if ((mask & 4) && (mask & 8) && x < a && y > b && (a - x) + (y - b) <= f) return true;
+      if ((mask & 8) && (mask & 1) && x < a && y < a && (a - x) + (a - y) <= f) return true;
+      return false;
+    }
+    function rimH(mask, a, b, x, y) { return !occH(mask, a, b, x + 1, y) || !occH(mask, a, b, x - 1, y) || !occH(mask, a, b, x, y + 1) || !occH(mask, a, b, x, y - 1); }
+    function cid(n) { return typeof n === 'number' ? n : C[n]; }
+    // Mauerflächen-Textur im feinen Raster
+    function faceTex(m, X, row, hh, gy) {
+      var face = cid(m.face), faceL = cid(m.faceL), joint = cid(m.joint), base = cid(m.base), hv = hash(X, row, 1401);
+      if (row >= hh - 2) return base;
+      if (row === 0) return faceL;
+      switch (m.pat) {
+        case 'brick': { var r = row - 1, c3 = Math.floor(r / 3), o = (c3 & 1) * 3; if (r % 3 === 2 || (X + o) % 6 === 5) return joint; return hash((X + o) / 6 | 0, c3, 1402) < 0.3 ? faceL : face; }
+        case 'ashlar': { var r2 = row - 1, c4 = Math.floor(r2 / 4), o2 = (c4 & 1) * 4 + (hash(c4, 0, 1403) * 3 | 0); if (r2 % 4 === 3 || (X + o2) % 8 === 7) return joint; return hash((X + o2) / 8 | 0, c4, 1404) < 0.25 ? faceL : face; }
+        case 'smooth': return (X % 10 === 9 || row % 9 === 8) ? joint : (hv < 0.05 ? joint : face);
+        case 'panel': return (X % 8 === 7 || (row - 1) % 6 === 5) ? joint : ((X % 8 === 0 || (row - 1) % 6 === 0) ? faceL : face);
+        case 'planks': case 'stakes': case 'planksH': return (X % 3 === 2) ? joint : (X % 3 === 0 ? faceL : face);
+        case 'earth': return row < 3 ? cid(m.top) : (hv < 0.12 ? joint : face);
+        case 'junk': { var hj = hash(X >> 2, row >> 2, 1405); return hj < 0.3 ? ((X + row) % 4 === 0 ? C.dusk : C.ink) : (hj < 0.62 ? ((X & 1) ? C.wood : C.woodL) : (hj < 0.78 ? C.red : (hj < 0.9 ? C.metal : C.fireY))); }
+        case 'scrap': { var hs = hash(X >> 2, row >> 3, 1406); return hs < 0.3 ? C.metalD : (hs < 0.55 ? C.metal : (hs < 0.75 ? C.stoneD : (hs < 0.88 ? C.fireO : C.metalL))); }
+        case 'art': return [C.pink, C.fireY, C.glass, C.leafL, C.purple, C.red, C.fireO, 'Tl'][(Math.floor((X + Math.sin(row * 0.5) * 3 + 16) / 4) + (row >> 3)) % 8];
+        default: return face;
+      }
+    }
+    // Stilparameter je Stil und Stufe (Dicke t, Höhe h im feinen Raster)
+    function wparams(st, lv) {
+      var T = { 1: [4, 11], 2: [6, 13], 3: [8, 16], 4: [10, 19], 5: [8, 21], 6: [12, 24] }[lv] || [6, 13];
+      var m = st === 'pali' ? PALI : (st === 'junk' ? MAT.anarchy2 : ((st === 'tribe' || st === 'anarchy') ? MAT[st + lv] : MAT[st]));
+      return { t: T[0], h: T[1] + ((m && m.dh) ? m.dh * 2 : 0) + (st === 'junk' ? -4 : 0), m: m };
+    }
+    function wallCellsH(st, lv, mask) {
+      var P = wparams(st, lv), m = P.m, a = 8 - (P.t >> 1), b = 7 + (P.t >> 1), outer = (lv === 5 && st !== 'tribe' && st !== 'anarchy') || (st === 'communism' && lv === 6);
+      if (outer) { a = 1; b = a + P.t - 1; }
+      var stakes = m.pat === 'stakes' || m.pat === 'planks', merl = m.merlon && !stakes;
+      return function (gx, gy) {
+        if (occH(mask, a, b, gx, gy)) {
+          var edge = rimH(mask, a, b, gx, gy), h = P.h, cap = null;
+          if (stakes) { var col = ((gx + gy * 3) >> 1) & 3; h += col === 0 ? 3 : (col === 2 ? 1 : 0); if ((gx + gy) % 2 === 0) h += 1; }
+          else if (st === 'junk') { h += Math.floor(hash(gx >> 2, gy >> 2, 1407) * 6) - 2; }
+          else if (merl && edge && (((gx >> 2) + (gy >> 2)) & 1) === 0) { h += lv >= 6 ? 5 : 3; cap = m.cap ? cid(m.cap) : null; }
+          return { h: h,
+            top: function (x, y) { if (stakes) return (h > P.h + 1) ? cid(m.topL) : C.woodD; if (cap) return cap; return edge ? cid(m.topL) : (((x + y) & 3) === 0 ? cid(m.joint) : cid(m.top)); },
+            face: function (x, row, y, hh) { if (stakes && row === 0) return cid(m.topL); return faceTex(m, x, row, hh, y); } };
+        }
+        if (outer) {   // niedrige Vormauer an der Außenseite (Zwinger), Gasse dazwischen
+          var a2 = 12, b2 = 15;
+          if (occH(mask, a2, b2, gx, gy) && !occH(mask, a, b, gx, gy)) {
+            var e2 = rimH(mask, a2, b2, gx, gy), mer2 = e2 && (((gx >> 2) + (gy >> 2)) & 1) === 0 && m.merlon;
+            return { h: 9 + (mer2 ? 2 : 0), top: function () { return cid(m.topL); }, face: function (x, row, y, hh) { return faceTex(m, x, row, hh, y); } };
+          }
+        }
+        if (lv === 5 && st === 'democracy' && occH(mask, 13, 15, gx, gy)) return { h: 4, top: function () { return C.leaf; }, face: function (x, row) { return row < 1 ? C.leaf : (row < 3 ? C.soil : C.woodD); } };
+        return null;
+      };
+    }
+    function wallHtot(st, lv) { return wparams(st, lv).h + 12; }
+    // Aufbauten im feinen Raster: Wehrgang (4), Fahnen (6), Stacheldraht, Goldkappen, Rohrkrone, Schießscharten
+    function crownLine(mask, a, b, h, Htot) {
+      var sp = 8, pts = [], horiz = (mask & 10) || !(mask & 5);
+      if (horiz) for (var x = 0; x < 16; x++) if (occH(mask, a, b, x, sp)) pts.push([x, sp - h + Htot]);
+      if (mask & 5) for (var gy = 0; gy < 16; gy++) if (occH(mask, a, b, sp, gy) && !(horiz && Math.abs(gy - sp) < 2)) pts.push([sp, gy - h + Htot]);
+      return pts;
+    }
+    function wallH(st, lv, mask, water) {
+      var P = wparams(st, lv), m = P.m, Htot = wallHtot(st, lv), cells = wallCellsH(st, lv, mask);
+      var a = 8 - (P.t >> 1), b = 7 + (P.t >> 1);
+      if ((lv === 5 && st !== 'tribe' && st !== 'anarchy') || (st === 'communism' && lv === 6)) { a = 1; b = a + P.t - 1; }
+      if (water) {
+        var base0 = cells, vert = water === 'v';
+        cells = function (gx, gy) {
+          var c = base0(gx, gy); if (!c || gx < 0 || gx > 15 || gy < 0 || gy > 15) return c;
+          if (vert && gy >= 4 && gy <= 11) return { h: c.h, base: 6, top: c.top, face: c.face };
+          if (!vert) { var f0 = c.face; return { h: c.h, top: c.top, face: function (x, row, y, hh) { var fb = hh - row, dx = Math.abs(x + 0.5 - 8); if (y === b && dx < 5 && fb <= 8 - dx * dx / 6) return fb <= 2 ? C.river : (fb > 7 - dx * dx / 6 ? C.stoneD : C.ink); return f0(x, row, y, hh); } }; }
+          return c;
+        };
+      }
+      var g = extrudeH(cells, Htot), pts = crownLine(mask, a, b, P.h, Htot);
+      if (st === 'fascism' && lv >= 2) pts.forEach(function (p, i) { g.set(p[0], p[1] - 2, (i & 1) ? C.metalL : C.ink); g.set(p[0], p[1] - 3, (i & 1) ? C.ink : C.metalL); if (i % 4 === 0) { g.set(p[0], p[1] - 1, C.ink); g.set(p[0], p[1] - 4, C.ink); } });
+      if (lv === 4 && st !== 'fascism' && st !== 'anarchy') pts.forEach(function (p, i) { g.set(p[0], p[1] - 7, i & 1 ? 'Td' : 'T'); g.set(p[0], p[1] - 8, 'Tl'); if (i % 6 === 0) for (var y = 1; y < 7; y++) g.set(p[0], p[1] - y, C.woodD); });
+      if (lv >= 6 && mask === 10) pts.forEach(function (p, i) { if (i === 3) { for (var y = 1; y < 12; y++) g.set(p[0], p[1] - y, C.woodD); g.paint(p[0] + 1, p[1] - 11, ['TTTu', 'TTTT', 'Ttt.']); } });   // je gerades Stück nur ein Wimpel
+      if (st === 'communism' && lv >= 4) pts.forEach(function (p) { g.set(p[0], p[1] - 1, C.stoneL); g.set(p[0], p[1] - 2, C.white); g.set(p[0], p[1] - 3, C.stone); });
+      if (st === 'theocracy' && lv >= 4) for (var i = 0; i < g.d.length; i++) if (g.d[i] === cid(m.faceL) && (i % 16) % 5 === 0) g.d[i] = C.gold;
+      if (st === 'republic' && lv >= 4) for (i = 0; i < g.d.length; i++) { var x0 = i % 16, y0 = (i / 16) | 0; if (g.d[i] === cid(m.face) && x0 % 6 === 3 && y0 % 7 === 3) { g.d[i] = C.ink; } }
+      return g;
+    }
+    // Tore im feinen Raster: Torhaus mit Bogen, Laibung (Tiefe), Gewölbeschatten, offene Flügel, Weg
+    function gateH(st, lv, vert) {
+      var P = wparams(st, lv), m = P.m, Hg = P.h + 9, Htot = Hg + 10, mask = vert ? 5 : 10;
+      var wcells = wallCellsH(st, lv, mask), g;
+      if (!vert) {
+        var y0 = 8 - (P.t >> 1) - 2, y1 = 7 + (P.t >> 1) + 2;
+        g = extrudeH(function (gx, gy) {
+          if (gx >= 1 && gx <= 14 && gy >= y0 && gy <= y1) {
+            var pier = gx <= 3 || gx >= 12, h = Hg + (pier ? 2 : 0), merl = m.merlon && (gy === y0) && ((gx >> 1) & 1) === 0;
+            return { h: h + (merl ? 2 : 0), top: function () { return cid(pier ? m.topL : m.top); },
+              face: function (x, row, y, hh) {
+                if (y === y1) {
+                  var fb = hh - row, dx = x + 0.5 - 8, R = 4.6, archTop = dx * dx < R * R ? 9 + Math.sqrt(R * R - dx * dx) * 0.9 : -1;
+                  if (fb <= archTop) {
+                    if (fb > archTop - 1.2) return C.stoneD;                                  // Bogenstein
+                    if (Math.abs(dx) > R - 1.4) return dx < 0 ? C.stone : C.stoneD;           // Laibung links hell, rechts Schatten
+                    if (fb <= 1) return PATHC; if (fb <= 2) return PATHD;
+                    if (Math.abs(dx) > R - 2.4 && fb < 8) return dx < 0 ? C.woodL : C.wood;   // offene Flügel
+                    return fb > archTop - 3 ? C.ink : C.plum;                                    // Gewölbeschatten
+                  }
+                  if (fb === Math.round(archTop) + 1 && Math.abs(dx) < 1) return C.stoneL;     // Schlussstein
+                  if (Math.abs(dx) < 1.5 && fb > archTop + 2 && fb < archTop + 6) return 'T';
+                }
+                return faceTex(m, x, row, hh, y);
+              } };
+          }
+          return wcells(gx, gy);
+        }, Htot);
+      } else {
+        g = extrudeH(function (gx, gy) {
+          var x0 = 8 - (P.t >> 1) - 2, x1 = 7 + (P.t >> 1) + 2;
+          if (gx >= x0 && gx <= x1 && gy >= 0 && gy <= 15) {
+            var north = gy <= 3, south = gy >= 13;
+            if (north) return { h: Hg, top: function () { return cid(m.topL); }, face: function (x, row, y, hh) { if (y === 3 && Math.abs(x + 0.5 - 8) < 1.5 && row > 2 && row < 7) return 'T'; return faceTex(m, x, row, hh, y); } };
+            if (south) return { h: 4, top: function () { return cid(m.topL); }, face: function (x, row, y, hh) { return faceTex(m, x, row, hh, y); } };
+            return { h: 2, base: 1, top: function (x) { return x === x0 || x === x1 ? C.woodD : PATHC; }, face: function () { return PATHD; } };
+          }
+          return wcells(gx, gy);
+        }, Htot);
+        for (var x = 1; x < 15; x++) { var yy = Htot + 4; if (!g.get(x, yy) || g.get(x, yy) === PATHC) g.set(x, yy, C.shade); }
+      }
+      return g;
+    }
+    L.lazyDef('wh_', function (key) {
+      var mm = /^wh_(wall|gate)_([a-z]+)_(\d)_(\w+)$/.exec(key); if (!mm) return null;
+      var st = mm[2], lv = +mm[3], arg = mm[4], g;
+      if (mm[1] === 'gate') g = gateH(st, lv, arg === 'v');
+      else if (/^water_[hv]$/.test(arg)) g = wallH(st, lv, arg === 'water_v' ? 5 : 10, arg.slice(-1));
+      else g = wallH(st, lv, +arg & 15, null);
+      g = g.footShade();
+      return { grid: g, scale: 0.5, ox: 0, oy: 8 - g.h * 0.5 };
+    });
+    // Umleitung der bisherigen Schlüssel
+    (function () {
+      function set(k, t) { L.ALIAS[k] = t; delete LITMAP[k]; }
+      for (var mk = 0; mk < 16; mk++) {
+        set('s_wall_1_' + mk, 'wh_wall_pali_1_' + mk); set('s_barricade_' + mk, 'wh_wall_junk_1_' + mk);
+        set('s_wall_2_' + mk, 'wh_wall_monarchy_2_' + mk); set('s_wall_3_' + mk, 'wh_wall_monarchy_3_' + mk);
+        set('s_wall_player_' + mk, 'wh_wall_player_2_' + mk);
+        STYLED.forEach(function (st) { for (var lv = 2; lv <= 6; lv++) set('s_wall_' + st + '_' + lv + '_' + mk, 'wh_wall_' + st + '_' + lv + '_' + mk); });
+        ['tribe', 'anarchy'].forEach(function (st) { for (var lv = 2; lv <= 4; lv++) set('s_wall_' + st + '_' + lv + '_' + mk, 'wh_wall_' + st + '_' + lv + '_' + mk); });
+      }
+      ['h', 'v'].forEach(function (d) {
+        set('s_wall_1_water_' + d, 'wh_wall_pali_1_water_' + d); set('s_gate_1_' + d, 'wh_gate_pali_1_' + d);
+        for (var lv = 2; lv <= 3; lv++) { set('s_wall_' + lv + '_water_' + d, 'wh_wall_monarchy_' + lv + '_water_' + d); set('s_gate_' + lv + '_' + d, 'wh_gate_monarchy_' + lv + '_' + d); }
+        STYLED.forEach(function (st) { for (var lv2 = 2; lv2 <= 6; lv2++) { set('s_wall_' + st + '_' + lv2 + '_water_' + d, 'wh_wall_' + st + '_' + lv2 + '_water_' + d); if (st !== 'fascism') set('s_gate_' + st + '_' + lv2 + '_' + d, 'wh_gate_' + st + '_' + lv2 + '_' + d); } });
+        ['tribe', 'anarchy'].forEach(function (st) { for (var lv3 = 2; lv3 <= 4; lv3++) { set('s_wall_' + st + '_' + lv3 + '_water_' + d, 'wh_wall_' + st + '_' + lv3 + '_water_' + d); set('s_gate_' + st + '_' + lv3 + '_' + d, 'wh_gate_' + st + '_' + lv3 + '_' + d); } });
+      });
+    })();
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });

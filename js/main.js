@@ -575,7 +575,7 @@
   // ------------------------------------------------------------------ Ton
   const AUDIO_KEY = 'wuselwelt.audio2';   // neuer Schlüssel: Ton ist vorerst standardmäßig aus
   game.audioOn = false;
-  game.audioSet = (function () { try { return Object.assign({ on: false, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }, JSON.parse(D().store.get(AUDIO_KEY) || '{}')); } catch (e) { return { on: true, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }; } })();
+  game.audioSet = (function () { try { return Object.assign({ on: false, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }, JSON.parse(D().store.get(AUDIO_KEY) || '{}')); } catch (e) { return { on: false, master: 0.8, music: 0.5, ambient: 0.7, effects: 0.8 }; } })();
   game.audioStart = function () {
     if (game.audioOn || !WW.Audio || !game.audioSet.on) return;
     try { WW.Audio.init(); WW.Audio.setVolume(game.audioSet); WW.Audio.mute(false); game.audioOn = true; } catch (e) { game.audioOn = false; }

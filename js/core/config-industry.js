@@ -44,6 +44,7 @@
       TH_BARREN_HEAL: 30,   // … unter dieser heilt er (BARREN_HEAL je Folgen-Durchlauf)
       BARREN_HEAL: 4, SOOT: 3, SOOT_R: 3.5,   // Ruß im Umkreis aktiver Fabriken
       BARREN_DEADTREES: 95, BARREN_ASH: 230, BARREN_FIELD: 80,   // Stufen: tote Bäume, Aschefeld, Feld trägt weniger
+      COAL_USE: 0.5, COAL_BOOST: 1.5, COAL_EMIT: 1.25,   // Kohle je aktiver Fabrik und Planung; Ertrags-Exponent; Ausstoß
       CLOSE_YEARS: 1,       // stillgelegt -> nach so vielen Jahren Ruine
       RAIN_CLEAN: 0.35,     // Regen: übrig bleibender Anteil
       BREEZE_CLEAN: 0.12    // Frische Brise: übrig bleibender Anteil
@@ -59,15 +60,18 @@
   WW.RAIL = {
     GOVS: { communism: { name: 'Volksbahn' }, fascism: { name: 'Gleichschrittbahn' } },
     MIN_TIER: 2,        // Städte ab „Stadt"
-    MAX_DIST: 90,       // Bahnhöfe weiter auseinander (Kacheln, Manhattan) werden nicht verbunden
+    MIN_DIST: 16,       // näher beieinander liegende Bahnhöfe bekommen keine (Mini-)Strecke
+    MAX_DIST: 64,       // Bahnhöfe weiter auseinander (Kacheln, Manhattan) werden nicht verbunden
     MAX_LEN: 160,       // längste Trasse
     PATH_NODES: 40000,  // Grenze der Wegsuche
-    SITES: 5,           // gleichzeitige Gleis-Baustellen je Strecke
+    SITES: 6,           // gleichzeitige Gleis-Baustellen je Strecke
+    CREW: 0.5,          // Gleisbautrupp: Fortschritt je Planung an Baustellen direkt am fertigen Gleis
     PLAN_EVERY: 120,    // Ticks je Planung
     SPEED: 0.3,         // Kacheln je Tick
     WAIT: 40,           // Ticks Aufenthalt am Bahnhof
     CARS: 4, CAR_CAP: 25, BALANCE_MIN: 30,   // Güterwagen, Ladung je Wagen, ab diesem Unterschied wird ausgeglichen
     FUEL: 2,            // Holz (oder Kohle) je Abfahrt
+    COAL_SPEED: 1.4,    // mit Kohle fährt der Zug schneller
     TROOPS: 12,         // Soldaten je Truppenzug
     EMIT: 4             // Qualm je Verschmutzungsschritt in der Zelle eines fahrenden Zugs
   };

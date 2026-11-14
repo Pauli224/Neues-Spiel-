@@ -356,8 +356,7 @@
   Renderer.prototype.depositDecor = function (i) {
     const st = this.st, v = st.deposit[i], S = this.S;
     const kinds = st.depositKinds || WW.DEPOSIT_KEYS || (WW.DEPOSITS ? (Array.isArray(WW.DEPOSITS) ? WW.DEPOSITS.map(d => d.key || d) : Object.keys(WW.DEPOSITS)) : null);
-    if (!kinds) return null;
-    const kind = kinds[v] || kinds[v - 1];
+    const kind = typeof v === 'string' ? v : kinds ? (kinds[v] || kinds[v - 1]) : ['iron', 'coal', 'gold', 'crystal'][v - 1];
     if (!kind) return null;
     const n = (Math.imul(i, 2654435761) >>> 28) % 3;
     for (const k of ['d_deposit_' + kind + '_' + n, 'd_deposit_' + kind + '_0', 'd_deposit_' + kind]) if (S.has(k)) return { key: k, dx: 0, dy: 0 };
@@ -548,7 +547,7 @@
   };
 
   // ------------------------------------------------------------------ Effekte
-  const FX_DUR = { explosion: 0.9, mushroom: 3.6, rock: 0.5, ward: 0.8, dud: 0.6, smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
+  const FX_DUR = { treeFall: 1.1, whistle: 0.8, explosion: 0.9, mushroom: 3.6, rock: 0.5, ward: 0.8, dud: 0.6, smokeplume: 0.01, muzzle: 0.18, bolt_shot: 0.3, flash: 0.5, shockwave: 1.0, mushroom: 3.2, tracer: 0.18, laser: 0.6, orbitallaser: 0.6, blackhole: 4, spark: 0.4, explosion: 0.8, tornado: 2, crack: 1.2, lavaglow: 1.5, rock: 0.8, breath: 0.8, arrow: 0.35, bolt: 0.45, meteor: 0.9, smoke: 1.4, rain: 1.8, plague: 1.6, sparkle: 1.2, restyle: 1.4,
     govchange: 1.8, dust: 0.9, hit: 0.3, splash: 0.6, poof: 0.6 };
   Renderer.prototype.addFx = function (list) {
     for (const f of list) {
@@ -879,6 +878,27 @@
           g.globalAlpha = 1;
           break;
         }
+        case 'treeFall': {
+          // Baum kippt um seinen Fuß, schlägt auf und verblasst
+          const key = S.has('d_tree_0') ? 'd_tree_' + ((f.seed & 3) % (S.has('d_tree_3') ? 4 : 1)) : null;
+          if (!key) break;
+          const dir = (f.seed & 1) ? 1 : -1, fall = Math.min(1, k / 0.55);
+          const ang = dir * (fall * fall) * Math.PI * 0.48 + (k > 0.55 && k < 0.65 ? dir * Math.sin((k - 0.55) * 60) * 0.03 : 0);
+          g.save(); g.translate(px, py + 3); g.rotate(ang);
+          g.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+          S.drawFast(g, key, -4, -11, 0, dir < 0);
+          g.restore();
+          if (k > 0.5 && k < 0.8) { g.globalAlpha = (0.8 - k) * 3; S.drawFast(g, 'fx_smoke_0', px - 4 + dir * 8, py - 4, 0, false); }
+          g.globalAlpha = 1;
+          break;
+        }
+        case 'whistle': {
+          // kleines Dampfwölkchen über der Lok
+          g.globalAlpha = 1 - k; g.fillStyle = '#fbf7ee';
+          g.fillRect(px - 1, py - 18 - k * 6, 3, 2); g.fillRect(px + 1, py - 21 - k * 8, 2, 2);
+          g.globalAlpha = 1;
+          break;
+        }
         case 'shockwave': {
           const r = (f.r || 6) * 8 * (0.15 + 0.85 * k);
           g.strokeStyle = 'rgba(255,250,230,' + (0.9 * (1 - k)) + ')'; g.lineWidth = 3;
@@ -913,7 +933,7 @@
         case 'mushroom': case 'explosion': {
           let fr = this.fxFrames(f.type === 'explosion' ? ((f.r || 1) >= 3 ? 'explosion_big' : (f.r || 1) < 1.5 && this.S.has('fx_blast_s_0') ? 'explosion_small' : 'explosion') : f.type);
           const fine = this.S.has('fx_blast_m_0');
-          const sc = fine ? (f.type === 'explosion' ? Math.max(1, Math.min(2.5, (f.r || 1) / 4)) : Math.max(1, (f.r || 1) / 10)) :
+          const sc = fine ? (f.type === 'explosion' ? Math.max(1, Math.min(2.5, (f.r || 1) / 4)) : Math.max(1.6, (f.r || 10) / 6)) :
             f.type === 'explosion' ? Math.max(1, Math.min(4, (f.r || 1) / (this.fxFrames('explosion_big').length && (f.r || 1) >= 3 ? 3 : 1.2))) : Math.max(1, (f.r || 1) / 4);
           if (!fr.length) {   // Ersatz: Feuerball aus vorhandenen Sprites
             const r = (f.r || 1.5) * 8 * (0.4 + k);
@@ -925,7 +945,8 @@
           const key = fr[Math.min(fr.length - 1, (k * fr.length) | 0)], inf = S.info(key);
           g.save(); g.translate(px, py); g.scale(sc, sc);
           g.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
-          S.drawFast(g, key, -Math.round((inf ? inf.w : 8) / 2) - (inf ? inf.ox : 0), -(inf ? inf.h : 8) - (inf ? inf.oy : 0) + 4, 0, false);
+          const iw = inf ? (inf.dw || inf.w) : 8, ih = inf ? (inf.dh || inf.h) : 8;
+          S.drawFast(g, key, -Math.round(iw / 2) - (inf ? inf.ox : 0), -ih - (inf ? inf.oy : 0) + 4, 0, false);
           g.restore();
           break;
         }
@@ -974,9 +995,17 @@
       }
       case 'station': return typeof S.stationKey === 'function' && S.has(S.stationKey(style)) ? S.stationKey(style) : (S.has('s_station') ? 's_station' : 's_market');
       case 'laborcamp': { const k = typeof S.laborcampKey === 'function' ? S.laborcampKey(style, !!s.ruin || !!s.closed) : 's_laborcamp'; return S.has(k) ? k : 's_barracks'; }
-      case 'mine': { const k = typeof S.mineKey === 'function' ? S.mineKey(s.ore || s.kind) : 's_mine'; return S.has(k) ? k : 's_quarry'; }
+      case 'mine': { const k = typeof S.mineKey === 'function' ? S.mineKey(s.res || s.ore || s.kind) : 's_mine'; return S.has(k) ? k : 's_quarry'; }
       case 'lair': return this.S.has('s_lair_' + s.kind) ? 's_lair_' + s.kind : 's_ruin';
-      case 'ruin': return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
+      case 'ruin':
+        if (s.ruinOf === 'laborcamp') {
+          // Mahnmal: großes Ruinenbild nur auf der linken oberen Ruinen-Kachel, die übrigen leer lassen
+          const st2 = this.st, W2 = st2.W;
+          const isCampRuin = (x, y) => { const o = this.structById ? this.structById(st2.structAt[y * W2 + x]) : null; return o && o.type === 'ruin' && o.ruinOf === 'laborcamp'; };
+          const ck = typeof S.laborcampKey === 'function' ? S.laborcampKey(style, true) : 's_laborcamp_ruin';
+          if (S.has(ck)) return (s.x > 0 && isCampRuin(s.x - 1, s.y)) || (s.y > 0 && isCampRuin(s.x, s.y - 1)) ? null : ck;
+        }
+        return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
       default: return this.S.has('s_' + s.type) ? 's_' + s.type : (s.w >= 2 ? 's_ruin_2' : 's_ruin');
     }
   };
@@ -1251,7 +1280,7 @@
       if (r < 0 || r >= nrows) return;
       rowU[r].push({ u: u, x: x, y: y, animal: isAnimal });
     };
-    if (st.units) for (const u of st.units) if (!u.dead) addU(u, false);
+    if (st.units) for (const u of st.units) if (!u.dead && u.ind !== 'train') addU(u, false);
     if (st.animals) for (const an of st.animals) if (!an.dead && !an.buried) addU(an, true);
 
     const time = this.time;
@@ -1376,12 +1405,13 @@
     const gov = k ? k.gov : 'tribe';
     const team = k ? k.colorIndex | 0 : 10;
     let key = this.structKey(s, gov);
+    if (key === null) return;
     if (s.type === 'field' && typeof S.swayKey === 'function' && (key === 's_field_3' || key === 's_field_2')) {
       const k2 = S.swayKey(key, (s.x + s.y + ((this.time * 2) | 0)) % 3); if (k2 && S.has(k2)) key = k2;
     }
     const inf = S.info(key);
     const fh = inf ? inf.fh : s.h;
-    const px = s.x * 8, py = (s.y + s.h - fh) * 8;
+    const px = s.x * 8, py = (s.type === 'ruin' && fh > s.h ? s.y : s.y + s.h - fh) * 8;
     S.drawFast(ctx, key, px, py, team, false);
     // Kornwogen auf reifenden Feldern: helle Welle läuft über das Feld
     if (s.type === 'field' && s.built !== false && (s.growth | 0) >= 2 && zoomBig && typeof S.swayKey !== 'function') {
@@ -1724,7 +1754,7 @@
       const X = cx * CPX, Y = cy * CPX, w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
       const dx = rx(X), dy = ry(Y), dw = rx(X + w) - dx, dh = ry(Y + h) - dy;
       if (!low && !c.wGl && builds-- > 0) { this.buildWaterGlints(c); this.trimChunks(); }
-      if (!low && c.wGl) { c.usedT = t; const k = c.wHi ? 2 : 1; ctx.drawImage(c.wGl[c.wHi ? ((t * 4) | 0) & 3 : fr], 0, 0, w * k, h * k, dx, dy, dw, dh); continue; }
+      if (!low && c.wGl) { c.usedT = t; ctx.globalAlpha = 1 - (this._night || 0) * 0.55; const k = c.wHi ? 2 : 1; ctx.drawImage(c.wGl[c.wHi ? ((t * 4) | 0) & 3 : fr], 0, 0, w * k, h * k, dx, dy, dw, dh); ctx.globalAlpha = 1; continue; }
       // weite Ansicht oder noch nicht gebaut: nur die Brandung
       ctx.globalAlpha = Math.max(0, a1) * 0.9; ctx.drawImage(c.wFoam1, 0, 0, w, h, dx, dy, dw, dh);
       ctx.globalAlpha = Math.max(0, a2) * 0.6; ctx.drawImage(c.wFoam2, 0, 0, w, h, dx, dy, dw, dh);
@@ -1949,7 +1979,14 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
     // Niederschlag in Bildschirmpixeln
-    if ((wx.rain > 0.02 || wx.snow > 0.02) && !this.autoOff.precip) this.drawPrecip(ctx, wx, dt);
+    if ((wx.rain > 0.02 || wx.snow > 0.02) && !this.autoOff.precip) {
+      const nt = (vt.x1 - vt.x0 + 1) * (vt.y1 - vt.y0 + 1);
+      if (typeof this.S.weatherKey === 'function' && nt < 4000) {
+        ctx.setTransform(s, 0, 0, s, ox, oy);
+        this.drawWeatherTiles(ctx, vt, wx);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      } else this.drawPrecip(ctx, wx, dt);
+    }
     if (wx.fog > 0.02) {
       ctx.fillStyle = 'rgba(225,232,236,' + (wx.fog * 0.28).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
@@ -1988,6 +2025,20 @@
     w.rainOnly = rainOnly;
     return w;
   };
+  // Regen/Schnee aus den kachelbaren Sprites der Grafik; die Muster laufen über die Kacheln nach unten
+  Renderer.prototype.drawWeatherTiles = function (g, vt, wx) {
+    const S = this.S, snow = wx.snow > (wx.rainOnly || 0);
+    const kind = snow ? 'snow' : 'rain', amt = Math.min(1, Math.max(wx.snow, wx.rainOnly || 0));
+    const fr = ((this.time * (snow ? 3 : 8)) | 0) & 1;
+    const shift = ((this.time * (snow ? 10 : 60)) | 0) % 8;
+    g.globalAlpha = Math.min(0.9, 0.3 + amt * 0.6);
+    for (let y = vt.y0 - 1; y <= vt.y1; y++) for (let x = vt.x0; x <= vt.x1; x++) {
+      const k = S.weatherKey(kind, fr, x, y);
+      if (k && S.has(k)) S.drawFast(g, k, x * 8, y * 8 + shift, 0, false);
+    }
+    g.globalAlpha = 1;
+  };
+
   Renderer.prototype.drawPrecip = function (ctx, wx, dt) {
     const cv = this.canvas, W = cv.width, H = cv.height, dpr = Math.max(1, this._dpr || 1);
     const P = this.drops || (this.drops = []);

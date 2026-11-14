@@ -358,7 +358,7 @@
     desert:    { p: 0.07, list: [['cactus', 3, 3], ['rock_sand', 1, 1]] },
     hill:      { p: 0.16, list: [['rock', 3, 2], ['bush', 2, 1]] },
     mountain:  { p: 0.34, list: [['crag', 5, 5], ['rock_grey', 2, 2]] },
-    shallow:   { p: 0.07, list: [['sandbar', 5, 3], ['rock_sea', 3, 1]] },
+    shallow:   { p: 0.1, list: [['sandbar', 5, 3], ['rock_sea', 3, 1], ['fish', 2, 2]] },
     snow:      { p: 0.3,  list: [['icecrag', 5, 1]] },
     tundra:    { p: 0.1,  list: [['shrub', 2, 3], ['rock', 3, 1]] },
     snowfield: { p: 0.06, list: [['pine_snow', 2, 2], ['rock_snow', 2, 1]] },
@@ -448,14 +448,15 @@
     // Weltposition, zwei Frequenzen bis ±7 px). Gilt an Ufern, zwischen Wassertiefen und an Schneerändern.
     if (!S._noDisplace) {
       var NB9 = [nw, n, ne, w, id, e, sw, s, se], anyD = false;
-      function dispOK(a, b) { var ga = GI[a], gb = GI[b]; if (ga.key === 'river' || gb.key === 'river') return false; return a !== b && (ga.water || gb.water || (ga.key === 'snow') !== (gb.key === 'snow') && Math.abs(ga.rank - gb.rank) <= 1 || ga.key === 'sand' || gb.key === 'sand'); }
+      function dispOK(a, b) { var ga = GI[a], gb = GI[b]; if ((ga.key === 'river' && gb.water) || (gb.key === 'river' && ga.water)) return false; return a !== b && (ga.water || gb.water || (ga.key === 'snow') !== (gb.key === 'snow') && Math.abs(ga.rank - gb.rank) <= 1 || ga.key === 'sand' || gb.key === 'sand'); }
       for (var k9 = 0; k9 < 9; k9++) if (k9 !== 4 && dispOK(id, NB9[k9])) anyD = true;
       if (anyD) {
+        var RK = NB9.some(function (t) { return GI[t].key === 'river'; }) ? 0.28 : 1;   // am Fluss nur schwach, damit der Lauf erkennbar bleibt
         function vtAt(px2, py2) {   // verschobenes Gelände an einem Pixel (auch knapp außerhalb der Kachel)
           var WX = hx + px2, WY = hy + py2;
           var ox2 = (vnoise(WX / 22, WY / 22, 841) - 0.5) * 26 + (vnoise(WX / 60, WY / 60, 842) - 0.5) * 22;
           var oy2 = (vnoise(WX / 22, WY / 22, 843) - 0.5) * 26 + (vnoise(WX / 60, WY / 60, 844) - 0.5) * 22;
-          var qx = Math.max(-16, Math.min(31, Math.round(px2 + ox2))), qy = Math.max(-16, Math.min(31, Math.round(py2 + oy2)));
+          var qx = Math.max(-16, Math.min(31, Math.round(px2 + ox2 * RK))), qy = Math.max(-16, Math.min(31, Math.round(py2 + oy2 * RK)));
           var home = NB9[(py2 < 0 ? 0 : (py2 > 15 ? 2 : 1)) * 3 + (px2 < 0 ? 0 : (px2 > 15 ? 2 : 1))];
           var vt = NB9[(qy < 0 ? 0 : (qy > 15 ? 2 : 1)) * 3 + (qx < 0 ? 0 : (qx > 15 ? 2 : 1))];
           return dispOK(home, vt) ? vt : home;
@@ -470,7 +471,8 @@
           if (g0.water) {
             var up1 = GI[V(px2, py2 - 1)], up2 = GI[V(px2, py2 - 2)], landN = !up1.water ? up1 : (!up2.water ? up2 : null);
             var landAdj = !GI[V(px2 - 1, py2)].water || !GI[V(px2 + 1, py2)].water || !GI[V(px2, py2 + 1)].water || !up1.water;
-            if (landN && landN.f && !up1.water) c0 = landN.lip;          // Uferkante (Seitenmaterial) unter Land
+            if (g0.key === 'river') { if (!up1.water) c0 = g0.sh; else if (landAdj) c0 = FOAMI; }   // Fluss: Schattenkante statt Erdwand
+            else if (landN && landN.f && !up1.water) c0 = landN.lip;          // Uferkante (Seitenmaterial) unter Land
             else if (landN && landN.f) c0 = landN.fd;
             else if (landAdj) c0 = FOAMI;
             else { var dN = GI[V(px2, py2 - 1)], dW = GI[V(px2 - 1, py2)]; if ((dN.water && dN.rank > g0.rank) || (dW.water && dW.rank > g0.rank)) c0 = g0.shore; }
@@ -562,6 +564,34 @@
   });
   ['deep', 'water', 'shallow', 'river'].forEach(function (t) { for (var f = 0; f < 4; f++) L0.ALIAS['t_water_anim_' + t + '_' + f] = 'hw_water_' + t + '_' + f; });
   for (var sm = 0; sm < 16; sm++) for (var sf = 0; sf < 4; sf++) L0.ALIAS['fx_surf_' + sm + '_' + sf] = 'hw_surf_' + sm + '_' + sf;
+  // Fischschwarm im Flachwasser (2 Phasen) als Deko d_fish_0/1
+  var FISHC = addColor(null, '#2a5a86', 150), FISHL = addColor(null, '#d8f2ff', 160);
+  L0.lazyDef('hf_', function (key) {
+    var m;
+    if ((m = /^hf_fish_(\d)$/.exec(key))) {
+      var g = new L0.Grid(16, 12), f = +m[1] & 1;
+      [[3, 3], [8, 2], [12, 5], [5, 7], [10, 8], [2, 9]].forEach(function (p, k) { var x = p[0] + (f ? (k & 1 ? 1 : -1) : 0), y = p[1]; g.set(x, y, FISHC); g.set(x + 1, y, FISHC); g.set(x + 2, y, FISHC); g.set(x - 1, y + (k & 1 ? -1 : 1), FISHC); });
+      g.set(6, 1, FISHL); g.set(13, 9, FISHL);
+      return { grid: g, scale: 0.5, ox: 0, oy: 1 };
+    }
+    if ((m = /^hf_treefall_(\d)$/.exec(key))) {   // gefällter Baum kippt nach rechts: 0°, 20°, 45°, 70°, 90°
+      var src = decorHi('tree', 11, null), ang = [0, 20, 45, 70, 88][Math.min(4, +m[1])] * Math.PI / 180;
+      var W2 = src.w + src.h, H2 = src.h + 4, pvx = Math.floor(src.w / 2), pvy = src.h - 4, dx0 = Math.floor(src.w / 2), out = new L0.Grid(W2, H2);
+      var ca = Math.cos(ang), sa = Math.sin(ang);
+      for (var y = 0; y < H2; y++) for (var x = 0; x < W2; x++) {
+        var rx = x - dx0, ry = y - (H2 - 5);
+        var sx = Math.round(pvx + rx * ca + ry * sa), sy = Math.round(pvy - rx * sa + ry * ca);
+        var c = src.get(sx, sy); if (c && c !== L0.C.shade) out.set(x, y, c);
+      }
+      return { grid: out, scale: 0.5, ox: Math.floor((8 - src.w * 0.5) / 2), oy: 8 - H2 * 0.5 };
+    }
+    return null;
+  });
+  L0.ALIAS.d_fish_0 = 'hf_fish_0'; L0.ALIAS.d_fish_1 = 'hf_fish_1';
+  for (var tf = 0; tf < 5; tf++) L0.ALIAS['fx_treefall_' + tf] = 'hf_treefall_' + tf;
+  // Vorkommen unter den Namen des Renderers
+  ['iron', 'coal', 'gold'].forEach(function (o) { L0.ALIAS['d_ore_' + o] = 'd_deposit_' + o + '_0'; L0.ALIAS['d_ore_' + o + '_0'] = 'd_deposit_' + o + '_0'; L0.ALIAS['d_ore_' + o + '_1'] = 'd_deposit_' + o + '_1'; });
+  L0.ALIAS.d_crystal = 'd_deposit_crystal_0';
   // Helfer: Wasser-Frame je Geländetyp (null bei Land), Brandungsmaske aus Nachbarn
   S.waterAnimKey = function (terrainId, frame) { var k = GI[terrainId] && GI[terrainId].water ? GI[terrainId].key : null; return k ? 't_water_anim_' + k + '_' + ((frame | 0) & 3) : null; };
   S.surfKey = function (n, e, s, w, frame) {

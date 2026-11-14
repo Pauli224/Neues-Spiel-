@@ -14,6 +14,7 @@ function test(name, fn) {
   catch (e) { results.push({ name, ok: false, ms: Date.now() - t0, err: e }); console.log('  FEHLGESCHLAGEN: ' + (e && e.stack || e)); }
 }
 function run(sim, n) { for (let i = 0; i < n; i++) sim.tick(); }
+const LONG = { seed: 12, w: 128, h: 80, dist: [52, 70] };   // zwei Städte weit genug auseinander für eine echte Strecke
 const LAWS = { govChanges: false, wars: false, disasters: false, newRealms: false, events: false };
 const rails = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'rail');
 const stations = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'station');
@@ -21,12 +22,13 @@ const stations = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 
 // Zwei Städte (ab Stufe „Stadt") in einem Reich mit Regierung gov
 function twoCities(gov, o) {
   o = o || {};
-  const sim = WW.Sim.create({ seed: o.seed || 5, width: 96, height: 64, populate: 0, laws: LAWS, animals: false });
+  const sim = WW.Sim.create({ seed: o.seed || 5, width: o.w || 96, height: o.h || 64, populate: 0, laws: LAWS, animals: false });
   sim._throwErrors = true;
   const spots = [];
-  for (let y = 8; y < 56; y += 2) for (let x = 8; x < 88; x += 2) if (WW.Cities.canFoundAt(sim, x, y, 'human', 0)) spots.push([x, y]);
+  for (let y = 8; y < sim.state.H - 8; y += 2) for (let x = 8; x < sim.state.W - 8; x += 2) if (WW.Cities.canFoundAt(sim, x, y, 'human', 0)) spots.push([x, y]);
   let pa = null, pb = null;
-  for (const p of spots) for (const q of spots) { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (!pa && d >= 32 && d <= 46) { pa = p; pb = q; } }
+  const d0 = o.dist ? o.dist[0] : 32, d1 = o.dist ? o.dist[1] : 46;
+  for (const p of spots) for (const q of spots) { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (!pa && d >= d0 && d <= d1) { pa = p; pb = q; } }
   assert(pa, 'keine Bauplätze');
   const a = sim.actions.spawnSettlers(pa[0], pa[1], 26, gov, 'human');
   const b = sim.actions.spawnSettlers(pb[0], pb[1], 26, gov, 'human');
@@ -42,24 +44,24 @@ function untilLine(o, years) {
   for (let y = 0; y < years; y++) {
     topUp(o);
     run(o.sim, 240);
-    const l = o.sim.state.rail.lines[0];
-    if (l && l.done && o.sim.state.trains.length) return l;
+    const l = o.sim.state.rail.lines.find((q) => q.done && o.sim.state.trains.some((t) => t.line === q.id));
+    if (l) return l;
   }
   return null;
 }
 
 test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
-  const o = twoCities('fascism');
+  const o = twoCities('fascism', LONG);
   const line = untilLine(o, 40);
   const st = o.sim.state;
   assert(line, 'keine fertige Strecke mit Zug (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
   log('Jahr', st.year, 'Strecke', line.tiles.length, 'Kacheln, Brücken', rails(o.sim).filter((s) => s.bridge).length, 'Bahnhöfe', stations(o.sim).length);
   for (const s of rails(o.sim)) assert(s.mask > 0, 'Gleis ohne Nachbarn (mask)');
   for (const s of [...rails(o.sim), ...stations(o.sim)]) assert(st.inRing[s.y * st.W + s.x] === -1, 'Bahn im Mauerring');
-  const A = WW.Cities.stock(o.sim, o.ca), B = WW.Cities.stock(o.sim, o.cb);
+  const A = WW.Cities.stock(o.sim, o.sim._cities.get(o.sim._structs.get(line.a).cityId)), B = WW.Cities.stock(o.sim, o.sim._cities.get(o.sim._structs.get(line.b).cityId));
   A.stone = 260; B.stone = 0;
   let smoke = 0, whistle = 0, moved = 0;
-  const tr = st.trains[0];
+  const tr = st.trains.find((t) => t.line === line.id);
   let px = tr.x;
   for (let i = 0; i < 900; i++) {
     o.sim.tick();
@@ -74,10 +76,10 @@ test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
 });
 
 test('2 Zerstörtes Gleis stoppt den Zug, Reparatur lässt ihn weiterfahren', function () {
-  const o = twoCities('communism');
+  const o = twoCities('communism', LONG);
   const line = untilLine(o, 40);
   assert(line, 'keine Strecke');
-  const st = o.sim.state, tr = st.trains[0];
+  const st = o.sim.state, tr = st.trains.find((t) => t.line === line.id);
   const mid = line.tiles[Math.min(line.tiles.length - 1, Math.max(1, Math.floor(line.tiles.length / 2)))];
   const s = o.sim._structs.get(st.structAt[mid]);
   WW.Structs.destroy(o.sim, s);
@@ -105,7 +107,7 @@ test('3 Stamm und Demokratie bauen keine Bahn (Tabelle WW.RAIL.GOVS)', function 
 });
 
 test('4 Speichern/Laden mit Zug, Determinismus, alte Spielstände, Zeitaufschlag', function () {
-  const mk = () => { const o = twoCities('fascism'); untilLine(o, 40); return o; };
+  const mk = () => { const o = twoCities('fascism', LONG); untilLine(o, 40); return o; };
   const A = mk(), B = mk();
   assert(A.sim.hash() === B.sim.hash(), 'nicht deterministisch');
   assert(A.sim.state.trains.length, 'kein Zug');
@@ -131,6 +133,36 @@ test('4 Speichern/Laden mit Zug, Determinismus, alte Spielstände, Zeitaufschlag
   const ms = Number(ns) / 1e6 / 4000;
   log('Bahn-Anteil', ms.toFixed(4), 'ms/Tick');
   assert(ms < 0.05, 'Bahn zu langsam');
+});
+
+test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vorräte gleichen sich aus, Kohle', function () {
+  const o = twoCities('fascism', LONG);
+  const line = untilLine(o, 45);
+  assert(line, 'keine fertige Strecke (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
+  const st = o.sim.state;
+  const A = o.sim._structs.get(line.a), B = o.sim._structs.get(line.b);
+  log('Strecke', line.tiles.length, 'Kacheln zwischen', o.sim._cities.get(A.cityId).name, 'und', o.sim._cities.get(B.cityId).name);
+  assert(A.cityId !== B.cityId, 'Strecke innerhalb einer Stadt');
+  assert(line.tiles.length >= 18 && line.tiles.length <= 75, 'Streckenlänge ' + line.tiles.length);
+  assert(!st.rail.lines.some((l) => l.tiles.length < 8), 'Mini-Strecke');
+  const tr = st.trains.find((t) => t.line === line.id);
+  const SA = WW.Cities.stock(o.sim, o.sim._cities.get(A.cityId)), SB = WW.Cities.stock(o.sim, o.sim._cities.get(B.cityId));
+  SA.stone = 300; SB.stone = 0;
+  let arrivals = 0, last = tr.to, whistle = 0, smoke = 0, coalRuns = 0;
+  // Kohle: erst ohne Feld, dann 0, dann vorhanden – nichts darf brechen
+  delete SA.coal; delete SB.coal;
+  for (let i = 0; i < 2400; i++) {
+    if (i === 800) { SA.coal = 0; SB.coal = 0; }
+    if (i === 1600) { SA.coal = 200; SB.coal = 200; }
+    o.sim.tick();
+    for (const f of o.sim.drainFx()) { if (f.type === 'whistle') whistle++; if (f.type === 'trainsmoke') smoke++; }
+    if (tr.to !== last) { arrivals++; last = tr.to; }
+    if (tr.coal) coalRuns++;
+  }
+  log('Ankünfte', arrivals, 'Pfiffe', whistle, 'Rauch', smoke, 'Stein A/B', Math.round(SA.stone), '/', Math.round(SB.stone), 'Ticks mit Kohle', coalRuns);
+  assert(arrivals >= 2 && whistle >= 2 && smoke > 20, 'Zug fährt nicht regelmäßig');
+  assert(SB.stone >= 40, 'Vorräte gleichen sich nicht aus');
+  assert(coalRuns > 0 && SA.coal < 200 + 1, 'Kohle wird nicht genutzt');
 });
 
 console.log('\n--- Ergebnis');

@@ -342,6 +342,7 @@
     if (st.tick % 20 === 5) WW.Gov.update(this);
     if (st.tick % 40 === 15) { WW.Cities.stats(this); WW.Diplo.update(this); }
     if (st.tick % 30 === 20) WW.Growth.update(this);
+    if (st.tick % 10 === 7) WW.Resources.update(this);
     if (st.tick % 40 === 25) { WW.Cities.stats(this); WW.Growth.updatePlots(this); }
     if (st.tick % TPY === 0) {
       st.year++;
@@ -361,7 +362,7 @@
   // Speichern / Laden
   // ---------------------------------------------------------------------------
   const RASTERS = [['terrain', Uint8Array], ['variant', Uint8Array], ['height', Uint8Array], ['owner', Int32Array],
-    ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array], ['chops', Uint8Array],
+    ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array], ['chops', Uint8Array], ['deposit', Uint8Array],
     ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array]];   // [wild] Raster der Wildnis
   if (WW.Industry) RASTERS.push(['murk', Uint8Array], ['barren', Uint8Array]);   // [industry] Flusstrübung (pollution hat eigene Größe: WW.Industry.save/load)
 
@@ -411,6 +412,10 @@
     defaults(st);
     const sim = new Sim(st, o.rng);
     WW.Growth.ensure(sim);
+    // ältere Spielstände: Vorkommen deterministisch nachrüsten, Lager um neue Rohstoffe ergänzen
+    if (!o.rasters.deposit) WW.Resources.generate(sim);
+    for (const c of st.cities) WW.Cities.fillStock(c.stock);
+    for (const k of st.kingdoms) if (k.stock) WW.Cities.fillStock(k.stock);
     return sim;
   }
 
@@ -457,7 +462,7 @@
       seed: seed, W: W, H: H, tick: 0, year: 0, nextId: 1, worldName: world.name || 'Wuselwelt',
       terrain: new Uint8Array(N), variant: new Uint8Array(N), height: new Uint8Array(N),
       owner: new Int32Array(N).fill(-1), structAt: new Int32Array(N).fill(-1), fire: new Uint8Array(N),
-      inRing: new Int32Array(N).fill(-1), mark: new Uint8Array(N), cleared: new Uint8Array(N), chops: new Uint8Array(N),
+      inRing: new Int32Array(N).fill(-1), mark: new Uint8Array(N), cleared: new Uint8Array(N), chops: new Uint8Array(N), deposit: new Uint8Array(N),
       structs: [], units: [], animals: [], cities: [], kingdoms: [], events: [],
       laws: Object.assign({}, WW.LAW_DEFAULTS, opts.laws || {}),
       pathVersion: 0, fireCount: 0, markCount: 0, eventSeq: 0, plots: []
@@ -474,6 +479,7 @@
     if (WW.Industry) WW.Industry.defaults(st);   // [industry]
     const sim = new Sim(st, null);
     WW.Growth.ensure(sim);
+    WW.Resources.generate(sim);
     sim._startSpots = (world.startSpots || []).slice();
 
     // Startreiche
@@ -555,8 +561,8 @@
     const city = WW.Cities.found(sim, x, y, k.id, race, name);
     if (!city) { WW.Gov.removeKingdom(sim, k, true); return null; }
     const ss = WW.CONFIG.START_STOCK;
-    city.stock = { food: ss.food, wood: ss.wood, stone: ss.stone, gold: ss.gold };
-    if (WW.GOVERNMENTS[k.gov].sharedStock) k.stock = { food: ss.food, wood: ss.wood, stone: ss.stone, gold: 0 };
+    city.stock = WW.Cities.fillStock({ food: ss.food, wood: ss.wood, stone: ss.stone, gold: ss.gold });
+    if (WW.GOVERNMENTS[k.gov].sharedStock) k.stock = WW.Cities.fillStock({ food: ss.food, wood: ss.wood, stone: ss.stone, gold: 0 });
     spawnPeople(sim, city, x + 0.5, y + 0.5, count, race);
     WW.Cities.stats(sim);
     WW.Gov.appointLeader(sim, k);

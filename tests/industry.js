@@ -155,9 +155,10 @@ test('3 Regen und Frische Brise reinigen', function () {
 });
 
 // -----------------------------------------------------------------------------
-test('4 Waldsterben: verschmutzte Stadt gegen saubere Vergleichsstadt', function () {
-  const mk = (on) => factoryCity('communism', { seed: 17, n: 3, settlers: 40, laws: { industry: on } });
-  const A = mk(true), B = mk(false);
+test('4 Waldsterben: verschmutzte Stadt gegen saubere Vergleichsstadt (ohne Kahlschlag)', function () {
+  // Vergleich: dieselbe Welt mit einer Regierung ohne Kahlschlag (Monarchie: nature 'use'), Industrie aus
+  const A = factoryCity('communism', { seed: 17, n: 3, settlers: 40 });
+  const B = factoryCity('monarchy', { seed: 17, n: 3, settlers: 40, laws: { industry: false } });
   assert(A.list.length === 3 && B.list.length === 0, 'Aufbau: ' + A.list.length + '/' + B.list.length);
   // Wald im Umkreis 14 um das Fabrikviertel (in der Vergleichswelt dieselbe Stelle, nur ohne Fabriken)
   const F = { cx: Math.round(A.list.reduce((a, s) => a + s.x, 0) / 3), cy: Math.round(A.list.reduce((a, s) => a + s.y, 0) / 3) };
@@ -327,6 +328,21 @@ test('10 Flusstrübung nur stromabwärts, ein Stück ins Meer', function () {
   st.pollution.fill(0);
   run(sim, 2400);
   assert(st.industry.murk === 0, 'Trübung klingt nicht ab');
+});
+
+// -----------------------------------------------------------------------------
+test('11 Kohle: fehlt, 0 oder vorhanden – Fabriken laufen mit Kohle stärker', function () {
+  const o = factoryCity('republic', { seed: 11, n: 2 });
+  const sk = WW.Cities.stock(o.sim, o.c);
+  delete sk.coal; run(o.sim, 120);
+  const g0 = WW.Mods.value(o.sim, o.k, o.c, 'gold', 1);
+  sk.coal = 0; run(o.sim, 120);
+  const g1 = WW.Mods.value(o.sim, o.k, o.c, 'gold', 1);
+  sk.coal = 100; run(o.sim, 120);
+  const g2 = WW.Mods.value(o.sim, o.k, o.c, 'gold', 1);
+  log('Gold × ohne Feld', g0.toFixed(2), '| coal 0', g1.toFixed(2), '| mit Kohle', g2.toFixed(2), '| Kohle übrig', sk.coal);
+  assert(g0 > 1 && Math.abs(g0 - g1) < 1e-9, 'ohne Kohle anders');
+  assert(g2 > g1 * 1.05 && sk.coal < 100 && o.list.some((s) => s.coal), 'Kohle wirkt nicht');
 });
 
 // -----------------------------------------------------------------------------

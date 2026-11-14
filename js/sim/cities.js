@@ -24,6 +24,9 @@
     if (!(res in s) || !WW.SimUtil.isNum(amount)) return;
     s[res] = Math.min(stockCap(sim, city, res), Math.max(0, s[res] + amount));
   }
+  // leeres Lager mit allen Rohstoffen (WW.RESOURCES)
+  function emptyStock() { const s = {}; for (const r of WW.RESOURCE_KEYS) s[r] = 0; return s; }
+  function fillStock(s) { if (s) for (const r of WW.RESOURCE_KEYS) if (typeof s[r] !== 'number') s[r] = 0; return s; }
   // Lagergrenze (verhindert absurde Vorräte; Gold unbegrenzt bis 9999)
   function stockCap(sim, city, res) {
     if (res === 'gold') return 9999;
@@ -79,7 +82,7 @@
       id: st.nextId++, name: name || WW.Names.town(sim.rng, race, sim._usedNames),
       kingdomId: kingdomId, race: race || k.race || 'human',
       cx: x, cy: y, centerId: -1, tier: 0, pop: 0, adults: 0, children: 0, housing: 4,
-      stock: { food: 0, wood: 0, stone: 0, gold: 0 }, happiness: 60,
+      stock: emptyStock(), happiness: 60,
       wall: WW.Walls.emptyWall(),
       founded: st.year, jobs: {}, sites: [], fields: [], drops: [], houses: 0,
       hasBarracks: false, hasMarket: false, hasMonument: false,
@@ -850,13 +853,13 @@
       // Kommunismus: Anteil am Reichslager mitnehmen
       if (WW.GOVERNMENTS[old.gov].sharedStock && old.stock) {
         const share = 1 / Math.max(1, old.cityIds.length);
-        for (const r of ['food', 'wood', 'stone', 'gold']) { const v = old.stock[r] * share; old.stock[r] -= v; city.stock[r] = v; }
+        for (const r of WW.RESOURCE_KEYS) { const v = (old.stock[r] || 0) * share; old.stock[r] = (old.stock[r] || 0) - v; city.stock[r] = v; }
       }
       old.cityIds = old.cityIds.filter(id => id !== city.id);
       if (old.capitalId === city.id) old.capitalId = old.cityIds.length ? old.cityIds[0] : -1;
     }
     if (WW.GOVERNMENTS[nk.gov].sharedStock && nk.stock) {
-      for (const r of ['food', 'wood', 'stone', 'gold']) { nk.stock[r] += city.stock[r]; }
+      for (const r of WW.RESOURCE_KEYS) { nk.stock[r] = (nk.stock[r] || 0) + (city.stock[r] || 0); }
     }
     city.kingdomId = nk.id;
     nk.cityIds.push(city.id);
@@ -920,7 +923,7 @@
     releaseTerritory: releaseTerritory, refreshLists: refreshLists, refreshAllLists: refreshAllLists, stats: stats,
     updateAll: updateAll, yearly: yearly, destroyCity: destroyCity, transferCity: transferCity, atCity: atCity,
     findCoreSpot: findCoreSpot, findFieldSpot: findFieldSpot, findDropSpot: findDropSpot, placeStruct: placeStruct,
-    centerOff: centerOff, footprintOk: footprintOk, DIRS16: DIRS16, happinessTarget: happinessTarget, scanResources: scanResources,
+    centerOff: centerOff, emptyStock: emptyStock, fillStock: fillStock, footprintOk: footprintOk, DIRS16: DIRS16, happinessTarget: happinessTarget, scanResources: scanResources,
     sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP
   };
 

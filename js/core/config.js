@@ -302,6 +302,29 @@
     tower:    { name: 'Turm', w: 1, h: 1, work: 50, hp: [240, 750, 1300], cost: [{ wood: 2 }, { stone: 3 }, { stone: 5 }], burn: 0.5 },
     ruin:     { name: 'Ruine', w: 1, h: 1, work: 1, hp: [1], cost: [{}], burn: 0 }
   };
+  // Weitere Bauwerke für Rohstoffe (Stufe 3b)
+  WW.STRUCT_INFO.mine    = { name: 'Mine', w: 2, h: 2, work: 90, hp: [120], cost: [{ wood: 8, stone: 4 }], burn: 0.3 };      // res: iron|coal|gold|crystal
+  WW.STRUCT_INFO.smithy  = { name: 'Schmiede', w: 2, h: 2, core: true, inside: true, work: 110, hp: [140], cost: [{ wood: 6, stone: 8 }], burn: 0.5 };
+  WW.STRUCT_INFO.fishery = { name: 'Fischerei', w: 2, h: 2, work: 60, hp: [70], cost: [{ wood: 8 }], burn: 1 };
+  WW.STRUCT_INFO.pasture = { name: 'Weide', w: 2, h: 2, work: 40, hp: [40], cost: [{ wood: 6 }], burn: 0.6 };
+
+  // Rohstoffe im Lager (stock) jeder Stadt: Schlüssel, Name, Icon; base = schon immer da
+  WW.RESOURCES = [
+    { key: 'food', name: 'Nahrung', icon: 'i_food', base: true, from: 'Felder, Fischerei, Weide', use: 'Essen, Wachstum' },
+    { key: 'wood', name: 'Holz', icon: 'i_wood', base: true, from: 'Wald (Holzfäller)', use: 'Bauen' },
+    { key: 'stone', name: 'Stein', icon: 'i_stone', base: true, from: 'Hügel, Gebirge (Steinmetze)', use: 'Mauern, Häuser' },
+    { key: 'gold', name: 'Gold', icon: 'i_gold', base: true, from: 'Steuern, Märkte, Goldminen', use: 'Söldner, Freikauf' },
+    { key: 'iron', name: 'Eisen', icon: 'i_iron', from: 'Eisenmine an Hügeln/Gebirgsrand', use: 'Schmiede: Werkzeug (Arbeit +) und Waffen (Kampfkraft +)' },
+    { key: 'coal', name: 'Kohle', icon: 'i_coal', from: 'Kohlemine', use: 'Schmiede, Fabriken, Züge' },
+    { key: 'fish', name: 'Fisch', icon: 'i_fish', from: 'Fischerei am Wasser', use: 'Nahrung (wird zuerst gegessen)' },
+    { key: 'crystal', name: 'Kristall', icon: 'i_crystal', from: 'Kristallmine im Kristallfeld', use: 'Luxus: Zufriedenheit, Gold im Handel, Wunder' },
+    { key: 'wool', name: 'Wolle', icon: 'i_wool', from: 'Weide', use: 'Kleidung: Zufriedenheit (in kalten Gegenden mehr)' }
+  ];
+  WW.RESOURCE_KEYS = WW.RESOURCES.map(r => r.key);
+  // Vorkommen (state.deposit): Code -> Art
+  WW.DEPOSITS = [null, 'iron', 'coal', 'gold', 'crystal', 'fish'];
+  WW.DEPOSIT_CODE = { iron: 1, coal: 2, gold: 3, crystal: 4, fish: 5 };
+
   WW.WALL_STYLES = ['palisade', 'stone', 'fortress'];
   WW.WALL_STYLE_NAMES = { palisade: 'Palisade', stone: 'Steinmauer', fortress: 'Festungsmauer', barricade: 'Barrikade' };
 

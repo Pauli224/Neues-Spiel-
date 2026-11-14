@@ -49,7 +49,7 @@
     chop: { f: ['chop'], vol: 0.35, prio: 2, cls: 'detail', gap: 0.6 },
     build: { f: ['build'], vol: 0.4, prio: 3, cls: 'detail', gap: 0.8 },
     rocket: { f: ['rocket_launch'], vol: 0.55, prio: 6, cls: 'loud', gap: 1.5 },
-    whistle: { f: ['whistle'], vol: 0.25, prio: 2, cls: 'mid', gap: 30 },
+    whistle: { f: ['whistle'], vol: 0.3, prio: 3, cls: 'mid', gap: 8 },
     sheep: { f: ['sheep'], vol: 0.4, prio: 2, cls: 'detail', gap: 2 },
     cow: { f: ['cow'], vol: 0.45, prio: 2, cls: 'detail', gap: 2.5 },
     wolf: { f: ['wolf'], vol: 0.4, prio: 3, cls: 'mid', gap: 4 },
@@ -80,7 +80,8 @@
     tornado: { f: ['amb_wind'], vol: 1.6, prio: 7, cls: 'loud', loop: true, rate: 1.35 },
     blackhole: { f: ['rocket_loop'], vol: 1.3, prio: 8, cls: 'loud', loop: true, rate: 0.5 },
     volcano: { f: ['amb_fire'], vol: 1.4, prio: 6, cls: 'loud', loop: true, rate: 0.55 },
-    floodLoop: { f: ['amb_river'], vol: 1.3, prio: 5, cls: 'loud', loop: true, rate: 0.8 }
+    floodLoop: { f: ['amb_river'], vol: 1.3, prio: 5, cls: 'loud', loop: true, rate: 0.8 },
+    train: { f: ['loco'], vol: 0.7, prio: 4, cls: 'mid', loop: true }
   };
 
   let ctx = null, out = null, beds = null, music = null, timer = null, inited = false, base = 'audio/';
@@ -97,9 +98,10 @@
   let moodForce = null, darkUntil = 0, warOn = false, stingAt = -10;
   let rainSpots = [];
   let flushPending = false;
-  const TOK_RATE = 6, TOK_MAX = 6;
-  let tokens = TOK_MAX, tokT = 0;
-  const stats = { played: 0, dropped: 0, stolen: 0, silent: 0, peakVoices: 0, errors: 0 };
+  const TOK_RATE = 4, TOK_MAX = 4, AMB_RATE = 1, AMB_MAX = 2;
+  let tokens = TOK_MAX, tokT = 0, ambTok = AMB_MAX, ambT = 0;
+  let speed = 1, spTick = -1, spT = 0;   // geschätztes Spieltempo (Ticks je s / 10)
+  const stats = { fx: 0, amb: 0, played: 0, dropped: 0, stolen: 0, silent: 0, peakVoices: 0, errors: 0 };
 
   function now() { return ctx ? ctx.currentTime : 0; }
   function safe(fn) { return function () { try { return fn.apply(null, arguments); } catch (e) { stats.errors++; return undefined; } }; }
@@ -158,6 +160,8 @@
     const reff = Math.sqrt(d * d + h * h);
     let gain = Math.min(1, (REF[cls] || 16) / reff);
     gain *= gain > 0.3 ? 1 : Math.sqrt(gain / 0.3);
+    // Kleines außerhalb des Bildes fällt schnell ab: ohne nahe Stadt hört man fast nur Natur
+    if (cls !== 'loud' && cls !== 'huge' && d > D * 1.1) gain *= Math.pow(D * 1.1 / d, 2);
     const pan = C.clamp(dx / Math.max(D, 6), -1, 1) * 0.8;
     const lp = d > 12 ? C.clamp(18000 / (1 + Math.pow(d / 25, 1.5)), 400, 18000) : 0;
     const delay = (cls === 'loud' || cls === 'huge') ? C.clamp((d - D * 0.8) * 0.008, 0, 2.5) : 0;
@@ -282,7 +286,10 @@
     sparkle: (f) => (f.r ? ['magic'] : ['bell', 1.3, 'chime']), heal: () => ['magic', 1.08, 'heal'], hearts: () => ['magic2', 1.2, 'hearts'],
     goldrain: () => ['bell', 1.5, 'gold'], frost: () => ['magic2', 0.8, 'frost'], raise: () => ['quake', 1.4, 'terrain'], lower: () => ['quake', 1.25, 'terrain'],
     splash: () => ['splash'], fishjump: () => ['splash', 1.6, 'fish'], firebreath: () => ['dragon'], zombify: () => ['snarl', 0.8, 'zombify'],
-    govchange: () => ['bells', 1, 'gov'], restyle: () => ['bell', 1, 'restyle'], centerStage: () => ['bells', 1, 'center']
+    govchange: () => ['bells', 1, 'gov'], restyle: () => ['bell', 1, 'restyle'], centerStage: () => ['bells', 1, 'center'],
+    whistle: () => ['whistle'],
+    // Baumfällen: leises Holzknacken, höchstens eins alle 2 s
+    treeFall: () => ['chop', 0.8, 'treeFall', 2, 0.5]
   };
   const DARK_FX = { mushroom: 90, bang: 40, meteor: 30, quake: 40, eruption: 40, plague: 40 };
 
@@ -318,24 +325,24 @@
       let x = f.x, y = f.y;
       if (f.type === 'quake' && isFinite(f.x2)) { x = (f.x + f.x2) / 2; y = (f.y + f.y2) / 2; }
       let g = groups.get(key);
-      if (!g) { g = { name: r[0], rate: r[1] || 1, key, n: 0, x, y, best: Infinity }; groups.set(key, g); }
+      if (!g) { g = { name: r[0], rate: r[1] || 1, key, gap: r[3], gain: r[4] || 1, n: 0, x, y, best: Infinity }; groups.set(key, g); }
       g.n++;
       const dd = isFinite(x) ? (x - cam.x) * (x - cam.x) + (y - cam.y) * (y - cam.y) : 0;
       if (dd < g.best) { g.best = dd; g.x = x; g.y = y; }
     }
     const list = Array.from(groups.values()).sort((a, b) => SND[b.name].prio - SND[a.name].prio);
     let played = 0;
-    tokens = Math.min(TOK_MAX, tokens + (t - tokT) * TOK_RATE); tokT = t;
+    // Gesamtdrossel: höchstens ~4 neue Effekte je Sekunde bei 1×, bei hohem Tempo weniger (4 / √Tempo); Großes (Vorrang ≥ 8) immer
+    tokens = Math.min(TOK_MAX, tokens + (t - tokT) * TOK_RATE / Math.sqrt(Math.max(1, speed))); tokT = t;
     for (const g of list) {
       if (played >= 6) { stats.dropped++; continue; }
-      // Gesamtdrossel: höchstens ~6 neue Effekte je Sekunde, Großes (Vorrang ≥ 8) immer
       if (SND[g.name].prio < 8 && tokens < 1) { stats.dropped++; continue; }
       const sd = SND[g.name];
-      const gap = Math.max(sd.gap || 0.1, lastPlay['@' + g.name] != null ? 0 : 0);
+      const gap = g.gap || sd.gap || 0.1;
       if (lastPlay[g.key] != null && t - lastPlay[g.key] < gap) { stats.dropped++; continue; }
       if (lastPlay['@' + g.name] != null && t - lastPlay['@' + g.name] < (sd.gap || 0.1) * 0.5) { stats.dropped++; continue; }
-      const v = playVoice(g.name, { x: g.x, y: g.y, rate: g.rate, gain: 1 + Math.min(0.3, Math.log(g.n) * 0.1) });
-      if (v) { lastPlay[g.key] = t; lastPlay['@' + g.name] = t; played++; if (SND[g.name].prio < 8) tokens -= 1; }
+      const v = playVoice(g.name, { x: g.x, y: g.y, rate: g.rate, gain: g.gain * (1 + Math.min(0.3, Math.log(g.n) * 0.1)) });
+      if (v) { lastPlay[g.key] = t; lastPlay['@' + g.name] = t; played++; stats.fx++; if (SND[g.name].prio < 8) tokens -= 1; }
     }
   }
 
@@ -346,6 +353,8 @@
     alliance: 'st_alliance', godAlliance: 'st_alliance', royalWedding: 'st_alliance', succession: 'st_crown', seatDone: 'st_crown',
     revolution: 'st_revolt', regimeFall: 'st_revolt', coup: 'st_revolt', collapse: 'st_revolt', strongman: 'st_revolt',
     found: 'st_found', newRealm: 'st_found', kingdomGone: 'st_gone', fallen: 'st_gone' };
+  // Lager-Ereignisse (js/sim/camps.js: campBuilt, campPickup, campIntern, campBreakout, campRiot, campProtest, campLiberated)
+  // bekommen bewusst kein Signal.
   const DARK_EV = { godNuke: 90, godNukeWild: 90, godTsar: 120, godTsarWild: 120, godBlackhole: 50, godBlackholeWild: 50, godMeteor: 30,
     godVolcano: 40, godVolcanoWild: 40, godQuake: 40, randomPlague: 50, godPlague: 50, zombieOutbreak: 50, kingdomGone: 40, fallen: 30, famine: 25 };
   let pendingSting = null;
@@ -382,6 +391,9 @@
     for (const p of ac) if (p && isFinite(p.x)) want.set('ac' + p.id, { name: 'engine_' + (SND['engine_' + p.kind] ? p.kind : 'bomber'), x: p.x, y: p.y, rocket: p.kind === 'rocket' });
     const ef = st && st.wild && Array.isArray(st.wild.effects) ? st.wild.effects : [];
     for (const e of ef) if (e && LOOP_OF[e.type] && isFinite(e.x)) want.set('ef' + e.id, { name: LOOP_OF[e.type], x: e.x, y: e.y });
+    // fahrende Züge in Kameranähe
+    const tr = st && Array.isArray(st.trains) ? st.trains : [], near = cam.dist * 1.3 + 12;
+    for (const z of tr) if (z && z.t === 'run' && !z.dead && isFinite(z.x) && Math.abs(z.x - cam.x) < near && Math.abs(z.y - cam.y) < near) want.set('tr' + z.id, { name: 'train', x: z.x, y: z.y });
     let arr = Array.from(want.entries());
     if (arr.length > GROUP_CAP.loop) {
       arr.sort((a, b) => ((a[1].x - cam.x) ** 2 + (a[1].y - cam.y) ** 2) - ((b[1].x - cam.x) ** 2 + (b[1].y - cam.y) ** 2));
@@ -400,7 +412,7 @@
         continue;
       }
       // Doppler angedeutet
-      const rate = w.name.indexOf('engine_') === 0 && dt > 0 ? 1 + C.clamp(-(d - v.lastD) / dt / 80, -0.1, 0.1) : 0;
+      const rate = (w.name.indexOf('engine_') === 0 || w.name === 'train') && dt > 0 ? 1 + C.clamp(-(d - v.lastD) / dt / 80, -0.1, 0.1) : 0;
       v.lastD = d;
       moveVoice(v, w.x, w.y, rate);
     }
@@ -411,12 +423,13 @@
     const m = mixOverride || mix;
     if (!m || !beds) return;
     cam.now = now();
+    ambTok = Math.min(AMB_MAX, ambTok + dt * AMB_RATE / Math.sqrt(Math.max(1, speed)));
     for (const e of A.events(m, cam, dt)) {
-      if (!SND[e.name]) continue;
+      if (!SND[e.name] || ambTok < 1) continue;
       const t = now();
       if (lastPlay['@' + e.name] != null && t - lastPlay['@' + e.name] < SND[e.name].gap) continue;
       const v = playVoice(e.name, { x: e.x, y: e.y, rate: e.rate, bus: e.animal ? out.effects : out.ambient, group: e.animal ? 'animal' : 'amb' });
-      if (v) lastPlay['@' + e.name] = t;
+      if (v) { lastPlay['@' + e.name] = t; ambTok -= 1; stats.amb++; }
     }
   }
 
@@ -439,6 +452,10 @@
     if (ci) { cam.x = C.fin(ci.x, cam.x); cam.y = C.fin(ci.y, cam.y); cam.dist = C.clamp(C.fin(ci.dist, cam.dist), 3, 400); camSet = true; }
     if (!ctx || ctx.state !== 'running') return;
     const t = now();
+    if (state && isFinite(state.tick)) {
+      if (spTick < 0 || state.tick < spTick) { spTick = state.tick; spT = t; }
+      else if (t - spT >= 1) { speed = speed * 0.5 + 0.5 * C.clamp((state.tick - spTick) / (t - spT) / 10, 0, 50); spTick = state.tick; spT = t; }
+    }
     if (queue.length) flush();
     if (state && t - lastAnalyze > 0.4) {
       lastAnalyze = t;
@@ -477,7 +494,7 @@
     state: safe(() => ({
       available: !!AC, started: !!ctx, running: !!ctx && ctx.state === 'running', muted, suspended: userSusp, hidden,
       volume: Object.assign({}, vol), voices: voices.length, maxVoices: MAX_VOICES, beds: beds ? beds.count() : 0,
-      loops: Array.from(loops.values()).filter((v) => !v.dying).length, mood: ctx ? mood() : 'peace',
+      loops: Array.from(loops.values()).filter((v) => !v.dying).length, mood: ctx ? mood() : 'peace', speed: Math.round(speed * 10) / 10,
       music: music ? music.current() : null, loading: BANK ? BANK.state() : null
     })),
     // Für Testseite und Messungen
