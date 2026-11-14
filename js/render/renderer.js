@@ -1193,6 +1193,8 @@
         // Ausbaustufen: 0 Lager, 1 Dorfhalle, 2 (oder fehlend) Regierungssitz
         if (s.stage === 0) { const k = this.pickVar(S.campKey, ['s_camp_a', 's_camp_b'], s); if (k) return k; }
         if (s.stage === 1) { const k = this.pickVar(S.hallKey, ['s_hall_a', 's_hall_b'], s); if (k) return k; }
+        // Megastadt/Riesenstadt (9.10): monumentales Zentrum ab Ausbaustufe 3
+        if ((s.stage | 0) >= 3 && typeof S.centerKey === 'function') { let k = null; try { k = S.centerKey(style, s.stage | 0); } catch (e) { k = null; } if (k && S.has(k)) return k; }
         return 's_center_' + style;
       }
       case 'house': {
@@ -1206,6 +1208,7 @@
       case 'pyramid': { const k = 's_monument_' + Math.max(0, Math.min(2, s.stage != null ? s.stage | 0 : (s.level | 0) - 1)); return S.has(k) ? k : 's_monument_' + style; }
       case 'market': { const cu = this.cultureOf(s); if (cu && typeof S.marketKey === 'function') { const k = S.marketKey(cu); if (k && S.has(k)) return k; } return 's_market'; }
       case 'temple': { const cu = this.cultureOf(s); if (cu && typeof S.templeKey === 'function') { const k = S.templeKey(cu); if (k && S.has(k)) return k; } return S.has('s_temple') ? 's_temple' : 's_monument_' + style; }
+      case 'garrison': { let k = null; try { k = typeof S.garrisonKey === 'function' ? S.garrisonKey(style, this.cultureOf(s)) : null; } catch (e) { k = null; } return k && S.has(k) ? k : (S.has('s_barracks') ? 's_barracks' : 's_ruin_2'); }   // Kaserne (9.10)
       case 'arsenal': { const k = typeof S.arsenalKey === 'function' ? S.arsenalKey(style) : 's_arsenal_' + style; return S.has(k) ? k : (S.has('s_barracks') ? 's_barracks' : 's_ruin_2'); }
       case 'camphq': case 'barrack': { const k = typeof S.campBuildKey === 'function' ? S.campBuildKey(s.type, style) : 's_' + s.type; return S.has(k) ? k : (S.has('s_' + s.type) ? 's_' + s.type : 's_barracks'); }
       case 'harbor': {
