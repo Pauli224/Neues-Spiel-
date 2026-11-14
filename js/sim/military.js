@@ -132,6 +132,7 @@
     m.count = m.count && typeof m.count === 'object' ? m.count : {};
     m.pick = typeof m.pick === 'number' ? m.pick : -1;
     m.pickT = m.pickT | 0;
+    m.hold = m.hold && typeof m.hold === 'object' ? m.hold : {};
     st.mil = m;
   }
 
@@ -726,11 +727,13 @@
   // Schlachten
   // ---------------------------------------------------------------------------
   // Vorfeld einer Stadt (Ringradius bzw. Kernbebauung + BATTLE.siegeMargin): dort wird belagert/angegriffen, nicht im Feld geschlagen
+  // ummauert: Ringradius aus der Innenfläche; offene Stadt: Kernbebauung (6 + Stufe)
+  function cityR(c) { return c.wall && c.wall.level >= 1 && c.wall.inside ? Math.sqrt(c.wall.inside / 3.14) : 6 + (c.tier | 0); }
   function siegeZone(sim, x, y) {
     const m = M().BATTLE.siegeMargin;
     for (const c of sim.state.cities) {
-      // ummauert: Ringradius aus der Innenfläche; offene Stadt: Kernbebauung (6 + Stufe) – Angriff auf die Stadt ist keine Feldschlacht
-      const r = (c.wall && c.wall.level >= 1 && c.wall.inside ? Math.sqrt(c.wall.inside / 3.14) : 6 + (c.tier | 0)) + m;
+      // Angriff auf eine Stadt ist Belagerung, keine Feldschlacht
+      const r = cityR(c) + m;
       const dx = x - c.cx - 0.5, dy = y - c.cy - 0.5;
       if (dx * dx + dy * dy <= r * r) return true;
     }
@@ -816,6 +819,92 @@
     return { base: base, name: (O[n] || (n + '.')) + ' ' + base, place: p };
   }
 
+  // Rückzug abgeschnitten: keine eigene Stadt im Umkreis BATTLE.cutoff
+  function cutOff(sim, kid, x, y) {
+    const k = sim._kingdoms.get(kid), R = M().BATTLE.cutoff;
+    if (!k) return true;
+    for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && (c.cx - x) * (c.cx - x) + (c.cy - y) * (c.cy - y) <= R * R) return false; }
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Feldzug (WW.MIL.CAMPAIGN, Faschismus/Kommunismus): Zielwahl, Sammeln, gemeinsamer Marsch mit den Fahrzeugen
+  // ---------------------------------------------------------------------------
+  function campaignOf(k) { return k && M().CAMPAIGN.govs[k.gov] ? M().CAMPAIGN : null; }
+  // Haken aus diplo.js update: schwächere, nahe Feindstadt statt einfach der nächsten
+  function pickTarget(sim, k, e, pair, marching) {
+    const C = campaignOf(k);
+    if (!C) return pair;
+    const st = sim.state, W = st.W;
+    if (marching > 0) {
+      const m = st.mil.march[k.id];
+      const tc = m && m.k === e.id && sim._cities.get(m.city);
+      if (tc && tc.kingdomId === e.id) {
+        let a = null, bd = 1e9;
+        for (const id of k.cityIds) { const c = sim._cities.get(id); if (!c) continue; const d = Math.abs(c.cx - tc.cx) + Math.abs(c.cy - tc.cy); if (d < bd) { bd = d; a = c; } }
+        if (a) return { a: a, b: tc, d: bd };
+      }
+      return pair;
+    }
+    if (sim._compDirty) WW.Path.updateComponents(sim);
+    let best = null, bs = 1e9;
+    for (const tid of e.cityIds) {
+      const tc = sim._cities.get(tid);
+      if (!tc) continue;
+      let a = null, bd = 1e9;
+      for (const id of k.cityIds) {
+        const c = sim._cities.get(id);
+        if (!c || sim.comp[c.cy * W + c.cx] !== sim.comp[tc.cy * W + tc.cx]) continue;
+        const d = Math.abs(c.cx - tc.cx) + Math.abs(c.cy - tc.cy);
+        if (d < bd) { bd = d; a = c; }
+      }
+      if (!a || bd > pair.d + C.extraDist) continue;
+      const def = (tc.jobs && tc.jobs.soldier || 0) * 2 + (tc.garrison | 0) * 2 + (tc.wall ? tc.wall.level : 0) * 6 + tc.pop * 0.1;
+      const sc = bd + def * C.defWeight;
+      if (sc < bs) { bs = sc; best = { a: a, b: tc, d: bd }; }
+    }
+    return best || pair;
+  }
+  // Haken aus diplo.js update: true = noch nicht losschicken (Heer und Fahrzeuge sammeln sich)
+  function holdArmy(sim, k, e, r, idle, marching) {
+    const C = campaignOf(k);
+    if (!C || marching > 0 || !r) return false;
+    const st = sim.state;
+    if (st.year - r.since >= C.holdYears) return false;
+    if (idle.length < C.minArmy) return true;
+    const want = Math.min(C.wantVeh, capOf(sim, k, 'tank', true) + capOf(sim, k, 'artillery', true));
+    if (want <= 0 || !arsenalsOfKingdom(sim, k.id).some((s) => s.built)) return false;
+    let v = 0;
+    for (const u of st.units) if (!u.dead && u.vehicle && u.kingdomId === k.id && !u.order && u.garrison == null) v++;
+    return v < want;
+  }
+  // Gemeinsamer Marsch: Soldaten warten auf ihre Fahrzeuge (unterwegs und vor dem Angriff), höchstens CAMPAIGN.waitYears
+  function pace(sim, groups) {
+    const st = sim.state, C = M().CAMPAIGN, hold = st.mil.hold;
+    const live = {};
+    for (const g of groups) {
+      const k = sim._kingdoms.get(g.kid), tc = sim._cities.get(g.city);
+      if (!campaignOf(k) || !tc) continue;
+      let vx = 0, vy = 0, vn = 0, sx = 0, sy = 0, sn = 0;
+      for (const u of g.list) { if (u.vehicle) { vx += u.x; vy += u.y; vn++; } else if (u.role === 'soldier') { sx += u.x; sy += u.y; sn++; } }
+      if (!vn || !sn) continue;
+      const key = g.kid + '>' + g.city;
+      live[key] = 1;
+      if (hold[key] == null) hold[key] = st.tick;
+      if (st.tick - hold[key] > C.waitYears * TPY()) continue;   // nicht ewig warten
+      const tx = tc.cx + 0.5, ty = tc.cy + 0.5;
+      const dV = Math.hypot(vx / vn - tx, vy / vn - ty);
+      const edge = cityR(tc) + C.waitR;
+      for (const u of g.list) {
+        if (u.vehicle || u.role !== 'soldier' || u.foe >= 0) continue;
+        const d = Math.hypot(u.x - tx, u.y - ty);
+        // weit vor den Fahrzeugen oder am Rand des Angriffsziels, während die Fahrzeuge noch zurück sind: warten
+        if ((d < dV - C.lag && d > edge - 2) || (d <= edge && dV > edge + 2)) { u.path = null; u.moving = false; u.nextPath = st.tick + 22; }
+      }
+    }
+    for (const key in hold) if (!live[key]) delete hold[key];
+  }
+
   // Marschgruppen: Abfangen, Ausfall der Verteidiger, Marschziel für Fahrzeuge (alle 20 Ticks im Krieg)
   function armies(sim) {
     const st = sim.state, B = M().BATTLE;
@@ -848,6 +937,7 @@
       gl.push(g);
     }
     st.mil.march = march;
+    pace(sim, gl);
     const W = st.W;
     const outside = (x, y) => { const i = Math.floor(y) * W + Math.floor(x); return i >= 0 && i < st.inRing.length && st.inRing[i] === -1; };
     // Abfangen: verfeindete Marschgruppen in der Nähe binden einander
@@ -881,7 +971,7 @@
       const dk = sim._kingdoms.get(tc.kingdomId), ak = sim._kingdoms.get(g.kid);
       if (!dk || !ak || !(WW.GOVERNMENTS[dk.gov].soldierShare > 0)) continue;
       const idle = idleByCity.get(tc.id) || [];
-      if (idle.length < 3 || idle.length < g.soldiers * 0.5) continue;
+      if (idle.length < 3 || idle.length < g.soldiers * B.sortieRatio) continue;   // Ausfall nur mit klarer Übermacht
       const pair = WW.Diplo.nearestCities(sim, dk, ak);
       if (!pair) continue;
       tc.milSortie = st.year;
@@ -1000,7 +1090,7 @@
           const my = sd === 1 ? nA : nB, op = sd === 1 ? nB : nA, peak = sd === 1 ? b.peakA : b.peakB;
           if (my > Math.max(1, peak * B.breakAt) || op < Math.max(2, my * B.ratio)) continue;
           const list = sd === 1 ? memA : memB;
-          if (op >= my * B.surrenderRatio && sim.rng.chance(0.6)) surrender(sim, b, sd, list);
+          if (op >= my * B.surrenderRatio && cutOff(sim, sideK(b, sd), b.x, b.y) && sim.rng.chance(0.6)) surrender(sim, b, sd, list);   // Aufgabe nur abgeschnitten
           else retreat(sim, b, sd, list);
           break;
         }
@@ -1235,7 +1325,7 @@
   WW.Military = {
     reserve: reserve, tick: tick, defaults: defaults, unit: unit, armor: armor, onKill: onKill, strength: strength, actions: actions,
     tryArsenal: tryArsenal, spawnVehicle: spawnVehicle, vehiclesOf: vehiclesOf, battleAt: battleAt, siteAt: siteAt, govSpec: govSpec,
-    capOf: capOf, costOf: costOf, production: production, placeName: placeOf, battleName: battleName
+    pickTarget: pickTarget, holdArmy: holdArmy, siegeZone: siegeZone, capOf: capOf, costOf: costOf, production: production, placeName: placeOf, battleName: battleName
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

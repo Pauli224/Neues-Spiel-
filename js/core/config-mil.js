@@ -45,12 +45,18 @@
 
     // Feldschlacht: mindestens min Kämpfer (beide Seiten zusammen, je Seite sideMin) im Umkreis r außerhalb der Mauerringe
     BATTLE: { min: 12, sideMin: 3, r: 10, rMax: 15, check: 20, breakAt: 0.4, ratio: 2, surrenderRatio: 3, minTicks: 100,
-              maxTicks: 720, quiet: 2, paroleTicks: 480, siegeMargin: 5, minLosses: 4, interceptR: 16, engageR: 12, sortieR: 30, sortieYears: 2 },
+              maxTicks: 720, quiet: 2, paroleTicks: 480, siegeMargin: 12, cutoff: 40, sortieRatio: 1.2, minLosses: 4, interceptR: 16, engageR: 12, sortieR: 30, sortieYears: 2 },
     // Gräben: dig je Prüfung und eingegrabenem Kämpfer, cover ab diesem Wert; Schaden × coverRanged (Fernkampf) bzw.
     // × coverMelee; decay: jährlicher Abbau nach Naturmodus des Gebiets (care wächst am schnellsten zu)
     TRENCH: { dig: 45, cover: 60, coverRanged: 0.55, coverMelee: 0.85, decay: { care: 40, use: 24, exploit: 12, none: 24 } },
     CRATER: [150, 199],    // state.mark-Wert eines Granattrichters (Zufall im Bereich; zählt wie alle Marken herunter)
     PATH_SHARE: 0.08,      // Anteil des Wegsuche-Budgets je Tick für Fahrzeuge (eigener Topf, getrennt von den Heeren)
+    // Feldzug (Faschismus, Kommunismus): Ziel = nahe, schwach verteidigte Stadt (Entfernung + defWeight × Abwehr, höchstens
+    // extraDist weiter als die nächste); vor dem Losmarschieren minArmy Soldaten und wantVeh Fahrzeuge sammeln (bis holdYears nach
+    // Kriegsbeginn); unterwegs warten die Soldaten auf die Fahrzeuge (lag Kacheln Vorsprung) und vor dem Angriff am Rand
+    // (Stadtradius + waitR), höchstens waitYears je Feldzug
+    CAMPAIGN: { govs: { fascism: 1, communism: 1 }, extraDist: 30, defWeight: 1.5, minArmy: 10, wantVeh: 2, holdYears: 2,
+                lag: 6, waitR: 8, waitYears: 1.5 },
     WORLD_MAX: 48,         // höchstens so viele Fahrzeuge weltweit (Arsenale warten darüber)
     ENGINE_MUL: 0.3,       // Schaden von Panzern/Geschützen an Rammböcken und Katapulten
     WRECK_YEARS: 30, MAX_WRECKS: 80, MAX_SITES: 40,

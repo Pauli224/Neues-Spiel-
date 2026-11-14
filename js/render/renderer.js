@@ -1380,6 +1380,7 @@
     const hiNow = this.useHi();
     if (this._hiWas !== undefined && this._hiWas !== hiNow) this.markAll();
     this._hiWas = hiNow;
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('a_flush');
     this.flushDirty();
     const budget = opts.firstFrames ? 40 : 7;
     const tb = performance.now();
@@ -1402,6 +1403,7 @@
     const ntiles = (vt.x1 - vt.x0 + 1) * (vt.y1 - vt.y0 + 1);
     const low = ntiles > LOW_DETAIL_TILES;
 
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('b_pre');
     // (1) Boden
     const cx0 = Math.max(0, (vt.x0 / CH) | 0), cx1 = Math.min(this.cw - 1, (vt.x1 / CH) | 0);
     const cy0 = Math.max(0, (vt.y0 / CH) | 0), cy1 = Math.min(this.chh - 1, ((vt.y1) / CH) | 0);
@@ -1422,6 +1424,7 @@
     const SK = s + '|' + ox + '|' + oy + '|' + cv.width + '|' + cv.height + '|' + (low ? 1 : 0);
     const wf = (this.time * 5) | 0;
     this._patchBase = null; this._patchA0 = null;
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('c_prep');
     const camStill = SK === this._camKey && !(this.shake > 0);
     if (camStill && !missing && !opts.firstFrames && this.gfx.still !== false) {
       const mk = (c) => { if (!c) c = document.createElement('canvas'); if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; } return c; };
@@ -1459,6 +1462,7 @@
       if (near) this.drawRegions(ctx, P);
       if (smogOn) { this._smogSh = 4 * Math.sin(this.time * 0.2); ctx.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(ctx); }
     }
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('d_still');
     ctx.setTransform(s, 0, 0, s, ox, oy);
     let drawn;
     if (low && (opts.scale || 1) < 0.9) drawn = this.drawDots(ctx, vt, opts);
@@ -1466,6 +1470,7 @@
     else drawn = this.drawObjects(ctx, vt, low, opts);
     if (!low && typeof S.flagKey === 'function') this.drawFlags(ctx, vt);
 
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('e_dyn');
     // Feuer auf Kacheln
     if (st.fire && st.fireCount > 0) {
       const nf = typeof S.fxFrames === 'function' ? S.fxFrames('fire') : 3;
@@ -1476,10 +1481,12 @@
       }
     }
 
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('f_fire');
     // Leben: Vögel, Schmetterlinge, springende Fische, Schornsteinrauch
     if (!low) this.drawLife(ctx, vt, dt, opts);
     // Rauch aus Fabriken, Dunst
     if (st.structs) this.updatePlumes(ctx, vt, dt);
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('g_life');
     // (4) Effekte, Flugzeuge
     this._lastDt = dt;
     this.drawFx(ctx, dt);
@@ -1487,18 +1494,21 @@
     if (st.trains && st.trains.length) this.drawTrains(ctx, st.trains, vt);
     if (st.aircraft && st.aircraft.length) this.drawAircraft(ctx, st.aircraft);
 
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('h_fx');
     this.drawParticles(ctx, dt);
     // Wolkenschatten, Wetter, Tageszeit (Nacht und Wolken in einer Ebene niedriger Auflösung)
     this._dayPhase = opts.dayPhase; this._dpr = cam.dpr;
     this.drawAtmosphere(ctx, cam, vt, dt, opts, s, ox, oy);
     ctx.setTransform(s, 0, 0, s, ox, oy);
 
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('i_atmo');
     // (5) Auswahl und Pinsel
     if (opts.select) this.drawSelection(ctx, opts.select, opts);
     if (opts.brush) this.drawBrush(ctx, opts.brush);
     if (opts.held) this.drawHeld(ctx, opts.held);
     if (st.plots && st.plots.length) this.drawPlots(ctx, vt);
 
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('j_sel');
     // Stadtnamen in Bildschirmpixeln
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (st.cities && opts.showNames !== false) this.drawCityLabels(ctx, cam, opts);
@@ -1509,6 +1519,7 @@
       ctx.fillRect(0, 0, cv.width, cv.height);
       this.flash -= dt;
     }
+    if (typeof window !== 'undefined' && window.__rp) window.__rp('k_labels');
     this.stats.drawn = drawn;
     this.stats.low = low;
     this.stats.frameMs = this.stats.frameMs * 0.9 + (performance.now() - t0) * 0.1;
