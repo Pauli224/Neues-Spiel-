@@ -114,7 +114,7 @@
     EXCHANGE: 0.3,      // Gefangenenaustausch je Jahr und Kriegspaar
     ESCAPE: 0.04,       // Flucht aus einem Gefangenenlager je Jahr und Lager
     HOME_JOY: 6, FREE_JOY: 15,   // Freude der Heimat bei Heimkehr (3 Jahre), der befreiten Stadt (6 Jahre)
-    MARCH_MAX: 1800     // Ticks, nach denen ein festgefahrener Marsch am Ziel ankommt (Notausgang)
+    MARCH_MAX: 1200     // Ticks, nach denen ein festgefahrener Marsch am Ziel ankommt (Notausgang)
   };
   const SI = WW.STRUCT_INFO;
   if (SI && !SI.laborcamp) {

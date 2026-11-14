@@ -5,13 +5,13 @@ const path = require('path');
 const fs = require('fs');
 const ROOT = path.join(__dirname, '..');
 const FILES = [
-  'js/core/terrain.js', 'js/core/rng.js', 'js/core/config.js', 'js/core/config-industry.js', 'js/core/config-walls.js', 'js/core/config-events.js', 'js/core/config-wild.js', 'js/core/config-mil.js',
-  'js/data/names.js', 'js/data/texts.js', 'js/data/texts-industry.js', 'js/data/events.js', 'js/data/texts-wild.js', 'js/data/texts-mil.js',
+  'js/core/terrain.js', 'js/core/rng.js', 'js/core/config.js', 'js/core/config-industry.js', 'js/core/config-walls.js', 'js/core/config-events.js', 'js/core/config-wild.js', 'js/core/config-mil.js', 'js/core/config-naval.js',
+  'js/data/names.js', 'js/data/texts.js', 'js/data/texts-industry.js', 'js/data/events.js', 'js/data/texts-wild.js', 'js/data/texts-mil.js', 'js/data/texts-naval.js',
   'js/sim/util.js', 'js/sim/world.js', 'js/sim/worldgen.js', 'js/sim/path.js', 'js/sim/structs.js',
   'js/sim/walls.js', 'js/sim/mods.js', 'js/sim/cities.js', 'js/sim/units.js', 'js/sim/gov.js', 'js/sim/diplo.js',
-  'js/sim/growth.js', 'js/sim/creatures.js', 'js/sim/wild.js', 'js/sim/env.js', 'js/sim/powers.js', 'js/sim/events.js', 'js/sim/industry.js', 'js/sim/rail.js', 'js/sim/camps.js', 'js/sim/military.js', 'js/sim/sim.js'
+  'js/sim/growth.js', 'js/sim/creatures.js', 'js/sim/wild.js', 'js/sim/env.js', 'js/sim/powers.js', 'js/sim/events.js', 'js/sim/industry.js', 'js/sim/rail.js', 'js/sim/camps.js', 'js/sim/military.js', 'js/sim/naval.js', 'js/sim/sim.js'
 ];
-const OPTIONAL = { 'js/core/config-mil.js': 1, 'js/data/texts-mil.js': 1, 'js/sim/military.js': 1, 'js/core/config-industry.js': 1, 'js/data/texts-industry.js': 1, 'js/sim/industry.js': 1, 'js/sim/rail.js': 1, 'js/sim/camps.js': 1, 'js/core/config-walls.js': 1, 'js/core/config-events.js': 1, 'js/data/events.js': 1, 'js/sim/mods.js': 1, 'js/sim/events.js': 1, 'js/core/config-wild.js': 1, 'js/data/texts-wild.js': 1, 'js/sim/wild.js': 1, 'js/sim/worldgen.js': 1 };
+const OPTIONAL = { 'js/core/config-naval.js': 1, 'js/data/texts-naval.js': 1, 'js/sim/naval.js': 1, 'js/core/config-mil.js': 1, 'js/data/texts-mil.js': 1, 'js/sim/military.js': 1, 'js/core/config-industry.js': 1, 'js/data/texts-industry.js': 1, 'js/sim/industry.js': 1, 'js/sim/rail.js': 1, 'js/sim/camps.js': 1, 'js/core/config-walls.js': 1, 'js/core/config-events.js': 1, 'js/data/events.js': 1, 'js/sim/mods.js': 1, 'js/sim/events.js': 1, 'js/core/config-wild.js': 1, 'js/data/texts-wild.js': 1, 'js/sim/wild.js': 1, 'js/sim/worldgen.js': 1 };
 function load(opts) {
   for (const f of FILES) {
     if (opts && opts.noWorldGen && f.endsWith('worldgen.js')) continue;

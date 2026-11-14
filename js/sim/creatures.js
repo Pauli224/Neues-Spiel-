@@ -7,6 +7,8 @@
     sheep: { name: 'Schaf', plural: 'Schafe', category: 'animal', hp: 12, speed: 0.035, ai: 'grazer', move: 'land', habitat: ['grass', 'flowers', 'savanna', 'tundra'], area: 60, max: 70, life: 12, breed: 0.05, group: [3, 6], diet: 'grass', food: 4, flock: true },
     wolf: { name: 'Wolf', plural: 'Wölfe', category: 'animal', hp: 26, speed: 0.07, hostile: true, ai: 'predator', move: 'land', habitat: ['forest', 'taiga', 'grass', 'tundra'], area: 320, max: 26, life: 12, breed: 0.03, group: [3, 4], diet: 'meat', dmg: 2.5, sight: 7, prey: ['sheep'], huntsUnits: true, pack: true, food: 3 }
   };
+  if (!DEFS.camel) DEFS.camel = { name: 'Kamel', plural: 'Kamele', desc: 'Genügsames Lasttier der Wüste. Trägt die Karawanen.', category: 'animal', hp: 26, speed: 0.032,   // [kultur]
+    ai: 'grazer', move: 'land', habitat: ['desert', 'savanna', 'sand'], area: 260, max: 18, life: 25, breed: 0.025, group: [2, 4], diet: 'grass', food: 5, flock: true };   // [kultur]
   WW.CREATURES = {};
   const MOVE = { land: 0, water: 1, sand: 2, air: 3, ghost: 3 };
   for (const k in DEFS) {
@@ -311,6 +313,7 @@
     grazer: function (sim, a, cr, think) {
       if (think) {
         a.food -= CFG().FOOD_DECAY * (a.kind === 'cow' ? 1.3 : 1);
+        if (a.kind === 'camel') a.food += CFG().FOOD_DECAY * 0.7;   // [kultur] Kamele sind genügsam
         if (a.wait > 0) a.wait -= THINK;
         // Raubtiere in Sicht? fliehen
         let danger = null;

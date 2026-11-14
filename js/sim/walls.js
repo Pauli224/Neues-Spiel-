@@ -532,7 +532,12 @@
     // ein Tor: das zur Richtung toward nächste (sonst das erste); fehlt eins, wird das Randstück zum Zentrum hin genommen
     let gate = -1, bd = 1e18;
     const tx = toward ? toward.x : city.cx, ty = toward ? toward.y : city.cy + 99;
-    for (const g of ring.gates) { const gx = g % W, gy = (g - gx) / W, d = (gx - tx) * (gx - tx) + (gy - ty) * (gy - ty); if (d < bd) { bd = d; gate = g; } }
+    for (const g of ring.gates) {
+      const o = sim._structs.get(st.structAt[g]);
+      if (o && !WW.Structs.isWallish(o) && (CORE[o.type] || KEEP[o.type] || (o.cityId !== -1 && o.cityId !== city.id))) continue;   // Tor nicht auf ein Gebäude
+      const gx = g % W, gy = (g - gx) / W, d = (gx - tx) * (gx - tx) + (gy - ty) * (gy - ty);
+      if (d < bd) { bd = d; gate = g; }
+    }
     if (gate < 0) return false;
     WW.Growth.claimTiles(sim, city, ring.all.concat(ring.inside));
     for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;

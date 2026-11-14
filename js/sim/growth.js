@@ -787,7 +787,8 @@
     const owner = st.owner, inRing = st.inRing, id = city.id, dep = st.deposit, ter = st.terrain;
     const code = res ? WW.DEPOSIT_CODE[res] : 0;
     const o = {
-      area: (i, inner) => (owner[i] === id || (!inner && owner[i] === -1)) && inRing[i] === -1,
+      // Minen dürfen auch innerhalb der eigenen Mauer liegen (Vorkommen im Stadtgebiet), alles andere davor
+      area: (i, inner) => (owner[i] === id || (!inner && owner[i] === -1)) && (inRing[i] === -1 || (kind === 'mine' && inRing[i] === id)),
       fieldOk: kind === 'pasture', race: city.race, cityId: id, needWalkBorder: false
     };
     const minD = (city.wall.plan ? 0 : WW.CONFIG.WALL_RESERVE) + WW.CONFIG.WALL_MARGIN + 2;

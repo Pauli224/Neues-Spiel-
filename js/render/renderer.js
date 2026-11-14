@@ -1458,38 +1458,50 @@
     return k;
   };
 
-  // Blöcke, deren Suchbereich das Kachelrechteck berührt, als veraltet markieren
-  Renderer.prototype.objTouch = function (tx0, ty0, tx1, ty1) {
-    if (!this.chunks.length) return;
-    const ext = this._objExt || 6;
-    const ca = Math.max(0, Math.floor((tx0 - OBJ_R) / CH)), cb = Math.min(this.cw - 1, Math.floor((tx1 + OBJ_L) / CH));
-    const ra = Math.max(0, Math.floor((ty0 - ext + 1) / CH)), rb = Math.min(this.chh - 1, Math.floor((ty1 + 1) / CH));
-    for (let cy = ra; cy <= rb; cy++) for (let cx = ca; cx <= cb; cx++) this.chunks[cy * this.cw + cx].objV = (this.chunks[cy * this.cw + cx].objV | 0) + 1;
+  // Änderungen als schmutzige Rechtecke (Logikpixel) je Block merken; jedes Phasenbild holt sie später nach
+  Renderer.prototype.objDirty = function (x0, y0, x1, y1) {
+    if (!this.chunks.length || !(x1 > x0) || !(y1 > y0)) return;
+    const seq = this._oseq = (this._oseq | 0) + 1;
+    const ca = Math.max(0, Math.floor(x0 / CPX)), cb = Math.min(this.cw - 1, Math.floor((x1 - 1) / CPX));
+    const ra = Math.max(0, Math.floor(y0 / CPX)), rb = Math.min(this.chh - 1, Math.floor((y1 - 1) / CPX));
+    for (let cy = ra; cy <= rb; cy++) for (let cx = ca; cx <= cb; cx++) {
+      const c = this.chunks[cy * this.cw + cx];
+      c.objV = seq;
+      if (!c.ob) continue;
+      const dl = c.dl || (c.dl = []);
+      if (dl.length >= 5 * 48) { c.fullV = seq; dl.length = 0; } else dl.push(x0, y0, x1, y1, seq);
+    }
   };
-  // Deko-Zwischenspeicher eines Kachelrechtecks verwerfen (und Blöcke markieren)
+  // Deko eines Kachelrechtecks hat sich (vielleicht) geändert: Pixelfläche samt Überstand der Deko markieren
+  Renderer.prototype.objTouch = function (tx0, ty0, tx1, ty1) { this.objDirty((tx0 - 1) * 8, (ty0 - 4) * 8, (tx1 + 2) * 8, (ty1 + 2) * 8); };
+  // Deko-Zwischenspeicher eines Kachelrechtecks verwerfen (und Fläche markieren)
   Renderer.prototype.objForget = function (tx0, ty0, tx1, ty1) {
     const st = this.st; if (!st || !this._dk) return;
     const W = st.W, H = st.H;
     tx0 = Math.max(0, tx0); ty0 = Math.max(0, ty0); tx1 = Math.min(W - 1, tx1); ty1 = Math.min(H - 1, ty1);
+    if (tx1 < tx0 || ty1 < ty0) return;
     for (let y = ty0; y <= ty1; y++) this._dk.fill(0, y * W + tx0, y * W + tx1 + 1);
     this.objTouch(tx0, ty0, tx1, ty1);
   };
+  Renderer.prototype.objDirtyRc = function (rc) {
+    this.objDirty(rc.x0 - 1, rc.y0 - 1, rc.x1 + 1, rc.y1 + 1);
+    if (rc.spike) this.objDirty(rc.dx0 - 1, rc.dy0 - 1, rc.dx1 + 1, rc.dy1 + 1);
+  };
+  const DECO_NEAR = { house: 1, wall: 1, gate: 1, tower: 1 };   // Bauwerke, deren Änderung die Stadtdeko ringsum beeinflusst
 
-  // Bauwerke einsammeln (alle 0,2 s): Anker-Index je Kachel, Merkmals-Prüfsumme je Block, Lagerfeuer, Balken-Kandidaten
+  // Bauwerke einsammeln (alle 0,2 s): Anker-Index je Kachel, geänderte Bauwerke als schmutzige Rechtecke, Lagerfeuer, Balken-Kandidaten
   Renderer.prototype.objPass = function (force) {
     const st = this.st;
     if (!force && this._ancH && this.time - (this._opT == null ? -9 : this._opT) < 0.2) return;
     this._opT = this.time;
     const W = st.W, H = st.H, N = W * H;
-    if (!this._ancH || this._ancH.length !== N) { this._ancH = new Int32Array(N); this._rc = new Map(); this._dk = new Int32Array(N); this._stamp = new Int32Array(N); this._objExt = this._objExt || 6; }
+    if (!this._ancH || this._ancH.length !== N) { this._ancH = new Int32Array(N); this._rc = new Map(); this._dk = new Int32Array(N); this._cov = new Int32Array(N); this._scan = new Int32Array(N); this._objExt = this._objExt || 6; }
     const head = this._ancH; head.fill(-1);
     const list = this._anc || (this._anc = []); list.length = 0;
     const structs = st.structs || [];
-    if (!this._ancN || this._ancN.length < structs.length) { this._ancN = new Int32Array(structs.length + 512); this._stS = new Int32Array(structs.length + 512); this._stD = new Int32Array(structs.length + 512); }
+    if (!this._ancN || this._ancN.length < structs.length) { this._ancN = new Int32Array(structs.length + 512); this._stS = new Int32Array(structs.length + 512); }
     const next = this._ancN;
     const cityK = this._objCityK = this.cityKingdoms();
-    const nr = this.chunks.length;
-    const sig = this._rsig && this._rsig.length === nr ? this._rsig.fill(0) : (this._rsig = new Int32Array(nr));
     const fires = this._campfires || (this._campfires = []); fires.length = 0;
     const barC = this._barCand || (this._barCand = []); barC.length = 0;
     const pass = this._passN = (this._passN | 0) + 1;
@@ -1504,39 +1516,37 @@
       const vh = this.structHash(s, k);
       let rc = rcm.get(s.id);
       if (!rc || rc.h !== vh) {
-        if (rc) this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1);
-        rc = this.structRect(s, k, vh); rcm.set(s.id, rc);
-        this.objForget(s.x - 2, s.y - 2, s.x + s.w + 1, s.y + s.h + 1);
+        const old = rc;
+        if (old) this.objDirtyRc(old);
+        rc = this.structRect(s, k, vh); rc.built = s.built !== false; rcm.set(s.id, rc);
+        this.objDirtyRc(rc);
+        if (!old || DECO_NEAR[s.type] || old.built !== rc.built || old.x !== rc.x || old.y !== rc.y) {
+          if (old) this.objForget(old.x - 2, old.y - 2, old.x + old.w + 1, old.y + old.hh + 1);
+          this.objForget(s.x - 2, s.y - 2, s.x + s.w + 1, s.y + s.h + 1);
+        }
       }
       rc.seen = pass;
-      const mh = mixH(vh, s.id * 40503);
-      const xa = Math.min(rc.x0, rc.spike ? rc.dx0 : 1e9), xb = Math.max(rc.x1, rc.spike ? rc.dx1 : -1e9), ya = rc.y0, yb = Math.max(rc.y1, rc.spike ? rc.dy1 : -1e9);
-      const c0 = Math.max(0, Math.floor(xa / CPX)), c1 = Math.min(this.cw - 1, Math.floor((xb - 1) / CPX));
-      const r0 = Math.max(0, Math.floor(ya / CPX)), r1 = Math.min(this.chh - 1, Math.floor((yb - 1) / CPX));
-      for (let cy = r0; cy <= r1; cy++) for (let cx = c0; cx <= c1; cx++) { const ri = cy * this.cw + cx; sig[ri] = (sig[ri] + mh) | 0; }
       if (rc.dyn) fires.push(s);
       if ((s.built === false && s.progress > 0) || s.upgrading || (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin')) barC.push(s);
     }
-    // verschwundene Bauwerke: Deko ringsum neu bestimmen
-    if ((pass & 3) === 0 || rcm.size > list.length) for (const [id, rc] of rcm) if (rc.seen !== pass) { this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1); rcm.delete(id); }
-    for (let i = 0; i < nr; i++) this.chunks[i].sSig = sig[i];
-    if (this._objExtGrew) { this._objExtGrew = false; for (const c of this.chunks) c.objV = (c.objV | 0) + 1; }
+    // verschwundene Bauwerke
+    if ((pass & 3) === 0 || rcm.size > list.length) for (const [id, rc] of rcm) if (rc.seen !== pass) { this.objDirtyRc(rc); this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1); rcm.delete(id); }
+    if (this._objExtGrew) { this._objExtGrew = false; const seq = this._oseq = (this._oseq | 0) + 1; for (const c of this.chunks) { c.objV = seq; c.fullV = seq; if (c.dl) c.dl.length = 0; } }
   };
 
   // geordnete Objekte einer Kachelzeile (Felder, Deko, Bauwerke, Stacheln der Zeile darüber) in out schreiben
-  Renderer.prototype.objRow = function (y, tx0, tx1, p, sway, out, fish) {
+  Renderer.prototype.objRow = function (y, tx0, tx1, out, fish) {
     const st = this.st, W = st.W, head = this._ancH, next = this._ancN, list = this._anc, rcm = this._rc;
     const row = y * W;
-    for (let x = tx0; x <= tx1; x++) for (let a = head[row + x]; a >= 0; a = next[a]) { const s = list[a]; if (s.type === 'field') out.push(0, a); }
+    for (let x = tx0; x <= tx1; x++) for (let a = head[row + x]; a >= 0; a = next[a]) { const s = list[a]; if (s.type === 'field' && !s.dead) out.push(0, a); }
     for (let x = tx0; x <= tx1; x++) {
       const v = this.decoCode(row + x);
       if (v <= 1) continue;
       if (v & (1 << 29)) { if (fish) fish.push(row + x); continue; }
       out.push(2, row + x);
     }
-    for (let x = tx0; x <= tx1; x++) for (let a = head[row + x]; a >= 0; a = next[a]) { const s = list[a]; if (s.type !== 'field') { const rc = rcm.get(s.id); if (!rc || !rc.dyn) out.push(3, a); } }
-    if (y > 0) for (let x = tx0; x <= tx1; x++) for (let a = head[row - W + x]; a >= 0; a = next[a]) { const rc = rcm.get(list[a].id); if (rc && rc.spike) out.push(4, a); }
-    void p; void sway;
+    for (let x = tx0; x <= tx1; x++) for (let a = head[row + x]; a >= 0; a = next[a]) { const s = list[a]; if (s.type !== 'field' && !s.dead) { const rc = rcm.get(s.id); if (!rc || !rc.dyn) out.push(3, a); } }
+    if (y > 0) for (let x = tx0; x <= tx1; x++) for (let a = head[row - W + x]; a >= 0; a = next[a]) { const rc = rcm.get(list[a].id); if (rc && rc.spike && !list[a].dead) out.push(4, a); }
   };
   // ein ruhendes Objekt zeichnen (Art, Index aus objRow)
   Renderer.prototype.objDraw = function (g, kind, v, p, sway) {
@@ -1566,24 +1576,16 @@
     return true;
   };
 
-  // Block-Bild für Phase p backen (genau die Pixelfläche des Blocks)
-  Renderer.prototype.bakeRegion = function (c, p) {
-    const st = this.st, W = st.W, H = st.H, ob = c.ob, k = ob.k, sway = ob.sway;
-    const size = CPX * k;
-    let cv = ob.cv[p];
-    if (!cv) { cv = ob.cv[p] = document.createElement('canvas'); cv.width = cv.height = size; this._objCount = (this._objCount | 0) + 1; }
-    const g = cv.getContext('2d');
-    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, size, size); g.imageSmoothingEnabled = false;
-    const X0 = c.cx * CPX, Y0 = c.cy * CPX, X1 = X0 + CPX, Y1 = Y0 + CPX;
-    g.setTransform(k, 0, 0, k, -X0 * k, -Y0 * k);
-    const ext = this._objExt || 6;
-    const tx0 = Math.max(0, c.cx * CH - OBJ_L), tx1 = Math.min(W - 1, c.cx * CH + CH - 1 + OBJ_R);
-    const ty0 = Math.max(0, c.cy * CH - 1), ty1 = Math.min(H - 1, c.cy * CH + CH - 1 + ext);
-    const fish = []; const out = this._objOut || (this._objOut = []); const r = this._objR || (this._objR = [0, 0, 0, 0]);
+  // Objekte, die das Pixelrechteck [X0,X1)×[Y0,Y1) berühren, in Malreihenfolge zeichnen (Kontext ist gesetzt)
+  Renderer.prototype.objPaint = function (g, X0, Y0, X1, Y1, p, sway, fish) {
+    const st = this.st, W = st.W, H = st.H, ext = this._objExt || 6;
+    const tx0 = Math.max(0, Math.floor(X0 / 8) - OBJ_L), tx1 = Math.min(W - 1, Math.floor((X1 - 1) / 8) + OBJ_R);
+    const ty0 = Math.max(0, Math.floor(Y0 / 8) - 1), ty1 = Math.min(H - 1, Math.floor((Y1 - 1) / 8) + ext);
+    const out = this._objOut || (this._objOut = []), r = this._objR || (this._objR = [0, 0, 0, 0]);
     this._bakeNoShot = true;
     for (let y = ty0; y <= ty1; y++) {
       out.length = 0;
-      this.objRow(y, tx0, tx1, p, sway, out, fish);
+      this.objRow(y, tx0, tx1, out, fish);
       for (let j = 0; j < out.length; j += 2) {
         if (!this.objRect(out[j], out[j + 1], p, sway, r)) continue;
         if (r[2] <= X0 || r[0] >= X1 || r[3] <= Y0 || r[1] >= Y1) continue;
@@ -1591,11 +1593,62 @@
       }
     }
     this._bakeNoShot = false;
+  };
+  // Block-Bild für Phase p ganz backen (genau die Pixelfläche des Blocks)
+  Renderer.prototype.bakeRegion = function (c, p) {
+    const st = this.st, W = st.W, ob = c.ob, k = ob.k, size = CPX * k;
+    let cv = ob.cv[p];
+    if (!cv) { cv = ob.cv[p] = document.createElement('canvas'); cv.width = cv.height = size; this._objCount = (this._objCount | 0) + 1; }
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, size, size); g.imageSmoothingEnabled = false;
+    const X0 = c.cx * CPX, Y0 = c.cy * CPX;
+    g.setTransform(k, 0, 0, k, -X0 * k, -Y0 * k);
+    const fish = [];
+    this.objPaint(g, X0, Y0, X0 + CPX, Y0 + CPX, p, ob.sway, fish);
     // Fischschwärme dieses Blocks (werden je Bild gezeichnet)
     const x0 = c.cx * CH, y0 = c.cy * CH;
     ob.fish = fish.filter(i => { const x = i % W, y = (i / W) | 0; return x >= x0 && x < x0 + CH && y >= y0 && y < y0 + CH; });
-    ob.v[p] = c.objV | 0; ob.bs[p] = c.sSig | 0;
-    c.objT = this.time;
+    ob.v[p] = c.objV | 0;
+  };
+  // Phasenbild auf den neuesten Stand bringen: schmutzige Rechtecke ausschneiden und neu malen, bei vielen ganz backen
+  Renderer.prototype.objUpdate = function (c, p) {
+    const ob = c.ob, v = ob.v[p];
+    if (!ob.cv[p] || v == null || (c.fullV | 0) > v) { this.bakeRegion(c, p); return 2; }
+    const dl = c.dl || [], X0 = c.cx * CPX, Y0 = c.cy * CPX, k = ob.k;
+    const rs = [];
+    let area = 0;
+    for (let j = 0; j < dl.length; j += 5) {
+      if (dl[j + 4] <= v) continue;
+      const x0 = Math.max(X0, dl[j]), y0 = Math.max(Y0, dl[j + 1]), x1 = Math.min(X0 + CPX, dl[j + 2]), y1 = Math.min(Y0 + CPX, dl[j + 3]);
+      if (x1 <= x0 || y1 <= y0) continue;
+      const a0 = Math.floor(x0), b0 = Math.floor(y0), a1 = Math.ceil(x1), b1 = Math.ceil(y1);
+      let dup = false;
+      for (let t = 0; t < rs.length; t += 4) if (rs[t] <= a0 && rs[t + 1] <= b0 && rs[t + 2] >= a1 && rs[t + 3] >= b1) { dup = true; break; }
+      if (dup) continue;
+      rs.push(a0, b0, a1, b1); area += (a1 - a0) * (b1 - b0);
+    }
+    if (rs.length > 4 * 40 || area > CPX * CPX) { this.bakeRegion(c, p); return 2; }
+    if (rs.length) {
+      const g = ob.cv[p].getContext('2d'), W = this.st.W;
+      g.imageSmoothingEnabled = false;
+      const fish = [];
+      for (let j = 0; j < rs.length; j += 4) {
+        g.save();
+        g.setTransform(k, 0, 0, k, -X0 * k, -Y0 * k);
+        g.beginPath(); g.rect(rs[j], rs[j + 1], rs[j + 2] - rs[j], rs[j + 3] - rs[j + 1]); g.clip();
+        g.clearRect(rs[j], rs[j + 1], rs[j + 2] - rs[j], rs[j + 3] - rs[j + 1]);
+        this.objPaint(g, rs[j], rs[j + 1], rs[j + 2], rs[j + 3], p, ob.sway, fish);
+        g.restore();
+      }
+      const x0 = c.cx * CH, y0 = c.cy * CH;
+      for (const i of fish) { const x = i % W, y = (i / W) | 0; if (x >= x0 && x < x0 + CH && y >= y0 && y < y0 + CH && ob.fish.indexOf(i) < 0) ob.fish.push(i); }
+    }
+    ob.v[p] = c.objV | 0;
+    // Protokoll kürzen: was alle vorhandenen Phasenbilder schon haben, fällt weg
+    let minV = Infinity;
+    for (let q = 0; q < 3; q++) if (ob.cv[q] && ob.v[q] != null) minV = Math.min(minV, ob.v[q]);
+    if (dl.length && minV !== Infinity) { let w = 0; for (let j = 0; j < dl.length; j += 5) if (dl[j + 4] > minV) { for (let t = 0; t < 5; t++) dl[w + t] = dl[j + t]; w += 5; } dl.length = w; }
+    return rs.length ? 1 : 0;
   };
 
   // Vor dem Zeichnen: Block-Bilder der sichtbaren Blöcke bereitstellen; liefert die anzuzeigende Wiege-Phase
@@ -1604,15 +1657,16 @@
     const k = devS >= 1.25 ? 2 : 1;
     const sway = devS >= 2 && this.gfx.quality !== 'low' && !this.autoOff.sway;
     const cfg = k + (sway ? 's' : 'n');
-    const want = typeof S.swayKey === 'function' ? ((this.time * 2) | 0) % 3 : 0;
+    const nph = typeof S.swayKey === 'function' ? 3 : 1;
+    const want = nph === 3 ? ((this.time * 2) | 0) % 3 : 0;
     const vis = this._objVis || (this._objVis = []); vis.length = 0;
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
       const c = this.chunks[cy * this.cw + cx];
-      if (!c.ob || c.ob.cfg !== cfg) { if (c.ob) this._objCount = (this._objCount | 0) - c.ob.cv.filter(Boolean).length; c.ob = { cfg: cfg, k: k, sway: sway, cv: [], v: [], bs: [], fish: [] }; }
+      if (!c.ob || c.ob.cfg !== cfg) { if (c.ob) this._objCount = (this._objCount | 0) - c.ob.cv.filter(Boolean).length; c.ob = { cfg: cfg, k: k, sway: sway, cv: [], v: [], fish: [] }; if (c.dl) c.dl.length = 0; }
       c.obT = this.time;
       vis.push(c);
     }
-    const fresh = (c, p) => c.ob.cv[p] && c.ob.v[p] === (c.objV | 0) && c.ob.bs[p] === (c.sSig | 0);
+    const fresh = (c, p) => c.ob.cv[p] && c.ob.v[p] === (c.objV | 0);
     // Phase: die gewünschte, sobald jeder sichtbare Block sie hat; sonst die zuletzt gezeigte; sonst sofort backen
     let P = want;
     if (!vis.every(c => c.ob.cv[want])) {
@@ -1620,13 +1674,14 @@
       if (prev != null && prev !== want && vis.every(c => c.ob.cv[prev])) P = prev;
       else for (const c of vis) if (!c.ob.cv[want]) { this.bakeRegion(c, want); this._over = (this._over | 0) + 1; }
     }
-    // Zeitbudget: zuerst veraltete gezeigte Bilder, dann die gewünschte Phase, dann die übrigen Phasen vorbacken
-    const t0 = performance.now(), lim = urgent ? 6 : 2;
-    let n = 0;
-    const step = (c, p) => { this.bakeRegion(c, p); n++; if (p === P) this._over = (this._over | 0) + 1; };
-    for (const c of vis) { if (performance.now() - t0 > lim && n) break; if (!fresh(c, P)) step(c, P); }
-    if (P !== want) for (const c of vis) { if (performance.now() - t0 > lim) break; if (!c.ob.cv[want] || !fresh(c, want)) step(c, want); }
-    if (typeof S.swayKey === 'function') for (let d = 1; d <= 2; d++) { const q = (want + d) % 3; for (const c of vis) { if (performance.now() - t0 > lim * 0.8) break; if (!fresh(c, q)) step(c, q); } }
+    // gezeigte Phase immer aktuell halten (meist nur kleine Ausschnitte), dann vorbacken im Zeitbudget
+    for (const c of vis) if (!fresh(c, P) && this.objUpdate(c, P)) this._over = (this._over | 0) + 1;
+    const t0 = performance.now(), lim = urgent ? 4 : 1.5;
+    for (let d = 0; d < nph; d++) {
+      const q = (want + d) % nph;
+      if (q === P) continue;
+      for (const c of vis) { if (performance.now() - t0 > lim) break; if (!fresh(c, q)) this.objUpdate(c, q); }
+    }
     // Deko-Prüfung als Sicherheitsnetz (Stümpfe, Stadtdeko …): alle 0,4 s ein sichtbarer Block
     if (this.time - (this._odT || 0) > 0.4 && vis.length) { this._odT = this.time; this._odI = ((this._odI | 0) + 1) % vis.length; this.objCheckDeco(vis[this._odI]); }
     this._shownP = P; this._regSway = sway;
@@ -1747,32 +1802,41 @@
       const items = this._dynItems || (this._dynItems = []); items.length = 0;
       for (const o of dyn) items.push(o);
       if (near) {
-        // ruhende Objekte, die ein bewegtes Rechteck berühren (davor und dahinter)
-        const ext = this._objExt || 6, stamp = this._stamp, stS = this._stS, stD = this._stD;
+        // ruhende Objekte, die ein bewegtes Rechteck berühren (davor und dahinter): Kacheln der Rechtecke markieren,
+        // Ankerkacheln ringsum je einmal absuchen, Treffer gegen die markierten Kacheln prüfen
+        const ext = this._objExt || 6, cov = this._cov, scan = this._scan, stS = this._stS;
         const fr = this._stampN = ((this._stampN | 0) + 1) & 0x3fffffff;
-        const out = this._objOut2 || (this._objOut2 = []), r = this._objR2 || (this._objR2 = [0, 0, 0, 0]);
-        const nDyn = dyn.length;
+        const r = this._objR2 || (this._objR2 = [0, 0, 0, 0]);
+        const head = this._ancH, next = this._ancN, list = this._anc, rcm = this._rc, dk = this._dk;
+        const hit = (x0, y0, x1, y1) => {
+          const a = Math.max(0, Math.floor(x0 / 8)), b = Math.min(W - 1, Math.floor((x1 - 1) / 8)), c0 = Math.max(0, Math.floor(y0 / 8)), c1 = Math.min(H - 1, Math.floor((y1 - 1) / 8));
+          for (let yy = c0; yy <= c1; yy++) for (let xx = a; xx <= b; xx++) if (cov[yy * W + xx] === fr) return true;
+          return false;
+        };
+        const push = (kind, v, row, sub) => { const it = item(); it.t = 5; it.cls = kind; it.v = v; it.row = row; it.sub = sub; items.push(it); };
         // bewegte Bauwerke (Lagerfeuer, feuerndes Gerät) nicht zusätzlich als ruhend zeichnen
-        for (const o of dyn) if (o.t === 4) { const s = o.u; for (let q = this._ancH[(s.y + s.h - 1) * W + s.x]; q >= 0; q = this._ancN[q]) if (this._anc[q] === s) stS[q] = fr; }
-        for (let d = 0; d < nDyn; d++) {
-          const o = dyn[d];
-          const ta = Math.max(0, Math.floor(o.x0 / 8) - OBJ_L), tb = Math.min(W - 1, Math.floor(o.x1 / 8) + OBJ_R);
-          const ra = Math.max(0, Math.floor(o.y0 / 8) - 1), rb = Math.min(H - 1, Math.floor(o.y1 / 8) + ext);
-          for (let y = ra; y <= rb; y++) {
-            out.length = 0;
-            this.objRow(y, ta, tb, P, sway, out, null);
-            for (let j = 0; j < out.length; j += 2) {
-              const kind = out[j], v = out[j + 1];
-              const arr = kind === 2 ? stamp : kind === 4 ? stD : stS;
-              if (arr[v] === fr) continue;
-              if (!this.objRect(kind, v, P, sway, r)) continue;
-              if (r[2] <= o.x0 || r[0] >= o.x1 || r[3] <= o.y0 || r[1] >= o.y1) continue;
-              arr[v] = fr;
-              const it = item(); it.t = 5; it.cls = kind; it.v = v;
-              if (kind === 2) { it.row = (v / W) | 0; it.sub = v % W; }
-              else { const s = this._anc[v]; it.row = s.y + s.h - 1 + (kind === 4 ? 1 : 0); it.sub = s.x; }
-              items.push(it);
+        for (const o of dyn) if (o.t === 4) { const s = o.u; for (let q = head[(s.y + s.h - 1) * W + s.x]; q >= 0; q = next[q]) if (list[q] === s) stS[q] = fr; }
+        for (const o of dyn) {
+          const a = Math.max(0, Math.floor(o.x0 / 8)), b = Math.min(W - 1, Math.floor((o.x1 - 1) / 8)), c0 = Math.max(0, Math.floor(o.y0 / 8)), c1 = Math.min(H - 1, Math.floor((o.y1 - 1) / 8));
+          for (let yy = c0; yy <= c1; yy++) for (let xx = a; xx <= b; xx++) cov[yy * W + xx] = fr;
+        }
+        for (const o of dyn) {
+          const ta = Math.max(0, Math.floor(o.x0 / 8) - OBJ_L), tb = Math.min(W - 1, Math.floor((o.x1 - 1) / 8) + OBJ_R);
+          const ra = Math.max(0, Math.floor(o.y0 / 8) - 1), rb = Math.min(H - 1, Math.floor((o.y1 - 1) / 8) + ext);
+          for (let y = ra; y <= rb; y++) for (let x = ta; x <= tb; x++) {
+            const i = y * W + x;
+            if (scan[i] === fr) continue;
+            scan[i] = fr;
+            for (let q = head[i]; q >= 0; q = next[q]) {
+              const s = list[q];
+              if (s.dead || stS[q] === fr) continue;
+              const rc = rcm.get(s.id);
+              if (!rc || rc.dyn) continue;
+              if (hit(rc.x0 - 1, rc.y0 - 1, rc.x1 + 1, rc.y1 + 1)) push(s.type === 'field' ? 0 : 3, q, y, x);
+              if (rc.spike && hit(rc.dx0 - 1, rc.dy0 - 1, rc.dx1 + 1, rc.dy1 + 1)) push(4, q, y + 1, x);
             }
+            const v = dk[i] === 0 ? this.decoCode(i) : dk[i];
+            if (v > 1 && !(v & (1 << 29)) && this.objRect(2, i, P, sway, r) && hit(r[0], r[1], r[2], r[3])) push(2, i, y, x);
           }
         }
       }

@@ -9,7 +9,7 @@
     VERSION: 1,
     TPS: 10,                  // Ticks pro Sekunde bei 1×
     TPY: 240,                 // Ticks pro Jahr (24 s bei 1×)
-    GRAZED_ON: 140, GRAZED_OFF: 110,   // state.grazed: Beweidung sichtbar ab 140, wieder grün unter 110 (Hysterese)
+    GRAZED_ON: 180, GRAZED_OFF: 110,   // state.grazed: Beweidung sichtbar ab 140, wieder grün unter 110 (Hysterese)
     MAX_UNITS: 2200,
     MAX_ANIMALS: 240,
     MAX_EVENTS: 400,
@@ -309,7 +309,7 @@
   WW.STRUCT_INFO.fishery = { name: 'Fischerei', w: 2, h: 2, work: 60, hp: [70], cost: [{ wood: 8 }], burn: 1 };
   WW.STRUCT_INFO.pasture = { name: 'Weide', w: 2, h: 2, work: 40, hp: [40], cost: [{ wood: 6 }], burn: 0.6 };
   // Kultur-Sonderbauten (Ausbau 9)
-  WW.STRUCT_INFO.caravanserai = { name: 'Karawanserei', w: 2, h: 2, core: true, inside: true, work: 120, hp: [150], cost: [{ wood: 6, stone: 8 }], burn: 0.3, culture: 'sahel' };
+  WW.STRUCT_INFO.caravanserai = { name: 'Karawanserei', w: 2, h: 2, core: true, inside: true, work: 120, hp: [150], cost: [{ wood: 6, stone: 4, gold: 30 }], burn: 0.3, culture: 'sahel' };
   WW.STRUCT_INFO.pyramid = { name: 'Pyramide', w: 1, h: 1, core: true, inside: true, work: 140, hp: [180, 300, 450], cost: [{ stone: 10 }, { stone: 14 }, { stone: 20 }], burn: 0, culture: 'nil' };   // level 1..3, stage 0..2
 
   // ---------------------------------------------------------------------------

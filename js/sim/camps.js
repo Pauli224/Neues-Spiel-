@@ -50,9 +50,10 @@
 //     u.ind 'camp' (Bewegung macht diese Datei, nicht die KI), u.camp = ID des Haftorts (Lagerstadt-ID ODER stockade-ID),
 //     u.pow = Heimatreich (Kriegsgefangener) | -1 (politischer Gefangener), u.powC = Heimatstadt | -1,
 //     u.campState 'march' (wird hingeführt) | 'held' (im Lager) | 'home' (Heimweg nach Befreiung/Freilassung),
-//     u.kingdomId = Reich des Haftorts (Insassen zählen NICHT zur Bevölkerung: u.cityId = -1), u.origK/u.origC (Herkunft),
+//     u.kingdomId = -1 und u.cityId = -1 (gehören keinem Reich, zählen nirgends mit, sind nie Ziel; Reich des Haftorts
+//     über WW.Camps.holdOf), u.origK/u.origC (Herkunft),
 //     u.work (ID der Arbeitsstätte | -1), u.tx/u.ty (Ziel), u.powUntil (Jahr der vertraglichen Freilassung | 0).
-//     Heimweg ('home'): u.role bleibt 'prisoner' (ohne Waffe), kingdomId = Heimatreich; bei Ankunft wieder Soldat.
+//     Heimweg ('home'): u.role bleibt 'prisoner' (ohne Waffe, Uniform nach u.pow); bei Ankunft wieder Soldat der Heimat.
 //   Wachen: normale Soldaten des Regimes mit cityId = Lagerstadt.
 // REICH
 //   kingdom.powsHeld  Anzahl Kriegsgefangener, die dieses Reich hält     kingdom.powsLost  eigene Soldaten in fremder Haft
@@ -168,7 +169,7 @@
     u.origK = ok; u.origC = oc;
     u.pow = pow ? ok : -1; u.powC = pow ? oc : -1; u.powUntil = 0;
     u.ind = 'camp'; u.camp = place.id; u.campState = o.march ? 'march' : 'held'; u.campT = 0; u.marchT = sim.state.tick;
-    u.kingdomId = hk ? hk.id : u.kingdomId; u.cityId = -1;
+    u.kingdomId = -1; u.cityId = -1;   // gehört keinem Reich (nie Ziel, zählt nirgends mit); Haftort-Reich über holdOf
     u.merc = false; u.work = -1; u.moving = false;
     u.hp = Math.max(4, Math.round(u.maxHp * 0.5));
     if (!o.march) { const p = centerXY(place); u.x = p.x; u.y = p.y; }
@@ -263,6 +264,8 @@
   // ---------------------------------------------------------------------------
   function unit(sim, u) {
     if (u.role !== 'prisoner') { u.ind = null; return false; }
+    if (u.kingdomId !== -1) u.kingdomId = -1;   // alte Stände: Insassen trugen das Reich des Regimes
+    if (u.hp < u.maxHp && ((sim.state.tick + u.id) & 63) === 0) u.hp++;   // Gefangene werden versorgt und erholen sich
     if (u.campState === 'home') { goHome(sim, u); return true; }
     const h = holdOf(sim, u);
     if (!h) { release(sim, u, null); return false; }
@@ -276,22 +279,38 @@
     if (h.kind === 'camp') return WW.Cities.centerTile(sim, h, u.id);
     return (h.y + ((u.id >> 1) & 1)) * W + h.x + (u.id & 1);
   }
-  // Marsch zu Fuß (Haftort oder Heimat). true = angekommen
+  // Marsch zu Fuß (Haftort oder Heimat), bewacht: Tore werden für den Zug geöffnet (auch fremde), Mauern nicht.
+  // Eigene Wegsuche (A* mit Durchbruch-Kosten, damit Wege durch Tore führen) und eigener Schritt (kein Rettungs-Sprung).
+  // true = angekommen
   function walk(sim, u, goal, gx, gy) {
-    const st = sim.state;
+    const st = sim.state, W = st.W;
     if (dist2(u.x, u.y, gx, gy) < 2.2) { u.path = null; u.moving = false; return true; }
     if (st.tick - (u.marchT || st.tick) > C().MARCH_MAX) { u.x = gx; u.y = gy; u.path = null; u.moving = false; return true; }   // Notausgang
+    const cur = Math.floor(u.y) * W + Math.floor(u.x);
     if (!u.path && ((st.tick + u.id) & 15) === 0) {
-      const r = WW.Units.goTo(sim, u, goal, { limit: WW.CONFIG.PATH_LIMIT_LONG || 4000 });
-      if (r === null) u.fails = (u.fails | 0) + 1;
+      const p = WW.Path.find(sim, cur, goal, { k: u.kingdomId, breach: true, limit: WW.CONFIG.PATH_LIMIT_LONG || 4000 });
+      if (p === null) {
+        u.fails = (u.fails | 0) + 1;
+        // anderes Ufer (kein Landweg): werden übergesetzt
+        if (u.fails >= 3 && sim.comp && sim.comp[cur] !== sim.comp[goal]) { u.x = gx; u.y = gy; u.path = null; u.moving = false; return true; }
+      }
+      else if (p) { u.path = p; u.pi = 0; u.goal = goal; }
     }
-    if (u.path) WW.Units.move(sim, u);
-    else if ((u.fails | 0) >= 3) {
-      // ohne Weg: geradeaus, so weit das Gelände trägt
-      const dx = gx - u.x, dy = gy - u.y, d = Math.sqrt(dx * dx + dy * dy), sp = 0.04;
-      const nx = u.x + dx / d * sp, ny = u.y + dy / d * sp, i = Math.floor(ny) * st.W + Math.floor(nx);
-      if (WW.TERRAIN_LUT.walk[st.terrain[i]] > 0 && sim.block[i] !== 1) { u.x = nx; u.y = ny; u.dir = dx < 0 ? -1 : 1; u.moving = true; }
-    } else u.moving = false;
+    const LUT = WW.TERRAIN_LUT, blk = sim.block;
+    const ok = (i) => i >= 0 && i < W * st.H && LUT.walk[st.terrain[i]] > 0 && blk[i] !== 1;
+    let tx = gx, ty = gy;
+    if (u.path) {
+      if (u.pi >= u.path.length) { u.path = null; u.moving = false; return false; }
+      const n = u.path[u.pi], nx = n % W, ny = (n - nx) / W, cx = cur % W, cy = (cur - cx) / W;
+      if (!ok(n) || (nx !== cx && ny !== cy && (!ok(cy * W + nx) || !ok(ny * W + cx)))) { u.path = null; u.fails = (u.fails | 0) + 1; u.moving = false; return false; }
+      tx = nx + 0.5; ty = ny + 0.5;
+    } else if ((u.fails | 0) < 3) { u.moving = false; return false; }
+    const dx = tx - u.x, dy = ty - u.y, d = Math.sqrt(dx * dx + dy * dy), sp = 0.045;
+    if (Math.abs(dx) > 0.02) u.dir = dx < 0 ? -1 : 1;
+    u.moving = true;
+    if (u.path && d <= sp) { u.x = tx; u.y = ty; u.pi++; return false; }
+    const nx = u.x + dx / d * sp, ny = u.y + dy / d * sp, i = Math.floor(ny) * W + Math.floor(nx);
+    if (u.path || ok(i)) { u.x = nx; u.y = ny; } else u.moving = false;
     return false;
   }
   function marchTo(sim, u, h) {
@@ -399,7 +418,7 @@
     u.path = null; u.moving = false; u.fails = 0; u.marchT = sim.state.tick;
     const k = sim._kingdoms.get(u.pow);
     if (u.pow >= 0 && k && !k.dead && (!city || city.kingdomId !== u.pow)) {
-      u.campState = 'home'; u.kingdomId = u.pow; u.work = -1;
+      u.campState = 'home'; u.kingdomId = -1; u.work = -1;
       WW.Units.bubble(u, 'heart', 50);
       return 'home';
     }
@@ -431,6 +450,7 @@
       const i = (y + dy) * W + x + dx;
       if (!LUT.build[st.terrain[i]] || LUT.water[st.terrain[i]]) return false;
       if (st.inRing[i] !== -1 && st.inRing[i] !== campId) return false;
+      if (campId >= 0 && st.owner[i] !== -1 && st.owner[i] !== campId) return false;
       const o = sim._structs.get(st.structAt[i]);
       if (o && o.type !== 'ruin' && o.type !== 'field') return false;
     }
@@ -459,8 +479,9 @@
         if (st.inRing[i] !== -1) foreign += 3;
         const s = sim._structs.get(st.structAt[i]);
         if (s && s.type === 'rail') rail++;
+        else if (s && s.cityId >= 0 && s.type !== 'field' && s.type !== 'ruin') foreign++;
       }
-      if (walk < 170 || foreign > 6) continue;
+      if (walk < 170 || foreign > 0) continue;
       // Kommandantur + Baracken-Plätze bebaubar?
       if (!rectFree(sim, x - 1, y - 1, 3, 3, -1)) continue;
       let slots = 0;
@@ -519,6 +540,7 @@
     camp.happiness = 50; camp.loyalty = 100;
     if (k.capitalId === camp.id) { const t = townsOf(sim, k)[0]; if (t) k.capitalId = t.id; }
     const hq = WW.Structs.create(sim, 'camphq', x - 1, y - 1, camp.id, { style: k.gov, built: true });
+    claimArea(sim, camp, k);
     for (let n = 0, placed = 0; n < SLOTS.length && placed < C().BARRACKS_START; n++) {
       const sl = SLOTS[n];
       if (!rectFree(sim, x + sl[0], y + sl[1], 2, 2, camp.id)) continue;
@@ -532,6 +554,41 @@
     chron(sim, 'campFounded', { city: camp.name, kingdom: k.name, other: mother.name }, camp, 'Lagerstadt mit Kommandantur, Baracken und Zaun; Ertrag geht an ' + mother.name);
     void hq;
     return camp;
+  }
+
+  // Eigenes kleines Gebiet: Fluren um die Kommandantur (frei oder von Schwesterstädten ohne deren Kerngebäude)
+  function claimArea(sim, camp, k) {
+    const st = sim.state, G = WW.Growth, F = G.FLUR, d = G.dims(st), W = st.W;
+    G.ensure(sim);
+    const R = C().RESERVE + C().MARGIN + 3;
+    for (let fy = 0; fy < d.fh; fy++) for (let fx = 0; fx < d.fw; fx++) {
+      const x0 = fx * F, y0 = fy * F;
+      // Flur berührt den Kreis um das Lager?
+      const nx = Math.max(x0, Math.min(camp.cx + 0.5, x0 + F)), ny = Math.max(y0, Math.min(camp.cy + 0.5, y0 + F));
+      if (dist2(nx, ny, camp.cx + 0.5, camp.cy + 0.5) > R * R) continue;
+      const fi = fy * d.fw + fx, o = st.flur[fi];
+      if (o === camp.id) continue;
+      if (o !== -1) {
+        const oc = sim._cities.get(o);
+        if (!oc || oc.kingdomId !== k.id) continue;
+        let core = false;
+        for (let y = y0; y < Math.min(st.H, y0 + F) && !core; y++) for (let x = x0; x < Math.min(W, x0 + F); x++) {
+          const i = y * W + x;
+          if (st.inRing[i] !== -1) { core = true; break; }
+          const s = sim._structs.get(st.structAt[i]);
+          if (s && s.cityId === oc.id && s.type !== 'field' && s.type !== 'rail') { core = true; break; }
+        }
+        if (core) continue;
+        for (let y = y0; y < Math.min(st.H, y0 + F); y++) for (let x = x0; x < Math.min(W, x0 + F); x++) {
+          const s = sim._structs.get(st.structAt[y * W + x]);
+          if (s && s.type === 'field' && s.cityId === oc.id) WW.Structs.remove(sim, s);
+        }
+        G.setFlur(sim, fi, -1);
+        oc.flurs = Math.max(0, (oc.flurs || 1) - 1);
+      }
+      G.setFlur(sim, fi, camp.id);
+    }
+    camp.flurs = G.countFlurs(sim, camp);
   }
 
   // Bauschritt: Wachen und Insassen bauen (kein Baumeister-Zug in die Lagerstadt)
@@ -591,7 +648,13 @@
     // Zaun (ein Tor Richtung Mutterstadt), danach Wachtürme und eine Arbeitsstätte
     const home = homeOf(sim, camp);
     if (!camp.wall.plan || camp.wall.style !== 'fence') {
-      WW.Walls.planFence(sim, camp, cfg.RESERVE, cfg.MARGIN, home ? { x: home.cx, y: home.cy } : null);
+      if (WW.Walls.planFence(sim, camp, cfg.RESERVE, cfg.MARGIN, home ? { x: home.cx, y: home.cy } : null)) {
+        // ein eigenes Gebäude auf der Zaunlinie würde eine Lücke lassen: es weicht (wird innen neu gebaut)
+        for (const t of camp.wall.plan) {
+          const o = sim._structs.get(st.structAt[t]);
+          if (o && o.cityId === camp.id && !WW.Structs.isWallish(o) && o.type !== 'camphq') WW.Structs.remove(sim, o);
+        }
+      }
     } else {
       if (towers < 2) placeTower(sim, camp, k, towers);
       if (!work) placeWork(sim, camp, k);

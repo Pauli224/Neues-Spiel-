@@ -241,9 +241,9 @@
 //   Alte Aufrufe bleiben: town(rng, race, used), person(rng, race, female), realm(baseName, gov).
 // KACHEL-MELDUNGEN
 //   drainDirtyTiles meldet nur noch Kacheln mit sichtbarer Änderung (Prüfsumme sim._visSig: Gelände, Variante, Höhe, Bauwerk-ID,
-//     -Art, -Stufe, -Maske, -Stil, -Material, -stage, built, Feuer, Marke, Rodung, grazed, Verödung 3 Stufen, Ruß, murk/crack/
-//     fallout in 8er-Stufen, flora, Vorkommen, Gebiet, Ring). NICHT gemeldet: Feldwachstum, Baufortschritt, Lebenspunkte (Bauwerke
-//     werden ohnehin je Bild aus dem Zustand gezeichnet).
+//     -Art, -Maske, Brücke, Feuer, Marke, Rodung, grazed, Verödung 3 Stufen, Ruß, murk/crack/fallout in 8er-Stufen, flora, Vorkommen,
+//     Gebiet, Ring). NICHT gemeldet: Stufe/Stil/Fertigstellung von Bauwerken, Feldwachstum, Baufortschritt, Lebenspunkte
+//     (Bauwerke werden in 2D und 3D ohnehin je Bild aus dem Zustand gezeichnet; Neubau/Abriss ändert die ID und wird gemeldet).
 //   state.grazed Uint8 (W*H, gespeichert): 1 = sichtbar abgeweidet, mit Hysterese (an ab CONFIG.GRAZED_ON 140, aus unter
 //     GRAZED_OFF 110). Darstellung bitte st.grazed[i] statt graze[i] >= 128 lesen (auch in groundSig).
 // =============================================================================
@@ -327,7 +327,7 @@
     if (this._dirty.length < this.state.W * this.state.H) this._dirty.push(i); else this._allDirty = true;
   };
   // Sichtbare Prüfsumme einer Kachel: alles, was die Darstellung je Kachel aus dem Zustand liest (Gelände, Höhe,
-  // Variante, Bauwerk-Art/Stil/Maske – nicht Wachstum, Baufortschritt, Leben –, Feuer, Marke, Rodung, Beweidung mit
+  // Variante, Bauwerk-ID/Art/Maske – nicht Stufe, Stil, Wachstum, Baufortschritt, Leben –, Feuer, Marke, Rodung, Beweidung mit
   // Hysterese (state.grazed), Trübung/Risse/Fallout in 8er-Stufen, Verödung in 3 Stufen, Ruß, Vorkommen, Gebiet, Ring).
   // drainDirtyTiles meldet nur Kacheln, deren Prüfsumme sich seit der letzten Meldung geändert hat.
   Sim.prototype._visSig = function (i) {
@@ -337,10 +337,8 @@
     if (sid >= 0) {
       const s = this._structs.get(sid);
       h = Math.imul(h ^ sid, 16777619);
-      if (s) {
-        h = Math.imul(h ^ (strHash(s.type) + (s.built ? 1 : 0) * 7 + (s.level | 0) * 131 + ((s.mask | 0) << 12) + (s.bridge ? 1 << 18 : 0) + ((s.stage | 0) << 20)), 16777619);
-        if (s.style || s.restyle || s.mat || s.orient) h = Math.imul(h ^ strHash((s.style || '') + '|' + (s.restyle || '') + '|' + (s.mat || '') + '|' + (s.orient || '')), 16777619);
-      }
+      // Bauwerke zeichnen 2D und 3D je Bild aus dem Zustand; je Kachel zählen nur Art, Maske (Gleis/Mauer) und Brücke
+      if (s) h = Math.imul(h ^ (strHash(s.type) + ((s.mask | 0) << 12) + (s.bridge ? 1 << 18 : 0)), 16777619);
     }
     const b = st.barren ? st.barren[i] : 0;
     h = Math.imul(h ^ ((st.fire[i] ? 1 : 0) | (st.mark[i] << 1) | ((st.cleared[i] ? 1 : 0) << 9) | ((st.grazed && st.grazed[i] ? 1 : 0) << 10) |

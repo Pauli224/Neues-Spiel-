@@ -371,7 +371,7 @@ test('9 Zeitaufschlag ohne Krieg und Dauerlauf mit Kriegen', function () {
   // Dauerlauf: gemischte Regierungen, Kriege erzwungen und von selbst
   const seeds = +(process.env.SOAK_SEEDS || 3);
   const TICKS = 40000;
-  const dist = { tankRealmWins: 0, otherWins: 0, draws: 0 };
+  const dist = { moreVehiclesWon: 0, moreVehiclesLost: 0, equalGear: 0, draws: 0, tankRealmWins: 0, otherWins: 0 };
   const ends = [];
   for (let s = 0; s < seeds; s++) {
     const seed = 100 + s * 17;
@@ -396,12 +396,17 @@ test('9 Zeitaufschlag ohne Krieg und Dauerlauf mit Kriegen', function () {
           const ti = Math.floor(u.y) * st.W + Math.floor(u.x);
           assert(Number.isFinite(u.x) && Number.isFinite(u.y) && Number.isFinite(u.hp), 'NaN am Fahrzeug');
           assert(WW.TERRAIN_LUT.walk[st.terrain[ti]] > 0, 'Fahrzeug auf Wasser/Gebirge');
-          assert(u.cityId === -1 || u.cityId === undefined || true, '');
         }
         for (const c of st.cities) for (const r of ['iron', 'coal', 'gold']) { const sk = WW.Cities.stock(w, c); assert(!(sk[r] < -0.001), 'Lager negativ: ' + r); }
       }
     }
-    for (const site of st.sites) { if (site.winner < 0) dist.draws++; else if (tankK.has(site.winner)) dist.tankRealmWins++; else dist.otherWins++; }
+    for (const site of st.sites) {
+      const va = site.vehicles ? site.vehicles.a : 0, vb = site.vehicles ? site.vehicles.b : 0;
+      if (site.winner < 0) { dist.draws++; continue; }
+      if (va === vb) dist.equalGear++;
+      else if ((va > vb) === (site.winner === site.a)) dist.moreVehiclesWon++; else dist.moreVehiclesLost++;
+      if (tankK.has(site.winner)) dist.tankRealmWins++; else dist.otherWins++;
+    }
     battles = st.sites.length;
     // Anteil der Städte, die Panzer-Reiche am Ende halten
     let tc = 0;

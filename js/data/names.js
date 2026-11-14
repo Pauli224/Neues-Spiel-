@@ -70,13 +70,11 @@
   };
 
   // schwache Adjektivform, passt hinter „der“ und „die“
-  const EPITHETS = ['Verschlafene', 'Ungeduldige', 'Gemütliche', 'Zerstreute', 'Pünktliche', 'Kühne', 'Brummige',
-    'Vergessliche', 'Schnarchende', 'Unbeirrbare', 'Wackere', 'Hungrige', 'Sparsame', 'Großzügige', 'Laute',
-    'Leise', 'Rastlose', 'Kitzlige', 'Neugierige', 'Schusselige', 'Gründliche', 'Prächtige', 'Mittelmäßige',
-    'Bescheidene', 'Erstaunliche', 'Pingelige', 'Sanftmütige', 'Übereifrige', 'Umständliche', 'Zögerliche',
-    'Wankelmütige', 'Unermüdliche', 'Gutgelaunte', 'Missmutige', 'Tollkühne', 'Ahnungslose', 'Kurzsichtige',
-    'Weitsichtige', 'Unpünktliche', 'Fröhliche', 'Kleinliche', 'Bärtige', 'Gestiefelte', 'Ewig Müde',
-    'Schlecht Gelaunte', 'Überraschend Kompetente', 'Wohlgenährte', 'Gähnende', 'Geschwätzige'];
+  const EPITHETS = ['Kühne', 'Gerechte', 'Weise', 'Strenge', 'Milde', 'Große', 'Fromme', 'Tapfere', 'Junge', 'Alte',
+    'Stille', 'Kluge', 'Sparsame', 'Prächtige', 'Bescheidene', 'Unermüdliche', 'Wachsame', 'Gütige', 'Standhafte', 'Gelehrte',
+    'Geduldige', 'Ruhmreiche', 'Beharrliche', 'Großzügige', 'Ernste', 'Heitere', 'Umsichtige', 'Unbeugsame', 'Treue',
+    'Friedfertige', 'Ehrgeizige', 'Rastlose', 'Besonnene', 'Redliche', 'Furchtlose', 'Weitsichtige', 'Freigebige', 'Zornige',
+    'Vorsichtige', 'Glückliche', 'Edle', 'Schweigsame', 'Aufrechte', 'Kundige'];
 
   // Parteien mit Bonus für die Amtszeit
   const PARTIES = {

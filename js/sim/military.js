@@ -42,11 +42,13 @@
 //                  wächst langsam zu (jährlich, nach Naturmodus des Gebiets). Dirty-Kacheln beim Entstehen und bei jedem
 //                  Stufenwechsel (Wert >> 6). Darstellung: t_trench mit softKey-Masken; gehört in die Boden-Prüfsumme.
 //   state.battles[] laufende Feldschlachten: { id, x, y (Mittelpunkt, Kacheln), r (Radius), a, b (Reichs-IDs; a = Angreifer),
-//                  start (Tick), year, lossA, lossB, nA, nB (Kämpfer jetzt), peakA, peakB, state ('fight'|'retreat'|'surrender'),
+//                  start (Tick), year, lossA, lossB, nA, nB (Kämpfer jetzt), peakA, peakB, vA, vB (höchstens gleichzeitig
+//                  beteiligte Fahrzeuge), state ('fight'|'retreat'|'surrender'),
 //                  breaker (Reich, das gewichen ist | -1), pows (Gefangene), quiet, dig (Reich, das sich eingräbt), name }
 //   state.sites[]  Schlachtfelder als Orte: { id, kind: 'battlefield', name ('Schlacht bei <Stadt>' | 'Schlacht <Gelände>'),
 //                  x, y, r, year, a, b, aName, bName, winner (Reichs-ID | -1 unentschieden), losses: { a, b }, pows, how
-//                  ('win'|'retreat'|'surrender'|'draw') } – höchstens WW.MIL.MAX_SITES, älteste fallen weg.
+//                  ('win'|'retreat'|'surrender'|'draw'), vehicles: { a, b } (beteiligte Fahrzeuge) } – höchstens WW.MIL.MAX_SITES,
+//                  älteste fallen weg.
 //   state.wrecks[] { id, x, y, kind: 'tank'|'gun', year, gov, k (Reich), rust 0..3 (rostet jährlich weiter) } –
 //                  verschwinden nach WW.MIL.WRECK_YEARS Jahren. Sprites d_wreck_tank, d_wreck_gun.
 //   state.mil      { seq, trenchN (Kacheln mit Graben), march { [kid]: { city, k, n } }, count { [kid]: { tank, artillery } },
@@ -829,7 +831,7 @@
       const place = placeOf(sim, cx, cy);
       const nm = battleName(sim, place);
       const bt = { id: ++st.mil.seq, x: Math.round(cx * 10) / 10, y: Math.round(cy * 10) / 10, r: B.r, a: a, b: b, start: st.tick, year: st.year,
-        lossA: 0, lossB: 0, nA: na, nB: nb, peakA: na, peakB: nb, state: 'fight', breaker: -1, pows: 0, gaveUp: 0, quiet: 0, dig: b,
+        lossA: 0, lossB: 0, nA: na, nB: nb, peakA: na, peakB: nb, vA: 0, vB: 0, state: 'fight', breaker: -1, pows: 0, gaveUp: 0, quiet: 0, dig: b,
         name: nm.name, base: nm.base, place: place };
       st.battles.push(bt);
       const ka = sim._kingdoms.get(a), kb = sim._kingdoms.get(b);
@@ -862,6 +864,10 @@
     });
     const nA = memA.length, nB = memB.length, n = nA + nB;
     b.nA = nA; b.nB = nB;
+    let vA = 0, vB = 0;
+    for (const v of memA) if (v.vehicle) vA++;
+    for (const v of memB) if (v.vehicle) vB++;
+    b.vA = Math.max(b.vA | 0, vA); b.vB = Math.max(b.vB | 0, vB);
     if (b.state === 'fight') { b.peakA = Math.max(b.peakA, nA); b.peakB = Math.max(b.peakB, nB); }
     if (n > 0) {
       b.x = Math.round((b.x * 0.6 + sx / n * 0.4) * 10) / 10; b.y = Math.round((b.y * 0.6 + sy / n * 0.4) * 10) / 10;
@@ -961,7 +967,8 @@
     const ka = sim._kingdoms.get(b.a), kb = sim._kingdoms.get(b.b);
     const aName = ka ? ka.name : '?', bName = kb ? kb.name : '?';
     const site = { id: ++st.mil.seq, kind: 'battlefield', name: b.name, base: b.base, x: b.x, y: b.y, r: Math.round(b.r), year: st.year,
-      a: b.a, b: b.b, aName: aName, bName: bName, winner: winner, losses: { a: b.lossA, b: b.lossB }, pows: b.pows, how: how };
+      a: b.a, b: b.b, aName: aName, bName: bName, winner: winner, losses: { a: b.lossA, b: b.lossB }, pows: b.pows, how: how,
+      vehicles: { a: b.vA | 0, b: b.vB | 0 } };
     st.sites.push(site);
     if (st.sites.length > M().MAX_SITES) st.sites.splice(0, st.sites.length - M().MAX_SITES);
     // Kriegsmüdigkeit: Schlachten zehren

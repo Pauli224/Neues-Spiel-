@@ -48,7 +48,7 @@ function checkInvariants(sim, where) {
     assert(LUT.walk[st.terrain[i]] > 0, where + ': Einheit ' + u.id + ' (' + u.role + ') auf unbegehbarem Gelände ' + WW.TERRAIN[st.terrain[i]].key);
     const s = sim._structs.get(st.structAt[i]);
     if (s && s.built && (s.type === 'wall' || s.type === 'tower')) assert(false, where + ': Einheit ' + u.id + ' steht auf ' + s.type);
-    if (s && s.built && s.type === 'gate') assert(WW.Path.passable(sim, i, u.kingdomId), where + ': Einheit ' + u.id + ' steht auf feindlichem Tor');
+    if (s && s.built && s.type === 'gate') assert(WW.Path.passable(sim, i, u.kingdomId), where + ': Einheit ' + u.id + ' (' + u.role + ', Reich ' + u.kingdomId + ', Tor von Stadt ' + s.cityId + ') steht auf feindlichem Tor');
     assert(sim._units.get(u.id) === u, where + ': Einheiten-Index kaputt');
   }
   for (const a of st.animals) {
@@ -936,6 +936,257 @@ test('16 Bäume fallen (Lichtungen) und wachsen je nach Naturmodus nach', functi
   assert(woodOnly(patches[2]) <= 1 && g30[2] < patches[2].length * 0.4, 'exploit lässt Wald nachwachsen (' + woodOnly(patches[2]) + ' Waldkacheln)');
   const D = WW.Sim.load(sim.serialize());
   assert(D && D.state.chops && D.state.chops.length === st.W * st.H, 'chops nicht gespeichert');
+});
+
+// --------------------------------------------------------------------------
+// 17. Rohstoffe: Vorkommen, Minen, Schmiede, Fisch, Wolle, Erschöpfung, Speichern
+// --------------------------------------------------------------------------
+test('17 Rohstoffe (Vorkommen, Minen, Schmiede, Fisch, Erschöpfung, Speichern, alte Stände)', function () {
+  // a) echte Welt: Vorkommen und Rohstoffbauten entstehen von selbst
+  const sim = makeSim({ seed: 'res1', size: 'medium', populate: 6, govs: 'mixed' });
+  const st = sim.state;
+  const dep = {}; for (let i = 0; i < st.deposit.length; i++) if (st.deposit[i]) dep[WW.DEPOSITS[st.deposit[i]]] = (dep[WW.DEPOSITS[st.deposit[i]]] || 0) + 1;
+  run(sim, 30 * WW.CONFIG.TPY, 2000, () => checkInvariants(sim, 'Rohstoffe'));
+  const built = {}; for (const s of st.structs) if (s.built && ['mine', 'smithy', 'fishery', 'pasture'].indexOf(s.type) >= 0) { const k = s.type + (s.res ? ':' + s.res : ''); built[k] = (built[k] || 0) + 1; }
+  let iron = 0, coal = 0; const armed = st.cities.filter(c => c.armed).length;
+  for (const c of st.cities) { const sk = WW.Cities.stock(sim, c); for (const r of WW.RESOURCE_KEYS) assert(isNum(sk[r]) && sk[r] >= 0, 'Lager ' + r + ' kaputt in ' + c.name); iron += sk.iron; coal += sk.coal; }
+  log('Vorkommen', JSON.stringify(dep), '· nach 30 Jahren gebaut', JSON.stringify(built), '· Eisen', iron.toFixed(0), 'Kohle', coal.toFixed(0), '· gerüstete Städte', armed);
+  assert(dep.iron > 10 && dep.coal > 10 && dep.fish > 10, 'zu wenige Vorkommen');
+  assert(Object.keys(built).some(k => k.indexOf('mine:') === 0), 'keine Mine gebaut');
+  assert(built.smithy >= 1 && armed >= 1, 'keine Schmiede mit Eisen');
+  assert(iron + coal > 5, 'kein Eisen/keine Kohle im Lager');
+
+  // b) Wirkung im Kleinen: Schmiede rüstet, Mine erschöpft sich, Fisch wird gegessen, Wolle wärmt
+  const sp = { x: 60, y: 45 };
+  const s2 = makeSim({ seed: 'rohstoff', world: meadowWorld(120, 90, { spots: [sp] }), populate: 1, govs: ['monarchy'], races: ['human'], animals: false });
+  const st2 = s2.state, W = st2.W, c = st2.cities[0], k = st2.kingdoms[0];
+  k.govLocked = true; s2.actions.setLaw('wars', false); s2.actions.setLaw('disasters', false);
+  run(s2, 2 * WW.CONFIG.TPY);
+  const sk = WW.Cities.stock(s2, c);
+  const soldier = st2.units.find(u => u.cityId === c.id && u.role !== 'leader' && u.role !== 'child');
+  WW.Units.setRole(s2, soldier, 'soldier');
+  const d0 = WW.Units.damageOf(s2, soldier);
+  const free = (w, h) => { for (let y = c.cy + 6; y < st2.H - 4; y++) for (let x = c.cx - 12; x < c.cx + 12; x++) { let ok = true; for (let dy = -1; dy <= h && ok; dy++) for (let dx = -1; dx <= w; dx++) { const i = (y + dy) * W + x + dx; if (st2.structAt[i] !== -1 || !WW.TERRAIN_LUT.build[st2.terrain[i]]) { ok = false; break; } } if (ok) return { x: x, y: y }; } return null; };
+  const ps = free(2, 2);
+  const smithy = WW.Structs.create(s2, 'smithy', ps.x, ps.y, c.id, { built: true });
+  sk.iron = 20; sk.coal = 20;
+  WW.Resources.update(s2);
+  const d2 = WW.Units.damageOf(s2, soldier);
+  log('Schmiede mit Eisen+Kohle: armed', c.armed, '· Schaden', d0.toFixed(2), '→', d2.toFixed(2), '· Eisen 20 →', sk.iron.toFixed(2));
+  assert(smithy && c.armed === 2 && d2 > d0 * 1.3, 'Schmiede stärkt die Soldaten nicht');
+  assert(sk.iron < 20 && sk.coal < 20, 'Schmiede verbraucht nichts');
+  // has/take: alles oder nichts
+  assert(WW.Resources.has(s2, c, { iron: 5, coal: 5 }) && !WW.Resources.has(s2, c, { iron: 999 }), 'Resources.has falsch');
+  const before = sk.iron;
+  assert(!WW.Resources.take(s2, c, { iron: 1, coal: 999 }) && sk.iron === before, 'take nimmt trotz Mangel');
+  assert(WW.Resources.take(s2, c, { iron: 2, coal: 1 }) && Math.abs(sk.iron - (before - 2)) < 1e-9, 'take nimmt nicht');
+  // Mine mit fast leerem Vorrat: liefert, erschöpft sich, Vorkommen weg, Ruine
+  const pm = free(2, 2);
+  for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) st2.deposit[(pm.y + dy) * W + pm.x + dx] = WW.DEPOSIT_CODE.iron;
+  const mine = WW.Structs.create(s2, 'mine', pm.x, pm.y, c.id, { built: true });
+  mine.res = 'iron'; mine.left = 0.05;
+  const ironBefore = sk.iron;
+  for (let n = 0; n < 5; n++) WW.Resources.update(s2);
+  let depLeft = 0; for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if (st2.deposit[(pm.y + dy) * W + pm.x + dx]) depLeft++;
+  const ruin = s2._structs.get(st2.structAt[pm.y * W + pm.x]);
+  log('Mine erschöpft: Eisen +' + (sk.iron - ironBefore + 0).toFixed(3) + ', Vorkommen übrig', depLeft, ', an der Stelle', ruin ? ruin.type : '–');
+  assert(mine.dead && depLeft === 0 && countEvents(s2, 'mineDepleted') >= 1, 'Mine erschöpft sich nicht');
+  // Fisch wird zuerst gegessen
+  sk.fish = 40; const food0 = sk.food;
+  for (let n = 0; n < 30; n++) s2.tick();
+  log('Fisch 40 →', sk.fish.toFixed(1), '· Nahrung', food0.toFixed(0), '→', sk.food.toFixed(0));
+  assert(sk.fish < 40, 'Fisch wird nicht gegessen');
+  // Wolle: in der Kälte mehr Zufriedenheit
+  sk.wool = 10; c.cold = 1;
+  const hw = WW.Resources.happiness(s2, c, sk); sk.wool = 0; const hn = WW.Resources.happiness(s2, c, sk);
+  assert(hw > hn + 5, 'Wolle wärmt nicht (' + hw + ' vs ' + hn + ')');
+
+  // c) Speichern/Laden trägt Vorkommen, Minen und Lager; alte Stände bekommen alles nachgerüstet
+  const str = sim.serialize();
+  const L = WW.Sim.load(str);
+  assert(L && U8eq(L.state.deposit, st.deposit), 'Vorkommen nach Laden anders');
+  const m1 = st.structs.find(s => s.type === 'mine'), m2 = m1 && L.state.structs.find(s => s.id === m1.id);
+  assert(!m1 || (m2 && m2.res === m1.res && m2.left === m1.left), 'Mine nach Laden anders');
+  const o = JSON.parse(str);
+  delete o.rasters.deposit;
+  for (const cc of o.cities) for (const r of ['iron', 'coal', 'fish', 'crystal', 'wool']) delete cc.stock[r];
+  const old = WW.Sim.load(JSON.stringify(o));
+  const fresh = WW.Resources.generate({ state: { W: st.W, H: st.H, seed: st.seed, terrain: old.state.terrain } });
+  assert(old && U8eq(old.state.deposit, fresh), 'alte Stände: Vorkommen nicht deterministisch nachgerüstet');
+  for (const cc of old.state.cities) for (const r of WW.RESOURCE_KEYS) assert(isNum(cc.stock[r]), 'alter Stand: Lager ohne ' + r);
+  run(old, 600);
+  checkInvariants(old, 'alter Stand');
+});
+function U8eq(a, b) { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+
+// --------------------------------------------------------------------------
+// 18. Kulturen: Zuweisung, Boni, Sonderbauten, Karawanen, Bewässerung, Speichern, alte Stände
+// --------------------------------------------------------------------------
+function desertWorld(W, H) {
+  const T = WW.T, N = W * H, terrain = new Uint8Array(N);
+  const spots = [{ x: 44, y: 46 }, { x: 70, y: 40 }, { x: 126, y: 40 }];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const e = Math.min(x, y, W - 1 - x, H - 1 - y);
+    let t = e < 2 ? T.WATER : T.DESERT;
+    if (e >= 2 && (y < 12 || y > H - 12)) t = T.SAVANNA;
+    for (const c of spots) { const d = Math.hypot(x - c.x, y - c.y); if (d > 7 && d < 12 && (x * 7 + y * 3) % 5 < 3) t = T.SAVANNA; }
+    if (x === 120 || x === 121) t = T.RIVER;
+    if (Math.hypot(x - 40, y - 40) < 3) t = T.SHALLOW;
+    if (Math.hypot(x - 70, y - 30) < 2.5) t = T.SHALLOW;
+    if (Math.hypot(x - 40, y - 60) < 3) t = T.HILL;
+    terrain[y * W + x] = t;
+  }
+  return { W: W, H: H, terrain: terrain, startSpots: spots, name: 'Wüste' };
+}
+test('18 Kulturen (Zuweisung, Boni messbar, Sonderbauten, Karawanen, Speichern, alte Stände)', function () {
+  // a) Zuweisung nach Volk und Gelände
+  const cw = makeSim({ seed: 'kultur', world: desertWorld(160, 80), populate: 3, govs: ['monarchy', 'republic', 'monarchy'], races: ['human', 'human', 'human'], animals: false });
+  const st = cw.state;
+  for (const k of st.kingdoms) k.govLocked = true;
+  for (const a of st.kingdoms) for (const b of st.kingdoms) if (a !== b) a.relations[b.id].opinion = 30;
+  cw.actions.setLaw('wars', false);
+  const cul = st.cities.map(c => c.culture);
+  log('Wüste: ' + st.cities.map(c => c.name + ' (' + c.culture + ')').join(', ') + ' · Reiche: ' + st.kingdoms.map(k => k.name + ', ' + k.leaderTitle + ' ' + k.leaderName).join(' · '));
+  assert(cul[0] === 'sahel' && cul[1] === 'sahel' && cul[2] === 'nil', 'Wüstenkulturen falsch zugewiesen: ' + cul.join(','));
+  assert(st.kingdoms[0].culture === 'sahel' && st.kingdoms[0].name.indexOf('Mansa-Reich ') === 0 && st.kingdoms[0].leaderTitle === 'Mansa', 'sahel-Reich ohne Mansa-Form');
+  assert(st.kingdoms[2].name.indexOf('Reich von ') === 0 && /Qore|Kandake/.test(st.kingdoms[2].leaderTitle), 'nil-Reich ohne eigene Form/Titel');
+  for (const u of st.units) assert(u.culture === st.cities.find(c => c.id === u.cityId).culture, 'Einheit ohne Kultur der Stadt');
+  const pick = (race, terr) => { const s = makeSim({ seed: 'p', width: 40, height: 30, populate: 0, animals: false }); s.state.terrain.fill(WW.T[terr]); return WW.Culture.pick(s, 20, 15, race); };
+  assert(pick('human', 'GRASS') === 'mitte' && pick('human', 'TUNDRA') === 'nord' && pick('human', 'TAIGA') === 'nord' && pick('human', 'DESERT') === 'sahel' && pick('dwarf', 'DESERT') === 'dwarf' && pick('elf', 'GRASS') === 'elf', 'Zuweisung nach Gelände/Volk falsch');
+  // b) Boni über Mods: messbar
+  const sah = st.cities[0], nil = st.cities[2];
+  assert(Math.abs(WW.SimUtil.mod(cw, cw._kingdoms.get(sah.kingdomId), sah, 'gold', 10) - 12.5) < 1e-9, 'sahel: Gold +25 % fehlt');
+  assert(WW.Mods ? (sah.mods || []).some(m => m.source === 'culture' && m.key === 'gold') : true, 'Kultur-Mod nicht in city.mods');
+  const sm = makeSim({ seed: 'p2', width: 60, height: 40, populate: 0, animals: false });
+  sm.state.terrain.fill(WW.T.GRASS);
+  const r1 = sm.actions.spawnSettlers(20, 20, 6, 'monarchy', 'human', 'mitte'), mc = sm._cities.get(r1.cityId);
+  assert(mc.culture === 'mitte' && Math.abs(WW.SimUtil.mod(sm, null, mc, 'wood', 10) - 11) < 1e-9, 'mitte: Forst +10 % fehlt');
+  // Wüstenschritt: Einheit der Kultur sahel ist auf Wüste schneller
+  const walkSpeed = (culture) => {
+    const s = makeSim({ seed: 'walk', width: 50, height: 20, populate: 0, animals: false });
+    s.state.terrain.fill(WW.T.DESERT); s.terrainChanged();
+    const u = WW.Units.create(s, { x: 5.5, y: 10.5, role: 'farmer', race: 'human', culture: culture });
+    u.path = []; for (let x = 6; x < 45; x++) u.path.push(10 * s.state.W + x); u.pi = 0;
+    for (let n = 0; n < 60; n++) WW.Units.move(s, u);
+    return u.x - 5.5;
+  };
+  const vs = walkSpeed('sahel'), vm = walkSpeed('mitte');
+  log('Weg auf Wüste in 60 Ticks: sahel', vs.toFixed(2), '· mitte', vm.toFixed(2));
+  assert(vs > vm * 1.12, 'sahel ohne Wüstenschritt');
+  // c) Laufen: Bewässerung, Karawanserei mit Karawanen, Pyramide (nil)
+  run(cw, 36 * WW.CONFIG.TPY, 2000, () => checkInvariants(cw, 'Kulturen'));
+  const irr = st.structs.filter(s => s.type === 'field' && s.irrigated).length;
+  const cs = st.structs.filter(s => s.type === 'caravanserai' && s.built).length;
+  const pyr = st.structs.find(s => s.type === 'pyramid');
+  const car = st.units.filter(u => u.role === 'caravan');
+  log('nach 36 Jahren: bewässerte Felder', irr, '· Karawansereien', cs, '· Karawanen', car.length, '(Kamel ' + car.every(u => u.camel) + ') · Pyramide Stufe', pyr ? pyr.stage : '–', '· Einw.', st.cities.slice(0, 3).map(c => c.pop).join('/'));
+  assert(irr >= 10, 'keine Bewässerungsfelder in der Wüste');
+  assert(cs >= 1 && car.length >= 1 && car.every(u => u.camel), 'keine Karawanserei/Karawanen');
+  assert(pyr && pyr.built && pyr.stage >= 1, 'nil baut keine Pyramide (mit Stufen)');
+  assert(WW.Culture.happiness(cw, nil) > 0, 'Pyramide hebt die Zufriedenheit nicht');
+  assert(countEvents(cw, 'irrigation') >= 1 && countEvents(cw, 'caravanserai') >= 1, 'Chronik zu Kulturen fehlt');
+  // d) Speichern/Laden und alte Stände
+  const str = cw.serialize();
+  const L = WW.Sim.load(str);
+  assert(L.hash() === cw.hash(), 'Kulturen: Laden ändert den Stand');
+  run(cw, 300); run(L, 300);
+  assert(L.hash() === cw.hash(), 'Kulturen: nach Laden nicht deterministisch');
+  const o = JSON.parse(str);
+  for (const c of o.cities) { delete c.culture; c.mods = (c.mods || []).filter(m => m.source !== 'culture'); }
+  for (const k of o.kingdoms) delete k.culture;
+  for (const u of o.units) delete u.culture;
+  o.cities[0].race = 'dwarf';
+  const old = WW.Sim.load(JSON.stringify(o));
+  assert(old.state.cities[0].culture === 'dwarf' && old.state.cities[1].culture === 'mitte', 'alte Stände: Kultur nicht nachgerüstet');
+  assert(old.state.kingdoms.every(k => WW.CULTURES[k.culture]) && old.state.units.every(u => WW.CULTURES[u.culture]), 'alte Stände: Reich/Einheit ohne Kultur');
+  if (WW.Mods) assert(old.state.cities[1].mods.some(m => m.source === 'culture'), 'alte Stände: Kultur-Boni fehlen');
+  run(old, 600); checkInvariants(old, 'alter Stand Kultur');
+  // e) Sandbox: Kultur beim Setzen wählbar
+  const sb = makeSim({ seed: 'sb', width: 80, height: 40, populate: 0, animals: false });
+  sb.state.terrain.fill(WW.T.GRASS);
+  const rr = sb.actions.spawnSettlers(20, 20, 6, null, 'human', 'nil');
+  const r2 = sb.actions.spawnSettlers(60, 20, 6, null, 'human');
+  assert(sb._cities.get(rr.cityId).culture === 'nil' && sb._cities.get(r2.cityId).culture === 'mitte', 'spawnSettlers: Kultur-Parameter wirkt nicht');
+});
+
+// --------------------------------------------------------------------------
+// 19. Namen: ernst, ohne Dopplung, Form je Regierung, Wechsel mit Chronik
+// --------------------------------------------------------------------------
+test('19 Namen (keine Dopplung, Form je Regierung und Kultur, Wechsel mit Chronik)', function () {
+  const rng = WW.RNG.create('namen');
+  const used = new Set();
+  const all = [];
+  for (const c of WW.CULTURE_KEYS) for (let i = 0; i < 60; i++) all.push(WW.Names.place(c, rng, i % 3 ? null : 'river', used));
+  assert(new Set(all).size === all.length, 'Ortsnamen doppelt');
+  const silly = /Quark|Knödel|Wurst|Brösel|Pudding|Socken|Schnitzel|Pantoffel/;
+  for (const c of ['mitte', 'nord', 'sahel', 'nil']) {
+    const l = []; const u2 = new Set();
+    for (let i = 0; i < 200; i++) l.push(WW.Names.place(c, rng, null, u2));
+    assert(new Set(l).size === 200, c + ': 200 Namen nicht verschieden');
+    assert(!l.some(n => silly.test(n)), c + ': alberner Name');
+    log(c + ':', l.slice(0, 8).join(', '));
+  }
+  for (const real of ['Gao', 'Timbuktu', 'Napata', 'Meroe', 'Kerma']) assert(all.indexOf(real) < 0, 'echter Ortsname vergeben: ' + real);
+  // Personen je Kultur, Titel
+  for (const c of ['mitte', 'nord', 'sahel', 'nil']) assert(typeof WW.Names.person(c, rng, true) === 'string' && WW.Names.person(c, rng, false).length > 1, 'Person ' + c);
+  assert(WW.Names.title('monarchy', 'sahel').m === 'Mansa' && WW.Names.title('monarchy', 'nil').f === 'Kandake' && WW.Names.title('monarchy', 'nord').m === 'Jarl' && WW.Names.title('fascism', 'sahel').m === 'Diktator', 'Titel je Kultur falsch');
+  // Reichsformen je Regierung
+  const forms = {};
+  for (const g of Object.keys(WW.GOVERNMENTS)) { forms[g] = new Set(); for (let id = 1; id < 40; id++) forms[g].add(WW.Names.realm(g, 'mitte', 'Falkenau', id).replace(' Falkenau', '')); }
+  log('Formen: ' + Object.keys(forms).map(g => g + ' ' + Array.from(forms[g]).join('/')).join(' · '));
+  assert(forms.fascism.size === 3 && !forms.fascism.has('Strammstaat') && forms.communism.size === 3 && forms.democracy.size === 2, 'Reichsformen fehlen');
+  assert(WW.Names.realm('monarchy', 'sahel', 'Tombara', 1) === 'Mansa-Reich Tombara' && WW.Names.realm('monarchy', 'nord', 'Frostvik', 1) === 'Jarltum Frostvik', 'Kultur-Formen der Monarchie');
+  assert(WW.Names.realm('Falkenau', 'monarchy') === 'Königreich Falkenau', 'alter Aufruf realm(base, gov)');
+  assert(WW.Texts.withArticle('Eisernes Reich Falkenau', 'dat') === 'dem Eisernen Reich Falkenau' && WW.Texts.withArticle('Freie Kommune X', 'in') === 'in der Freien Kommune X', 'Beugung der Reichsnamen');
+  // Wechsel: Form ändert sich, Stamm bleibt, Chronik
+  const sim = makeSim({ seed: 'namenwelt', width: 120, height: 80, populate: 4, animals: false });
+  const st = sim.state;
+  const names = st.cities.map(c => c.name);
+  assert(new Set(names).size === names.length && !names.some(n => silly.test(n)), 'Städtenamen doppelt oder albern: ' + names.join(','));
+  const k = st.kingdoms[0], base = k.baseName;
+  sim.actions.setGovernment(k.id, 'fascism');
+  const n1 = k.name;
+  sim.actions.setGovernment(k.id, 'communism');
+  const n2 = k.name;
+  sim.actions.setGovernment(k.id, 'democracy');
+  log('Wechsel:', n1, '→', n2, '→', k.name, '· Chronik:', st.events.filter(e => e.type === 'realmRenamed').slice(-1).map(e => e.text).join(''));
+  assert(n1.endsWith(' ' + base) && n2.endsWith(' ' + base) && k.name.endsWith(' ' + base) && n1 !== n2, 'Form wechselt nicht oder Stamm geht verloren');
+  assert(countEvents(sim, 'realmRenamed', k.id) >= 3, 'kein Chronik-Eintrag zum neuen Namen');
+});
+
+// --------------------------------------------------------------------------
+// 20. Kachel-Meldungen nur bei sichtbarer Änderung
+// --------------------------------------------------------------------------
+test('20 Kachel-Meldungen (nur sichtbare Änderungen, Beweidung mit Hysterese)', function () {
+  const sim = makeSim({ seed: 'dirty1', size: 'medium', populate: 5, govs: 'mixed' });
+  const st = sim.state;
+  let n = 0; while (st.units.length < 380 && n < 240 * 80) { sim.tick(); n++; }
+  sim.drainDirtyTiles();
+  let raw = 0, out = 0;
+  const orig = sim.markDirty;
+  sim.markDirty = function (i) { if (!this._dirtyFlag[i]) raw++; return orig.call(this, i); };
+  const T = 40 * 20;
+  for (let t = 1; t <= T; t++) { sim.tick(); if (t % 40 === 0) out += sim.drainDirtyTiles().length; }
+  sim.markDirty = orig;
+  log('bei', st.units.length, 'Einwohnern, 40 Ticks/s: gemeldet', (out / 20).toFixed(1), 'Kacheln/s (vorher wären es', (raw / 20).toFixed(1), 'gewesen)');
+  assert(out / 20 < 80, 'zu viele Kachel-Meldungen: ' + (out / 20).toFixed(1));
+  // Sichtbares wird gemeldet: Gelände malen, Feuer
+  sim.drainDirtyTiles();
+  const c = st.cities[0];
+  sim.actions.paintTerrain(c.cx + 30, c.cy, 1, WW.T.SAND);
+  const d = sim.drainDirtyTiles();
+  assert(d.length >= 1, 'gemaltes Gelände nicht gemeldet');
+  // Hysterese: an ab GRAZED_ON, aus erst unter GRAZED_OFF
+  let gi = -1; for (let i = 0; i < st.terrain.length; i++) if (st.terrain[i] === WW.T.GRASS && !st.grazed[i]) { gi = i; break; }
+  st.graze[gi] = WW.CONFIG.GRAZED_ON - 5; for (let t = 0; t < 40; t++) sim._sweepGrazed();
+  assert(!st.grazed[gi], 'Hysterese: zu früh an');
+  st.graze[gi] = WW.CONFIG.GRAZED_ON; for (let t = 0; t < 40; t++) sim._sweepGrazed();
+  assert(st.grazed[gi] === 1, 'Beweidung wird nicht sichtbar');
+  st.graze[gi] = WW.CONFIG.GRAZED_OFF + 2; for (let t = 0; t < 40; t++) sim._sweepGrazed();
+  assert(st.grazed[gi] === 1, 'Hysterese: zu früh aus');
+  st.graze[gi] = WW.CONFIG.GRAZED_OFF - 1; for (let t = 0; t < 40; t++) sim._sweepGrazed();
+  assert(!st.grazed[gi], 'Beweidung verschwindet nicht');
+  assert(Array.from(sim.drainDirtyTiles()).indexOf(gi) >= 0, 'Umschalten der Beweidung nicht gemeldet');
 });
 
 // --------------------------------------------------------------------------

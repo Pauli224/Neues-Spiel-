@@ -1113,7 +1113,8 @@
           const cost = WW.Structs.costFor(sim, c.special, 1, city.id);
           if (WW.Cities.canPay(sim, city, cost) && !(city.specialTry > st.tick)) {
             city.specialTry = st.tick + 400;
-            const i = WW.Cities.findCoreSpot(sim, city, c.special);
+            let i = WW.Cities.findCoreSpot(sim, city, c.special);
+            if (i < 0 && c.special === 'caravanserai' && WW.Resources) { const o = WW.Resources.findSpot(sim, city, 'smithy', null); i = o ? o.i : -1; }   // vor dem Tor
             if (i >= 0) {
               const k = sim._kingdoms.get(city.kingdomId);
               const s = WW.Cities.placeStruct(sim, city, c.special, i % st.W, Math.floor(i / st.W), { style: k ? k.gov : 'tribe' });
