@@ -135,7 +135,9 @@
     }
     const r = Math.max(0.7, 10 / (game.cam.zoom * 8));
     // genau getroffene Figur zuerst, dann Gebäude (Stadt), dann Figuren in der Nähe
-    const s = q.structAt(p.x, p.y);
+    let s = q.structAt(p.x, p.y);
+    // hohe Bauten: Treffer auf dem Bild zählt, nicht nur auf der Grundfläche
+    if (!s || s.type === 'field') { const hs = game.renderer.structAtPx ? game.renderer.structAtPx(p.x * 8, p.y * 8) : null; if (hs && hs.h + 2 < ((game.renderer._rc.get(hs.id) || {}).y1 - (game.renderer._rc.get(hs.id) || {}).y0) / 8) s = hs; }
     const near = s ? null : q.unitNear(p.x, p.y - 0.3, Math.min(r, 0.45));
     if (near) return game.selectUnit(near.id, false);
     if (s && s.cityId >= 0 && s.type !== 'field' && q.city(s.cityId)) {

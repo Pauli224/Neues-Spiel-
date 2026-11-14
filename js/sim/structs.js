@@ -43,6 +43,11 @@
     const out = { food: 0, wood: c.wood || 0, stone: c.stone || 0, gold: c.gold || 0 };
     // ohne Goldwirtschaft wird Gold durch Stein ersetzt
     if (out.gold && cityGov(sim, cityId).goldMul <= 0) { out.stone += out.gold; out.gold = 0; }
+    // Megastadt (9.10): Wohnblöcke aus Beton – Holz wird durch Stein ersetzt
+    if (type === 'house' && out.wood > 0 && cityGov(sim, cityId).megaHousing) {
+      const mc = sim._cities.get(cityId);
+      if (mc && mc.tier >= 3) { out.stone += out.wood; out.wood = 0; }   // erst ab Großstadt
+    }
     // Lehmbau (Kulturen sahel, nil): Mauerwerk aus Lehm, Holz nur für die Sparren
     if (out.wood > 1 && !WALLISH[type]) {
       const c = sim._cities.get(cityId);

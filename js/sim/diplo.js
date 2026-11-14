@@ -124,8 +124,10 @@
         const yrs = st.year - r.since;
         const minArmy = WW.GOVERNMENTS[k.gov].war === 'mass' ? 4 : (yrs >= 2 ? 1 : 2);
         if (idle.length < minArmy && !(idle.length >= 1 && marching > 0)) continue;
+        if (WW.Military && WW.Military.holdArmy(sim, k, e, r, idle, marching)) continue;   // [mil] Heer sammelt sich mit seinen Fahrzeugen
         // Ziel: nächste erreichbare Feindstadt
-        const pair = nearestCities(sim, k, e);
+        let pair = nearestCities(sim, k, e);   // [mil] let statt const (Zielwahl unten)
+        if (WW.Military && pair) pair = WW.Military.pickTarget(sim, k, e, pair, marching) || pair;   // [mil] schwächere, nahe Städte zuerst
         if (pair && WW.Naval && !sameLand(sim, pair.a, pair.b)) { WW.Naval.seaWar(sim, k, e, idle, marching); continue; }   // [see] Ziele über das Meer: Truppenlandung
         if (!pair || !sameLand(sim, pair.a, pair.b)) continue;
         const keep = marching > 0 ? 0 : Math.floor(idle.length * 0.25);

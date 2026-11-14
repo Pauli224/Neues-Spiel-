@@ -80,10 +80,10 @@
     if (kind === 'city') {
       const w = o.wall || {};
       if (o.kind === 'camp') return ['camp', o.name, o.kingdomId, o.inmates, o.pows, o.guards, o.guardsWant, o.cap, Math.round(o.campUnrest || 0), JSON.stringify(o.powFrom || {}), JSON.stringify(o.campOut || {}), o.station, o.railLine].join('|');
-      return [o.name, o.kingdomId, o.tier, o.pop, o.housing, o.culture, Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
+      return [o.name, o.kingdomId, o.tier, o.pop, o.housing, o.culture, o.garrison, o.garrisonWant, o.garrisonSet, JSON.stringify(o.occupied || null), Math.floor(o.stock.food), Math.floor(o.stock.wood), Math.floor(o.stock.stone), Math.floor(o.stock.gold),
         Math.round(o.happiness), w.level, w.built, w.total, w.state, o.hungry, o.revolt, Math.round((o.loyalty || 0) * 100), Math.round(o.nature || 0), Math.round(o.pollution || 0), modSig(o, this.game.sim), (function (cs) { return cs ? [cs.stage, cs.upgrading, Math.round((cs.progress || 0) * 50)].join(',') : ''; })(this.game.sim.query.struct ? this.game.sim.query.struct(o.centerId) : null), JSON.stringify(o.governor || null), plotSig(this.game.sim)].join('|');
     }
-    if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name, o.campState, o.camp, o.pow].join('|');
+    if (kind === 'unit') return [o.role, o.age, Math.round(o.hp), o.carrying, o.sick, o.cityId, o.kingdomId, o.task, o.name, o.campState, o.camp, o.pow, o.garrison, o.ind, o.escortN].join('|');
     return [o.kind, Math.round(o.hp)].join('|');
   };
 
@@ -363,6 +363,7 @@
     if (k) body.appendChild(h('div.sec', [h('div.row', [h('span.muted', 'Gehört zu'), h('button.link', { type: 'button', on: { click: () => game.selectKingdom(k.id, true) } }, k.name),
       icon('i_gov_' + k.gov, 20), h('span.muted', WW.GOVERNMENTS[k.gov].name)])]));
     { const cb = cultureBlock(c.culture); if (cb) body.appendChild(cb); }
+    { const gb = this.garrisonBlock(c, k); if (gb) body.appendChild(gb); }
     if (c.campFree) body.appendChild(h('div.sec', h('div.muted', 'War bis zum Jahr ' + c.campFree + ' eine Lagerstadt. Ein Mahnmal erinnert daran.')));
     if (c.revolt) body.appendChild(h('div.sec', h('div.hint-box', 'Aufruhr! Rebellen ziehen durch die Gassen.')));
     else if (c.hungry) body.appendChild(h('div.sec', h('div.hint-box', 'Hunger: Die Vorräte sind leer.')));
@@ -466,6 +467,9 @@
       links.push(h('div', { style: { marginBottom: '6px' } }, (u.pow >= 0 ? 'Kriegsgefangener aus ' + kname(sim, u.pow) : 'Politischer Gefangener') + (CS[u.campState] ? ' · ' + CS[u.campState] : '')));
       if (hold && hold.name) links.push(h('div.row', [h('span.muted', 'Haftort'), h('button.link', { type: 'button', on: { click: () => game.selectCity(hold.id, true) } }, hold.name)]));
     }
+    if (u.garrison != null && u.garrison >= 0) { const gc = sim.query.city(u.garrison); links.push(h('div.row', [h('span.muted', 'Garnison von'), gc ? h('button.link', { type: 'button', on: { click: () => game.selectCity(gc.id, true) } }, gc.name) : h('span', '—')])); }
+    else if (u.order && u.order.kind === 'garrison') { const gc = sim.query.city(u.order.city); if (gc) links.push(h('div.muted', 'Unterwegs zur Garnison von ' + gc.name)); }
+    if (u.ind === 'escort') { const to = sim.query.city(u.escortTo); links.push(h('div.muted', { style: { marginBottom: '6px' } }, 'Begleitwache eines Gefangenenmarschs' + (to ? ' nach ' + to.name : '') + (u.escortN ? ' (' + u.escortN + ' Gefangene)' : ''))); }
     if (u.vehicle) links.push(h('div.muted', { style: { marginBottom: '6px' } }, (u.role === 'tank' ? 'Panzer' : 'Feldgeschütz') + (u.simple ? ' (einfache Bauart)' : '') + (u.parole ? ' · hat die Waffen niedergelegt' : '')));
     if (c) links.push(h('div.row', [h('span.muted', 'Wohnt in'), h('button.link', { type: 'button', on: { click: () => game.selectCity(c.id, true) } }, c.name)]));
     if (k) links.push(h('div.row', [h('span.muted', 'Reich'), h('button.link', { type: 'button', on: { click: () => game.selectKingdom(k.id, true) } }, k.name)]));
@@ -474,6 +478,36 @@
     body.appendChild(h('div.sec', h('button.btn', { type: 'button', on: { click: () => game.follow(u.id) } }, [icon('i_inspect', 22), h('span', game.followId === u.id ? 'Folge ich' : 'Kamera folgt')])));
   };
 
+  // Garnison und Besatzung (9.10): Ist/Soll, Wirkung, Knöpfe; besetzte Städte mit Herkunft und Eingliederung
+  Panels.prototype.garrisonBlock = function (c, k) {
+    const { h, icon } = D();
+    const sim = this.game.sim, S = WW.Sprites;
+    if (c.garrison == null && c.garrisonWant == null && !c.occupied) return null;
+    const g = k ? WW.GOVERNMENTS[k.gov] : null, gi = g && g.garrison;
+    const sec = h('div.sec', [h('h3', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [S.has('i_garrison') ? icon('i_garrison', 18) : null, 'Garnison'])]);
+    if (c.occupied) {
+      const yrs = Math.max(0, (sim.state.year | 0) - (c.occupied.since | 0)), left = gi && gi.integ ? Math.ceil(gi.integ - yrs) : null;
+      sec.appendChild(h('div.hint-box', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [S.has('i_occupied') ? icon('i_occupied', 18) : null,
+        h('span', 'Besetzt seit Jahr ' + (c.occupied.since | 0) + (c.occupied.prev >= 0 ? ', früher ' + kname(sim, c.occupied.prev) : '') + '. ' +
+          (left != null ? (left > 40 ? 'Eingliederung kaum absehbar.' : left > 0 ? 'Eingliederung in etwa ' + left + (left === 1 ? ' Jahr.' : ' Jahren.') : 'Eingliederung steht bevor.') : ''))]));
+    }
+    const have = c.garrison | 0, want = c.garrisonWant | 0;
+    const ratio = typeof c.garrisonRatio === 'number' ? c.garrisonRatio : (want ? Math.min(1, have / want) : 1);
+    sec.appendChild(h('div.barline', [h('span', have + ' Soldaten · Soll ' + want + (c.garrisonSet != null ? ' (von dir festgelegt)' : '')), h('b', Math.round(ratio * 100) + ' %')]));
+    sec.appendChild(h('div.bar' + (ratio < 0.5 ? '.bad' : ratio < 0.9 ? '.warn' : ''), [h('b', { style: { width: Math.max(2, Math.round(ratio * 100)) + '%' } })]));
+    if (gi && gi.cap) sec.appendChild(h('div.muted', { style: { marginTop: '4px' } }, 'Volle Garnison stärkt die Loyalität um bis zu ' + gi.cap + ' Punkte' + (c.occupied ? '; fehlt sie in der besetzten Stadt, sinkt sie.' : '.')));
+    const has = sim.state.structs.some(s => s.type === 'garrison' && s.cityId === c.id && !s.dead && s.built);
+    if (has) sec.appendChild(h('div.muted', 'Garnisonskaserne: Wirkung +50 %.'));
+    if (sim.actions.setGarrison) {
+      const base = c.garrisonSet != null ? c.garrisonSet : want;
+      const act = (n) => { try { sim.actions.setGarrison(c.id, n); } catch (e) { /* egal */ } this.refreshInfo(true); };
+      sec.appendChild(h('div.rbtns', { style: { marginTop: '6px' } }, [
+        h('button.btn.good', { type: 'button', on: { click: () => act(Math.max(have, base) + 2) } }, [S.has('i_garrison') ? icon('i_garrison', 20) : null, h('span', 'Verstärken')]),
+        h('button.btn.danger', { type: 'button', disabled: have === 0 && c.garrisonSet === 0, on: { click: () => act(0) } }, h('span', 'Abziehen')),
+        h('button.btn', { type: 'button', 'aria-pressed': c.garrisonSet == null ? 'true' : 'false', disabled: c.garrisonSet == null, on: { click: () => act(null) } }, h('span', 'Selbst verwalten'))]));
+    }
+    return sec;
+  };
   // ------------------------------------------------------------------ Ausbau 9: Schlacht, Schlachtfeld, Schiff, Zug, Bauwerke, Lagerstadt
   const byId = (list, id) => Array.isArray(list) ? list.find(o => o && o.id === id) || null : null;
   function kname(sim, id) { const k = id >= 0 ? sim.query.kingdom(id) : null; return k ? k.name : 'ein vergangenes Reich'; }
@@ -594,6 +628,8 @@
       rows.push(h('dt', 'Schiffe'), h('dd', String(ships.length)), h('dt', 'Werft'), h('dd', s.prod ? (((WW.NAVAL && WW.NAVAL.KINDS[s.prod]) || {}).name || s.prod) + ' · ' + Math.round(100 * (s.prog || 0)) + ' %' : 'ruht'));
       const led = sim.state.naval && sim.state.naval.ledger && c ? sim.state.naval.ledger[c.id] : 0;
       if (led) rows.push(h('dt', 'Seehandel'), h('dd', Math.floor(led) + ' Gold'));
+      const NS = sim.state.naval && sim.state.naval.stats;
+      if (NS && (NS.invasions || NS.landings)) rows.push(h('dt', 'Landungen (Welt)'), h('dd', (NS.landings | 0) + ' von ' + (NS.invasions | 0) + ' Einschiffungen · ' + (NS.troopsLanded | 0) + ' von ' + (NS.troopsSent | 0) + ' Soldaten an Land'));
     } else if (s.type === 'stockade') {
       rows.push(h('dt', 'Kriegsgefangene'), h('dd', (s.inmates | 0) + ' von ' + (s.cap | 0)));
     } else if (s.type === 'barrack') {

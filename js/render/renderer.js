@@ -53,7 +53,7 @@
     for (let i = 0; i < W * H; i++) this.decorSig[i] = st.structAt && st.structAt[i] >= 0 ? -2 : st.terrain[i];
     this.groundDirty.clear();
     this.fx.length = 0;
-    this._ancH = null; this._rc = null; this._dk = null; this._objCount = 0; this._shownP = null; this._opT = null; this._bKey = this._aKey = ''; this.muzzleT = null;
+    this._ancH = null; this._rc = null; this._dk = null; this._parade = null; this._paradeSig = null; this._objCount = 0; this._shownP = null; this._opT = null; this._bKey = this._aKey = ''; this.muzzleT = null;
     this.labelCache.clear();
     this.buildMini();
     this.queueAll(cam);
@@ -93,14 +93,14 @@
   // und ihrer 8 Nachbarn, dazu Variante, Beweidung, Trübung, Risse, Fallout, Krater und Gleis.
   Renderer.prototype.groundSig = function (x, y) {
     const st = this.st, W = st.W, H = st.H, i = y * W + x, t = st.terrain, path = this.path;
-    const cl = st.cleared, ba = st.barren, so = st.soot, tr = st.trench;
+    const cl = st.cleared, ba = st.barren, so = st.soot, tr = st.trench, pa = this._parade;
     let h = 2166136261 | 0;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const xx = x + dx, yy = y + dy;
       let v = -1;
       if (xx >= 0 && yy >= 0 && xx < W && yy < H) {
         const j = yy * W + xx;
-        v = t[j] | (path[j] ? 256 : 0) | (cl && cl[j] > 0 ? 512 : 0) | (so && so[j] > 0 ? 1024 : 0) | (ba && ba[j] > 0 ? (ba[j] > 170 ? 3 : ba[j] > 85 ? 2 : 1) << 11 : 0) | (tr && tr[j] >> 6 ? 1 << 13 : 0);
+        v = t[j] | (path[j] ? 256 : 0) | (cl && cl[j] > 0 ? 512 : 0) | (so && so[j] > 0 ? 1024 : 0) | (ba && ba[j] > 0 ? (ba[j] > 170 ? 3 : ba[j] > 85 ? 2 : 1) << 11 : 0) | (tr && tr[j] >> 6 ? 1 << 13 : 0) | (pa && pa[j] === 1 ? 1 << 14 : 0);
       }
       h = Math.imul(h ^ v, 16777619);
     }
@@ -134,6 +134,12 @@
     if (st.cleared && st.cleared[i] > 0) this.softOverlay(g, x, y, st.cleared, 't_cleared', null);
     if (st.barren && st.barren[i] > 0) this.softOverlay(g, x, y, st.barren, 't_barren', (v) => v > 170 ? 3 : v > 85 ? 2 : 1);
     if (st.soot && st.soot[i] > 0) this.softOverlay(g, x, y, st.soot, 't_soot', null);
+    // Aufmarschplatz (Prachtstraße) als Bodenbelag
+    if (this._parade && this._parade[i] === 1) {
+      const pv = (xx, yy) => xx < 0 || yy < 0 || xx >= W || yy >= H ? false : this._parade[yy * W + xx] === 1;
+      const pk = 's_deco_parade_ground_' + ((pv(x, y - 1) ? 1 : 0) | (pv(x + 1, y) ? 2 : 0) | (pv(x, y + 1) ? 4 : 0) | (pv(x - 1, y) ? 8 : 0));
+      if (this.S.has(pk)) this.S.drawFast(g, pk, x * 8, y * 8, 0, false);
+    }
     // Schützengraben (sichtbar ab Wert >> 6), weiche Ränder über softKey
     if (st.trench && st.trench[i] >> 6) this.softOverlay(g, x, y, st.trench, 't_trench', null, (v) => v >> 6 ? 1 : 0);
     // Schienen liegen im Boden wie Pfade
@@ -299,6 +305,7 @@
       return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : (this.S.has('d_stump_0') ? { key: 'd_stump_0', dx: 0, dy: 0 } : null);
     }
     if (st.deposit && st.deposit[i] > 0) { const d = this.depositDecor(i, noTime); if (d) return d; }
+    if (this._parade && this._parade[i] >= 2) { const pk = PARADE_DECO[this._parade[i]]; return pk && this.S.has(pk) ? { key: pk, dx: 0, dy: 0 } : null; }
     if (st.owner && st.owner[i] >= 0) {
       // Ergebnis je Kachel eine Sekunde zwischenspeichern (Nachbarsuche ist teuer)
       const N = st.W * st.H;
@@ -1194,12 +1201,14 @@
         if (s.stage === 0) { const k = this.pickVar(S.campKey, ['s_camp_a', 's_camp_b'], s); if (k) return k; }
         if (s.stage === 1) { const k = this.pickVar(S.hallKey, ['s_hall_a', 's_hall_b'], s); if (k) return k; }
         // Megastadt/Riesenstadt (9.10): monumentales Zentrum ab Ausbaustufe 3
-        if ((s.stage | 0) >= 3 && typeof S.centerKey === 'function') { let k = null; try { k = S.centerKey(style, s.stage | 0); } catch (e) { k = null; } if (k && S.has(k)) return k; }
+        // Die Simulation baut das Zentrum bis Stufe 2 aus; das monumentale Zentrum folgt der Stadtstufe (Mega-/Riesenstadt)
+        { const cty = this._cityById ? this._cityById.get(s.cityId) : null, ms = Math.max(s.stage | 0, cty && (s.stage == null || s.stage >= 2) && cty.tier >= 6 ? cty.tier - 3 : 0);
+          if (ms >= 3 && typeof S.centerKey === 'function') { let k = null; try { k = S.centerKey(style, ms); } catch (e) { k = null; } if (k && S.has(k) && k !== 's_center_' + style) return k; } }
         return 's_center_' + style;
       }
       case 'house': {
         const cu = this.cultureOf(s);
-        if (cu) { let k = null; try { k = S.houseKey(style, s.level | 0, varOf(s), cu); } catch (e) { k = null; } if (k && S.has(k) && k.indexOf('_' + cu + '_') > 0) return k; }
+        if (cu && (s.level | 0) <= 3) { let k = null; try { k = S.houseKey(style, s.level | 0, varOf(s), cu); } catch (e) { k = null; } if (k && S.has(k) && k.indexOf('_' + cu + '_') > 0) return k; }
         if (s.level === 0) { const k = this.pickVar(S.tentKey, ['s_tent_a', 's_tent_b', 's_tent_c', 's_tent_d'], s); if (k) return k; }
         return S.houseKey(style, Math.max(1, s.level | 0), varOf(s));
       }
@@ -1222,6 +1231,7 @@
       case 'factory': {
         const lv = Math.max(1, Math.min(2, s.level | 0 || (s.w >= 3 ? 2 : 1)));
         if (s.closed && S.has('s_factory_ruin_' + lv)) return 's_factory_ruin_' + lv;
+        if (style === 'fascism' && s.w >= 3 && S.has('s_warworks')) return 's_warworks';   // Rüstungswerk großer faschistischer Fabriken
         let k = null;
         if (typeof S.factoryKey === 'function') { try { k = S.factoryKey(s.kind, lv, !!s.filtered); } catch (e) { k = null; } }
         if (k && S.has(k)) return k;
@@ -1684,7 +1694,52 @@
     }
     // verschwundene Bauwerke
     if ((pass & 3) === 0 || rcm.size > list.length) for (const [id, rc] of rcm) if (rc.seen !== pass) { this.objDirtyRc(rc); { const oc = this.chunkAt(Math.min(W - 1, rc.x), Math.min(H - 1, rc.y + rc.hh - 1)); if (oc) oc.decorDirty = true; } this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1); rcm.delete(id); }
+    this.updateParade();
     if (this._objExtGrew) { this._objExtGrew = false; const seq = this._oseq = (this._oseq | 0) + 1; for (const c of this.chunks) { c.objV = seq; c.fullV = seq; if (c.dl) c.dl.length = 0; } }
+  };
+
+  // Prachtstraßen faschistischer Großstädte (rein optisch): Achsen vom Zentrum aus mit Pflaster (Boden) und
+  // Laternen, Fahnenmasten, Säulen und einer Tribüne an den Rändern (Stadt-Deko). 1 Pflaster, 2–4 Deko, 5 Tribüne.
+  const PARADE_DECO = [null, null, 's_deco_parade_lamp', 's_deco_parade_mast', 's_deco_parade_column', 's_deco_parade_tribune'];
+  Renderer.prototype.updateParade = function () {
+    const st = this.st, S = this.S;
+    if (!st.cities || !st.structAt || !S.has('s_deco_parade_lamp')) return;
+    const W = st.W, H = st.H, N = W * H;
+    const kings = new Map(); for (const k of st.kingdoms || []) kings.set(k.id, k);
+    let sig = '';
+    for (const c of st.cities) { const k = kings.get(c.kingdomId); if (k && k.gov === 'fascism' && c.kind !== 'camp' && c.tier >= 3) sig += c.id + ':' + c.tier + ':' + c.cx + ':' + c.cy + ';'; }
+    // Bauwerke ändern die freien Plätze: bei geänderten Stadtdaten oder alle 2 s neu bestimmen
+    if (sig === this._paradeSig && this.time - (this._paradeT || 0) < 2) return;
+    this._paradeSig = sig; this._paradeT = this.time;
+    const old = this._parade && this._parade.length === N ? this._parade : null;
+    const P = new Uint8Array(N);
+    if (sig) {
+      const LUT = WW.TERRAIN_LUT, ring = st.inRing;
+      const free = (x, y, c) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const i = y * W + x; return st.structAt[i] < 0 && LUT.build[st.terrain[i]] && st.owner[i] === c.id && (!ring || ring[i] === c.id || ring[i] < 0); };
+      for (const c of st.cities) {
+        const k = kings.get(c.kingdomId);
+        if (!(k && k.gov === 'fascism' && c.kind !== 'camp' && c.tier >= 3)) continue;
+        const L = Math.min(12, 3 + c.tier);
+        for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+          for (let d = 2; d <= L; d++) {
+            const x = c.cx + dx * d, y = c.cy + dy * d;
+            if (!free(x, y, c)) break;   // die Achse endet am ersten Gebäude
+            P[y * W + x] = 1;
+            // Seiten: im Wechsel Laterne, Mast, Säule
+            if (d % 2 === 0) for (const sgn of [-1, 1]) {
+              const sx = x + dy * sgn, sy = y + dx * sgn;
+              if (free(sx, sy, c) && !this.path[sy * W + sx]) P[sy * W + sx] = 2 + ((d >> 1) + (sgn > 0 ? 1 : 0)) % 3;
+            }
+          }
+        }
+        // Tribüne am Platz südlich vor dem Zentrum (2×1)
+        const tx = c.cx + 2, ty = c.cy + 2;
+        if (free(tx, ty, c) && free(tx + 1, ty, c) && !P[ty * W + tx] && !P[ty * W + tx + 1]) { P[ty * W + tx] = 5; P[ty * W + tx + 1] = 6; }
+      }
+    }
+    this._parade = P;
+    if (!old) { if (sig) for (let i = 0; i < N; i++) if (P[i]) { this.markTiles([i]); this.objForget(i % W, (i / W) | 0, i % W, (i / W) | 0); const dc = this.chunkAt(i % W, (i / W) | 0); if (dc) dc.decorDirty = true; } return; }
+    for (let i = 0; i < N; i++) if (P[i] !== old[i]) { const x = i % W, y = (i / W) | 0; if (P[i] === 1 || old[i] === 1) this.markTiles([i]); this.objForget(x, y, x, y); const dc = this.chunkAt(x, y); if (dc) dc.decorDirty = true; }
   };
 
   // geordnete Objekte einer Kachelzeile (Felder, Deko, Bauwerke, Stacheln der Zeile darüber) in out schreiben
@@ -2471,7 +2526,8 @@
       const tw = Math.ceil(ctx.measureText(name).width);
       const bw = Math.round(11 * dpr * (small ? 1 : 1.5)), pad = Math.round(4 * dpr);
       const h = Math.round((fs + 7) * dpr);
-      const w = tw + pad * 3 + bw;
+      const occ = c.occupied && S.has('i_occupied'), osz = Math.round(h * 0.8);
+      const w = tw + pad * 3 + bw + (occ ? osz + pad : 0);
       const x = Math.round(L.x * dpr - w / 2), y = Math.round(L.y * dpr - h);
       // Tafel: Kante, Fläche, harte Schattenkante
       ctx.fillStyle = 'rgba(10,26,33,0.92)';
@@ -2490,6 +2546,8 @@
         S.drawFast(ctx, bk, 0, 0, k.colorIndex | 0, false);
         ctx.restore();
       }
+      // besetzte Stadt: kleines Banner-Zeichen am Ende des Schilds
+      if (occ) { const oi = S.info('i_occupied'), sc = osz / Math.max(1, oi.w); ctx.save(); ctx.imageSmoothingEnabled = false; ctx.setTransform(sc, 0, 0, sc, x + w - pad - osz - oi.ox * sc, y + Math.round((h - osz) / 2) - oi.oy * sc); S.drawFast(ctx, 'i_occupied', 0, 0, 0, false); ctx.restore(); }
       ctx.fillStyle = '#f3ead2';
       ctx.textBaseline = 'middle';
       ctx.fillText(name.split('  ')[0], x + pad * 2 + bw, y + h / 2 - dpr);
@@ -2545,6 +2603,18 @@
         marks.push({ kind: 'battle', id: b.id, x: b.x, y: b.y, box: { x: x / dpr, y: y / dpr, w: w / dpr, h: h / dpr } });
       }
     }
+  };
+  // Bauwerk unter einem Weltpunkt (Logikpixel) nach Sprite-Rechteck: das vorderste (unterste Ankerzeile) gewinnt.
+  // Für hohe Bauten (Wohnblöcke, monumentales Zentrum), deren Bild weit über die Grundfläche ragt.
+  Renderer.prototype.structAtPx = function (wx, wy) {
+    if (!this._rc || !this.structById) return null;
+    let best = null, by = -1e9;
+    for (const [id, rc] of this._rc) {
+      if (wx < rc.x0 || wx >= rc.x1 || wy < rc.y0 || wy >= rc.y1) continue;
+      const b = rc.y + rc.hh;
+      if (b > by) { const s = this.structById(id); if (s && !s.dead && s.type !== 'field') { best = s; by = b; } }
+    }
+    return best;
   };
   Renderer.prototype.markAt = function (sx, sy) {
     const m = this._marks;

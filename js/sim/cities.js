@@ -505,6 +505,7 @@
       if (!s) continue;
       if (filterWall && WW.Structs.isWallish(s)) continue;
       if (filterWall && s.built && s.restyle && !s.upgradeTo) continue;
+      if (filterWall && (s.type === 'rail' || s.type === 'station')) continue;   // Bahnbau zählt nicht gegen die Stadtplanung
       n++;
     }
     return n;
@@ -638,6 +639,21 @@
       }
       break;
     }
+  }
+
+  // Megastadt (9.10): stehen Vorstädte vor der Mauer, wird der Ring rechtzeitig erweitert (vor weiteren Mauerstufen),
+  // sodass ein großer Ring Kern und Vorstädte umschließt. Nutzt WW.Walls.plan (expanding); scheitert es (Nachbar zu nah),
+  // bleibt es bei Vorstädten (wall.maxed).
+  function megaRing(sim, city) {
+    const w = city.wall, st = sim.state;
+    if (!w.plan || (w.state !== 'done' && w.state !== 'upgrading') || w.maxed || !city.noSpace || city.tier < 3 || !gov(sim, city).megaHousing) return;   // Erweiterung geht vor weiteren Mauerstufen
+    if (st.year - (w.plannedYear || 0) < 3) return;
+    let out = 0;
+    for (const s of st.structs) if (!s.dead && s.cityId === city.id && s.type === 'house' && st.inRing[s.y * st.W + s.x] !== city.id) out++;
+    if (out < 3) return;
+    const before = w.plan.length;
+    if (!WW.Walls.plan(sim, city, WW.CONFIG.WALL_MARGIN, Math.max(1, w.level), true)) { w.plannedYear = st.year; w.maxed = true; return; }   // [walls]
+    if (w.plan.length > before) sim.event('wallExpand', { city: city.name, kingdom: (sim._kingdoms.get(city.kingdomId) || {}).name || '' }, atCity(city));
   }
 
   function upgradeHouse(sim, city, sk) {
@@ -936,7 +952,7 @@
       if (city.hasWood === undefined) scanResources(sim, city);
       economy(sim, city);
       if ((slot + city.id) % 2 === 0) assignJobs(sim, city);
-      if ((slot + city.id) % 3 === 0) { planBuildings(sim, city); WW.Walls.update(sim, city); }
+      if ((slot + city.id) % 3 === 0) { planBuildings(sim, city); megaRing(sim, city); WW.Walls.update(sim, city); }
     }
   }
 
