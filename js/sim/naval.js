@@ -65,7 +65,8 @@
 //   mit dem Militär) { id, x, y, kind: 'ship', ship (Schiffsart), look, year, gov, k (Reich), rust 0..3 } – Sprite
 //   d_wreck_ship. Ohne js/sim/military.js altert dieses Modul die Schiffswracks selbst (NAVAL.WRECK_YEARS).
 //
-// ZUSTAND state.naval = { seq, harbors [Hafen-IDs], colony { [kid]: Jahr }, invade { [kid]: Jahr },
+// ZUSTAND state.naval = { seq, harbors [Hafen-IDs], colony { [kid]: Jahr }, invade { [kid]: Jahr }, noHarbor { [cityId]: Jahr },
+//   first { [kid]: 1 }, ledger { [cityId]: Gold aus Seehandel insgesamt (Info-Fenster) },
 //   stats { built, sunk, fish, trades, colonies, landings, wrecks } }
 //
 // FX (sim.drainFx), Koordinaten in Kacheln:
@@ -146,6 +147,7 @@
     n.invade = n.invade && typeof n.invade === 'object' ? n.invade : {};
     n.noHarbor = n.noHarbor && typeof n.noHarbor === 'object' ? n.noHarbor : {};
     n.first = n.first && typeof n.first === 'object' ? n.first : {};
+    n.ledger = n.ledger && typeof n.ledger === 'object' ? n.ledger : {};
     const S = n.stats && typeof n.stats === 'object' ? n.stats : {};
     for (const k of ['built', 'sunk', 'fish', 'trades', 'colonies', 'landings', 'wrecks']) S[k] = +S[k] || 0;
     n.stats = S;
@@ -286,12 +288,13 @@
     return out;
   }
   // Route zwischen zwei Wasserkacheln (zwischengespeichert; Ergebnis hängt nur am Gelände -> deterministisch)
-  function route(sim, from, to) {
+  function route(sim, from, to, limit) {
     const st = sim.state, N = st.W * st.H;
     if (!(from >= 0 && from < N && to >= 0 && to < N)) return null;
     const nav = seaInfo(sim);
     if (nav.comp[from] < 0 || nav.comp[from] !== nav.comp[to]) return null;
     if (from === to) return [];
+    if (limit > 0) return astar(sim, from, to, limit);   // kurze Suche (Verfolgung), nicht zwischengespeichert
     const key = from * N + to;
     if (nav.cache.has(key)) { const r = nav.cache.get(key); return r ? r.slice() : null; }
     const r = astar(sim, from, to, NV().PATH_NODES);
@@ -459,9 +462,11 @@
     if (city.kind === 'camp' || !city.centerOk || city.tier < spec.minTier || city.pop < spec.minPop) return;
     if ((n.noHarbor[city.id] | 0) > st.year) return;
     if (harborOf(sim, city.id, false)) return;
-    if (WW.Cities.countSites(sim, city, true) >= 2 + city.tier) return;
+    const open = WW.Cities.countSites(sim, city, true);
+    if (open >= 2 + city.tier) return;
+    // ohne Vorrat nur, wenn sonst kaum gebaut wird (die Baustelle zieht dann Holzfäller nach sich)
     const cost = WW.Structs.costFor(sim, 'harbor', 1, city.id);
-    if (!WW.Cities.canPay(sim, city, cost)) return;
+    if (!WW.Cities.canPay(sim, city, cost) && open > 1) return;
     // schnelle Vorprüfung: Meer in Reichweite?
     const W = st.W, H = st.H, L = seaLut(), r = Math.min(NV().HARBOR.r, WW.Cities.territoryRadius(city, sim) + 2);
     let any = false;
@@ -681,7 +686,12 @@
       const kk = sim._kingdoms.get(c.kingdomId);
       if (!kk) continue;
       const g = WW.GOVERNMENTS[kk.gov] || {};
-      if (g.goldMul > 0) { const v = WW.SimUtil.mod(sim, kk, c, 'gold', amt); WW.Cities.addStock(sim, c, 'gold', v); if (c === ca) shown = v; }
+      if (g.goldMul > 0) {
+        const v = WW.SimUtil.mod(sim, kk, c, 'gold', amt);
+        WW.Cities.addStock(sim, c, 'gold', v);
+        st.naval.ledger[c.id] = Math.round(((st.naval.ledger[c.id] || 0) + v) * 100) / 100;
+        if (c === ca) shown = v;
+      }
       else { WW.Cities.addStock(sim, c, 'food', T.goods); WW.Cities.addStock(sim, c, 'wood', T.goods); if (c === ca) s.cargo.goods = T.goods; }
     }
     s.cargo.gold = shown;
@@ -692,7 +702,7 @@
       if (rb) rb.opinion = Math.min(100, rb.opinion + T.opinion);
     }
     st.naval.stats.trades++;
-    if (hr(sim, s.id, st.tick + 3) < 0.06) chron(sim, 'seaTrade', { city: ca.name, other: cb.name, ship: s.name }, WW.Cities.atCity(cb), 'economy', shown ? '+' + Math.round(shown) + ' Gold' : 'Waren');
+    if (hr(sim, s.id, st.tick + 3) < 0.06) chron(sim, 'seaTrade', { city: ca.name, otherCity: cb.name, ship: s.name }, WW.Cities.atCity(cb), 'economy', shown ? '+' + Math.round(shown) + ' Gold' : 'Waren');
   }
   function arrive(sim, s) {
     s.moving = false; s.route = []; s.ri = 0;
@@ -933,7 +943,7 @@
       }
       if (best) break;
     }
-    if (!best) return false;
+    if (!best) { n.invade[k.id] = st.year - I.every + 1; return false; }   // nächstes Jahr wieder versuchen
     const s = best.s, board = boardTile(sim, best.h), hc = comp[board];
     const bx = board % W, by = Math.floor(board / W);
     const list = idle.filter((u) => !u.dead && !u.order && !u.sea && !u.ind && comp[Math.floor(u.y) * W + Math.floor(u.x)] === hc);
@@ -1054,7 +1064,7 @@
   }
   function finishSink(sim, s) {
     const st = sim.state, W = st.W, H = st.H, ter = st.terrain;
-    s.dead = true; sim._shipMapDirty = true;
+    s.dead = true; sim._shipMapDirty = true; sim._shipsDead = true;
     const i = tileOf(sim, s);
     let w = -1;
     if (ter[i] === WW.T.SHALLOW) w = i;
@@ -1074,7 +1084,7 @@
   function scrap(sim, s) {
     if (s.dead) return;
     if (s.passengers.length) unload(sim, s, null);
-    s.dead = true; sim._shipMapDirty = true;
+    s.dead = true; sim._shipMapDirty = true; sim._shipsDead = true;
     sim.fx({ type: 'splash', x: s.x, y: s.y });
   }
   function fireAt(sim, w, x2, y2, hit) {
@@ -1084,9 +1094,14 @@
   function combat(sim) {
     const st = sim.state, K = NV().KINDS.warship;
     const ships = st.ships;
+    let warK = null;
     for (const w of ships) {
       if (w.dead || w.kind !== 'warship' || w.t === 'sink') continue;
       if (w.cd > 0) { w.cd -= 5; continue; }
+      if (!warK) warK = new Map();
+      let aw = warK.get(w.kingdomId);
+      if (aw === undefined) { aw = WW.Diplo.atWar(sim, w.kingdomId); warK.set(w.kingdomId, aw); }
+      if (!aw) { w.cd = 20; continue; }
       // nächstes feindliches Schiff
       let foe = null, fd = 1e9, near = null, nd = 1e9;
       for (const o of ships) {
@@ -1112,7 +1127,7 @@
       const free = w.t === 'dock' || (w.t === 'work' && (!w.mission || w.mission.kind !== 'escort')) || (w.t === 'out' && w.mission && w.mission.kind === 'patrol');
       const chasing = w.t === 'out' && w.mission && w.mission.kind === 'chase';
       if (near && (free || (chasing && ((st.tick + w.id) % 40) < 5))) {
-        const r = route(sim, tileOf(sim, w), tileOf(sim, near));
+        const r = route(sim, tileOf(sim, w), tileOf(sim, near), 700);
         if (r && r.length <= 3 * K.sight) {
           const was = w.t === 'dock';
           if (r.length > 2) r.length = r.length - 2;   // nicht rammen: auf Schussweite heran
@@ -1123,6 +1138,7 @@
       }
       // Küstenbeschuss (Regierungen mit Geschützen)
       if (w.t === 'work' || w.t === 'out') { const wk = sim._kingdoms.get(w.kingdomId); if (hasGuns(wk ? wk.gov : w.gov)) bombard(sim, w); }
+      if (w.cd <= 0) w.cd = 10;   // nichts zu tun: etwas seltener prüfen
     }
   }
   function bombard(sim, w) {
@@ -1272,14 +1288,15 @@
       }
     }
     // Häfen (Bau von Schiffen), Liste aufräumen
-    if (n.harbors.length) {
+    if (n.harbors.length && t % 10 === 0) {
+      const slot = (t / 10) | 0;
       let j = 0;
       for (let q = 0; q < n.harbors.length; q++) {
         const id = n.harbors[q];
         const h = sim._structs.get(id);
         if (!h || h.dead || h.type !== 'harbor') continue;
         n.harbors[j++] = id;
-        if ((t + id) % 40 === 0) harborTick(sim, h);
+        if ((slot + id) % 4 === 0) harborTick(sim, h);
       }
       n.harbors.length = j;
     }
@@ -1301,9 +1318,12 @@
       if (t % 5 === 2 && sim._hostileWorld) combat(sim);
       if (t % 40 === 21) smoke(sim);
       // Aufräumen
-      let any = false;
-      for (const s of ships) if (s.dead) { any = true; break; }
-      if (any) { st.ships = ships.filter((s) => !s.dead); sim._shipMapDirty = true; }
+      if (sim._shipsDead) {
+        sim._shipsDead = false; sim._shipMapDirty = true;
+        let j = 0;
+        for (let q = 0; q < ships.length; q++) if (!ships[q].dead) ships[j++] = ships[q];
+        ships.length = j;
+      }
     }
     // jährlich: Siedler über das Meer, Wracks ohne Militär altern lassen
     if (t % CF().TPY === 120) {

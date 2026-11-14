@@ -1270,10 +1270,9 @@
     // Sekunde neu zusammengesetzt, mit Werkzeug in der Hand sofort bei jeder Bodenänderung. Darüber liegt ein zweites Bild mit
     // den ruhenden Objekten und dem Dunst; je Bild wird nur dieses kopiert und Bewegtes darübergelegt.
     const SK = s + '|' + ox + '|' + oy + '|' + cv.width + '|' + cv.height + '|' + (low ? 1 : 0);
-    const camStill = SK === this._camKey && !(this.shake > 0);
-    this._camKey = SK;
     const wf = (this.time * 5) | 0;
     this._patchBase = null; this._patchA0 = null;
+    const camStill = SK === this._camKey && !(this.shake > 0);
     if (camStill && !missing && !opts.firstFrames && this.gfx.still !== false) {
       const mk = (c) => { if (!c) c = document.createElement('canvas'); if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; } return c; };
       const bc = this._stBase = mk(this._stBase);
@@ -1301,8 +1300,10 @@
       if (aNew) { this._aKey = akey; this._aO = this._over; }
       ctx.drawImage(top, 0, 0);
       this._patchBase = bc; this._patchA0 = a0;
+      this._camKey = SK;
     } else {
       this._bKey = ''; this._aKey = '';
+      this._camKey = SK;
       this.drawBase(ctx);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       if (near) this.drawRegions(ctx, P);
@@ -1889,7 +1890,9 @@
       } else for (const o of dyn) simple.push(o);
       // (a) einfache Dinge: direkt aufs Standbild, bei Dunst im Ausschnitt über dem Bild ohne Dunst
       simple.sort(order);
-      if (smogOn && simple.length) {
+      // bewegte Kamera (keine Zwischenbilder): Figuren ohne Dunst-Ausschnitt, Verdecktes ohne Bodenkopie (nur ruhend genau)
+      const exact = !!this._patchBase;
+      if (smogOn && simple.length && exact) {
         clipTo(simple);
         if (this._patchA0) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchA0, 0, 0); }
         else { this.drawBase(ctx); if (near) { ctx.setTransform(1, 0, 0, 1, 0, 0); this.drawRegions(ctx, P); } }
@@ -1903,11 +1906,9 @@
         const items = this._cItems;
         items.sort(order);
         clipTo(complex);
-        if (this._patchBase) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchBase, 0, 0); }
-        else this.drawBase(ctx);
-        ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
+        if (exact) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchBase, 0, 0); ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy); }
         for (const it of items) drawIt(it);
-        if (smogOn) this.drawSmogLayer(ctx);
+        if (smogOn && exact) this.drawSmogLayer(ctx);
         ctx.restore(); ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
       }
       this.stats.dynS = simple.length; this.stats.dynC = complex.length;

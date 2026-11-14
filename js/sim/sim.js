@@ -765,6 +765,7 @@
         if (st.mark[i] && LUT.water[terrainId]) WW.Env.setMark(sim, i, 0);
       }
       if (changed) { sim.terrainChanged(); WW.Cities.refreshAllLists(sim); }
+      if (changed && WW.Wild && WW.Wild.rescueArea) WW.Wild.rescueArea(sim, cx, cy, r);   // [mil] Leute/Tiere auf frisch gemaltem Wasser/Lava sofort retten
       return changed > 0;
     }
 

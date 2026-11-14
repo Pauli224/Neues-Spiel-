@@ -767,6 +767,7 @@
     if (x < 0 || y < 0 || x >= st.W || y >= st.H) return false;
     if (o != null && typeof o !== 'object') o = null;
     const res = p.apply(sim, x, y, o || null);
+    if (W_() && W_().rescueAll) W_().rescueAll(sim);   // wer jetzt auf Lava/Wasser steht, rettet sich sofort
     if (!silent && p.event) {
       const i = Math.floor(y) * st.W + Math.floor(x);
       let c = sim._cities.get(st.owner[i]) || sim._cities.get(st.inRing[i]);

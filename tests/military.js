@@ -422,6 +422,62 @@ test('9 Zeitaufschlag ohne Krieg und Dauerlauf mit Kriegen', function () {
   assert(!(ends.length >= 2 && ends.every((s) => s > 0.85)), 'Panzer-Reiche überrennen jede Welt');
 });
 
+test('10 Regime bekommen rechtzeitig Fahrzeuge, im Krieg eine sichtbare Truppe', function () {
+  const firsts = [], late = [];
+  for (const seed of [1, 2, 6, 7]) {
+    const sim = WW.Sim.create({ seed: seed, size: 'small', populate: 4, govs: ['fascism', 'communism', 'fascism', 'communism'], laws: { govChanges: false } });
+    sim._throwErrors = true;
+    const st = sim.state, first = {};
+    for (let y = 1; y <= 30; y++) {
+      run(sim, 240);
+      for (const k of st.kingdoms) if (first[k.id] == null && vehicles(sim, k.id).length) first[k.id] = y;
+    }
+    for (const k of st.kingdoms) {
+      if (!WW.MIL.GOVS[k.gov] || !WW.MIL.GOVS[k.gov].tank) continue;
+      const cs = k.cityIds.map((id) => sim._cities.get(id));
+      const pop = cs.reduce((a, c) => a + c.pop, 0);
+      if (first[k.id] != null) firsts.push(first[k.id]);
+      else if (pop >= 30 && cs.some((c) => c.tier >= 2)) late.push(seed + ':' + k.gov + ':' + pop);
+    }
+  }
+  firsts.sort((a, b) => a - b);
+  log('erstes Fahrzeug nach Jahren:', firsts.join(', '), '| ohne Fahrzeug trotz Stadt ≥ 30 Einw.:', late.join(' ') || '-');
+  assert(firsts.length >= 4 && firsts[Math.floor(firsts.length / 2)] <= 25, 'erste Fahrzeuge zu spät/zu selten');
+  assert(late.length <= 1, 'Regime mit Stadt ohne Fahrzeug: ' + late.join(' '));
+  // Krieg: Truppe in der Größenordnung 1 je 25–30 Einwohner
+  const o = duel('fascism', 'monarchy', { seed: 61 });
+  grow(o, 12, 70);
+  o.sim.actions.setRelation(o.A.id, o.B.id, 'war');
+  const pop = () => o.A.cityIds.reduce((a, id) => a + (o.sim._cities.get(id) || { pop: 0 }).pop, 0);
+  const made = () => o.sim.state.structs.filter((s) => s.type === 'arsenal' && o.A.cityIds.indexOf(s.cityId) >= 0).reduce((a, s) => a + (s.made | 0), 0);
+  let y = 0;
+  for (; y < 14 && made() < Math.max(2, Math.floor(pop() / 30)); y++) grow(o, 1, 70);
+  const n = made();
+  log('Krieg: Faschismus mit', pop(), 'Einw. hat nach', 12 + y, 'Jahren', n, 'Fahrzeuge gebaut,', vehicles(o.sim, o.A.id).length, 'im Dienst (Obergrenze', WW.Military.capOf(o.sim, o.A, 'tank', true) + '+' + WW.Military.capOf(o.sim, o.A, 'artillery', true) + ')');
+  assert(n >= Math.floor(pop() / 30) && n >= 2, 'keine sichtbare Truppe im Krieg');
+});
+
+test('11 Schlachtnamen abwechslungsreich, Aufgebende kämpfen nicht mehr', function () {
+  const o = duel('fascism', 'monarchy', { seed: 71, terrain: (t, W, H) => { for (let y = 0; y < H; y++) { t[y * W + 44] = WW.T.RIVER; t[y * W + 60] = WW.T.RIVER; } } });
+  run(o.sim, 240);
+  const names = [];
+  for (let i = 0; i < 9; i++) { const px = i < 5 ? 40 : 58, nm = WW.Military.battleName(o.sim, px, 30); names.push(nm.name); o.sim.state.sites.push({ id: -1 - i, kind: 'battlefield', name: nm.name, base: nm.base, x: px, y: 30, r: 10, year: 0, a: o.A.id, b: o.B.id, winner: -1, losses: { a: 0, b: 0 }, pows: 0, how: 'draw' }); }
+  log('Namen:', names.join(' | '));
+  assert(new Set(names).size === names.length, 'Namen doppelt');
+  assert(names.filter((n) => /^(Zweite|Dritte|Vierte|Fünfte|Sechste) /.test(n)).length <= 1, 'zu früh mit Zählwort');
+  assert(names.some((n) => /Fluss|Furt/.test(n)) && names.some((n) => /vor /.test(n)), 'Fluss/Gelände fehlen im Namen');
+  o.sim.state.sites.length = 0;
+  // Aufgabe: Heimgeschickte sind weder Angreifer noch Ziel
+  o.sim.actions.setRelation(o.A.id, o.B.id, 'war');
+  const a = soldier(o.sim, o.A, o.ca, 50, 30), b = soldier(o.sim, o.B, o.cb, 51, 30);
+  assert(WW.Units.hostile(o.sim, a, b), 'Vorlauf: nicht verfeindet');
+  b.parole = o.sim.state.tick + 100;
+  assert(!WW.Units.hostile(o.sim, a, b) && !WW.Units.hostile(o.sim, b, a), 'Aufgebender ist noch Ziel/Angreifer');
+  const hp = b.hp;
+  for (let i = 0; i < 60; i++) { b.x = 51.5; b.y = 30.5; a.x = 50.5; a.y = 30.5; o.sim.tick(); }
+  assert(b.hp >= hp && !b.dead, 'Aufgebender wird angegriffen');
+});
+
 console.log('\n--- Ergebnis');
 for (const r of results) console.log('  ' + (r.ok ? 'ok    ' : 'FEHLER') + '  ' + r.name + '  (' + (r.ms / 1000).toFixed(1) + ' s)' + (r.ok ? '' : '  -> ' + (r.err && r.err.message)));
 const bad = results.filter((r) => !r.ok).length;

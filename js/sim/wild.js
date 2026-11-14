@@ -142,6 +142,7 @@
     if (st.terrain[i] === t) return false;
     st.terrain[i] = t;
     sim.markDirty(i);
+    markRescue(sim, i);
     if (LUT.water[t]) { WW.Env.extinguish(sim, i); if (st.mark[i]) WW.Env.setMark(sim, i, 0); }
     if (st.flora[i] && t !== WW.T.ASH && t !== WW.T.LAVA) { st.flora[i] = 0; st.graze[i] = 0; }
     const s = sim._structs.get(st.structAt[i]);
@@ -180,6 +181,40 @@
   function finishTerrain(sim) {
     sim.terrainChanged();
     WW.Cities.refreshAllLists(sim);
+    rescueAll(sim);
+  }
+
+  // Wer auf einer geänderten Kachel steht, die er nicht betreten darf (Lava, Wasser, Land für Fische), rettet sich sofort
+  // auf die nächste passende Kachel (sonst ertrinkt er wie bisher). Laufzeitliste sim._rescue wird in derselben Aktion
+  // bzw. am Ende desselben Ticks abgearbeitet (finishTerrain, Wild.update, Powers.strike, sim.js paintTerrain).
+  function markRescue(sim, i) { (sim._rescue || (sim._rescue = [])).push(i); }
+  function rescueAll(sim) {
+    const L = sim._rescue;
+    if (!L || !L.length) return;
+    const st = sim.state, W = st.W, set = new Set(L);
+    L.length = 0;
+    for (const u of st.units) {
+      if (u.dead) continue;
+      const i = Math.floor(u.y) * W + Math.floor(u.x);
+      if (!set.has(i)) continue;
+      if (WW.TERRAIN_LUT.walk[st.terrain[i]] <= 0 || sim.block[i] === 1) WW.Units.rescue(sim, u);
+    }
+    for (const a of st.animals) {
+      if (a.dead) continue;
+      const i = Math.floor(a.y) * W + Math.floor(a.x);
+      if (!set.has(i)) continue;
+      const cr = WW.CREATURES[a.kind];
+      if (!cr || WW.Creatures.canEnter(sim, cr, i)) continue;
+      const n = WW.Creatures.nearestFor(sim, cr, i, 4);
+      if (n >= 0) { a.x = (n % W) + 0.5; a.y = Math.floor(n / W) + 0.5; a.tx = -1; a.moving = false; }
+      else WW.Creatures.kill(sim, a, null);
+    }
+  }
+  function rescueArea(sim, x, y, r) {
+    const st = sim.state, W = st.W, H = st.H;
+    for (let yy = Math.max(0, Math.floor(y - r)); yy <= Math.min(H - 1, Math.floor(y + r)); yy++)
+      for (let xx = Math.max(0, Math.floor(x - r)); xx <= Math.min(W - 1, Math.floor(x + r)); xx++) markRescue(sim, yy * W + xx);
+    rescueAll(sim);
   }
 
   // Baum pflanzen (Baumhirte, Saat): Wiese -> Wald, Savanne -> Dschungel, Tundra -> Nadelwald, Asche -> Wiese
@@ -972,6 +1007,7 @@
     const S = CFG().ALARM_SCAN;
     for (const c of st.cities) if ((tick + c.id) % S === 0) cityAlarm(sim, c);
     if (tick % 30 === 17) updateLairs(sim);
+    rescueAll(sim);
   }
   function yearly(sim) {
     ensure(sim);
@@ -987,7 +1023,7 @@
 
   WW.Wild = {
     defaults: defaults, ensure: ensure, addScar: addScar, RASTERS: RASTERS, bandOf: bandOf, terrainForBand: terrainForBand, terrainFromHeight: terrainFromHeight,
-    setTerrain: setTerrain, setHeight: setHeight, finishTerrain: finishTerrain, plantTree: plantTree, capOf: capOf, habitat: habitat,
+    setTerrain: setTerrain, setHeight: setHeight, finishTerrain: finishTerrain, rescueAll: rescueAll, rescueArea: rescueArea, plantTree: plantTree, capOf: capOf, habitat: habitat,
     chron: chron, cityNear: cityNear, cityDist2: cityDist2, sturdy: sturdy, scare: scare, sendSoldiers: sendSoldiers, placeLair: placeLair, lairsOf: lairsOf,
     spawnBandit: spawnBandit, makeMad: makeMad, populate: populate, immigrate: immigrate, grab: grab, drop: drop,
     actions: actions, update: update, yearly: yearly,

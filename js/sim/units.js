@@ -136,6 +136,7 @@
   function hostile(sim, a, b) {
     if (a === b || a.dead || b.dead) return false;
     if (a.role === 'prisoner' || b.role === 'prisoner') return false;   // [industry] Lager-Insassen sind nie Ziel
+    if ((a.parole && a.parole > sim.state.tick) || (b.parole && b.parole > sim.state.tick)) return false;   // [mil] Waffen niedergelegt
     if (a.seaS === 'aboard' || b.seaS === 'aboard' || a.seaS === 'swim' || b.seaS === 'swim') return false;   // [see] an Bord / schwimmt
     // Wildnis: Räuber sind allen feind, Wahnsinnige ebenso
     if (a.role === 'bandit' || b.role === 'bandit') return a.role !== b.role;

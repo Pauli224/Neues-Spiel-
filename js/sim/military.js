@@ -36,6 +36,8 @@
 //   Mindestabstand, langsame Schussfolge, Flächentreffer, Krater (state.mark 100..199), trifft Mauern; im Nahkampf
 //   wehrlos (schießt nicht, versucht abzurücken). Ausfall -> Wrack (state.wrecks), Fx 'wreck'.
 //   Fahrzeuge schließen sich im Krieg dem Marsch des eigenen Heeres an (state.mil.march), sonst parken sie daheim.
+//   u.parole (Tick): hat bei einer Aufgabe die Waffen niedergelegt; bis dahin weder Angreifer noch Ziel (units.js hostile),
+//   wird nicht in neue Heere eingezogen (diplo.js). Darstellung: ohne Waffe / weiße Fahne.
 //   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts von selbst.
 //
 // ZUSTAND
@@ -50,7 +52,9 @@
 //                  Aufgabe: WW.Camps.surrender(sim, siegerId, einheiten, schlacht) -> Anzahl, falls vorhanden, sonst je Soldat
 //                  WW.Camps.capture(sim, { id: -1, kingdomId: sieger }, u, { surrender: true }); wer nicht gefangen wird,
 //                  legt die Waffen nieder und geht heim (order home). Fahrzeuge der Aufgebenden werden erbeutet.
-//   state.sites[]  Schlachtfelder als Orte: { id, kind: 'battlefield', name ('Schlacht bei <Stadt>' | 'Schlacht <Gelände>'),
+//   state.sites[]  Schlachtfelder als Orte: { id, kind: 'battlefield', name (erste freie Angabe: 'Schlacht bei <Stadt>',
+//                  'am Fluss bei <Stadt>', '<Gelände> vor <Stadt>', 'an der Furt von <Stadt>', 'bei <Stadt> im Jahr N';
+//                  ohne Stadt '<Gelände>', 'am Fluss', '<Gelände> im Jahr N'; erst danach mit Zählwort), base,
 //                  x, y, r, year, a, b, aName, bName, winner (Reichs-ID | -1 unentschieden), losses: { a, b }, pows, how
 //                  ('win'|'retreat'|'surrender'|'draw'), vehicles: { a, b } (beteiligte Fahrzeuge) } – höchstens WW.MIL.MAX_SITES,
 //                  älteste fallen weg.
@@ -73,7 +77,8 @@
 //   battleStart, battleRetreat, battleSurrender, arsenal (Arsenal eröffnet), firstTank, firstGun, tankBreach,
 //   godTank, godGun, godBattle
 //
-// KRÄFTE (WW.POWERS, Kategorie 'destruction'): milTank „Panzer setzen", milGun „Geschütz setzen" (gehört dem Reich an
+// KRÄFTE (WW.POWERS, Kategorie 'destruction'; Feld icon: milTank -> i_tank, milGun -> i_artillery, milBattle -> i_battle;
+//   tools.js sucht bisher i_<key>, die Darstellung soll power.icon bevorzugen): milTank „Panzer setzen", milGun „Geschütz setzen" (gehört dem Reich an
 //   der Stelle bzw. dem nächsten Reich ≤ 30 Kacheln), milBattle „Schlacht befehlen" (zweimal tippen: erstes Reich, dann
 //   zweites -> Krieg erzwungen + beide Heere marschieren aufeinander zu).
 // AKTIONEN (sim.actions.*, werfen nie): placeVehicle(x, y, kind ['tank'|'artillery'], kingdomId?) -> unitId | null,
@@ -130,7 +135,7 @@
   function capOf(sim, k, kind, war) {
     const sp = govSpec(k.gov);
     if (!sp || !sp[kind]) return 0;
-    let n = Math.min(sp[kind].max, Math.floor(kingdomPop(sim, k) / sp[kind].per));
+    let n = Math.min(sp[kind].max, Math.floor(kingdomPop(sim, k) / sp[kind].per + 0.5));
     if (!war) n = n > 0 ? Math.max(1, Math.round(n * M().PEACE_SHARE)) : 0;
     return n;
   }
@@ -163,6 +168,12 @@
     for (const s of sim.state.structs) if (!s.dead && s.built && s.cityId === city.id && (s.type === 'factory' || s.type === 'smithy')) return true;
     return false;
   }
+  function hasMine(sim, city) {
+    for (const s of sim.state.structs) if (!s.dead && s.built && s.type === 'mine' && s.cityId === city.id && (s.res === 'iron' || s.res === 'coal')) return true;
+    return false;
+  }
+  // Eisen, das die Schmiede für das Arsenal liegen lässt (Haken in growth.js, Resources.update)
+  function reserve(sim, city) { return city && city.milRes > 0 ? city.milRes : 0; }
   function arsenalsOfKingdom(sim, kid) {
     const out = [];
     for (const s of sim.state.structs) {
@@ -184,7 +195,7 @@
       if ((city.tier | 0) < 2 || city.pop < sp.minPop || !city.centerOk) return null;
       if ((city.milNext | 0) > st.tick) return null;
       if (own.length >= sp.arsenals || own.some((s) => !s.built)) return null;
-      if (!hasWorkshop(sim, city)) return null;
+      if (!sp.noWorkshop && !hasWorkshop(sim, city)) return null;   // Regime bauen auch ohne Werkstatt (dann langsamer)
     }
     const W = st.W;
     const i = WW.Industry.findSpot(sim, city, 3, 2);
@@ -205,15 +216,18 @@
   }
 
   // Kosten eines Fahrzeugs für Reich k (gerundet)
+  // alt: Behelf (Zahl = Index der Möglichkeit in COST.alt bzw. COST.altNoGold; true = erste)
   function costOf(k, kind, alt) {
     const sp = govSpec(k.gov) || { costMul: 1 };
     const C = M().COST;
     const mul = sp.costMul * (kind === 'tank' && sp.simple ? M().SIMPLE.costMul : 1);
-    const src = alt ? ((WW.GOVERNMENTS[k.gov] || {}).goldMul > 0 ? C.alt : C.altNoGold) : { iron: C[kind].iron, coal: C[kind].coal };
+    const list = (WW.GOVERNMENTS[k.gov] || {}).goldMul > 0 ? C.alt : C.altNoGold;
+    const src = alt ? list[Math.min(list.length - 1, alt === true ? 0 : alt | 0)] : { iron: C[kind].iron, coal: C[kind].coal };
     const out = {};
     for (const r in src) out[r] = Math.max(1, Math.round(src[r] * mul));
     return out;
   }
+  function altCount(k) { const C = M().COST; return ((WW.GOVERNMENTS[k.gov] || {}).goldMul > 0 ? C.alt : C.altNoGold).length; }
   function canPay(sk, cost) { for (const r in cost) if (!((sk[r] || 0) >= cost[r])) return false; return true; }
   function pay(sk, cost) { for (const r in cost) sk[r] = (sk[r] || 0) - cost[r]; }
 
@@ -266,12 +280,20 @@
         if (!pick) continue;
         const sk = WW.Cities.stock(sim, city);
         let c = costOf(k, pick, false), how = 'res';
-        if (!canPay(sk, c)) { c = costOf(k, pick, true); how = 'alt'; if (!canPay(sk, c)) continue; }
+        if (!canPay(sk, c)) {
+          // mit eigener Eisen-/Kohlemine eine Weile auf Rohstoffe warten (die Schmiede lässt die Reserve liegen), dann Behelf
+          if (hasMine(sim, city) && (s.waitRes | 0) < M().COST.waitSteps) { s.waitRes = (s.waitRes | 0) + 1; city.milRes = c.iron; continue; }
+          how = 'alt';
+          let ok = false;
+          for (let ai = 0; ai < altCount(k) && !ok; ai++) { c = costOf(k, pick, ai); ok = canPay(sk, c); }
+          if (!ok) continue;
+        }
         pay(sk, c);
-        s.prod = pick; s.prog = 0; s.pay = how; s.lastPay = how; p[pick]++;
+        s.prod = pick; s.prog = 0; s.pay = how; s.lastPay = how; s.waitRes = 0; city.milRes = 0; p[pick]++;
       }
       const C = M().COST;
-      s.prog = Math.min(1, s.prog + C.step / C[s.prod].work * sp.speedMul * (s.pay === 'alt' ? C.altSpeed : 1));
+      const ws = hasWorkshop(sim, city);
+      s.prog = Math.min(1, s.prog + C.step / C[s.prod].work * sp.speedMul * (s.pay === 'alt' ? C.altSpeed : 1) * (ws ? 1 : C.noWorkshop));
       if (s.prog >= 1) {
         const kind = s.prod;
         s.prod = null; s.prog = 0; s.pay = null;
@@ -702,23 +724,61 @@
   }
 
   // Ort für den Namen: nächste Stadt oder Gelände
-  function placeOf(sim, x, y) {
-    const st = sim.state;
+  // Mögliche Ortsangaben für den Namen (der Reihe nach): Stadt, Fluss, Gelände vor der Stadt, Jahr
+  function placeOptions(sim, x, y) {
+    const st = sim.state, W = st.W, H = st.H;
     let best = null, bd = M().SITE_NEAR_CITY * M().SITE_NEAR_CITY;
     for (const c of st.cities) { const d = (c.cx - x) * (c.cx - x) + (c.cy - y) * (c.cy - y); if (d < bd) { bd = d; best = c; } }
-    if (best) return 'bei ' + best.name;
-    const tx = Math.max(0, Math.min(st.W - 1, Math.floor(x))), ty = Math.max(0, Math.min(st.H - 1, Math.floor(y)));
-    const key = WW.TERRAIN[st.terrain[ty * st.W + tx]].key;
-    const TP = (WW.TEXTS_MIL && WW.TEXTS_MIL.TERRAIN_PHRASE) || {};
-    return TP[key] || 'im Niemandsland';
+    const tx = Math.max(0, Math.min(W - 1, Math.floor(x))), ty = Math.max(0, Math.min(H - 1, Math.floor(y)));
+    const TM = WW.TEXTS_MIL || {}, TP = TM.TERRAIN_PHRASE || {};
+    // häufigstes Gelände im Umkreis 4 (ein einzelner Baum macht noch keinen Wald), Fluss in der Nähe
+    const cnt = {};
+    let river = false;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const xx = tx + dx, yy = ty + dy;
+      if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const t = st.terrain[yy * W + xx];
+      if (t === WW.T.RIVER) river = true;
+      const k = WW.TERRAIN[t].key;
+      if (TP[k] && k !== 'river') cnt[k] = (cnt[k] || 0) + 1;
+    }
+    let key = null, kn = 0;
+    for (const k in cnt) if (cnt[k] > kn) { kn = cnt[k]; key = k; }
+    const terr = (key && TP[key]) || 'im Niemandsland';
+    const out = [];
+    if (best) {
+      out.push('bei ' + best.name);
+      if (river) out.push('am Fluss bei ' + best.name);
+      out.push(terr + ' vor ' + best.name);
+      if (river) out.push('an der Furt von ' + best.name);
+      out.push('bei ' + best.name + ' im Jahr ' + st.year);
+    } else {
+      // die beiden nächsten Städte (bis 60 Kacheln) für „zwischen X und Y"
+      const near = st.cities.map((c) => [c, (c.cx - x) * (c.cx - x) + (c.cy - y) * (c.cy - y)]).filter((p) => p[1] <= 3600)
+        .sort((p, q) => p[1] - q[1] || p[0].id - q[0].id);
+      const betw = near.length >= 2 ? 'zwischen ' + near[0][0].name + ' und ' + near[1][0].name : null;
+      out.push(terr);
+      if (betw) out.push(betw);
+      if (river) out.push('am Fluss');
+      if (betw) out.push(terr + ' ' + betw);
+      out.push(terr + ' im Jahr ' + st.year);
+    }
+    return out;
   }
-  function battleName(sim, place) {
-    const base = 'Schlacht ' + place;
+  function placeOf(sim, x, y) { return placeOptions(sim, x, y)[0]; }
+  // Name einer neuen Schlacht: erste noch freie Ortsangabe; erst wenn alle vergeben sind, mit Zählwort
+  function battleName(sim, x, y) {
+    const used = new Set();
+    for (const s of sim.state.sites) used.add(s.base);
+    for (const b of sim.state.battles) used.add(b.base);
+    const opts = placeOptions(sim, x, y);
+    for (const p of opts) if (!used.has('Schlacht ' + p)) return { base: 'Schlacht ' + p, name: 'Schlacht ' + p, place: p };
+    const p = opts[0], base = 'Schlacht ' + p;
     let n = 1;
     for (const s of sim.state.sites) if (s.base === base) n++;
     for (const b of sim.state.battles) if (b.base === base) n++;
     const O = (WW.TEXTS_MIL && WW.TEXTS_MIL.ORDINAL) || [];
-    return { base: base, name: n >= 2 ? ((O[n] || (n + '.')) + ' ' + base) : base };
+    return { base: base, name: (O[n] || (n + '.')) + ' ' + base, place: p };
   }
 
   // Marschgruppen: Abfangen, Ausfall der Verteidiger, Marschziel für Fahrzeuge (alle 20 Ticks im Krieg)
@@ -833,8 +893,8 @@
       const oc = sim._cities.get(st.owner[i]);
       const swap = oc ? oc.kingdomId === a : (mB > mA);
       if (swap) { a = tmp.b; b = tmp.a; na = nB; nb = nA; }
-      const place = placeOf(sim, cx, cy);
-      const nm = battleName(sim, place);
+      const nm = battleName(sim, cx, cy);
+      const place = nm.place;
       const bt = { id: ++st.mil.seq, x: Math.round(cx * 10) / 10, y: Math.round(cy * 10) / 10, r: B.r, a: a, b: b, start: st.tick, year: st.year,
         lossA: 0, lossB: 0, nA: na, nB: nb, peakA: na, peakB: nb, vA: 0, vB: 0, state: 'fight', breaker: -1, pows: 0, gaveUp: 0, quiet: 0, dig: b,
         name: nm.name, base: nm.base, place: place };
@@ -940,8 +1000,8 @@
       for (const u of soldiers) if (WW.Camps.capture(sim, att, u, { surrender: true })) caught++;   // ohne Zufall/Unterzahl-Prüfung
     }
     for (const u of soldiers) if (!u.dead && u.role !== 'prisoner') {
-      // nicht gefangen genommen: legt die Waffen nieder und geht heim
-      u.order = { kind: 'home' }; u.foe = -1; u.path = null; u.breach = -1;
+      // nicht gefangen genommen: legt die Waffen nieder und geht heim (greift nicht an, wird nicht angegriffen)
+      u.order = { kind: 'home' }; u.foe = -1; u.path = null; u.breach = -1; u.parole = st.tick + M().BATTLE.paroleTicks;
       WW.Units.bubble(u, 'question', 40);
     }
     // Fahrzeuge werden erbeutet
@@ -954,7 +1014,6 @@
     const lk = sim._kingdoms.get(b.breaker);
     chron(sim, 'battleSurrender', { loser: lk ? lk.name : '', winner: wk.name, pows: soldiers.length, name: b.name, Name: capFirst(b.name), place: b.place, Place: capFirst(b.place) },
       { kingdomId: b.breaker, cityId: -1, x: b.x, y: b.y }, caught ? caught + ' Kriegsgefangene' : 'Waffen niedergelegt');
-    void st;
   }
 
   function finish(sim, b) {
@@ -1139,9 +1198,9 @@
   }
 
   WW.Military = {
-    tick: tick, defaults: defaults, unit: unit, armor: armor, onKill: onKill, strength: strength, actions: actions,
+    reserve: reserve, tick: tick, defaults: defaults, unit: unit, armor: armor, onKill: onKill, strength: strength, actions: actions,
     tryArsenal: tryArsenal, spawnVehicle: spawnVehicle, vehiclesOf: vehiclesOf, battleAt: battleAt, siteAt: siteAt, govSpec: govSpec,
-    capOf: capOf, costOf: costOf, production: production, placeName: placeOf
+    capOf: capOf, costOf: costOf, production: production, placeName: placeOf, battleName: battleName
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

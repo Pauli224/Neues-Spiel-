@@ -57,7 +57,12 @@ test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
   assert(line, 'keine fertige Strecke mit Zug (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
   log('Jahr', st.year, 'Strecke', line.tiles.length, 'Kacheln, Brücken', rails(o.sim).filter((s) => s.bridge).length, 'Bahnhöfe', stations(o.sim).length);
   for (const s of rails(o.sim)) assert(s.mask > 0, 'Gleis ohne Nachbarn (mask)');
-  for (const s of [...rails(o.sim), ...stations(o.sim)]) assert(st.inRing[s.y * st.W + s.x] === -1, 'Bahn im Mauerring');
+  // Bahnhöfe liegen draußen; Gleise im Ring nur, wenn die Strecke den Ring an einem Gleistor (walls.js) quert
+  for (const s of stations(o.sim)) assert(st.inRing[s.y * st.W + s.x] === -1, 'Bahnhof im Mauerring');
+  const gates = st.structs.filter((s) => !s.dead && s.type === 'gate' && s.rail);
+  for (const s of rails(o.sim)) if (st.inRing[s.y * st.W + s.x] !== -1) assert(gates.some((g) => g.line === s.line), 'Gleis im Mauerring ohne Gleistor');
+  for (const s of rails(o.sim)) { const c = o.sim._cities.get(st.inRing[s.y * st.W + s.x]); if (c && c.wall && c.wall.plan) assert(!c.wall.plan.includes(s.y * st.W + s.x), 'Gleis als Lücke im Mauerring'); }
+  log('Gleistore', gates.length);
   const A = WW.Cities.stock(o.sim, o.sim._cities.get(o.sim._structs.get(line.a).cityId)), B = WW.Cities.stock(o.sim, o.sim._cities.get(o.sim._structs.get(line.b).cityId));
   A.stone = 260; B.stone = 0;
   let smoke = 0, whistle = 0, moved = 0;

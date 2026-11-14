@@ -923,7 +923,8 @@
       }
       // Schmiede: Eisen (+ Kohle) -> Waffen und Rüstung für die Soldaten
       let armed = 0;
-      if (smithy && sk.iron >= 0.2) {
+      const milRes = WW.Military ? WW.Military.reserve(sim, city) : 0;   // [mil] Eisen fürs Arsenal liegen lassen
+      if (smithy && sk.iron >= 0.2 + milRes) {
         const use = (1 + city.pop * 0.03) / yps;
         sk.iron = Math.max(0, sk.iron - use);
         armed = 1;

@@ -116,6 +116,7 @@
         let marching = 0;
         for (const u of st.units) {
           if (u.dead || u.kingdomId !== k.id || u.role !== 'soldier') continue;
+          if (u.parole && u.parole > st.tick) continue;   // [mil] hat die Waffen niedergelegt
           if (u.order) { if (u.order.k === e.id) marching++; continue; }
           idle.push(u);
         }
