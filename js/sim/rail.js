@@ -345,7 +345,7 @@
           s = null;
         }
         const g = WW.GOVERNMENTS[k.gov];
-        const ringReady = !(g && g.wallMax > 0) || (c.wall && c.wall.plan && c.wall.plan.length) || c.pop >= 60;   // sonst reißt die erste Mauer ihn ab
+        const ringReady = !(g && g.wallMax > 0) || (c.wall && c.wall.plan && c.wall.plan.length) || c.pop >= 60 || st.year - (c.founded | 0) >= 15;   // sonst reißt die erste Mauer ihn ab (nach 15 Jahren ohne Mauer: trotzdem)
         // Bahnhof auf der Seite der nächsten anderen Stadt des Reichs
         let partner = null, pd = 1e9;
         for (const o of cities) { if (o === c) continue; const d = Math.abs(o.cx - c.cx) + Math.abs(o.cy - c.cy); if (d < pd) { pd = d; partner = o; } }
@@ -367,20 +367,25 @@
         }
         const a = inT[bi], b = rest[bj];
         rest.splice(bj, 1); inT.push(b);
-        if (bd > R().MAX_DIST || bd < R().MIN_DIST || a.cityId === b.cityId) continue;   // keine Mini-Strecken
+        // keine Mini-Strecken zwischen Nachbarstädten; liegen die Bahnhöfe nur deshalb nah, weil eine Großstadt weit
+        // hinausgewachsen ist, dürfen sie (mit kurzer Trasse) verbunden werden
+        const caS = sim._cities.get(a.cityId), cbS = sim._cities.get(b.cityId);
+        const farCities = !!(caS && cbS && Math.abs(caS.cx - cbS.cx) + Math.abs(caS.cy - cbS.cy) >= 2 * R().MIN_DIST);
+        if (bd > R().MAX_DIST || (bd < R().MIN_DIST && !farCities) || a.cityId === b.cityId) continue;
+        const minLen = farCities && bd < R().MIN_DIST ? 4 : R().MIN_LEN;
         let line = st.rail.lines.find((l) => (l.a === a.id && l.b === b.id) || (l.a === b.id && l.b === a.id));
         const key = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id);
         if (!line) {
           if (st.rail.fail[key] != null && st.year - st.rail.fail[key] < 5) continue;
           const p = path(sim, a, b, k.id);
-          if (!p || p.length < R().MIN_LEN) { st.rail.fail[key] = st.year; continue; }
+          if (!p || p.length < minLen) { st.rail.fail[key] = st.year; continue; }
           line = { id: ++st.rail.seq, kingdomId: k.id, a: a.id, b: b.id, tiles: p, done: false, opened: false, broken: false };
           st.rail.lines.push(line);
         }
         line.kingdomId = k.id;
         if (!buildLine(sim, line)) {
           const p = path(sim, a, b, k.id);
-          if (p && p.length >= R().MIN_LEN) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year;
+          if (p && p.length >= minLen) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year;
         }
       }
     }

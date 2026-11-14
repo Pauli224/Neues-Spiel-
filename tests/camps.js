@@ -494,7 +494,7 @@ test('9 Speichern/Laden, Determinismus, alte Spielstände, Zeitaufschlag', funct
 
 // -----------------------------------------------------------------------------
 test('11 Gleisanschluss: Rampe vor dem Tor, Güterzug liefert ab, Gefangenenzug bringt Gefangene, Befreiung unterwegs', function () {
-  const W = warWorld('fascism', 'democracy', { seed: 6 });
+  const W = warWorld('fascism', 'democracy', { seed: +(process.env.CAMP_SEED || 6) });
   const sim = W.sim, camp = W.camp, st = sim.state;
   let line = null, t = 0;
   for (; t < 12000 && !(line = WW.Rail.campLineOf(sim, camp)); t += 120) run(sim, 120);
@@ -542,8 +542,13 @@ test('11 Gleisanschluss: Rampe vor dem Tor, Güterzug liefert ab, Gefangenenzug 
   }
   assert(piece, 'kein Gleisstück vor dem Zug');
   const aboard = tr.prisoners.map((id) => sim._units.get(id));
-  WW.Structs.destroy(sim, piece);
-  run(sim, 200);
+  // Sabotage: das Stück bleibt zerstört (die Bautrupps flicken eine einzelne Lücke sonst sofort wieder)
+  const gapAt = piece.y * st.W + piece.x;
+  for (let i = 0; i < 200; i++) {
+    const r = sim._structs.get(st.structAt[gapAt]);
+    if (r && (r.type === 'rail' || r.type === 'ruin')) WW.Structs.remove(sim, r);
+    run(sim, 1);
+  }
   const freed = aboard.filter((u) => !u.dead && u.role !== 'prisoner').length;
   log('Befreiung unterwegs: an Bord', aboard.length, ', frei', freed, '| Chronik', evs(sim, /^campTrain/).map((e) => e.type).join(','));
   assert(aboard.length >= 1 && freed === aboard.length && evs(sim, /^campTrainFreed$/).length, 'Befreiung unterwegs fehlt');

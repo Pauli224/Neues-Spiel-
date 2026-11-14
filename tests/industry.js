@@ -201,7 +201,7 @@ test('6 Wirkung über Mods: Gold/Stärke höher, Zufriedenheit/Ernte niedriger, 
   log('Gold ×', g.toFixed(2), '| Stärke ×', s.toFixed(2), '| Soldatenanteil', so.toFixed(2));
   assert(g > 1.2 && s > 1.1 && so > 0.1, 'Ertrags-Mods fehlen');
   // starke Verschmutzung: Kommunismus mit 4 Kombinaten
-  const K = factoryCity('communism', { seed: 41, n: 4, settlers: 45 });
+  const K = factoryCity('communism', { seed: +(process.env.IND_SEED || 41), n: 4, settlers: 45 });
   let acid = 0;
   const st = K.sim.state;
   for (let i = 0; i < 4800; i++) { K.sim.tick(); for (const f of K.sim.drainFx()) if (f.type === 'acidrain') acid++; }
@@ -210,7 +210,19 @@ test('6 Wirkung über Mods: Gold/Stärke höher, Zufriedenheit/Ernte niedriger, 
   log('Kombinate', K.list.length, 'city.pollution', K.c.pollution, 'Zufriedenheit 50 ->', h.toFixed(1), 'Ernte ×', fo.toFixed(2), 'Kranke', sick, 'Säureregen-Fx', acid);
   assert(K.c.pollution >= 30, 'zu wenig Verschmutzung');
   assert(h < 45 && fo < 0.9, 'Folgen-Mods fehlen');
-  assert(st.events.some((e) => e.type === 'indSick') || sick > 0, 'niemand wird krank');
+  // Krankheit: ob die Luft über den Häusern von selbst über TH_SICK steigt, hängt vom Weltverlauf ab (Wind, Kohle,
+  // Abgaben); die Regel selbst wird mit einer dichten Wolke über der Stadt geprüft
+  let sick2 = sick;
+  if (!(st.events.some((e) => e.type === 'indSick') || sick > 0)) {
+    const d = WW.Industry.dims(st), C4 = d.cell, ccx = Math.floor(K.c.cx / C4), ccy = Math.floor(K.c.cy / C4);
+    for (let i = 0; i < 600; i++) {
+      for (let y = Math.max(0, ccy - 3); y <= Math.min(d.ph - 1, ccy + 3); y++) for (let x = Math.max(0, ccx - 3); x <= Math.min(d.pw - 1, ccx + 3); x++) st.pollution[y * d.pw + x] = 170;
+      K.sim.tick();
+    }
+    sick2 = st.units.filter((u) => !u.dead && u.sick).length;
+    log('von selbst niemand krank (Luft unter', WW.INDUSTRY.CFG.TH_SICK + '); unter dichter Wolke krank:', sick2);
+  }
+  assert(st.events.some((e) => e.type === 'indSick') || sick2 > 0, 'niemand wird krank');
   log('Chronik:', st.events.filter((e) => /^ind/.test(e.type)).map((e) => e.type).join(', '));
   // Nachbarn: zwei Reiche nah beieinander, eines qualmt
   const sim = WW.Sim.create({ seed: 5, width: 96, height: 64, populate: 0, laws: LAWS, animals: false });

@@ -14,7 +14,7 @@ function test(name, fn) {
   catch (e) { results.push({ name, ok: false, ms: Date.now() - t0, err: e }); console.log('  FEHLGESCHLAGEN: ' + (e && e.stack || e)); }
 }
 function run(sim, n) { for (let i = 0; i < n; i++) sim.tick(); }
-const LONG = { seed: 12, w: 128, h: 80, dist: [52, 70] };   // zwei Städte weit genug auseinander für eine echte Strecke
+const LONG = { seed: +(process.env.RAIL_SEED || 12), w: 128, h: 80, dist: [52, 70] };   // zwei Städte weit genug auseinander für eine echte Strecke
 const LAWS = { govChanges: false, wars: false, disasters: false, newRealms: false, events: false, camps: false };   // Lagerstädte (eigene Lagerstrecken) prüft tests/camps.js
 const rails = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'rail');
 const stations = (sim) => sim.state.structs.filter((s) => !s.dead && s.type === 'station');
@@ -28,7 +28,10 @@ function twoCities(gov, o) {
   for (let y = 8; y < sim.state.H - 8; y += 2) for (let x = 8; x < sim.state.W - 8; x += 2) if (WW.Cities.canFoundAt(sim, x, y, 'human', 0)) spots.push([x, y]);
   let pa = null, pb = null;
   const d0 = o.dist ? o.dist[0] : 32, d1 = o.dist ? o.dist[1] : 46;
-  for (const p of spots) for (const q of spots) { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (!pa && d >= d0 && d <= d1) { pa = p; pb = q; } }
+  // beide auf derselben Landmasse (sonst gibt es keine Trasse)
+  WW.Path.updateComponents(sim);
+  const comp = (p) => sim.comp[p[1] * sim.state.W + p[0]];
+  for (const p of spots) for (const q of spots) { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (!pa && d >= d0 && d <= d1 && comp(p) === comp(q)) { pa = p; pb = q; } }
   assert(pa, 'keine Bauplätze');
   const a = sim.actions.spawnSettlers(pa[0], pa[1], 26, gov, 'human');
   const b = sim.actions.spawnSettlers(pb[0], pb[1], 26, gov, 'human');
@@ -38,7 +41,16 @@ function twoCities(gov, o) {
   return { sim, k, ca, cb };
 }
 // hält beide Städte auf Stadtgröße (Zuzug per Siedler-Werkzeug)
-function topUp(o) { for (const c of [o.ca, o.cb]) if (c.pop < 24 && !c.dead) o.sim.actions.spawnSettlers(c.cx + 1, c.cy + 2, 8, null, 'human'); }
+// (dazu Bauholz/Stein: kleine Städte geben seit 9.10 Abgaben an die Hauptstadt und hätten sonst nichts für Mauer und Bahnhof)
+function topUp(o) {
+  for (const c of [o.ca, o.cb]) {
+    if (c.dead) continue;
+    if (c.pop < 24) o.sim.actions.spawnSettlers(c.cx + 1, c.cy + 2, 8, null, 'human');
+    const sk = WW.Cities.stock(o.sim, c);
+    if (sk.wood < 40) sk.wood += 40;
+    if (sk.stone < 30) sk.stone += 30;
+  }
+}
 function years(o, n) { for (let y = 0; y < n; y++) { topUp(o); run(o.sim, 240); } }
 function untilLine(o, years) {
   for (let y = 0; y < years; y++) {
@@ -71,13 +83,13 @@ test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
   A.stone = 260; B.stone = 0;
   let smoke = 0, whistle = 0, moved = 0, carried = 0;
   const tr = st.trains.find((t) => t.line === line.id);
-  let px = tr.x, pt = tr.t;
+  let px = tr.x, py = tr.y, pt = tr.t;
   for (let i = 0; i < 900; i++) {
     o.sim.tick();
     if (pt === 'load' && tr.t === 'run') carried += tr.cargo.stone || 0;
     pt = tr.t;
     for (const f of o.sim.drainFx()) { if (f.type === 'trainsmoke') smoke++; if (f.type === 'whistle') whistle++; }
-    if (Math.abs(tr.x - px) > 0) moved++; px = tr.x;
+    if (Math.abs(tr.x - px) > 0 || Math.abs(tr.y - py) > 0) moved++; px = tr.x; py = tr.y;   // (auch senkrechte Strecken)
   }
   log('Stein A', Math.round(A.stone), 'B', Math.round(B.stone), '| Rauch', smoke, 'Pfiffe', whistle, 'Fahr-Ticks', moved);
   assert(moved > 50 && smoke > 5 && whistle > 0, 'Zug fährt nicht sichtbar');
@@ -166,12 +178,20 @@ test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vo
   const A = o.sim._structs.get(line.a), B = o.sim._structs.get(line.b);
   log('Strecke', line.tiles.length, 'Kacheln zwischen', o.sim._cities.get(A.cityId).name, 'und', o.sim._cities.get(B.cityId).name);
   assert(A.cityId !== B.cityId, 'Strecke innerhalb einer Stadt');
-  assert(line.tiles.length >= 18 && line.tiles.length <= 90, 'Streckenlänge ' + line.tiles.length);
-  assert(!st.rail.lines.some((l) => l.tiles.length < WW.RAIL.MIN_LEN), 'Mini-Strecke');
+  // Städte liegen 52–70 Kacheln auseinander; die Trasse ist kürzer, wenn eine Stadt (Megastadt) weit hinausgewachsen ist
+  const CA = o.sim._cities.get(A.cityId), CB = o.sim._cities.get(B.cityId);
+  const far = Math.abs(CA.cx - CB.cx) + Math.abs(CA.cy - CB.cy);
+  assert(far >= 2 * WW.RAIL.MIN_DIST && line.tiles.length >= 4 && line.tiles.length <= 90, 'Streckenlänge ' + line.tiles.length + ' bei Stadtabstand ' + far);
+  // Mini-Strecken nur verboten zwischen nahen Städten
+  for (const l of st.rail.lines) {
+    if (l.camp != null || l.tiles.length >= WW.RAIL.MIN_LEN) continue;
+    const a = o.sim._cities.get((o.sim._structs.get(l.a) || {}).cityId), b = o.sim._cities.get((o.sim._structs.get(l.b) || {}).cityId);
+    assert(a && b && Math.abs(a.cx - b.cx) + Math.abs(a.cy - b.cy) >= 2 * WW.RAIL.MIN_DIST, 'Mini-Strecke zwischen Nachbarstädten');
+  }
   const tr = st.trains.find((t) => t.line === line.id);
   const SA = WW.Cities.stock(o.sim, o.sim._cities.get(A.cityId)), SB = WW.Cities.stock(o.sim, o.sim._cities.get(B.cityId));
   SA.stone = 300; SB.stone = 0;
-  let arrivals = 0, last = tr.to, whistle = 0, smoke = 0, coalRuns = 0, moved = 0, lastT = tr.t;
+  let arrivals = 0, last = tr.to, whistle = 0, smoke = 0, coalRuns = 0, moved = 0, lastT = tr.t, dep1 = 0, dep1coal = 0, dep3 = 0, dep3coal = 0;
   // Kohle: erst ohne Feld, dann 0, dann vorhanden – nichts darf brechen
   delete SA.coal; delete SB.coal;
   for (let i = 0; i < 2400; i++) {
@@ -181,13 +201,19 @@ test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vo
     for (const f of o.sim.drainFx()) { if (f.type === 'whistle') whistle++; if (f.type === 'trainsmoke') smoke++; }
     if (tr.to !== last) { arrivals++; last = tr.to; }
     if (tr.coal) coalRuns++;
-    if (tr.t === 'run' && lastT === 'load') moved += tr.cargo.stone + tr.cargo.food + tr.cargo.wood;
+    if (tr.t === 'run' && lastT === 'load') {
+      moved += tr.cargo.stone + tr.cargo.food + tr.cargo.wood;
+      // Abfahrt: mit Kohle, wenn die Abfahrtsstadt (bzw. Mutterstadt) Kohle hat, sonst Holz/Notbetrieb
+      if (i >= 1600) { dep3++; if (tr.coal) dep3coal++; } else if (i < 800) { dep1++; if (tr.coal) dep1coal++; }
+    }
     lastT = tr.t;
   }
   log('Ankünfte', arrivals, 'Pfiffe', whistle, 'Rauch', smoke, 'Stein A/B', Math.round(SA.stone), '/', Math.round(SB.stone), 'beförderte Güter', Math.round(moved), 'Ticks mit Kohle', coalRuns);
   assert(arrivals >= 2 && whistle >= 2 && smoke > 20, 'Zug fährt nicht regelmäßig');
   assert(moved >= 60, 'Vorräte gleichen sich nicht aus');
-  assert(coalRuns > 0 && SA.coal < 200 + 1, 'Kohle wird nicht genutzt');
+  // (der Kohlevorrat selbst eignet sich nicht als Maß: Kohleminen der Städte füllen ihn nach)
+  log('Abfahrten ohne Kohlefeld', dep1, '(davon mit Kohle', dep1coal + ') · mit 200 Kohle', dep3, '(davon mit Kohle', dep3coal + ')');
+  assert(coalRuns > 0 && dep3 >= 1 && dep3coal === dep3, 'Kohle wird nicht genutzt');
 });
 
 console.log('\n--- Ergebnis');
