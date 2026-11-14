@@ -669,6 +669,7 @@
     if (city.nature != null && city.nature < 30) h -= (WW.RACES[city.race] && WW.RACES[city.race].nature === 'care') ? 10 : 4;   // kahle Umgebung
     if (city.occupiedUntil && sim.state.year < city.occupiedUntil) h -= (g.war === 'mass' ? 22 : 10);
     if (city.hasMonument) h += (k && k.gov === 'theocracy') ? 14 : 5;
+    if (WW.Resources) h += WW.Resources.happiness(sim, city, sk);   // Wolle (Kälte), Kristall
     if (k && k.gov === 'fascism') h += Math.min(25, city.propaganda || 0);
     if (sim.state.tick < city.blessUntil) h += 20;
     if (k && k.policy && k.policy.bonus === 'nap') h += 8;
@@ -690,7 +691,9 @@
     const secPerYear = WW.CONFIG.TPY / WW.CONFIG.TPS;
     // Essen
     if (st.laws.hunger) {
-      const eat = city.pop * WW.CONFIG.FOOD_PER_YEAR / secPerYear;
+      let eat = city.pop * WW.CONFIG.FOOD_PER_YEAR / secPerYear;
+      // Fisch wird zuerst gegessen (bis zur Hälfte des Bedarfs)
+      if (sk.fish > 0) { const f = Math.min(sk.fish, eat * 0.5); sk.fish -= f; eat -= f; }
       if (sk.food >= eat) { sk.food -= eat; city.hungry = false; city.starve = 0; }
       else {
         sk.food = 0;
@@ -746,7 +749,7 @@
       sim.event('tier', { city: city.name, tier: WW.CITY_TIERS[tier].name, tierA: WW.CITY_TIERS[tier].nameA }, atCity(city));
     } else if (tier < city.tier - 1) city.tier = tier + 1;
     // Kommunismus: Stadt zeigt eine Kopie des Reichslagers
-    if (sk !== city.stock) { city.stock.food = sk.food; city.stock.wood = sk.wood; city.stock.stone = sk.stone; city.stock.gold = sk.gold; }
+    if (sk !== city.stock) { for (const r of WW.RESOURCE_KEYS) city.stock[r] = sk[r] || 0; }
   }
 
   // Rohstoffe in Reichweite? (einmal je Jahr)

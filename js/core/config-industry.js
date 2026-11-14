@@ -61,11 +61,12 @@
     GOVS: { communism: { name: 'Volksbahn' }, fascism: { name: 'Gleichschrittbahn' } },
     MIN_TIER: 2,        // Städte ab „Stadt"
     MIN_DIST: 16,       // näher beieinander liegende Bahnhöfe bekommen keine (Mini-)Strecke
+    MIN_LEN: 12,        // kürzere Trassen werden nicht gebaut
     MAX_DIST: 64,       // Bahnhöfe weiter auseinander (Kacheln, Manhattan) werden nicht verbunden
     MAX_LEN: 160,       // längste Trasse
     PATH_NODES: 40000,  // Grenze der Wegsuche
     SITES: 6,           // gleichzeitige Gleis-Baustellen je Strecke
-    CREW: 0.5,          // Gleisbautrupp: Fortschritt je Planung an Baustellen direkt am fertigen Gleis
+    CREW_TILES: 2,      // Gleisbautrupp: je Ende und Planung so viele Gleisstücke am fertigen Gleis fertig
     PLAN_EVERY: 120,    // Ticks je Planung
     SPEED: 0.3,         // Kacheln je Tick
     WAIT: 40,           // Ticks Aufenthalt am Bahnhof

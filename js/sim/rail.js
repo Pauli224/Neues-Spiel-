@@ -204,18 +204,24 @@
       missing++;
       need.push(n);
     }
-    // Gleisbautrupp: Baustellen direkt an fertigem Gleis/Bahnhof kommen zusätzlich voran (Baumeister haben oft Mauern vor)
-    for (let n = 0; n < line.tiles.length; n++) {
-      const s = sim._structs.get(st.structAt[line.tiles[n]]);
-      if (!s || s.type !== 'rail' || s.built) continue;
-      const i = line.tiles[n], x = i % W;
-      const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W];
-      if (!nb.some((j) => { const o = j >= 0 && sim._structs.get(st.structAt[j]); return o && o.built && (o.type === 'rail' || o.type === 'station'); })) continue;
-      const c = sim._cities.get(s.cityId);
-      if (!s.paid && c && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
-      if (!s.paid) continue;
-      s.progress = Math.min(1, (s.progress || 0) + R().CREW);
-      if (s.progress >= 1) { WW.Structs.complete(sim, s); open--; masksAround(sim, i); }
+    // Gleisbautrupp: von beiden Enden her je RAIL.CREW_TILES Baustellen direkt am fertigen Gleis/Bahnhof fertig
+    // (zusätzlich zu den Baumeistern, die oft Mauern vorhaben)
+    const L = line.tiles.length;
+    for (const dir of [1, -1]) {
+      let done = 0;
+      for (let q = 0; q < L && done < R().CREW_TILES; q++) {
+        const n = dir > 0 ? q : L - 1 - q, i = line.tiles[n];
+        const s = sim._structs.get(st.structAt[i]);
+        if (!s || s.type !== 'rail') break;          // Lücke ohne Baustelle: hier endet der Trupp
+        if (s.built) continue;
+        const x = i % W;
+        const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W];
+        if (!nb.some((j) => { const o = j >= 0 && sim._structs.get(st.structAt[j]); return o && o.built && (o.type === 'rail' || o.type === 'station'); })) break;
+        const c = sim._cities.get(s.cityId);
+        if (!s.paid && c && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
+        if (!s.paid) break;
+        WW.Structs.complete(sim, s); open--; done++; masksAround(sim, i);
+      }
     }
     line.done = missing === 0 && open === 0;
     if (!missing) return true;
@@ -260,6 +266,10 @@
         let partner = null, pd = 1e9;
         for (const o of cities) { if (o === c) continue; const d = Math.abs(o.cx - c.cx) + Math.abs(o.cy - c.cy); if (d < pd) { pd = d; partner = o; } }
         if (!s && ringReady && (c.railNext | 0) <= st.tick) { s = placeStation(sim, c, k, partner); if (!s) c.railNext = st.tick + (TPY() >> 1); }
+        if (s && !s.built) {   // Bautrupp hilft auch am Bahnhof
+          if (!s.paid && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
+          if (s.paid) { s.progress = Math.min(1, (s.progress || 0) + 0.25); if (s.progress >= 1) { WW.Structs.complete(sim, s); WW.Cities.refreshLists(sim, c); } }
+        }
         if (s) stations.push(s);
       }
       if (stations.length < 2) continue;
@@ -279,14 +289,14 @@
         if (!line) {
           if (st.rail.fail[key] != null && st.year - st.rail.fail[key] < 5) continue;
           const p = path(sim, a, b, k.id);
-          if (!p) { st.rail.fail[key] = st.year; continue; }
+          if (!p || p.length < R().MIN_LEN) { st.rail.fail[key] = st.year; continue; }
           line = { id: ++st.rail.seq, kingdomId: k.id, a: a.id, b: b.id, tiles: p, done: false, opened: false, broken: false };
           st.rail.lines.push(line);
         }
         line.kingdomId = k.id;
         if (!buildLine(sim, line)) {
           const p = path(sim, a, b, k.id);
-          if (p) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year;
+          if (p && p.length >= R().MIN_LEN) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year;
         }
       }
     }
@@ -306,11 +316,11 @@
         if (!line) {
           if (st.rail.fail[key] != null && st.year - st.rail.fail[key] < 5) continue;
           const p = path(sim, a, b, k.id);
-          if (!p) { st.rail.fail[key] = st.year; continue; }
+          if (!p || p.length < R().MIN_LEN) { st.rail.fail[key] = st.year; continue; }
           line = { id: ++st.rail.seq, kingdomId: k.id, a: a.id, b: b.id, tiles: p, done: false, opened: false, broken: false, ally: o.id };
           st.rail.lines.push(line);
         }
-        if (!buildLine(sim, line)) { const p = path(sim, a, b, k.id); if (p) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year; }
+        if (!buildLine(sim, line)) { const p = path(sim, a, b, k.id); if (p && p.length >= R().MIN_LEN) { line.tiles = p; buildLine(sim, line); } else st.rail.fail[key] = st.year; }
       }
     }
     // Masken der Strecken frisch halten (zerstörte Gleise, neue Nachbarn)

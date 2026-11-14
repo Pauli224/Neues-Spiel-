@@ -451,7 +451,7 @@
       function dispOK(a, b) { var ga = GI[a], gb = GI[b]; if ((ga.key === 'river' && gb.water) || (gb.key === 'river' && ga.water)) return false; return a !== b && (ga.water || gb.water || (ga.key === 'snow') !== (gb.key === 'snow') && Math.abs(ga.rank - gb.rank) <= 1 || ga.key === 'sand' || gb.key === 'sand'); }
       for (var k9 = 0; k9 < 9; k9++) if (k9 !== 4 && dispOK(id, NB9[k9])) anyD = true;
       if (anyD) {
-        var RK = NB9.some(function (t) { return GI[t].key === 'river'; }) ? 0.28 : 1;   // am Fluss nur schwach, damit der Lauf erkennbar bleibt
+        var RK = NB9.some(function (t) { return GI[t].key === 'river'; }) ? 0.6 : 1;   // am Fluss nur schwach, damit der Lauf erkennbar bleibt
         function vtAt(px2, py2) {   // verschobenes Gelände an einem Pixel (auch knapp außerhalb der Kachel)
           var WX = hx + px2, WY = hy + py2;
           var ox2 = (vnoise(WX / 22, WY / 22, 841) - 0.5) * 26 + (vnoise(WX / 60, WY / 60, 842) - 0.5) * 22;

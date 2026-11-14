@@ -306,6 +306,24 @@
     [true, false].forEach(function (old) { var c = document.createElement('canvas'); WW.SpriteScene.renderTownCompare(c, sc, old, gv); box.appendChild(c); });
   })();
 
+  // ---------------------------------------------------------------- Abschluss: Mahnmal, Gefangene, große Pilzwolke, Rohstoffe, kippender Baum (?final=3)
+  if (Q.get('final')) (function () {
+    var sc = +Q.get('final') || 3, r = section('final', 'Abschluss: Mahnmal und Lagerruine, Gefangene (alle Völker), Rohstoffe, Vorkommen, Fischschwarm, kippender Baum, große Pilzwolke');
+    var c = document.createElement('canvas'); c.id = 'finalcv'; c.width = 64 * 8 * sc; c.height = 24 * 8 * sc;
+    var x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(sc, sc);
+    var rows = []; for (var y = 0; y < 24; y++) { rows.push([]); for (var xx = 0; xx < 64; xx++) rows[y].push(y >= 9 && y < 12 && xx < 16 ? WW.T.SHALLOW : (xx >= 40 && y >= 12 ? WW.T.ASH : WW.T.GRASS)); }
+    groundRect(x, rows, 0, 0);
+    S.draw(x, 's_memorial', 8, 16); S.draw(x, 's_laborcamp_ruin', 32, 16);
+    ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'].forEach(function (rc, i) { S.draw(x, S.unitKey(rc, 'prisoner', i & 1 ? 'fascism' : 'communism', i % 5), 56 + i * 11, 24); });
+    ['s_mine_iron', 's_mine_coal', 's_mine_crystal', 's_mine_gold', 's_smithy', 's_pasture'].forEach(function (k, i) { S.draw(x, k, 130 + i * 24, 16, { team: 1 }); });
+    S.draw(x, 's_fishery', 8, 64, { team: 1 });
+    ['d_ore_iron', 'd_ore_iron_1', 'd_ore_coal', 'd_ore_coal_1', 'd_ore_gold', 'd_crystal', 'd_fish_0', 'd_fish_1', 'd_sandbar_2'].forEach(function (k, i) { S.draw(x, k, 40 + i * 12, i >= 6 ? 76 : 64); });
+    for (var f = 0; f < 5; f++) S.draw(x, 'fx_treefall_' + f, 160 + f * 22, 72);
+    for (f = 0; f < 10; f += 2) S.draw(x, 'fx_nuke_l_' + f, 330 + f * 19, 176);
+    S.draw(x, 't_crater_l', 330 + 4 * 19 - 16, 160);
+    cell(r, '', c);
+  })();
+
   // ---------------------------------------------------------------- Nacharbeit: Zelte, Lager, Regen, Schnee, Lichtschein, Menü-Icons (?polish=4)
   if (Q.get('polish')) (function () {
     var sc = +Q.get('polish') || 4, r = section('polish', 'Zelte und Lager neu, Regen und Schnee, Lichtschein, Menü-Icons (Maßstab ' + sc + ')');

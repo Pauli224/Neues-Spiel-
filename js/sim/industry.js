@@ -160,7 +160,7 @@
   // ---------------------------------------------------------------------------
   // Bauplatz: außerhalb des Mauerrings am Stadtrand, bevorzugt am Fluss
   // ---------------------------------------------------------------------------
-  // opt: { toward: { x, y } } – Bauplatz auf der Seite, die diesem Punkt zugewandt ist (Bahnhof Richtung Nachbarstadt)
+  // opt: { toward: { x, y }, loose } – loose: Rückfall ohne freie Gasse (wird automatisch versucht). toward: Bauplatz auf der Seite, die diesem Punkt zugewandt ist (Bahnhof Richtung Nachbarstadt)
   function findSpot(sim, city, w, h, opt) {
     const st = sim.state, W = st.W, H = st.H, owner = st.owner, inRing = st.inRing, id = city.id;
     const T = WW.T;
@@ -181,6 +181,18 @@
       return !(s && WW.Structs.isWallish(s));
     };
     const o = { area: area, fieldOk: true, race: city.race, cityId: id, needWalkBorder: true };
+    // lockere Prüfung (Rückfall bei engen Lagen): nur die Grundfläche, ohne freie Gasse rundum
+    const looseOk = (x, y) => {
+      for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
+        const i = (y + dy) * W + x + dx;
+        if (!area(i)) return false;
+        const s = sim._structs.get(st.structAt[i]);
+        if (s && !(s.type === 'ruin' || (s.type === 'field' && s.cityId === id))) return false;
+        if (!WW.Structs.terrainBuildable(sim, i, city.race)) return false;
+      }
+      return true;
+    };
+    const loose = !!(opt && opt.loose);
     let best = -1, bs = -1e9;
     const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
     const y0 = Math.max(1, Math.floor(py - r)), y1 = Math.min(H - 2 - h, Math.ceil(py + r));
@@ -191,7 +203,7 @@
       const mx = x + w / 2, my = y + h / 2;
       const d = Math.sqrt((mx - px) * (mx - px) + (my - py) * (my - py));
       if (d < minD || d > r - 1) continue;
-      if (WW.Cities.footprintOk(sim, x, y, w, h, o) < 0) continue;
+      if (loose ? !looseOk(x, y) : WW.Cities.footprintOk(sim, x, y, w, h, o) < 0) continue;
       let river = 0, wood = 0;
       for (let yy = Math.max(0, y - 2); yy < Math.min(H, y + h + 2); yy++) for (let xx = Math.max(0, x - 2); xx < Math.min(W, x + w + 2); xx++) {
         const t = st.terrain[yy * W + xx];
@@ -202,6 +214,7 @@
       const score = tw - Math.abs(d - want) - Math.max(0, d - want - 4) * 2 + (river ? 3 + Math.min(2, river * 0.2) : 0) - wood * 0.1 + hh(seedOf(sim) ^ id, y * W + x) * 0.8 - (own === id ? 0 : 2);
       if (score > bs) { bs = score; best = y * W + x; }
     }
+    if (best < 0 && !loose) return findSpot(sim, city, w, h, Object.assign({}, opt || {}, { loose: true }));
     return best;
   }
 

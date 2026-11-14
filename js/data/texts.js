@@ -393,6 +393,29 @@
       'Bei {city} beginnt jetzt {other_nom}. Die Bauern beider Seiten winken sich misstrauisch zu.',
       '{kingdom_nom} und {other_nom} sind jetzt Nachbarn. Erste Streitfrage: Wem gehört der Apfelbaum an der Grenze?'
     ],
+    // ---------------------------------------------------------------- Rohstoffe
+    mineOpened: [
+      'Bei {city} wird eine {res}mine in den Berg gegraben. Die Spitzhacken klingeln.',
+      '{city} hat {res} im Hügel gefunden! Eine Mine wird ausgehoben, alle tragen Helme aus Kochtöpfen.',
+      'Die Leute von {city} graben nach {res}. Ein Maulwurf beschwert sich über die Konkurrenz.'
+    ],
+    mineDepleted: [
+      'Die {res}mine von {city} ist leer. Zurück bleiben Löcher, Ruinen und ein sehr verwirrter Maulwurf.',
+      'In der Mine bei {city} gibt es kein {res} mehr. Die Bergleute packen die Spitzhacken ein.',
+      'Der Berg bei {city} hat alles {res} hergegeben. Die alte Mine verfällt.'
+    ],
+    smithyDone: [
+      'In {city} glüht die erste Schmiede. Die Soldaten bekommen Klingen und Helme aus Eisen.',
+      '{city} hat eine Schmiede! Ab jetzt klingt es dort den ganzen Tag nach Kling und Klong.'
+    ],
+    fisheryDone: [
+      'Am Ufer bei {city} legen die ersten Fischerboote ab. Heute gibt es Fisch, morgen auch.',
+      '{city} baut eine Fischerei. Die Möwen ziehen begeistert mit ein.'
+    ],
+    pastureDone: [
+      'Rund um {city} grasen jetzt Schafe. Im Winter gibt es warme Wollsocken für alle.',
+      '{city} legt eine Weide an. Die Schafe halten die Stadtversammlung ab.'
+    ],
     clearcut: [
       '{kingdom_nom} meldet: Der Wald rund um {city} wurde erfolgreich besiegt.',
       'Rund um {city} stehen nur noch Baumstümpfe. {leader} nennt das „Aussicht“.',

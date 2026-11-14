@@ -708,3 +708,257 @@
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));
+
+// ============================================================================
+// Rohstoffe (Stufe 3b): Vorkommen (state.deposit), Minen, Schmiede, Fischerei, Weide
+// ============================================================================
+(function (WW) { 'use strict';
+
+  const RES_NAME = { iron: 'Eisen', coal: 'Kohle', gold: 'Gold', crystal: 'Kristall', fish: 'Fisch' };
+  const YPS = () => WW.CONFIG.TPY / WW.CONFIG.TPS;   // Aufrufe (je 1 s) pro Jahr
+  // Erträge je Jahr (gebaut, voll besetzt)
+  const Y = { mine: 6, fish: 14, wool: 4, woolFood: 3, crystalGold: 5 };
+  const MINE_LEFT_PER_TILE = 70;      // Vorrat je Vorkommens-Kachel; eine Mine mit 4 Kacheln hält etwa 45 Jahre
+  const COLD = {};                    // kalte Gegenden: Wolle wärmt
+  for (const k of ['taiga', 'tundra', 'snowfield', 'snow']) if (WW.TERRAIN_BY_KEY && WW.TERRAIN_BY_KEY[k]) COLD[WW.TERRAIN_BY_KEY[k].id] = 1;
+
+  // ---------------------------------------------------------------- Vorkommen erzeugen
+  // Eigener Zufall aus dem Weltsamen (sim.rng bleibt unberührt): gleicher Samen + gleiches Gelände = gleiche Vorkommen.
+  function generate(sim) {
+    const st = sim.state, W = st.W, H = st.H, T = WW.T;
+    if (!st.deposit || st.deposit.length !== W * H) st.deposit = new Uint8Array(W * H);
+    const dep = st.deposit; dep.fill(0);
+    const rng = new WW.RNG(((st.seed | 0) ^ 0x5eed0de9) >>> 0);
+    const CS = 10, cw = Math.ceil(W / CS), ch = Math.ceil(H / CS);
+    const metal = new Uint8Array(cw * ch), rich = new Float32Array(cw * ch), fishR = new Float32Array(cw * ch);
+    for (let c = 0; c < cw * ch; c++) {
+      const r = rng.next();
+      metal[c] = r < 0.45 ? 1 : (r < 0.85 ? 2 : 3);         // Eisen / Kohle / Gold je Gegend
+      rich[c] = rng.next(); fishR[c] = rng.next();
+    }
+    const ter = st.terrain;
+    const isMt = (t) => t === T.MOUNTAIN || t === T.SNOW;
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x, t = ter[i];
+      const c = Math.floor(y / CS) * cw + Math.floor(x / CS);
+      const r1 = rng.next(), r2 = rng.next();               // immer zwei Züge je Kachel: stabil bei Geländeänderung
+      if (t === T.HILL) {
+        let m = 0;
+        if (isMt(ter[i - 1])) m++; if (isMt(ter[i + 1])) m++; if (isMt(ter[i - W])) m++; if (isMt(ter[i + W])) m++;
+        if (r1 < (m ? 0.42 : 0.09) * (0.25 + rich[c])) dep[i] = metal[c];
+      } else if (t === T.MOUNTAIN) {
+        const edge = WW.TERRAIN_LUT.walk[ter[i - 1]] > 0 || WW.TERRAIN_LUT.walk[ter[i + 1]] > 0 || WW.TERRAIN_LUT.walk[ter[i - W]] > 0 || WW.TERRAIN_LUT.walk[ter[i + W]] > 0;
+        if (edge && r1 < 0.3 * (0.25 + rich[c])) dep[i] = metal[c];
+        else if (edge && r2 < 0.025) dep[i] = 4;           // selten: Kristall im Gebirge
+      } else if (t === T.CRYSTAL) {
+        if (r1 < 0.55) dep[i] = 4;
+      } else if (t === T.SHALLOW) {
+        if (r1 < 0.3 * (0.15 + fishR[c])) dep[i] = 5;
+      }
+    }
+    return dep;
+  }
+
+  function depAt(st, i) { return WW.DEPOSITS[st.deposit ? st.deposit[i] : 0] || null; }
+
+  // ---------------------------------------------------------------- Planung
+  // Regierungen gewichten: wer zuerst was baut. tribe: Weide + Fischerei, keine Mine.
+  function wishList(sim, city, k) {
+    const gk = (k && k.gov) || 'tribe';
+    const race = city.race;
+    let list;
+    if (gk === 'fascism' || gk === 'communism') list = ['mine:coal', 'mine:iron', 'smithy', 'fishery', 'pasture', 'mine:gold', 'mine:crystal'];
+    else if (gk === 'republic') list = ['mine:crystal', 'mine:gold', 'fishery', 'pasture', 'mine:iron', 'smithy', 'mine:coal'];
+    else if (gk === 'tribe') list = ['pasture', 'fishery'];
+    else if (gk === 'monarchy' || gk === 'theocracy') list = ['mine:iron', 'fishery', 'smithy', 'pasture', 'mine:gold', 'mine:crystal', 'mine:coal'];
+    else list = ['fishery', 'pasture', 'mine:iron', 'mine:crystal', 'smithy', 'mine:gold', 'mine:coal'];
+    if (race === 'elf') list = list.filter(w => w.indexOf('mine') !== 0 && w !== 'smithy');   // Elfen graben nicht
+    const g = WW.GOVERNMENTS[gk];
+    if (g && g.goldMul <= 0) list = list.filter(w => w !== 'mine:gold');
+    return list;
+  }
+
+  // freie 2×2-Fläche nahe einem Vorkommen (oder Weideland) suchen
+  function findSpot(sim, city, kind, res) {
+    const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
+    const r = Math.min(24, WW.Cities.territoryRadius(city, sim) + 3);
+    const px = city.cx + 0.5, py = city.cy + 0.5;
+    const owner = st.owner, inRing = st.inRing, id = city.id, dep = st.deposit, ter = st.terrain;
+    const code = res ? WW.DEPOSIT_CODE[res] : 0;
+    const o = {
+      area: (i, inner) => (owner[i] === id || (!inner && owner[i] === -1)) && inRing[i] === -1,
+      fieldOk: kind === 'pasture', race: city.race, cityId: id, needWalkBorder: false
+    };
+    const minD = (city.wall.plan ? 0 : WW.CONFIG.WALL_RESERVE) + WW.CONFIG.WALL_MARGIN + 2;
+    let best = -1, bs = -1e9, bestN = 0;
+    for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 4, Math.ceil(py + r)); y++) {
+      for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 4, Math.ceil(px + r)); x++) {
+        const d = Math.sqrt((x + 1 - px) * (x + 1 - px) + (y + 1 - py) * (y + 1 - py));
+        if (d < minD || d > r) continue;
+        const i0 = y * W + x;
+        if (owner[i0] !== id) continue;
+        let n = 0;
+        if (kind === 'pasture') {
+          for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) { const t = ter[i0 + dy * W + dx]; if (LUT.fertile[t] >= 0.3 && !LUT.wood[t]) n++; }
+          if (n < 4) continue;
+        } else {
+          for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if (dep[i0 + dy * W + dx] === code) n++;
+          if (n < (kind === 'fishery' ? 3 : 2)) continue;
+        }
+        let near = false;
+        for (let dy = -2; dy <= 3 && !near; dy++) for (let dx = -2; dx <= 3; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const s = sim._structs.get(st.structAt[yy * W + xx]);
+          if (s && (WW.Structs.isWallish(s) || (s.cityId === id && WW.STRUCT_INFO[s.type] && WW.STRUCT_INFO[s.type].core))) { near = true; break; }
+        }
+        if (near) continue;
+        if (WW.Cities.footprintOk(sim, x, y, 2, 2, o) < 0) continue;
+        const score = n * 0.8 - d * 0.4 + sim._hashNoise(i0) * 0.3;
+        if (score > bs) { bs = score; best = i0; bestN = n; }
+      }
+    }
+    return best < 0 ? null : { i: best, n: bestN };
+  }
+
+  function plan(sim, city, k, have) {
+    const st = sim.state, W = st.W;
+    if (city.pop < 12 || !city.centerOk) return;
+    let open = 0;
+    for (const id of city.sites) { const s = sim._structs.get(id); if (s && !WW.Structs.isWallish(s) && !s.built) open++; }
+    if (open >= 1 + city.tier) return;
+    const sk = WW.Cities.stock(sim, city);
+    for (const wish of wishList(sim, city, k)) {
+      const p = wish.split(':'), type = p[0], res = p[1] || null;
+      if (type === 'mine') { if (have['mine:' + res] || city.pop < 16 || have.mine >= 1 + (city.tier >= 2 ? 1 : 0)) continue; }
+      else if (have[type]) continue;
+      if (type === 'smithy' && (city.pop < 20 || (!have['mine:iron'] && sk.iron < 3))) continue;
+      if (type === 'fishery' && city.noFish && st.year < city.noFish) continue;
+      if (type === 'mine' && city.noDep && city.noDep[res] && st.year < city.noDep[res]) continue;
+      const cost = WW.Structs.costFor(sim, type, 1, city.id);
+      if (!WW.Cities.canPay(sim, city, cost)) continue;
+      let at = null;
+      if (type === 'smithy') { const i = WW.Cities.findCoreSpot(sim, city, 'smithy'); at = i >= 0 ? { i: i, n: 0 } : null; }
+      else at = findSpot(sim, city, type, type === 'fishery' ? 'fish' : res);
+      if (!at) {
+        // nichts in Reichweite: für ein paar Jahre nicht mehr suchen
+        if (type === 'fishery') city.noFish = st.year + 4;
+        else if (type === 'mine') { city.noDep = city.noDep || {}; city.noDep[res] = st.year + 4; }
+        continue;
+      }
+      const opt = { style: k ? k.gov : 'tribe' };
+      const s = WW.Cities.placeStruct(sim, city, type, at.i % W, Math.floor(at.i / W), opt);
+      if (!s) continue;
+      if (type === 'mine') { s.res = res; s.left = Math.min(600, at.n * MINE_LEFT_PER_TILE); }
+      city.sites.push(s.id);
+      if (type === 'mine') sim.event('mineOpened', { city: city.name, res: RES_NAME[res] }, WW.Cities.atCity(city));
+      return;
+    }
+  }
+
+  // ---------------------------------------------------------------- Abbau / Erträge / Wirkung (jede Sekunde)
+  function depleteMine(sim, s, city) {
+    const st = sim.state, W = st.W, code = WW.DEPOSIT_CODE[s.res];
+    for (let dy = -1; dy <= s.h; dy++) for (let dx = -1; dx <= s.w; dx++) {
+      const x = s.x + dx, y = s.y + dy;
+      if (x < 0 || y < 0 || x >= W || y >= st.H) continue;
+      const i = y * W + x;
+      if (st.deposit[i] === code) { st.deposit[i] = 0; sim.markDirty(i); }
+    }
+    if (city) sim.event('mineDepleted', { city: city.name, res: RES_NAME[s.res] }, WW.Cities.atCity(city));
+    WW.Structs.remove(sim, s);
+    WW.Structs.ruinize(sim, s);
+  }
+
+  function update(sim) {
+    const st = sim.state;
+    if (!st.deposit) generate(sim);
+    const yps = YPS();
+    // Rohstoff-Bauwerke je Stadt sammeln
+    const by = new Map();
+    for (const s of st.structs) {
+      if (s.dead || s.cityId < 0) continue;
+      const t = s.type;
+      if (t !== 'mine' && t !== 'smithy' && t !== 'fishery' && t !== 'pasture') continue;
+      let e = by.get(s.cityId);
+      if (!e) { e = []; by.set(s.cityId, e); }
+      e.push(s);
+    }
+    const slot = (st.tick / 10) | 0;
+    for (const city of st.cities) {
+      if (city.dead) continue;
+      const k = sim._kingdoms.get(city.kingdomId);
+      const list = by.get(city.id) || [];
+      const have = { mine: 0 };
+      for (const s of list) { if (s.type === 'mine') { have.mine++; have['mine:' + s.res] = 1; } else have[s.type] = 1; }
+      if ((slot + city.id) % 25 === 0) plan(sim, city, k, have);
+      const sk = WW.Cities.stock(sim, city);
+      const crew = 0.5 + 0.5 * Math.min(1, city.pop / 24);
+      let smithy = false;
+      for (const s of list) {
+        if (!s.built || s.dead) continue;
+        if (s.type === 'mine') {
+          const res = s.res;
+          if (!res || !(res in sk)) continue;
+          let a = WW.SimUtil.mod(sim, k, city, res, Y.mine * crew) / yps;
+          if (s.left != null) { a = Math.min(a, s.left); s.left -= a; }
+          WW.Cities.addStock(sim, city, res, a);
+          if (s.left != null && s.left <= 0.001) depleteMine(sim, s, city);
+        } else if (s.type === 'fishery') {
+          WW.Cities.addStock(sim, city, 'fish', WW.SimUtil.mod(sim, k, city, 'fish', Y.fish * crew) / yps);
+        } else if (s.type === 'pasture') {
+          WW.Cities.addStock(sim, city, 'wool', WW.SimUtil.mod(sim, k, city, 'wool', Y.wool) / yps);
+          WW.Cities.addStock(sim, city, 'food', Y.woolFood / yps);
+        } else if (s.type === 'smithy') smithy = true;
+      }
+      // Schmiede: Eisen (+ Kohle) -> Waffen und Rüstung für die Soldaten
+      let armed = 0;
+      if (smithy && sk.iron >= 0.2) {
+        const use = (1 + city.pop * 0.03) / yps;
+        sk.iron = Math.max(0, sk.iron - use);
+        armed = 1;
+        if (sk.coal >= 0.2) { sk.coal = Math.max(0, sk.coal - use * 0.5); armed = 2; }
+      }
+      if (armed !== (city.armed || 0)) city.armed = armed;
+      // Wolle wird getragen (in der Kälte mehr gebraucht), Kristall wird an Märkten zu Gold
+      if (sk.wool > 0) sk.wool = Math.max(0, sk.wool - city.pop * (city.cold ? 0.08 : 0.04) / yps);
+      if (sk.crystal > 0 && k) {
+        const g = WW.GOVERNMENTS[k.gov];
+        if (g && g.goldMul > 0 && (city.markets || g.key === 'republic')) {
+          const c = Math.min(sk.crystal, (1 + (city.markets || 0)) * 1.5 / yps);
+          sk.crystal -= c;
+          let gold = c * Y.crystalGold * (g.key === 'republic' || g.key === 'democracy' ? 1.5 : 1);
+          if (k.policy && k.policy.bonus === 'trade') gold *= 1.5;
+          sk.gold = Math.min(9999, sk.gold + WW.SimUtil.mod(sim, k, city, 'crystal', gold));
+        }
+      }
+      if (city.cold == null || (slot + city.id) % 240 === 0) city.cold = isCold(sim, city) ? 1 : 0;
+    }
+  }
+
+  function isCold(sim, city) {
+    const st = sim.state, W = st.W;
+    let n = 0, all = 0;
+    for (let dy = -6; dy <= 6; dy += 3) for (let dx = -6; dx <= 6; dx += 3) {
+      const x = city.cx + dx, y = city.cy + dy;
+      if (x < 0 || y < 0 || x >= W || y >= st.H) continue;
+      all++; if (COLD[st.terrain[y * W + x]]) n++;
+    }
+    return all > 0 && n * 3 >= all;
+  }
+
+  // Zufriedenheit aus Wolle und Kristall (für happinessTarget)
+  function happiness(sim, city, sk) {
+    let h = 0;
+    if (sk.wool >= 1) h += city.cold ? 8 : 3;
+    if (sk.crystal >= 1) h += 3;
+    return h;
+  }
+
+  // Kampfkraft/Rüstung der Soldaten einer Stadt mit Schmiede
+  function armMul(sim, cityId) { const c = sim._cities.get(cityId); return c && c.armed ? (c.armed >= 2 ? 1.35 : 1.25) : 1; }
+  function armorMul(sim, cityId) { const c = sim._cities.get(cityId); return c && c.armed ? 1.15 : 1; }
+
+  WW.Resources = { generate: generate, depAt: depAt, update: update, plan: plan, findSpot: findSpot, wishList: wishList, happiness: happiness, armMul: armMul, armorMul: armorMul, isCold: isCold, YIELD: Y, RES_NAME: RES_NAME };
+
+})(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

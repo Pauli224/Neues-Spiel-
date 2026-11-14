@@ -51,7 +51,7 @@
     const frac = u.maxHp > 0 ? u.hp / u.maxHp : 1;
     u.role = role;
     u.maxHp = baseHp(role, race);
-    if (role === 'soldier') u.maxHp = Math.round(u.maxHp * gov(sim, u).unitHpMul);
+    if (role === 'soldier') u.maxHp = Math.round(u.maxHp * gov(sim, u).unitHpMul * (WW.Resources ? WW.Resources.armorMul(sim, u.cityId) : 1));
     u.hp = Math.max(1, Math.round(u.maxHp * frac));
     if (u.carrying && u.cityId >= 0) {
       const c = sim._cities.get(u.cityId);
@@ -154,7 +154,7 @@
     const race = WW.RACES[u.race] || WW.RACES.human;
     let d = u.role === 'soldier' ? C().SOLDIER_DMG : (u.role === 'rebel' ? 6 : C().BASE_DMG);
     if (u.merc) d *= 1.2;
-    if (u.role === 'soldier') d *= gov(sim, u).unitDmgMul;
+    if (u.role === 'soldier') d *= gov(sim, u).unitDmgMul * (WW.Resources ? WW.Resources.armMul(sim, u.cityId) : 1);   // Schmiede: Eisenwaffen
     if (u.role === 'child') d = 1;
     return WW.SimUtil.mod(sim, sim._kingdoms.get(u.kingdomId), sim._cities.get(u.cityId), 'strength', d * race.strength);
   }

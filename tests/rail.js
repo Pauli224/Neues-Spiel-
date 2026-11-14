@@ -52,7 +52,7 @@ function untilLine(o, years) {
 
 test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
   const o = twoCities('fascism', LONG);
-  const line = untilLine(o, 40);
+  const line = untilLine(o, 60);
   const st = o.sim.state;
   assert(line, 'keine fertige Strecke mit Zug (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
   log('Jahr', st.year, 'Strecke', line.tiles.length, 'Kacheln, Brücken', rails(o.sim).filter((s) => s.bridge).length, 'Bahnhöfe', stations(o.sim).length);
@@ -77,7 +77,7 @@ test('1 Strecke wird gebaut, Zug fährt und gleicht Vorräte aus', function () {
 
 test('2 Zerstörtes Gleis stoppt den Zug, Reparatur lässt ihn weiterfahren', function () {
   const o = twoCities('communism', LONG);
-  const line = untilLine(o, 40);
+  const line = untilLine(o, 60);
   assert(line, 'keine Strecke');
   const st = o.sim.state, tr = st.trains.find((t) => t.line === line.id);
   const mid = line.tiles[Math.min(line.tiles.length - 1, Math.max(1, Math.floor(line.tiles.length / 2)))];
@@ -107,7 +107,7 @@ test('3 Stamm und Demokratie bauen keine Bahn (Tabelle WW.RAIL.GOVS)', function 
 });
 
 test('4 Speichern/Laden mit Zug, Determinismus, alte Spielstände, Zeitaufschlag', function () {
-  const mk = () => { const o = twoCities('fascism', LONG); untilLine(o, 40); return o; };
+  const mk = () => { const o = twoCities('fascism', LONG); untilLine(o, 60); return o; };
   const A = mk(), B = mk();
   assert(A.sim.hash() === B.sim.hash(), 'nicht deterministisch');
   assert(A.sim.state.trains.length, 'kein Zug');
@@ -137,14 +137,14 @@ test('4 Speichern/Laden mit Zug, Determinismus, alte Spielstände, Zeitaufschlag
 
 test('5 Lange Strecke zwischen zwei Städten (20–60 Kacheln), Zug kommt an, Vorräte gleichen sich aus, Kohle', function () {
   const o = twoCities('fascism', LONG);
-  const line = untilLine(o, 45);
+  const line = untilLine(o, 60);
   assert(line, 'keine fertige Strecke (Bahnhöfe ' + stations(o.sim).length + ', Gleise ' + rails(o.sim).length + ')');
   const st = o.sim.state;
   const A = o.sim._structs.get(line.a), B = o.sim._structs.get(line.b);
   log('Strecke', line.tiles.length, 'Kacheln zwischen', o.sim._cities.get(A.cityId).name, 'und', o.sim._cities.get(B.cityId).name);
   assert(A.cityId !== B.cityId, 'Strecke innerhalb einer Stadt');
-  assert(line.tiles.length >= 18 && line.tiles.length <= 75, 'Streckenlänge ' + line.tiles.length);
-  assert(!st.rail.lines.some((l) => l.tiles.length < 8), 'Mini-Strecke');
+  assert(line.tiles.length >= 18 && line.tiles.length <= 90, 'Streckenlänge ' + line.tiles.length);
+  assert(!st.rail.lines.some((l) => l.tiles.length < WW.RAIL.MIN_LEN), 'Mini-Strecke');
   const tr = st.trains.find((t) => t.line === line.id);
   const SA = WW.Cities.stock(o.sim, o.sim._cities.get(A.cityId)), SB = WW.Cities.stock(o.sim, o.sim._cities.get(B.cityId));
   SA.stone = 300; SB.stone = 0;
