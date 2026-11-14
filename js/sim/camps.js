@@ -185,6 +185,7 @@
     u.merc = false; u.work = -1; u.moving = false;
     u.hp = Math.max(4, Math.round(u.maxHp * 0.5));
     if (!o.march) { const p = centerXY(place); u.x = p.x; u.y = p.y; }
+    else unstick(sim, u);   // wer auf dem eigenen Tor gefangen wurde, steht nun auf einem fremden: einen Schritt zur Seite
     u.campVia = 0; u.train = 0; u.escort = 0;
     // mit Gleisanschluss: erst zum Bahnhof der Mutterstadt, dann im Gefangenenzug zur Rampe
     if (o.march && place.kind === 'camp' && WW.Rail && WW.Rail.campTownStation) {
@@ -1343,7 +1344,7 @@
     tick: tick, defaults: defaults, unit: unit, capture: capture, onPeace: onPeace, cityUpdate: cityUpdate,
     campsOf: campsOf, stockadesOf: stockadesOf, inmatesOf: inmatesOf, holdOf: holdOf, liberate: liberate, intern: intern,
     found: found, grow: grow, uprising: uprising, isRegime: isRegime, count: count, unload: unload, trainFreed: trainFreed, surrender: surrender,
-    escort: escort
+    escort: escort, _yearly: yearly   // _yearly: nur für Tests (Abholung/Ausbruch/Verurteilung eines Jahres)
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

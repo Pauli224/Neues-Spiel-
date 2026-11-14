@@ -196,8 +196,36 @@
     updateMask(sim, i); updateMask(sim, i - 1); updateMask(sim, i + 1); updateMask(sim, i - W); updateMask(sim, i + W);
   }
 
+  // Rückfall: freie 2×2-Fläche vor der Mauer (eigenes/freies Land, nur Felder/Ruinen weichen), zur Partnerstadt hin
+  function freeSpotNear(sim, city, k, partner) {
+    const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT, plan = new Set((city.wall && city.wall.plan) || []);
+    let rr = 6;
+    for (const i of plan) { const d = Math.hypot((i % W) - city.cx, Math.floor(i / W) - city.cy); if (d > rr) rr = d; }
+    const tx = partner ? partner.cx : city.cx, ty = partner ? partner.cy : city.cy;
+    let best = -1, bs = 1e18;
+    for (let y = Math.max(2, Math.floor(city.cy - rr - 16)); y <= Math.min(H - 4, Math.ceil(city.cy + rr + 16)); y++)
+      for (let x = Math.max(2, Math.floor(city.cx - rr - 16)); x <= Math.min(W - 4, Math.ceil(city.cx + rr + 16)); x++) {
+        let ok = true;
+        for (let dy = -1; dy <= 2 && ok; dy++) for (let dx = -1; dx <= 2 && ok; dx++) {
+          const i = (y + dy) * W + x + dx, inner = dx >= 0 && dy >= 0 && dx < 2 && dy < 2;
+          if (st.inRing[i] !== -1 || plan.has(i)) { ok = false; break; }
+          if (!inner) continue;
+          const t = st.terrain[i];
+          if (!LUT.build[t] || LUT.water[t]) { ok = false; break; }
+          const o = st.owner[i];
+          if (o !== -1 && o !== city.id) { const oc = sim._cities.get(o); if (!oc || oc.kingdomId !== k.id) { ok = false; break; } }
+          const sx = sim._structs.get(st.structAt[i]);
+          if (sx && sx.type !== 'field' && sx.type !== 'ruin') { ok = false; break; }
+        }
+        if (!ok) continue;
+        const sc = Math.abs(Math.hypot(x - city.cx, y - city.cy) - rr - 3) * 4 + Math.hypot(x - tx, y - ty) * 0.2;   // dicht vor der eigenen Mauer, zur Partnerstadt hin
+        if (sc < bs) { bs = sc; best = y * W + x; }
+      }
+    return best;
+  }
   function placeStation(sim, city, k, partner) {
-    const i = WW.Industry.findSpot(sim, city, 2, 2, partner ? { toward: { x: partner.cx + 0.5, y: partner.cy + 0.5 } } : null);
+    let i = WW.Industry.findSpot(sim, city, 2, 2, partner ? { toward: { x: partner.cx + 0.5, y: partner.cy + 0.5 } } : null);
+    if (i < 0) i = freeSpotNear(sim, city, k, partner);
     if (i < 0) return null;
     const st = sim.state, W = st.W, x = i % W, y = Math.floor(i / W);
     for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
@@ -310,6 +338,12 @@
       const stations = [];
       for (const c of cities) {
         let s = stationOf(sim, c);
+        // vom wachsenden Mauerring umschlossener Bahnhof ohne fertige Strecke: zieht vor die Mauer um (sonst kein Weg hinaus)
+        if (s && st.inRing[s.y * st.W + s.x] !== -1 && !st.rail.lines.some((l) => l.done && (l.a === s.id || l.b === s.id))) {
+          WW.Structs.remove(sim, s); WW.Cities.refreshLists(sim, c);
+          for (const key in st.rail.fail) if (key.split('-').indexOf(String(s.id)) >= 0) delete st.rail.fail[key];
+          s = null;
+        }
         const g = WW.GOVERNMENTS[k.gov];
         const ringReady = !(g && g.wallMax > 0) || (c.wall && c.wall.plan && c.wall.plan.length) || c.pop >= 60;   // sonst reißt die erste Mauer ihn ab
         // Bahnhof auf der Seite der nächsten anderen Stadt des Reichs

@@ -1239,7 +1239,7 @@ test('21 Faschismus 9.10: keine Dörfer, Megastufen, Garnisonen (halten, abziehe
   const fx = garrisonScenario('fascism', 3, 30);
   log('Faschismus ohne Garnison (abgezogen im Jahr 3): verloren im Jahr', fx.lost, '· Chronik garrisonWithdrawn', countEvents(fx.sim, 'garrisonWithdrawn'));
   assert(fx.lost > 0, 'ohne Garnison wird die Stadt nicht verloren');
-  const dm = garrisonScenario('democracy', 0, 12);
+  const dm = garrisonScenario('democracy', 0, 8);   // Eingliederung messen (später können Entfernung/Stadtlimit die Stadt noch abspalten)
   log('Demokratie: eingegliedert nach', dm.integrated, 'Jahren · verloren', dm.lost, '· Loyalität', Math.round(dm.city.loyalty));
   assert(dm.lost < 0 && dm.integrated > 0 && dm.integrated <= 6 && countEvents(dm.sim, 'integrated') >= 1, 'Demokratie gliedert nicht in wenigen Jahren ein');
   // Garnisonssoldaten marschieren nicht, Speichern/Laden trägt alles

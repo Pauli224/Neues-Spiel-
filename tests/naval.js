@@ -424,12 +424,17 @@ test('12 Dauerlauf Inselwelt (gemischte Regierungen) ohne Ausnahme', function ()
   const st = sim.state;
   const m = meter();
   const t0 = Date.now();
-  let maxShips = 0, maxPer = 0, sumMs = 0;
+  let maxShips = 0, maxPer = 0, sumMs = 0, sumCpu = 0, sumWall = 0, maxCpuPer = 0;
   try {
     for (let t = 0; t < ticks; t += 1000) {
       m.reset();
+      const c0 = process.cpuUsage(), w0 = process.hrtime.bigint();
       run(sim, 1000);
-      maxPer = Math.max(maxPer, m.ms() / 1000); sumMs += m.ms();
+      const wall = Number(process.hrtime.bigint() - w0) / 1e6, cu = process.cpuUsage(c0), cpu = (cu.user + cu.system) / 1000;
+      // Anteil der Seefahrt an der Wanduhr × CPU-Zeit des Abschnitts: weniger empfindlich für einen ausgelasteten Rechner
+      const cpuNav = wall > 0 ? m.ms() / wall * Math.min(cpu, wall) : m.ms();
+      maxPer = Math.max(maxPer, m.ms() / 1000); sumMs += m.ms(); sumCpu += cpuNav; sumWall += wall;
+      maxCpuPer = Math.max(maxCpuPer, cpuNav / 1000);
       maxShips = Math.max(maxShips, st.ships.length);
       if (t % 5000 === 0) invariants(sim, 'Tick ' + st.tick);
       // gelegentlich Unruhe stiften, damit auch Krieg über das Meer vorkommt
@@ -452,11 +457,33 @@ test('12 Dauerlauf Inselwelt (gemischte Regierungen) ohne Ausnahme', function ()
   log('Inseln (≥ 40 Kacheln)', isl, '| besiedelt', settled.size, '| Häfen', st.naval.harbors.length, '| Schiffe jetzt', st.ships.length, 'höchstens', maxShips);
   log('Statistik', JSON.stringify(st.naval.stats), '| Wracks', st.wrecks.filter((w) => w.kind === 'ship').length);
   log('Chronik (letzte 400)', JSON.stringify(ev));
-  log('Seefahrt im Mittel', (sumMs / ticks).toFixed(4), 'ms/Tick, schlechtester Abschnitt', maxPer.toFixed(4), 'ms/Tick (je 1000 Ticks)');
-  assert(sumMs / ticks < 0.03, 'Zeitaufschlag im Dauerlauf ' + (sumMs / ticks).toFixed(4) + ' ms/Tick');
+  log('Seefahrt (Wanduhr) im Mittel', (sumMs / ticks).toFixed(4), 'ms/Tick, schlechtester Abschnitt', maxPer.toFixed(4), 'ms/Tick (je 1000 Ticks); Anteil', (100 * sumMs / sumWall).toFixed(1) + ' %');
+  log('Seefahrt (CPU-geschätzt) im Mittel', (sumCpu / ticks).toFixed(4), 'ms/Tick, schlechtester Abschnitt', maxCpuPer.toFixed(4), 'ms/Tick');
+  assert(sumCpu / ticks < 0.03, 'Zeitaufschlag im Dauerlauf ' + (sumCpu / ticks).toFixed(4) + ' ms/Tick');
   assert(st.naval.harbors.length > 0 && st.naval.stats.built > 0, 'keine Seefahrt im Dauerlauf');
   const s = sim.serialize();
   assert(WW.Sim.load(s).serialize() === s, 'Endstand nicht stabil speicherbar');
+});
+
+test('13 Faschismus: keine Siedler über das Meer (noSettle); Garnisonen bleiben daheim', function () {
+  const noS = !!(WW.GOVERNMENTS.fascism.build && WW.GOVERNMENTS.fascism.build.noSettle);
+  log('Marke noSettle am Faschismus:', noS);
+  const sim = twoIslands({ spots: [SPOT_A], govs: ['fascism'] });
+  const st = sim.state, c = st.cities[0];
+  const otherC = compAt(sim, SPOT_B.x, SPOT_B.y);
+  for (let y = 0; y < 26; y++) { grow(sim, 1, 46, [c]); const sk = WW.Cities.stock(sim, c); sk.wood += 30; sk.stone += 10; }
+  const colony = st.cities.find((x) => compAt(sim, x.cx, x.cy) === otherC);
+  log('Jahr', st.year, 'Transporter', ships(sim, null, 'transport').length, 'Überfahrten', st.naval.stats.colonies, 'Stadt auf Insel B', !!colony);
+  if (noS) assert(!colony && st.naval.stats.colonies === 0 && !st.events.some((e) => e.type === 'seaColony'), 'Faschismus siedelt über das Meer');
+  // Garnison: sind alle Soldaten stationiert, wird niemand eingeschifft
+  const sim2 = twoIslands({ govs: ['monarchy', 'theocracy'] });
+  const [A, B] = sim2.state.kingdoms;
+  grow(sim2, 14, 44);
+  for (const u of sim2.state.units) if (u.kingdomId === A.id) u.garrison = u.cityId;
+  const idle = sim2.state.units.filter((u) => !u.dead && u.kingdomId === A.id && u.role === 'soldier' && !u.order);
+  sim2.actions.setRelation(A.id, B.id, 'war');
+  const ok = WW.Naval.seaWar(sim2, A, B, idle, 0);
+  assert(!ok && !sim2.state.units.some((u) => u.kingdomId === A.id && u.sea), 'Garnisonssoldaten eingeschifft');
 });
 
 console.log('\n--- Ergebnis');

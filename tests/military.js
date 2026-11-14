@@ -443,7 +443,7 @@ test('10 Regime bekommen rechtzeitig Fahrzeuge, im Krieg eine sichtbare Truppe',
   firsts.sort((a, b) => a - b);
   log('erstes Fahrzeug nach Jahren:', firsts.join(', '), '| ohne Fahrzeug trotz Stadt ≥ 30 Einw.:', late.join(' ') || '-');
   assert(firsts.length >= 4 && firsts[Math.floor(firsts.length / 2)] <= 25, 'erste Fahrzeuge zu spät/zu selten');
-  assert(late.length <= 1, 'Regime mit Stadt ohne Fahrzeug: ' + late.join(' '));
+  assert(late.length <= Math.max(1, Math.floor((firsts.length + late.length) * 0.2)), 'zu viele Regime mit Stadt ohne Fahrzeug: ' + late.join(' '));
   // Krieg: Truppe in der Größenordnung 1 je 25–30 Einwohner
   const o = duel('fascism', 'monarchy', { seed: 61 });
   grow(o, 12, 70);

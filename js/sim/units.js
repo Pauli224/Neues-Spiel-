@@ -454,12 +454,12 @@
       if (tab[st.terrain[i]]) return i;
       e.list.splice(k, 1);
     }
-    return -1;
+    return e.list.length ? -1 : -2;   // -2: frisch gesucht, nichts da (kein erneuter Suchlauf)
   }
   // wie findResource, aber erst ab Abstand minR (Hain um die Stadt bleibt stehen); Rückfall ohne Mindestabstand
   function findResourceFrom(sim, u, city, res, minR, maxR) {
     const i = cachedRes(sim, u, city, res, minR, maxR);
-    return i >= 0 ? i : findResource(sim, u, city, res, maxR);
+    return i >= 0 ? i : (i === -2 && minR <= 2 ? -1 : findResource(sim, u, city, res, maxR));
   }
   function findResource(sim, u, city, res, maxR) {
     const cand = scanRes(sim, city, res, 2, maxR, 6);
@@ -485,7 +485,7 @@
         if (d < bs) { bs = d; best = f; }
       }
       if (race.fishing && city.hasWater && !(city.besieged > st.tick) && (!best || best.growth < 3) && !(u.noFishUntil > st.tick) && sim.rng.chance(0.6)) {
-        const i = findResource(sim, u, city, 'water', 9);
+        const i = findResourceFrom(sim, u, city, 'water', 2, 9);   // zwischengespeichert (Leistung)
         if (i >= 0) {
           const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
           if (g >= 0) { u.task = 'fish'; u.target = -1; u.goal = -1; u.tt = g; u.phase = 1; return; }
@@ -494,8 +494,8 @@
       // knappe Vorräte: Beeren und Pilze im Wald sammeln, statt auf reife Felder zu warten
       const sk = WW.Cities.stock(sim, city);
       if ((!best || best.growth < 3) && sk.food < city.pop * 1.5 + 4 && !(city.besieged > st.tick) && !(u.noFishUntil > st.tick)) {
-        let i = findResource(sim, u, city, 'wood', 10);
-        if (i < 0) i = findResource(sim, u, city, 'fertile', 8);   // ohne Wald: Beeren und Wurzeln auf der Wiese
+        let i = findResourceFrom(sim, u, city, 'wood', 2, 10);
+        if (i < 0) i = findResourceFrom(sim, u, city, 'fertile', 2, 8);   // ohne Wald: Beeren und Wurzeln auf der Wiese
         if (i >= 0) {
           const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
           if (g >= 0) { u.task = 'forage'; u.target = -1; u.goal = -1; u.tt = g; u.phase = 1; return; }

@@ -272,7 +272,7 @@
 //     der Mauer (an der Mauer bzw. am Bestand entlang, nicht auf Feldern). [walls] Bitte: Ringplanung/Erweiterung bei dieser
 //     Größe (Ring mit 200+ Innenkacheln, Vorstadt davor) prüfen; bisher erweitert sich der Ring der Megastadt kaum (expansions 0).
 //   Faschismus: gov.megaGrowth (Geburten ×1,4 ab Großstadt), gov.housesPerFlur 2,6, Ernte ×1,5 ab Großstadt (Zwangsbewirtschaftung).
-//   Weltobergrenze Einwohner WW.CONFIG.MAX_UNITS (siehe Messwerte im Bericht).
+//   Weltobergrenze Einwohner WW.CONFIG.MAX_UNITS (2200); je Stadt keine Geburten ab WW.CONFIG.CITY_POP_MAX (700).
 // GARNISONEN (alle Regierungen außer Anarchie; Werte WW.GOVERNMENTS[g].garrison { cap (Loyalität max.), integ (Jahre bis zur
 //   Eingliederung), share (Soll-Anteil besetzt) })
 //   u.garrison = Stadt-ID | undefined: Soldat dieser Stadt fest zugeteilt; bleibt in/bei der Stadt, besetzt Mauer/Tore, wird nie

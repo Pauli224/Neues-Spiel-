@@ -54,6 +54,12 @@
 //             gehen zum Hafen, gehen an Bord, landen an der fremden Küste und gründen dort eine Stadt (Rolle settler).
 //             Krieg: Soldaten steigen ein, Landung nahe einer feindlichen Küstenstadt (außerhalb ihres Rings), danach
 //             marschieren sie wie gewohnt (order march). Je Reich höchstens eine Landung zugleich, Abstand INVADE.every Jahre.
+//             Garnisonssoldaten (u.garrison = Stadt-ID) werden nie eingeschifft. Geleit: ein freies Kriegsschiff des Reichs
+//             (≤ INVADE.escortR vom Hafen) fährt mit; hat das Reich Kriegsschiffe, aber keins frei, wartet der Transporter
+//             einmal bis zu INVADE.escortWait Ticks. Feindliches Kriegsschiff nah und kein Geleit dabei: einmal an eine
+//             andere Landestelle ausweichen; schwer getroffen: umkehren. Küstentürme des Feindes (≤ INVADE.towerR) beschießen
+//             anlandende Transporter. Regierungen mit WW.GOVERNMENTS[g].build.noSettle (Faschismus, PLAN-9 9.10) schicken
+//             keine Siedler über das Meer und Gestrandete gründen dort keinen Ort (Truppenlandungen bleiben).
 //   warship   Wache vor dem Hafen (patrol), Geleit für Transporter (escort), Seegefecht mit feindlichen Schiffen in
 //             Reichweite, Verfolgung (chase); Regierungen mit Geschützen (WW.MIL.GOVS[gov].artillery bzw. NAVAL.GUN_GOVS)
 //             beschießen Küstenmauern, -tore und -türme des Feindes.
@@ -71,7 +77,7 @@
 //   first { [kid]: 1 }, ledger { [cityId]: Gold aus Seehandel insgesamt (Info-Fenster) },
 //   mask (Base64-Bitmaske der Wasserkacheln, alle 60 Ticks erneuert; Grundlage von Zusammenhang und Routen-Zwischenspeicher),
 //   maskVer (zählt bei Änderung),
-//   stats { built, sunk, fish, trades, colonies, landings, wrecks } }
+//   stats { built, sunk, fish, trades, colonies, landings, wrecks, invasions (Einschiffungen), troopsSent, troopsLanded } }
 //
 // FX (sim.drainFx), Koordinaten in Kacheln:
 //   wake      { x, y, dir, kind }        Kielwasser hinter einem fahrenden Schiff (alle 8 Ticks)

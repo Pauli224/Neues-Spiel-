@@ -382,11 +382,13 @@
     if (u.path && u.goal === goal && u.pi < u.path.length) return true;
     if (u.nextPath && u.nextPath > st.tick) return false;
     const C = WW.CONFIG;
-    if ((sim._armyUsed || 0) >= C.PATH_BUDGET * C.ARMY_PATH_SHARE) return false;
+    // eigenes Teilbudget je Tick (Fahrzeuge nehmen den Heeren nicht die Wegsuche weg)
+    if (sim._milT !== st.tick) { sim._milT = st.tick; sim._milUsed = 0; }
+    if (sim._milUsed >= C.PATH_BUDGET * M().PATH_SHARE || sim._pathBudget < C.PATH_BUDGET * 0.3) return false;
     tables(sim);
     const b0 = sim._pathBudget;
     const p = WW.Path.find(sim, cur, goal, { k: u.kingdomId, race: 'tank', breach: !!breach && u.role === 'tank', limit: limit || C.PATH_LIMIT_ARMY });
-    sim._armyUsed = (sim._armyUsed || 0) + Math.max(0, b0 - sim._pathBudget);
+    sim._milUsed += Math.max(0, b0 - sim._pathBudget);
     if (p === false) { u.nextPath = st.tick + 8; return false; }
     if (p === null) {
       u.fails = (u.fails | 0) + 1; u.path = null;

@@ -11,6 +11,7 @@
     TPY: 240,                 // Ticks pro Jahr (24 s bei 1×)
     GRAZED_ON: 170, GRAZED_OFF: 90,   // state.grazed: Beweidung sichtbar ab 170, wieder grün unter 90 (Hysterese)
     MAX_UNITS: 2200,
+    CITY_POP_MAX: 700,        // keine Geburten mehr ab dieser Einwohnerzahl einer Stadt (Megastadt, 9.10)
     MAX_ANIMALS: 240,
     MAX_EVENTS: 400,
     UNIT_SPEED: 0.1,         // Kacheln pro Tick bei walk = 1

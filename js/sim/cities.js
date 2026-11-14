@@ -217,8 +217,11 @@
     if (k && k.policy && k.policy.bonus === 'safety') soldierShare += 0.06;
     if (atWar) soldierShare = g.war === 'mass' ? Math.min(0.55, soldierShare * 2) : soldierShare * 1.6 + (g.soldierShare > 0 ? 0.06 : 0);
     if (city._rebels > 0 && g.soldierShare > 0) soldierShare += 0.1;
-    want.soldier = n >= 4 ? Math.round(n * Math.min(0.55, soldierShare)) : 0;
-    if (g.soldierShare > 0 && n >= 6 && want.soldier < 1) want.soldier = 1;
+    // Garnisonssoldaten (9.10) zählen zum Soldatenanteil, arbeiten aber nicht mit
+    let garr = 0;
+    for (const u of city._members) if (u.garrison != null && u.role === 'soldier') garr++;
+    want.soldier = n >= 4 ? Math.max(0, Math.round((n + garr) * Math.min(0.55, soldierShare)) - garr) : 0;
+    if (g.soldierShare > 0 && n >= 6 && want.soldier < 1 && !garr) want.soldier = 1;
     const sites = city.sites.length;
     // offener Materialbedarf der Baustellen
     let needWood = 0, needStone = 0;
@@ -755,6 +758,7 @@
       const race = WW.RACES[city.race] || WW.RACES.human;
       let p = WW.CONFIG.BIRTH_RATE * city.adults * WW.SimUtil.mod(sim, k, city, 'growth', g.growthMul) * race.fertility;
       if (g.megaGrowth && city.tier >= 3) p *= g.megaGrowth;   // Megastadt (9.10)
+      if (city.pop >= WW.CONFIG.CITY_POP_MAX) p = 0;           // Obergrenze je Stadt (Leistung)
       if (sk.food < city.pop * 0.6) p *= 0.15;
       if (city.happiness < 30) p *= 0.4;
       if (city.hungry) p = 0;

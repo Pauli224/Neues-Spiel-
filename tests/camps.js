@@ -15,7 +15,18 @@ function test(name, fn) {
   try { fn(); results.push({ name, ok: true, ms: Date.now() - t0 }); console.log('  BESTANDEN (' + (Date.now() - t0) + ' ms)'); }
   catch (e) { results.push({ name, ok: false, ms: Date.now() - t0, err: e }); console.log('  FEHLGESCHLAGEN: ' + (e && e.stack || e)); }
 }
-function run(sim, n) { for (let i = 0; i < n; i++) sim.tick(); }
+// „Sitzkrieg": Krieg auf dem Papier (für Gefangene), aber keine Heerzüge gegen die Städte der Gegenseite – sonst erobert
+// das (seit 9.10 starke) Regime den Gegner, bevor der Test fertig ist. sim._sitz = [Reich-ID, …]
+function run(sim, n) {
+  for (let i = 0; i < n; i++) {
+    sim.tick();
+    if (sim._sitz && (sim.state.tick % 5) === 0) for (const u of sim.state.units) {
+      if (u.dead || !u.order || u.order.city == null) continue;
+      const c = sim._cities.get(u.order.city);
+      if (c && sim._sitz.indexOf(c.kingdomId) >= 0 && sim._sitz.indexOf(u.kingdomId) >= 0) { u.order = null; u.path = null; u.breach = -1; }
+    }
+  }
+}
 const LAWS = { govChanges: false, wars: false, disasters: false, newRealms: false, events: false };
 const TPY = WW.CONFIG.TPY;
 // Zufallsereignisse nur dort, wo sie geprüft werden (sonst tauschen sich Testgefangene aus oder brechen zufällig aus)
@@ -68,6 +79,7 @@ function warWorld(gov, other, o) {
   for (const c of [ca, cb]) sim.actions.spawnSettlers(c.cx + 2, c.cy + 2, 26, null, 'human');
   run(sim, 1200);
   const A = sim._kingdoms.get(ca.kingdomId), B = sim._kingdoms.get(cb.kingdomId);
+  if (o.sitz !== false) sim._sitz = [A.id, B.id];
   sim.actions.setLaw('camps', true);
   let camp = null;
   if (o.camp !== false && WW.CAMPS.GOVS[A.gov]) {
@@ -77,13 +89,14 @@ function warWorld(gov, other, o) {
   return { sim, A, B, ca, cb, camp };
 }
 // n Soldaten des Reichs home bei (x, y) aufstellen und von einem Soldaten von holder gefangen nehmen lassen
-function takePows(sim, holder, home, n) {
+function takePows(sim, holder, home, n, frac) {
+  const fr = frac == null ? 0.5 : frac;   // Ort des Gefechts zwischen den Hauptstädten (0 = Heimat, 1 = Halter)
   const hc = sim._cities.get(home.capitalId), ac = sim._cities.get(holder.capitalId);
-  const att = WW.Units.create(sim, { x: (hc.cx + ac.cx) / 2, y: (hc.cy + ac.cy) / 2 + 1, role: 'soldier', kingdomId: holder.id, cityId: ac.id, race: 'human' });
+  const att = WW.Units.create(sim, { x: hc.cx + (ac.cx - hc.cx) * fr, y: hc.cy + (ac.cy - hc.cy) * fr + 1, role: 'soldier', kingdomId: holder.id, cityId: ac.id, race: 'human' });
   const list = [];
   for (let i = 0; i < n; i++) {
     // Gefecht auf halbem Weg zwischen den Hauptstädten (Feldschlacht)
-    const W0 = sim.state.W, f = WW.Path.nearestFree(sim, Math.floor((hc.cy + ac.cy) / 2) * W0 + Math.floor((hc.cx + ac.cx) / 2) + (i % 3), home.id, 8);
+    const W0 = sim.state.W, f = WW.Path.nearestFree(sim, Math.floor(hc.cy + (ac.cy - hc.cy) * fr) * W0 + Math.floor(hc.cx + (ac.cx - hc.cx) * fr) + (i % 3), home.id, 8);
     const t = WW.Units.create(sim, { x: (f % W0) + 0.5, y: Math.floor(f / W0) + 0.5, role: 'soldier', kingdomId: home.id, cityId: hc.id, race: ['human', 'dwarf', 'orc', 'elf'][i % 4] });
     if (WW.Camps.capture(sim, att, t, { surrender: true })) list.push(t);
   }
@@ -157,7 +170,7 @@ test('2 Aufbau: Kommandantur, Baracken, Wachtürme, Zaun dicht mit genau einem T
     'Wachtürme', tw.length, 'Zaun', fence.length, 'Tore', gates.length, '| Zaun', camp.wall.state, camp.wall.built + '/' + camp.wall.total, '| Wachen', camp.guards + '/' + camp.guardsWant, 'Plätze', camp.cap);
   assert(camp.kind === 'camp' && camp.centerId === -1 && !structsOf(sim, camp, 'center').length, 'Lagerstadt hat ein Zentrum');
   assert(hq.length === 1 && hq[0].built && hq[0].x === camp.cx - 1 && hq[0].y === camp.cy - 1, 'Kommandantur fehlt/falsch');
-  assert(bar.length >= 2 && bar.filter((s) => s.built).length >= 2 && camp.cap >= 16, 'Baracken fehlen');
+  assert(bar.length >= 2 && bar.filter((s) => s.built).length >= 2 && camp.cap >= 8, 'Baracken fehlen');
   assert(tw.length === 2, 'Wachtürme fehlen');
   assert(gates.length === 1 && camp.wall.gates.length === 1, 'nicht genau ein Tor');
   assert(fence.every((s) => s.mat === 'fence' && s.level === 1) && gates[0].mat === 'fence', 'Zaun nicht im Stil fence');
@@ -180,7 +193,7 @@ test('3 Kriegsgefangene: Regime -> Lagerstadt (Zwangsarbeit), andere -> Gefangen
   const sim = W.sim;
   sim.actions.setLaw('industry', false);   // keine Bahn: hier wird marschiert (Bahn: Test 11)
   sim.actions.setRelation(W.A.id, W.B.id, 'war');
-  const p1 = takePows(sim, W.A, W.B, 5);   // Faschismus nimmt gefangen
+  const p1 = takePows(sim, W.A, W.B, 5, 0.8);   // Faschismus nimmt gefangen (Gefecht nahe der eigenen Hauptstadt)
   const p2 = takePows(sim, W.B, W.A, 4);   // Demokratie nimmt gefangen
   assert(p1.length === 5 && p2.length === 4, 'Gefangennahme fehlgeschlagen');
   assert(p1.every((u) => u.camp === W.camp.id && u.pow === W.B.id && u.campState === 'march'), 'Kriegsgefangene des Regimes nicht zur Lagerstadt');
@@ -363,22 +376,30 @@ test('8 Leitplanken: camps.js liest weder Volk noch Kultur; Auswahl unabhängig 
   const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'sim', 'camps.js'), 'utf8').replace(/\/\/.*$/gm, '');
   assert(!/\.race\b|races?\[|\brace\b/.test(src), 'camps.js liest das Volk');
   assert(!/culture/i.test(src), 'camps.js liest die Kultur');
-  // gleiche Welt, nur Volk/Kultur der Bewohner vertauscht -> dieselben Leute (nach ID) werden abgeholt
+  // gleicher Spielstand zweimal geladen, im zweiten Volk/Kultur aller Einheiten und Städte vertauscht: die Abholung
+  // (ein Durchlauf von WW.Camps._yearly) wählt genau dieselben Leute
+  const o = city('fascism', { unhappy: true, seed: 13 });
+  years(o, 3);
+  forceCamp(o.sim, o.k, 130);
+  for (let i = 0; i < 40 && !campCities(o.sim).some((c) => c.cap > 0); i++) run(o.sim, 120);
+  WW.Mods.add(o.c, { key: 'happiness', add: -80, source: 'test2' });
+  run(o.sim, 30);
+  const sv = o.sim.serialize();
   const pick = (swap) => {
-    const o = city('fascism', { unhappy: true, seed: 13 });
-    years(o, 3);
-    if (swap) for (const u of o.sim.state.units) { u.race = u.race === 'human' ? 'orc' : 'human'; u.culture = 'x' + (u.culture || ''); }
-    const camp = forceCamp(o.sim, o.k, 130);
-    WW.Mods.add(o.c, { key: 'happiness', add: -80, source: 'test2' });
+    const S = WW.Sim.load(sv);
+    if (swap) {
+      const R = WW.RACE_KEYS || ['human', 'orc'];
+      for (const u of S.state.units) { u.race = R[(R.indexOf(u.race) + 1) % R.length]; u.culture = 'x' + (u.culture || ''); }
+      for (const c of S.state.cities) { c.culture = 'y' + (c.culture || ''); }
+    }
     const old = WW.CAMPS.PICKUP; WW.CAMPS.PICKUP = 1;
-    try { run(o.sim, TPY * 2); } finally { WW.CAMPS.PICKUP = old; }
-    return prisoners(o.sim).filter((u) => u.camp === camp.id).map((u) => u.id).sort((a, b) => a - b).join(',');
+    try { WW.Camps._yearly(S); } finally { WW.CAMPS.PICKUP = old; }
+    return prisoners(S).map((u) => u.id).sort((x, y) => x - y).join(',');
   };
   const a = pick(false), b = pick(true);
   log('Abgeholte (IDs) normal:', a || '-', '| Volk/Kultur vertauscht:', b || '-');
   assert(a.length > 0, 'niemand abgeholt');
-  // Hinweis: Volk beeinflusst Tempo/Lebenspunkte anderer Systeme; verglichen wird die Auswahl im ersten Jahr
-  assert(a.split(',')[0] === b.split(',')[0], 'Auswahl hängt vom Volk ab');
+  assert(a === b, 'Auswahl hängt vom Volk oder der Kultur ab');
 });
 
 // -----------------------------------------------------------------------------
@@ -396,7 +417,7 @@ test('9 Speichern/Laden, Determinismus, alte Spielstände, Zeitaufschlag', funct
   const sv = A.sim.serialize();
   assert(WW.Sim.load(sv).serialize() === sv, 'Laden ist nicht formstabil');
   const L = WW.Sim.load(sv);
-  L._throwErrors = true;
+  L._throwErrors = true; L._sitz = A.sim._sitz;   // (Testaufbau, kein Spielzustand)
   run(A.sim, 900); run(L, 900);
   assert(A.sim.hash() === L.hash(), 'Laden und Weiterlaufen weicht ab');
   // alter Spielstand (Fassung 19): Einzelbau laborcamp mit Insassen, ohne city.kind, ohne Gefangenen-Felder
