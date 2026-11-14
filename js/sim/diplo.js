@@ -561,7 +561,7 @@
     for (const u of st.units) {
       if (u.garrison == null) continue;
       const c = sim._cities.get(u.garrison);
-      if (u.dead || !c || c.kingdomId !== u.kingdomId || u.role !== 'soldier') { if (!u.dead) release(u); continue; }
+      if (u.dead || !c || c.kingdomId !== u.kingdomId || (u.role !== 'soldier' && !u.vehicle)) { if (!u.dead) release(u); continue; }   // Fahrzeuge [mil] dürfen stationiert sein
       cnt.set(c.id, (cnt.get(c.id) || 0) + 1);
     }
     const halls = new Set();
@@ -599,7 +599,7 @@
       } else if (n > w + (city.garrisonSet != null ? 0 : 2) && city._members) {
         // überzählige Garnison wird wieder normale Wache
         let drop = city.garrisonSet != null ? n - w : 1;
-        for (const u of st.units) { if (drop <= 0) break; if (u.garrison === city.id && !u.dead) { release(u); n--; drop--; } }
+        for (const u of st.units) { if (drop <= 0) break; if (u.garrison === city.id && !u.dead && !u.vehicle) { release(u); n--; drop--; } }   // Fahrzeuge bleiben
         city.garrison = n;
       }
       city.garrisonRatio = w > 0 ? Math.min(1, n / w) : (n > 0 ? 1 : 0);
