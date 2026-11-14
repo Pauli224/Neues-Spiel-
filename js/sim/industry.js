@@ -38,16 +38,19 @@
 //                    WW.Industry.at(state, x, y) -> 0..255. Ab ~60 Dunst sichtbar, ab 170 Säureregen-Gefahr.
 //   state.murk       Uint8Array(W * H), Trübung von Wasserkacheln 0..255 (entsteht auf 'river' unter verschmutzter Luft,
 //                    fließt stromabwärts – zu Wassernachbarn mit geringerer state.height, sonst gleich hoch – bis wenige
-//                    Kacheln ins Meer; > 0 trüb, weniger Fisch). Dirty-Kacheln, wenn sich murk >> 6 ändert.
+//                    Kacheln ins Meer; > 0 trüb, weniger Fisch). Dirty-Kacheln, wenn sich murk >> 3 ändert oder 0 <-> > 0.
 //   state.barren     Uint8Array(W * H), ausgelaugter, grauer Boden 0..255 (Landkacheln). Steigt unter Luft ≥ TH_BARREN (45)
 //                    und durch Ruß im Umkreis 3,5 aktiver Fabriken, heilt bei Luft < 30 um 4 je 60 Ticks.
 //                    Stufen: ≥ 80 Feld trägt weniger, ≥ 95 Bäume sterben (Gelände deforested + state.cleared = tote
 //                    Stämme), ≥ 230 Wiese/Blumen/Savanne/Tundra -> 'ash' (dauerhaft). Dirty-Kacheln bei barren >> 6.
-//                    Darstellung: grau überlagern ab ~64.
+//                    Darstellung: Stufen 0 / >0 / >85 / >170 (Kachel-Meldung nur beim Stufenwechsel, Hysterese ±BARREN_HYST).
+//   state.soot       Uint8Array(W * H), Ruß 0..SOOT_MAX im Umkreis SOOT_R aktiver Fabriken (Landkacheln); steigt je
+//                    Folgen-Durchlauf, klingt ohne Fabrik um SOOT_DECAY ab. Darstellung an/aus (> 0); Meldung nur dabei.
+//                    Gespeichert als rasters.soot (nur wenn vorhanden; fehlt = leer).
 //   state.wind       { dx, dy (Einheitsvektor aus 16 Richtungen), dir 0..15 (0 = Osten, im Uhrzeigersinn, 4 = Süden),
 //                    str 0.6..1 } – dreht sich langsam (alle 120 Ticks evtl. um 1/16).
 //   state.industry   { any (Summe der Verschmutzung beim letzten Schritt, 0 = alles sauber), murk (Anzahl trüber Kacheln),
-//                    barren (Anzahl ausgelaugter Kacheln) }
+//                    barren (Anzahl ausgelaugter Kacheln), soot (Anzahl berußter Kacheln) }
 //
 // KENNZAHLEN
 //   city.pollution 0..100 (Luft über der Stadt), city.indActive (aktive Fabriken), city.indNext (Tick der nächsten
@@ -97,12 +100,13 @@
     if (!(st.pollution instanceof Uint8Array) || st.pollution.length !== d.pw * d.ph) st.pollution = new Uint8Array(d.pw * d.ph);
     if (!(st.murk instanceof Uint8Array) || st.murk.length !== st.W * st.H) st.murk = new Uint8Array(st.W * st.H);
     if (!(st.barren instanceof Uint8Array) || st.barren.length !== st.W * st.H) st.barren = new Uint8Array(st.W * st.H);
+    if (!(st.soot instanceof Uint8Array) || st.soot.length !== st.W * st.H) st.soot = new Uint8Array(st.W * st.H);
     const w = st.wind && typeof st.wind === 'object' ? st.wind : {};
     w.dir = (w.dir | 0) & 15; w.str = typeof w.str === 'number' && isFinite(w.str) ? w.str : 0.8;
     const D = WW.Cities.DIRS16[w.dir]; w.dx = D[0]; w.dy = D[1];
     st.wind = w;
     const s = st.industry && typeof st.industry === 'object' ? st.industry : {};
-    s.any = +s.any || 0; s.murk = s.murk | 0; s.barren = s.barren | 0;
+    s.any = +s.any || 0; s.murk = s.murk | 0; s.barren = s.barren | 0; s.soot = s.soot | 0;
     st.industry = s;
     if (st.laws && !('industry' in st.laws) && WW.LAW_DEFAULTS && 'industry' in WW.LAW_DEFAULTS) st.laws.industry = WW.LAW_DEFAULTS.industry;
     // city.pollution / kingdom.pollution ergänzt der Takt (plan); hier nichts an Städten ändern (Laden bleibt formstabil)
@@ -112,9 +116,12 @@
   function save(st, o) {
     delete o.pollution;
     if (st.pollution) o.rasters.pollution = WW.SimUtil.encodeArray(st.pollution);
+    delete o.soot;
+    if (st.soot && st.industry && st.industry.soot > 0) o.rasters.soot = WW.SimUtil.encodeArray(st.soot);
   }
   function load(st, o) {
     if (o.rasters && o.rasters.pollution) { const d = dims(st); st.pollution = WW.SimUtil.decodeArray(o.rasters.pollution, Uint8Array, d.pw * d.ph); }
+    if (o.rasters && o.rasters.soot) st.soot = WW.SimUtil.decodeArray(o.rasters.soot, Uint8Array, st.W * st.H);
   }
   function at(st, x, y) {
     if (!st.pollution) return 0;
@@ -500,6 +507,8 @@
     const T = WW.T, LUT = WW.TERRAIN_LUT;
     let changed = false;
     const treeDead = any ? new Map() : null;
+    const murkPass = any || st.industry.murk > 0;
+    if (murkPass) murkBegin(sim);
     if (any) {
       for (let cy = 0; cy < d.ph; cy++) for (let cx = 0; cx < pw; cx++) {
         const v = pol[cy * pw + cx];
@@ -537,6 +546,7 @@
       if (changed) sim.terrainChanged();
     }
     if (st.industry.murk > 0) spreadMurk(sim);
+    if (murkPass) murkEnd(sim);
     const treeMap = treeDead || new Map();
     soil(sim, treeMap);
     // Städte: Kennzahl, Mods, Chronik
@@ -626,10 +636,36 @@
     }
   }
 
+  // Kachel-Meldungen nur bei sichtbarer Änderung (der Renderer zeichnet murk in 8er-Stufen, barren in den Stufen
+  // 0 / >0 / >85 / >170, soot nur an/aus). barren mit kleiner Hysterese (BARREN_HYST) an den Grenzen 85 und 170.
+  // murk wird während eines Durchlaufs mehrfach geschrieben (Zufluss, Ausbreitung, Abklingen): gemeldet wird erst am
+  // Ende des Durchlaufs gegen den Stand davor (murkBegin/murkEnd), sonst meldeten Zwischenwerte Kacheln ohne Änderung.
   function setMurk(sim, i, v) {
-    const st = sim.state, o = st.murk[i];
-    st.murk[i] = v;
-    if ((o >> 6) !== (v >> 6)) sim.markDirty(i);
+    const m = sim.state.murk;
+    if (m[i] === v) return;
+    if (!sim._murkPre) { const o = m[i]; m[i] = v; if ((o >> 3) !== (v >> 3) || !o !== !v) sim.markDirty(i); return; }
+    m[i] = v;
+  }
+  function murkBegin(sim) {
+    const m = sim.state.murk;
+    let pre = sim._murkPreBuf;
+    if (!pre || pre.length !== m.length) pre = sim._murkPreBuf = new Uint8Array(m.length);
+    pre.set(m); sim._murkPre = pre;
+  }
+  function murkEnd(sim) {
+    const pre = sim._murkPre, m = sim.state.murk;
+    sim._murkPre = null;
+    if (!pre) return;
+    for (let i = 0; i < m.length; i++) {
+      const o = pre[i], v = m[i];
+      if (o !== v && ((o >> 3) !== (v >> 3) || !o !== !v)) sim.markDirty(i);
+    }
+  }
+  function barrenVisible(o, v) {
+    if (!o !== !v) return true;
+    const h = CF().BARREN_HYST | 0;
+    if (v > o) return (o <= 85 + h && v > 85 + h) || (o <= 170 + h && v > 170 + h);
+    return (o > 85 - h && v <= 85 - h) || (o > 170 - h && v <= 170 - h);
   }
   // Trübung fließt stromabwärts (Nachbar-Wasser mit geringerer Höhe, sonst gleich hoch) bis ein Stück ins Meer
   // und klingt ab. Arbeitet auf einer Kopie: Ergebnis hängt nur vom Raster ab, nicht von der Reihenfolge.
@@ -668,8 +704,15 @@
   // Wiese/Steppe zu Aschefeld (dauerhaft). Rückgabe: Map Stadt-ID -> abgestorbene Bäume
   function setBarren(sim, i, v) {
     const b = sim.state.barren, o = b[i];
+    if (o === v) return;
     b[i] = v;
-    if ((o >> 6) !== (v >> 6)) sim.markDirty(i);
+    if (barrenVisible(o, v)) sim.markDirty(i);
+  }
+  function setSoot(sim, i, v) {
+    const so = sim.state.soot, o = so[i];
+    if (o === v) return;
+    so[i] = v;
+    if (!o !== !v) sim.markDirty(i);
   }
   function soil(sim, treeDead) {
     const st = sim.state, C = CF(), d = dims(st), W = st.W, H = st.H, pw = d.pw, pol = st.pollution, b = st.barren;
@@ -685,8 +728,9 @@
           setBarren(sim, i, Math.min(255, b[i] + add));
         }
       }
-      // Ruß im Umkreis aktiver Fabriken
-      const R = C.SOOT_R;
+      // Ruß im Umkreis aktiver Fabriken (laugt den Boden aus und liegt als schwarze Schicht: state.soot)
+      const R = C.SOOT_R, so = st.soot;
+      if (so && ind.soot > 0) for (let i = 0; i < W * H; i++) if (so[i]) setSoot(sim, i, Math.max(0, so[i] - C.SOOT_DECAY));
       for (const s of activeList(sim)) {
         if (s.dead || !s.active) continue;
         const mx = s.x + s.w / 2, my = s.y + s.h / 2, add = s.filtered ? 1 : C.SOOT;
@@ -694,11 +738,18 @@
           const dx = x + 0.5 - mx, dy = y + 0.5 - my;
           if (dx * dx + dy * dy > R * R) continue;
           const i = y * W + x;
-          if (!LUT.water[st.terrain[i]]) setBarren(sim, i, Math.min(255, b[i] + add));
+          if (LUT.water[st.terrain[i]]) continue;
+          setBarren(sim, i, Math.min(255, b[i] + add));
+          if (so) setSoot(sim, i, Math.min(C.SOOT_MAX, so[i] + C.SOOT_DECAY + add));
         }
       }
+      if (so) { let ns = 0; for (let i = 0; i < W * H; i++) if (so[i]) ns++; ind.soot = ns; }
+    } else if (st.soot && ind.soot > 0) {
+      const so = st.soot; let ns = 0;
+      for (let i = 0; i < W * H; i++) if (so[i]) { setSoot(sim, i, Math.max(0, so[i] - C.SOOT_DECAY)); if (so[i]) ns++; }
+      ind.soot = ns;
     }
-    if (!(ind.barren > 0) && !(ind.any > 0)) return false;
+    if (!(ind.barren > 0) && !(ind.any > 0)) return false;   // (Ruß ohne Luftverschmutzung klingt oben ab)
     let n = 0, changed = false, ash = 0;
     const ASHABLE = {}; ASHABLE[T.GRASS] = 1; ASHABLE[T.FLOWERS] = 1; ASHABLE[T.SAVANNA] = 1; ASHABLE[T.TUNDRA] = 1;
     for (let i = 0; i < W * H; i++) {
@@ -790,7 +841,7 @@
     if (t % C.STEP === 7) step(sim);
     if (t % 120 === 61) windTurn(sim);
     const ind = st.industry;
-    if (t % C.EFFECT_EVERY === 41 && (ind.any > 0 || ind.murk > 0 || ind.barren > 0 || sim._indDirtyCities !== false)) {
+    if (t % C.EFFECT_EVERY === 41 && (ind.any > 0 || ind.murk > 0 || ind.barren > 0 || ind.soot > 0 || sim._indDirtyCities !== false)) {
       effects(sim); kingdomStats(sim);
       sim._indDirtyCities = ind.any > 0 || ind.murk > 0 || ind.barren > 0;
     }

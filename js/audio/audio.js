@@ -288,6 +288,7 @@
     splash: () => ['splash'], fishjump: () => ['splash', 1.6, 'fish'], firebreath: () => ['dragon'], zombify: () => ['snarl', 0.8, 'zombify'],
     govchange: () => ['bells', 1, 'gov'], restyle: () => ['bell', 1, 'restyle'], centerStage: () => ['bells', 1, 'center'],
     whistle: () => ['whistle'],
+    shell: () => ['cannon', 0.9, 'shell'], tankfire: () => ['cannon', 1.25, 'tankfire'], dig: () => ['build', 0.7, 'dig', 3, 0.4],   // [mil]
     // Baumfällen: leises Holzknacken, höchstens eins alle 2 s
     treeFall: () => ['chop', 0.8, 'treeFall', 2, 0.5]
   };

@@ -17,6 +17,7 @@
       if (!c) continue;
       s += c.pop * 0.5 + (c.jobs.soldier || 0) * 2 + (c.wall.level || 0) * 3;
     }
+    if (WW.Military) s += WW.Military.strength(sim, k);   // [mil] Panzer und Geschütze zählen mit
     return s;
   }
 

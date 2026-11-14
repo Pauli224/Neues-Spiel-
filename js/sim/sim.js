@@ -12,6 +12,7 @@
 //    js/sim/wild.js vor env.js – siehe tests/load.js)
 //   (Industrie: js/core/config-industry.js nach config.js, js/data/texts-industry.js nach texts.js, js/sim/industry.js,
 //    js/sim/rail.js, js/sim/camps.js vor sim.js; Doku in deren Kopfkommentaren)   // [industry]
+//   (Militär: js/core/config-mil.js, js/data/texts-mil.js, js/sim/military.js nach camps.js; Doku im Kopf von military.js)   // [mil]
 //
 // ERZEUGEN
 //   const sim = WW.Sim.create(opts)          opts (alle optional):
@@ -193,6 +194,58 @@
 //   type 'silent' schreiben keine Chronik; nach jedem Regierungswechsel WW.Events.onGovChange(sim, kingdom), falls vorhanden.
 //   Heere: Wegsuche gedeckelt (CONFIG.PATH_LIMIT_ARMY, ARMY_PATH_SHARE des Budgets je Tick, u.nextPath = Wartezeit).
 //   Farmer sammeln bei knappen Vorräten Beeren im Wald (task 'forage', CONFIG.FORAGE). city.resCache = Rohstoff-Zwischenspeicher.
+//
+// AUSBAU 9 – ROHSTOFFE, KULTUREN, NAMEN, KACHEL-MELDUNGEN (Simulation Kern; verbindlich für Grafik, Darstellung, Militär,
+//   Industrie. Nur Ergänzungen, alte Felder und Aufrufe bleiben gültig.)
+// ROHSTOFFE
+//   Lager: city.stock (Kommunismus: kingdom.stock) hat immer alle Schlüssel aus WW.RESOURCE_KEYS:
+//     food, wood, stone, gold, iron, coal, fish, crystal, wool (WW.RESOURCES[]: { key, name, icon 'i_<key>', base, from, use }).
+//     Zugriff immer über WW.Cities.stock(sim, city) (liefert bei geteiltem Lager das Reichslager).
+//     WW.Resources.has(sim, city, { iron: 2, coal: 1 }) -> bool, WW.Resources.take(sim, city, { iron: 2, coal: 1 }) -> bool
+//     (alles oder nichts; für Arsenal/Panzer, Fabriken, Züge).
+//   Vorkommen: state.deposit Uint8 (W*H), Code -> Art über WW.DEPOSITS = [null,'iron','coal','gold','crystal','fish'],
+//     WW.DEPOSIT_CODE. Gespeichert; alte Spielstände: deterministisch aus dem Weltsamen erzeugt. Erschöpfte Kacheln -> 0.
+//   Bauwerke (alle 2×2, außerhalb des Rings, Schmiede bevorzugt innen): mine { res 'iron'|'coal'|'gold'|'crystal', left (Restvorrat;
+//     0 -> Ruine, Ereignis mineDepleted) }, smithy, fishery (am Flachwasser mit Fisch), pasture (Weide). Ereignis mineOpened.
+//   Wirkung: city.armed 0|1|2 (Schmiede mit Eisen | Eisen + Kohle): Soldaten Kampfkraft ×1,25/×1,35, Leben ×1,15
+//     (WW.Resources.armMul/armorMul). Fisch wird zuerst gegessen. Wolle: Zufriedenheit (+8 in Kälte, sonst +3), city.cold 0|1;
+//     Kälte ohne Wolle -4 (nicht für Kultur nord). Kristall: über Markt/Handelsrepublik zu Gold. Kohle: Schmiede, Fabriken, Züge.
+// KULTUREN (WW.CULTURES[key], WW.CULTURE_KEYS)
+//   Schlüssel: mitte (gemäßigt, Standard für Menschen), nord (Schnee, Tundra, Nadelwald), sahel (Wüste, Savanne; Vorbild
+//     Sahel-Reiche und Sahara-Nomaden), nil (Wüste/Savanne mit Fluss im Umkreis 6; Vorbild Kusch/Nubien), dazu je Fantasievolk
+//     eine Kultur mit dem Volksschlüssel: elf, dwarf, orc, gnome, frog.
+//   Eintrag: { key, name, adj, people, note (Vorbild), biomes [Geländeschlüssel], race (nur Fantasievölker), style (Baustil-Schlüssel
+//     für Sprites, = key), bonus { Mod-Schlüssel: Faktor }, bonusText [lesbar], special ('caravanserai'|'pyramid'|null),
+//     desertWalk, irrigation, riverFields, coldProof }.
+//   Felder: city.culture, kingdom.culture (Kultur der Hauptstadt, folgt ihr), unit.culture (Geburtsstadt; Kinder erben).
+//     Gespeichert; alte Spielstände: Menschen 'mitte', sonst Volksschlüssel.
+//   WW.Culture.pick(sim, x, y, race) -> Schlüssel (Volk + Gelände im Umkreis), WW.Culture.of(obj) -> Schlüssel,
+//     WW.Culture.info(key) -> Eintrag (Rückfall mitte).
+//   Boni: dauerhafte Mods an der Stadt (city.mods, source 'culture', über WW.Mods; ohne mods.js direkt in WW.SimUtil.mod):
+//     mitte wood ×1,1, build ×1,05 · nord fish ×1,3, keine Kältenachteile · sahel gold ×1,25, kein Tempoabzug in Wüste/Sand,
+//     Karawanen · nil Felder an Flüssen ×1,5 (food), Pyramide (Zufriedenheit). sahel/nil: Bewässerungsfelder auf Wüste/Sand
+//     im Umkreis 3 um Wasser (field.irrigated = true; Darstellung: Gräben).
+//   Sonderbauten: 'caravanserai' (2×2, sahel, je Stadt 1; schickt Karawanen) und 'pyramid' (1×1, nil, je Stadt 1; level 0..2 =
+//     Ausbaustufe, Sprite s_monument_<level> laut PLAN-9 – der Typ 'monument' bleibt das Regierungsdenkmal).
+//   Karawane: Einheit role 'caravan' (Name „Karawanenführer"), u.camel = true (Kamel daneben zeichnen), läuft zwischen ihrer Stadt
+//     und einer befreundeten Stadt (eigenes Reich, Bündnis oder Frieden mit Meinung ≥ 0); Ankunft: Gold für beide Städte,
+//     Fx caravan { x, y }. Tier 'camel' (WW.CREATURES.camel, Lasttier, friedlich, Wüste/Savanne).
+//   spawnSettlers(x, y, count, govKeyOrNull, raceKey?, cultureKey?) – 6. Parameter optional; ohne Angabe nach Volk + Gelände.
+//   create-Option cultures: Liste von Kulturschlüsseln (zyklisch) für die Startreiche.
+// NAMEN (js/data/names.js)
+//   WW.Names.place(culture, rng, biomeKey?, used?) -> Ortsname (ernst, je Kultur; used = Set gegen Dopplungen in der Welt)
+//   WW.Names.realm(govKey, culture, stem, seed) -> „Königreich Falkenau", „Mansa-Reich Tombara", „Volksrepublik Frostvik" …
+//     (seed: Zahl, z. B. Reichs-ID, wählt die Form stabil). Stamm = kingdom.baseName (Name der Hauptstadt bei Gründung).
+//   WW.Names.person(culture, rng, female) -> Vorname; WW.Names.title(govKey, culture) -> { m, f } (Mansa, Qore/Kandake, Jarl …).
+//   kingdom.name wechselt bei Regierungswechsel die Form, baseName bleibt; Ereignis realmRenamed { old, kingdom }.
+//   Alte Aufrufe bleiben: town(rng, race, used), person(rng, race, female), realm(baseName, gov).
+// KACHEL-MELDUNGEN
+//   drainDirtyTiles meldet nur noch Kacheln mit sichtbarer Änderung (Prüfsumme sim._visSig: Gelände, Variante, Höhe, Bauwerk-ID,
+//     -Art, -Stufe, -Maske, -Stil, -Material, -stage, built, Feuer, Marke, Rodung, grazed, Verödung 3 Stufen, Ruß, murk/crack/
+//     fallout in 8er-Stufen, flora, Vorkommen, Gebiet, Ring). NICHT gemeldet: Feldwachstum, Baufortschritt, Lebenspunkte (Bauwerke
+//     werden ohnehin je Bild aus dem Zustand gezeichnet).
+//   state.grazed Uint8 (W*H, gespeichert): 1 = sichtbar abgeweidet, mit Hysterese (an ab CONFIG.GRAZED_ON 140, aus unter
+//     GRAZED_OFF 110). Darstellung bitte st.grazed[i] statt graze[i] >= 128 lesen (auch in groundSig).
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -259,6 +312,9 @@
     this._seedHash = WW.RNG.hashSeed(state.seed);
     WW.Path.init(this);
     WW.Structs.rebuildBlock(this);
+    if (!state.grazed || state.grazed.length !== N) state.grazed = new Uint8Array(N);
+    this._vsig = new Int32Array(N);
+    for (let i = 0; i < N; i++) this._vsig[i] = this._visSig(i);
     this._unitsDirty = this._animalsDirty = this._structsDirty = false;
     const sim = this;
     this.actions = makeActions(sim);
@@ -270,12 +326,59 @@
     this._dirtyFlag[i] = 1;
     if (this._dirty.length < this.state.W * this.state.H) this._dirty.push(i); else this._allDirty = true;
   };
+  // Sichtbare Prüfsumme einer Kachel: alles, was die Darstellung je Kachel aus dem Zustand liest (Gelände, Höhe,
+  // Variante, Bauwerk-Art/Stil/Maske – nicht Wachstum, Baufortschritt, Leben –, Feuer, Marke, Rodung, Beweidung mit
+  // Hysterese (state.grazed), Trübung/Risse/Fallout in 8er-Stufen, Verödung in 3 Stufen, Ruß, Vorkommen, Gebiet, Ring).
+  // drainDirtyTiles meldet nur Kacheln, deren Prüfsumme sich seit der letzten Meldung geändert hat.
+  Sim.prototype._visSig = function (i) {
+    const st = this.state;
+    let h = Math.imul(2166136261 ^ (st.terrain[i] | (st.variant[i] << 8) | (st.height[i] << 16)), 16777619);
+    const sid = st.structAt[i];
+    if (sid >= 0) {
+      const s = this._structs.get(sid);
+      h = Math.imul(h ^ sid, 16777619);
+      if (s) {
+        h = Math.imul(h ^ (strHash(s.type) + (s.built ? 1 : 0) * 7 + (s.level | 0) * 131 + ((s.mask | 0) << 12) + (s.bridge ? 1 << 18 : 0) + ((s.stage | 0) << 20)), 16777619);
+        if (s.style || s.restyle || s.mat || s.orient) h = Math.imul(h ^ strHash((s.style || '') + '|' + (s.restyle || '') + '|' + (s.mat || '') + '|' + (s.orient || '')), 16777619);
+      }
+    }
+    const b = st.barren ? st.barren[i] : 0;
+    h = Math.imul(h ^ ((st.fire[i] ? 1 : 0) | (st.mark[i] << 1) | ((st.cleared[i] ? 1 : 0) << 9) | ((st.grazed && st.grazed[i] ? 1 : 0) << 10) |
+      ((b ? (b > 170 ? 3 : b > 85 ? 2 : 1) : 0) << 11) | ((st.soot && st.soot[i] ? 1 : 0) << 13) | (st.deposit[i] << 14) |
+      ((st.flora ? st.flora[i] & 15 : 0) << 18) | ((st.murk ? st.murk[i] >> 3 : 0) << 22)), 16777619);
+    h = Math.imul(h ^ ((st.crack ? st.crack[i] >> 3 : 0) | ((st.fallout ? st.fallout[i] >> 3 : 0) << 5) | ((st.fire[i] >> 4) << 10)), 16777619);
+    h = Math.imul(h ^ st.owner[i], 16777619);
+    h = Math.imul(h ^ st.inRing[i], 16777619);
+    return h | 0;
+  };
   Sim.prototype.drainDirtyTiles = function () {
-    const out = Int32Array.from(this._dirty);
-    for (let k = 0; k < this._dirty.length; k++) this._dirtyFlag[this._dirty[k]] = 0;
-    this._dirty.length = 0;
+    const d = this._dirty, sig = this._vsig, all = this._allDirty;
+    let n = 0;
+    for (let k = 0; k < d.length; k++) {
+      const i = d[k];
+      this._dirtyFlag[i] = 0;
+      const v = this._visSig(i);
+      if (v !== sig[i] || all) { sig[i] = v; d[n++] = i; }
+    }
+    const out = Int32Array.from(n === d.length ? d : d.slice(0, n));
+    d.length = 0;
     this._allDirty = false;
     return out;
+  };
+  // Beweidung sichtbar mit Hysterese (an ab GRAZED_ON, aus unter GRAZED_OFF); je Tick ein Streifen der Karte
+  Sim.prototype._sweepGrazed = function () {
+    const st = this.state, gz = st.graze, gd = st.grazed;
+    if (!gz || !gd) return;
+    const N = gz.length, step = Math.ceil(N / 40);
+    const C = WW.CONFIG, on = C.GRAZED_ON, off = C.GRAZED_OFF;
+    let i = st.grazePos | 0;
+    const end = Math.min(N, i + step);
+    for (; i < end; i++) {
+      const v = gz[i];
+      if (gd[i]) { if (v < off) { gd[i] = 0; this.markDirty(i); } }
+      else if (v >= on && WW.TERRAIN_LUT.fertile[st.terrain[i]] > 0) { gd[i] = 1; this.markDirty(i); }
+    }
+    st.grazePos = i >= N ? 0 : i;
   };
   Sim.prototype.fx = function (f) {
     if (this._fx.length < 600) this._fx.push(f);
@@ -332,12 +435,14 @@
     compact(this);
     // Statistik (pop, jobs, _members) wird von den Verbrauchern selbst erneuert (alle 10/40 Ticks, jährlich)
     WW.Units.buildBuckets(this);
+    this._sweepGrazed();
     WW.Units.updateAll(this);
     WW.Creatures.updateAll(this);
     WW.Env.update(this);
     if (WW.Mods && st.tick % 10 === 3) WW.Mods.tick(this);   // [events]
     if (WW.Events) WW.Events.tick(this);   // [events]
     if (WW.Industry) WW.Industry.tick(this);   // [industry]
+    if (WW.Military) WW.Military.tick(this);   // [mil] Arsenale, Schlachten, Gräben (js/sim/military.js)
     if (st.tick % 10 === 0) WW.Cities.updateAll(this);
     if (st.tick % 20 === 5) WW.Gov.update(this);
     if (st.tick % 40 === 15) { WW.Cities.stats(this); WW.Diplo.update(this); }
@@ -363,8 +468,10 @@
   // ---------------------------------------------------------------------------
   const RASTERS = [['terrain', Uint8Array], ['variant', Uint8Array], ['height', Uint8Array], ['owner', Int32Array],
     ['structAt', Int32Array], ['fire', Uint8Array], ['inRing', Int32Array], ['mark', Uint8Array], ['cleared', Uint8Array], ['chops', Uint8Array], ['deposit', Uint8Array],
-    ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array]];   // [wild] Raster der Wildnis
+    ['flora', Uint8Array], ['graze', Uint8Array], ['fallout', Uint8Array], ['crack', Uint8Array],   // [wild] Raster der Wildnis
+    ['grazed', Uint8Array]];
   if (WW.Industry) RASTERS.push(['murk', Uint8Array], ['barren', Uint8Array]);   // [industry] Flusstrübung (pollution hat eigene Größe: WW.Industry.save/load)
+  if (WW.Military) RASTERS.push(['trench', Uint8Array]);   // [mil] Schützengräben
 
   function replacer(key, value) {
     if (key && key.charCodeAt(0) === 95) return undefined;   // '_' = Laufzeit
@@ -409,6 +516,7 @@
     if (!o.rasters.owner) st.owner.fill(-1);
     if (!o.rasters.structAt) st.structAt.fill(-1);
     if (!o.rasters.inRing) st.inRing.fill(-1);
+    if (!o.rasters.grazed && st.graze) for (let i = 0; i < N; i++) st.grazed[i] = st.graze[i] >= 128 && WW.TERRAIN_LUT.fertile[st.terrain[i]] > 0 ? 1 : 0;
     defaults(st);
     const sim = new Sim(st, o.rng);
     WW.Growth.ensure(sim);
@@ -436,6 +544,7 @@
     st.worldName = st.worldName || 'Wuselwelt';
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
     if (WW.Industry) WW.Industry.defaults(st);   // [industry]
+    if (WW.Military) WW.Military.defaults(st);   // [mil]
     if (WW.Events) WW.Events.defaults(st);   // [events] mods, laws, Ereignis-Zustand
   }
 
@@ -477,6 +586,7 @@
     for (const k in st.laws) if (!(k in WW.LAW_DEFAULTS)) delete st.laws[k];
     if (WW.Wild) WW.Wild.defaults(st);   // [wild]
     if (WW.Industry) WW.Industry.defaults(st);   // [industry]
+    if (WW.Military) WW.Military.defaults(st);   // [mil]
     const sim = new Sim(st, null);
     WW.Growth.ensure(sim);
     WW.Resources.generate(sim);
@@ -732,6 +842,7 @@
       acts.setRealmLawLocked = safe(function (kid, key, v) { return WW.Events.setRealmLawLocked(sim, kid, key, v); });   // [events]
     }   // [events]
     if (WW.Wild) Object.assign(acts, WW.Wild.actions(sim, safe));   // [wild] grab, drop, held, aimAircraft, placeLair, spawnBandits
+    if (WW.Military) Object.assign(acts, WW.Military.actions(sim, safe));   // [mil] placeVehicle, orderBattle
     return acts;   // [wild]
   }
 

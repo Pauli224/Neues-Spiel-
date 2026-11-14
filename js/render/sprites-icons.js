@@ -1,5 +1,6 @@
 // Wuselwelt – Pixelkunst: UI-Icons (16×16, mit dunkler Kontur, für helle wie dunkle Tafeln).
 // Inhalt wird auf 14×14 gezeichnet und danach umrandet. Abruf über WW.Sprites.iconCanvas(key, scale).
+// Ausbau 9: i_tank, i_artillery, i_battle, i_pow, i_culture und die Zeichen e_<gov> (siehe Kopf von sprites.js).
 (function (WW) { 'use strict';
 
   (WW._spriteBuilders = WW._spriteBuilders || []).push(function (L) {

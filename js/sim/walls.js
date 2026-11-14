@@ -16,6 +16,12 @@
 //   explosion {x,y,r} (Kanone), arrow {x,y,x2,y2} (Bürgerposten), ward {x,y,r} (Bannkreis), spikes {x,y}, dud {x,y} (Falle).
 //   Ereignisse: wallLevel / wallLevelDone { city, name } (Ausbau auf Stufe 4–6 bzw. Holzstufen von Stamm/Anarchie),
 //   selfshotSheep { city } (Selbstschussanlage trifft ein Schaf), trapOops { city } (Falle trifft die eigenen Leute).
+//
+// [walls] LAGERZAUN (Lagerstadt city.kind 'camp', js/sim/camps.js): WW.Walls.planFence(sim, city, reserve, margin, toward)
+//   plant einen Ring wie eine Mauer, aber mit genau EINEM Tor (das zur Richtung toward {x,y} nächste), ohne Türme und
+//   Geräte; Stücke type 'wall'/'gate', mat 'fence', level 1; city.wall.style 'fence'. WW.Walls.fenceUpdate(sim, city)
+//   ergänzt fehlende Stücke und meldet true, sobald der Zaun fertig ist. Haltbarkeit setzt camps.js (WW.CAMPS.FENCE_HP),
+//   Bauen übernehmen die Wachen (camps.js). Kein Ausbau, keine Erweiterung, keine Geräte (Walls.update fasst ihn nicht an).
 (function (WW) { 'use strict';
 
   // Kerngebäude kommen aus der Tabelle (STRUCT_INFO[type].core)
@@ -477,7 +483,7 @@
       const lv = w.state === 'upgrading' ? w.target : Math.max(1, w.level || w.target || 1);
       const tt = st.terrain[t], nt = deforested(tt);
       if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
-      WW.Structs.create(sim, gateSet.has(t) ? 'gate' : 'wall', x, y, city.id, { level: lv, built: false, mat: wallStyle(gov, lv) });
+      WW.Structs.create(sim, gateSet.has(t) ? 'gate' : 'wall', x, y, city.id, { level: lv, built: false, mat: w.style === 'fence' ? 'fence' : wallStyle(gov, lv) });   // [walls] Lagerzaun bleibt Zaun
     }
   }
 
@@ -518,9 +524,61 @@
     return n;
   }
 
+  // [walls] Lagerzaun: Ring mit genau einem Tor, ohne Türme/Geräte, mat 'fence', Stufe 1
+  function planFence(sim, city, reserve, margin, toward) {
+    const st = sim.state, W = st.W;
+    const ring = computeRing(sim, city, margin == null ? 1.5 : margin, reserve == null ? 5 : reserve);
+    if (!ring || !ring.tiles.length) return false;
+    // ein Tor: das zur Richtung toward nächste (sonst das erste); fehlt eins, wird das Randstück zum Zentrum hin genommen
+    let gate = -1, bd = 1e18;
+    const tx = toward ? toward.x : city.cx, ty = toward ? toward.y : city.cy + 99;
+    for (const g of ring.gates) { const gx = g % W, gy = (g - gx) / W, d = (gx - tx) * (gx - tx) + (gy - ty) * (gy - ty); if (d < bd) { bd = d; gate = g; } }
+    if (gate < 0) return false;
+    WW.Growth.claimTiles(sim, city, ring.all.concat(ring.inside));
+    for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;
+    for (const i of ring.inside) if (st.inRing[i] === -1) st.inRing[i] = city.id;
+    for (const i of ring.inside) {
+      const s = sim._structs.get(st.structAt[i]);
+      if (s && s.type === 'field' && s.cityId === city.id) WW.Structs.remove(sim, s);
+    }
+    for (const t of ring.tiles) {
+      const x = t % W, y = (t - x) / W;
+      let s = sim._structs.get(st.structAt[t]);
+      const want = t === gate ? 'gate' : 'wall';
+      if (s && s.cityId === city.id && WW.Structs.isWallish(s)) { if (s.type === want) continue; WW.Structs.remove(sim, s); s = null; }
+      else if (s) {
+        if (s.cityId !== -1 && s.cityId !== city.id) continue;
+        if (CORE[s.type] || KEEP[s.type] || s.type === 'memorial') continue;
+        WW.Structs.remove(sim, s);
+      }
+      const tt = st.terrain[t], nt = deforested(tt);
+      if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
+      WW.Structs.create(sim, want, x, y, city.id, { level: 1, built: false, mat: 'fence', orient: ring.gateDir[t] || 'h' });
+    }
+    const w = city.wall;
+    w.plan = ring.all.slice(); w.gaps = []; w.gates = [gate]; w.towers = []; w.old = [];
+    w.target = 1; w.level = 0; w.style = 'fence'; w.state = 'building'; w.plannedYear = st.year; w.inside = ring.inside.length;
+    w.expansions = 0; w.devices = []; w.name = WW.WALL_STYLE_NAMES.fence || 'Zaun';
+    refreshCounts(sim, city);
+    WW.Cities.refreshLists(sim, city);
+    st.pathVersion++;
+    return true;
+  }
+  // [walls] Lagerzaun pflegen; true = eben fertig geworden
+  function fenceUpdate(sim, city) {
+    const w = city.wall;
+    if (!w || w.style !== 'fence' || !w.plan) return false;
+    repairPlan(sim, city);
+    refreshCounts(sim, city);
+    if (w.state === 'building' && w.total > 0 && w.built >= w.total) { w.state = 'done'; w.level = 1; return true; }
+    if (w.state === 'done' && w.built < w.total) w.level = 1;   // Bresche: bleibt Zaun, wird geflickt
+    return false;
+  }
+
   // Alle 3 s je Stadt
   function update(sim, city) {
     const st = sim.state, w = city.wall;
+    if (w && w.style === 'fence') { fenceUpdate(sim, city); return; }   // [walls] Lagerzaun
     const k = sim._kingdoms.get(city.kingdomId);
     if (!k) return;
     const gov = WW.GOVERNMENTS[k.gov];
@@ -620,7 +678,8 @@
     computeRing: computeRing, plan: plan, update: update, refreshCounts: refreshCounts,
     startUpgrade: startUpgrade, demolishAll: demolishAll, emptyWall: emptyWall, wallStyle: wallStyle,
     deforested: deforested, CORE: CORE, maxReserve: maxReserve,
-    levelInfo: levelInfo, levelName: levelName, assignDevices: assignDevices, clampLevel: clampLevel   // [walls]
+    levelInfo: levelInfo, levelName: levelName, assignDevices: assignDevices, clampLevel: clampLevel,   // [walls]
+    planFence: planFence, fenceUpdate: fenceUpdate   // [walls] Lagerzaun
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

@@ -393,6 +393,34 @@
       'Bei {city} beginnt jetzt {other_nom}. Die Bauern beider Seiten winken sich misstrauisch zu.',
       '{kingdom_nom} und {other_nom} sind jetzt Nachbarn. Erste Streitfrage: Wem gehört der Apfelbaum an der Grenze?'
     ],
+    // ---------------------------------------------------------------- Kulturen und Namen (Ausbau 9)
+    realmRenamed: [
+      'Aus {old} wird {kingdom}. An den Grenzen werden die Schilder übermalt, die alten heizen den Winter.',
+      '{old} heißt jetzt {kingdom}. Die Kartenzeichner seufzen und spitzen die Federn.',
+      'Neuer Name, gleiche Leute: {old} nennt sich ab heute {kingdom}. Die Briefboten lernen um.',
+      'Die Kanzleien schreiben es tausendfach ab: {kingdom}, vormals {old}. Die Tinte wird knapp.'
+    ],
+    caravanserai: [
+      'In {city} öffnet eine Karawanserei. Im Innenhof tränken Kamele, auf den Galerien wird gefeilscht.',
+      '{city} baut eine Karawanserei mit schattigem Hof. Händler aus allen Richtungen sind willkommen.',
+      'Die Karawanserei von {city} ist fertig. Die erste Karawane bricht auf, die Kamele sind wie immer skeptisch.'
+    ],
+    caravanArrives: [
+      'Eine Karawane aus {city} erreicht {other}. Salz, Tuch und Neuigkeiten wechseln den Besitzer.',
+      'Kamelglocken vor {other}: Händler aus {city} bringen Waren und Gold für beide Märkte.'
+    ],
+    pyramid: [
+      'Bei {city} wird der Grundstein einer Pyramide gelegt. Steil, klein und sehr stolz.',
+      '{city} beginnt eine Pyramide für die Ahnen. Die Steinmetze messen dreimal und schlagen einmal.'
+    ],
+    pyramidStage: [
+      'Die Pyramide von {city} wächst um eine Stufe. Von oben sieht man jetzt den Fluss glitzern.',
+      'Eine neue Lage Sandstein auf der Pyramide von {city}. Die Leute kommen zum Staunen vorbei.'
+    ],
+    irrigation: [
+      'Die Leute von {city} graben Kanäle vom Wasser in den Sand. Wo es nass wird, wächst Hirse.',
+      'Bewässerung in {city}: schmale Gräben, viele Eimer und am Ende grüne Felder mitten im Sand.'
+    ],
     // ---------------------------------------------------------------- Rohstoffe
     mineOpened: [
       'Bei {city} wird eine {res}mine in den Berg gegraben. Die Spitzhacken klingeln.',
@@ -596,6 +624,8 @@
   }
   function withArticle(name, cas) {
     name = String(name || '');
+    const ra = WW.Names && WW.Names.realmArticle ? WW.Names.realmArticle(name, cas) : null;   // Reichsformen aus names.js (gebeugt)
+    if (ra) return ra;
     const g = genderOf(name);
     if (!g) return name;
     if (cas === 'in') return (g === 'f' ? 'in der ' : 'im ') + name;

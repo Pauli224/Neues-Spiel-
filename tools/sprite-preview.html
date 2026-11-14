@@ -684,6 +684,19 @@
     });
   })();
 
+  // ---------------------------------------------------------------- Ausbau 9: Zeichen, Kulturen, Militär, Lagerstadt (?ausbau=zeichen|kulturen|militaer|lager&sc=4)
+  if (Q.get('ausbau')) (function () {
+    var which = Q.get('ausbau'), sc = +Q.get('sc') || 4;
+    var r = section('ausbau', 'Ausbau 9: ' + which + ' (Maßstab ' + sc + ')');
+    var c = document.createElement('canvas'); c.id = 'ausbaucv';
+    var build = WW.SpriteScene && WW.SpriteScene.ausbau && WW.SpriteScene.ausbau[which];
+    if (!build) { r.textContent = 'unbekannt: ' + which; return; }
+    var sz = build.size; c.width = sz[0] * 8 * sc; c.height = sz[1] * 8 * sc;
+    var x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(sc, sc);
+    build.draw(x, { groundRect: groundRect, fill: fill, S: S });
+    cell(r, '', c);
+  })();
+
   window.__preview = { section: section, canvas: canvas, cell: cell, showSprite: showSprite, groundRect: groundRect };
 })();
 </script>

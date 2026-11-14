@@ -1,6 +1,56 @@
 // Wuselwelt – Pixelkunst, Kern: Palette, Teamfarben, Raster-Werkzeuge, Atlas-Backen, Zeichen-API.
 // Die eigentlichen Motive stehen in sprites-world.js, sprites-units.js und sprites-icons.js.
 // Ladereihenfolge: sprites.js, dann die drei sprites-*.js (beliebig), dann WW.Sprites.init().
+//
+// ============================================================================ Ausbau 9 – Schlüssel für den Renderer (verbindlich)
+// Alles Neue ist träge (lazyDef, erst beim ersten Zeichnen gebacken, kostet keine Startzeit) und liegt im
+// feinen Raster (Maßstab 0,5). Maße in Logikpixeln (dw×dh), Anker wie gewohnt: x,y = linke obere Ecke der
+// Grundfläche; Gebäude unten bündig (ragen nach oben), Figuren/Fahrzeuge waagrecht mittig auf ihrer Kachel.
+// S.info(key) liefert die genauen Werte (w, h, fw, fh, ox, oy, dw, dh, scale).
+//  Zeichen der Regierungen
+//   S.emblemKey(gov) -> 'e_<gov>' (16×16, Anker 'icon' wie i_*): e_fascism Liktorenbündel, e_communism Hammer
+//     und Sichel mit Stern, e_monarchy Krone, e_democracy Urne, e_theocracy Sonne, e_republic Münze,
+//     e_anarchy gesprengte Kette, e_tribe Totem. Auch als iconCanvas nutzbar.
+//   S.flagKey(kind, pattern, frame, team, gov): 5. Parameter neu. Mit gov liefern 'pole' und 'hang' Fahnen mit
+//     Zeichen: 'fl_pole_<gov>_<p>_<f>' (gleicher Anker wie s_flagpole_*: ox -1, oy -18, 18×26) und
+//     'fl_hang_<gov>_<p>' (wie s_banner_hang_*: Anker icon, 8×18). Faschismus: dunkle Standarte mit goldenem
+//     Bündel, Saum in Reichsfarbe; Kommunismus: rotes Tuch, goldene Hammer und Sichel, Stern, Liek in
+//     Reichsfarbe; übrige: Reichsmuster mit Zeichen im Obereck. Ohne gov wie bisher. 'row'/'center' unverändert.
+//   Armbinden: automatisch an Soldaten und Anführern aller Regierungen (unitKey wie bisher).
+//   Banner an Zentrum (Faschismus/Kommunismus), Arsenal und Kommandantur sind eingezeichnet.
+//  Kulturen (sahel, nil, nord; 'mitte' und Volksschlüssel = bisherige Grafik)
+//   S.unitKey(race, role, gov, frame, culture): 5. Parameter optional -> 'hu_<cult>_<race>_<role>_<gov>_<frame>'
+//     (gleiche Maße/Anker wie h_*). Neue Rollen: 'caravan' (Karawanenführer, Indigo-Schleier bei sahel),
+//     'pow' (Kriegsgefangener: abgetragene Uniform des Reichs gov, ohne Waffe; geht auch ohne Kultur: h_*_pow_*).
+//   S.houseKey(gov, level, variant, culture): 4. Parameter optional -> 's_house_<cult>_<level>_<a|b>' (2×2),
+//     Stufe 0 -> 's_tent_<cult>_<a|b>' (2×2; sahel Nomadenzelte). S.houseVariantCount bleibt 2 für Kulturen.
+//   S.centerKey(gov, stage, culture, variant): Stufe 0 's_camp_<cult>_<f>' (Feuer f=0/1), 1 's_hall_<cult>',
+//     2 's_center_<cult>_<gov>' (alle 3×3). Ohne Kultur die bisherigen Schlüssel (campKey/hallKey/s_center_<gov>).
+//   S.marketKey(culture) -> 's_market_<cult>' bzw. 's_market' (2×2); S.templeKey(culture) -> 's_temple_<cult>'
+//     (2×2) bzw. null für mitte.
+//   Sonderbauten: 's_monument_0' / '_1' / '_2' (nil: steile kleine Pyramide in drei Baustufen, 2×2),
+//     's_caravanserai' (sahel, 3×3), 's_longhall' (nord, 3×2). S.monumentKey(gov, culture, stage) wählt.
+//   Tiere: 'a_camel_<0..3>' (Lauf, blickt nach rechts, links per flip), 'a_camel_load_<0..3>' (Karawane: mit Last).
+//  Militär
+//   S.vehicleKey('tank'|'artillery', gov, dir, frame) -> 'hv_<type>_<style>_<dir>_<frame>', dir 'e','w','n','s',
+//     frame 0/1 (Panzer: Kettenlauf; Geschütz: 0 Ruhe, 1 Rückstoß). Mittig auf der Kachel wie Figuren, ragt über
+//     die Kachel hinaus (etwa 15×11 seitlich). style: fascism (kantig-dunkel, Bündel), communism (rund-oliv,
+//     Stern), sonst Feldgeschütz mit Protze (monarchy/republic/democracy) bzw. schlichter Panzer.
+//   's_arsenal_<gov>' (3×2) für alle acht Regierungen; S.arsenalKey(gov).
+//   'd_wreck_tank', 'd_wreck_gun' (frisch, verkohlt), 'd_wreck_tank_old', 'd_wreck_gun_old' (rostig, bewachsen);
+//     S.wreckKey(kind, ageYears). Deko-Anker wie d_* (1×1, ragt nach oben).
+//   Graben: S.softKey('t_trench', mask) -> 't_trench_<0..15>' (Bit0 N, Bit1 O, Bit2 S, Bit3 W = Nachbar auch
+//     Graben), 8×8 Bodenüberlagerung wie t_cleared, 't_trench' = 15.
+//   'fx_shell_0..2' Granate im Flug (rund, ohne Richtung), 'fx_shell_3' Einschlag; 'fx_tankfire_0..3'
+//     Mündungsfeuer mit Rauch, zeigt nach rechts (flip für links); beide mittig ('center').
+//   Icons 16×16: 'i_tank', 'i_artillery', 'i_battle', 'i_pow', 'i_culture'.
+//  Lagerstadt
+//   's_camphq' (Kommandantur 2×2), 's_barrack' (2×2), 's_watchtower' (1×1, hoch), 's_stockade' (2×2,
+//     Gefangenenlager ohne Arbeit). S.campBuildKey(type, gov) liefert die Fassung je Regime
+//     ('s_camphq_fascism', 's_camphq_communism', sonst 's_camphq').
+//   Zaun: S.wallKey('fence', level, mask) -> 's_wall_fence_<mask>' (16 Masken), S.gateKey('fence', level, dir)
+//     -> 's_gate_fence_h|v'. Holzpfosten und Draht, schlicht.
+// ============================================================================
 (function (WW) { 'use strict';
 
   // ---------------------------------------------------------------------------

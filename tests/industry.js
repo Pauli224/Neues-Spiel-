@@ -273,13 +273,17 @@ test('9 Dunstglocke, ausgelaugter Boden, Heilung; Filter klar weniger', function
   const ash0 = st.terrain.filter((t) => t === T.ASH).length;
   let maxP = 0;
   const ps = [];
-  for (let y = 0; y < 10; y++) { run(A.sim, 240); ps.push(A.c.pollution); maxP = Math.max(maxP, A.c.pollution); }
+  let coalYears = 0;
+  for (let y = 0; y < 10; y++) { run(A.sim, 240); ps.push(A.c.pollution); maxP = Math.max(maxP, A.c.pollution); if (A.list.some((s) => s.coal)) coalYears++; }
   const barrenSum = () => { let n = 0; for (const v of st.barren) n += v; return n; };
   let grey = 0; for (const v of st.barren) if (v >= 64) grey++;
   const ash1 = st.terrain.filter((t) => t === T.ASH).length;
   const b1 = barrenSum();
-  log('city.pollution je Jahr', ps.join(','), '| graue Kacheln', grey, '| Aschefeld', ash0, '->', ash1);
-  assert(maxP >= 40 && maxP <= 90 && ps[9] >= 35, 'keine deutliche Dunstglocke');
+  // Obergrenze: deutlich, aber nicht gesättigt. Seit es Rohstoffe gibt, fördert die Stadt Kohle; Kohle-Fabriken stoßen
+  // ×COAL_EMIT aus (Regel, gewollt) – dann darf der Gipfel entsprechend höher liegen, bleibt aber unter der Sättigung 100.
+  const top = coalYears ? Math.min(99, Math.round(90 * WW.INDUSTRY.CFG.COAL_EMIT)) : 90;
+  log('city.pollution je Jahr', ps.join(','), '| Jahre mit Kohle', coalYears, '(Obergrenze ' + top + ') | graue Kacheln', grey, '| Aschefeld', ash0, '->', ash1);
+  assert(maxP >= 40 && maxP <= top && ps[9] >= 35, 'keine deutliche Dunstglocke');
   assert(grey >= 30, 'Boden wird nicht grau');
   assert(ash1 > ash0, 'kein kahles Land');
   assert(st.events.some((e) => e.type === 'indHaze'), 'keine Chronik zur Dunstglocke');
@@ -378,6 +382,57 @@ test('8 Dauerlauf 40 000 Ticks (gemischte Regierungen) und Zeitaufschlag', funct
     'Industrie-Anteil', ms.toFixed(4), 'ms/Tick');
   assert(maxF > 0, 'keine Fabriken im Dauerlauf');
   assert(ms < 0.1, 'Zeitaufschlag zu hoch: ' + ms.toFixed(4) + ' ms/Tick');
+});
+
+// -----------------------------------------------------------------------------
+test('12 Kachel-Meldungen nur bei sichtbarer Änderung (barren 0/85/170, murk 8er, soot an/aus)', function () {
+  const A = factoryCity('communism', { seed: 23, n: 3, waitWall: true });
+  const sim = A.sim, st = sim.state, N = st.W * st.H, h = WW.INDUSTRY.CFG.BARREN_HYST;
+  run(sim, 240 * 3);
+  // Ruß liegt an den Fabriken
+  assert(st.soot && st.industry.soot > 0, 'keine Rußschicht');
+  const lv = (v) => v > 170 ? 3 : v > 85 ? 2 : v > 0 ? 1 : 0;
+  const vis = (i) => lv(st.barren[i]) | ((st.murk[i] >> 3) << 2) | ((st.soot[i] > 0 ? 1 : 0) << 10);
+  // „gezeichneter" Stand: wird nur bei Meldung aufgefrischt (wie der Renderer)
+  sim.drainDirtyTiles();
+  const drawn = new Int32Array(N); for (let i = 0; i < N; i++) drawn[i] = vis(i);
+  const ch = new Set(), marked = new Set();
+  let pb = st.barren.slice(), pm = st.murk.slice();
+  // nur Meldungen der Industrie zählen (andere Quellen: Bauten, Feuer …)
+  const md = sim.markDirty, it = WW.Industry.tick; let inInd = false;
+  sim.markDirty = function (i) { if (inInd) marked.add(i); return md.call(this, i); };
+  WW.Industry.tick = function (s) { inInd = true; try { return it(s); } finally { inInd = false; } };
+  try {
+  for (let t = 0; t < 400; t++) {
+    sim.tick();
+    for (const i of sim.drainDirtyTiles()) drawn[i] = vis(i);
+    for (let i = 0; i < N; i++) if (st.barren[i] !== pb[i] || st.murk[i] !== pm[i]) ch.add(i);
+    pb.set(st.barren); pm.set(st.murk);
+  }
+  } finally { WW.Industry.tick = it; delete sim.markDirty; }
+  let stale = 0, bad = 0;
+  for (let i = 0; i < N; i++) {
+    if (drawn[i] === vis(i)) continue;
+    stale++;
+    const v = st.barren[i], near = Math.abs(v - 85) <= h + 1 || Math.abs(v - 170) <= h + 1;
+    if (!near || (drawn[i] & ~3) !== (vis(i) & ~3)) bad++;
+  }
+  log('Kacheln mit geänderten Werten', ch.size, '| von der Industrie gemeldet', marked.size, '| veraltet gezeichnet', stale, 'davon außerhalb der Hysterese', bad);
+  assert(ch.size > 40, 'zu wenig Bewegung für die Messung');
+  assert(marked.size < ch.size * 0.6, 'zu viele Meldungen');
+  assert(bad === 0, 'sichtbare Änderung nicht gemeldet');
+  // Ruß speichern/laden, alte Stände ohne soot
+  const txt = sim.serialize(), B = WW.Sim.load(txt);
+  assert(B && B.serialize() === txt && B.state.soot.some((v) => v > 0), 'Ruß nicht gespeichert');
+  const o = JSON.parse(txt); delete o.rasters.soot; if (o.industry) delete o.industry.soot;
+  const O = WW.Sim.load(JSON.stringify(o));
+  assert(O && O.state.soot instanceof Uint8Array && O.state.soot.length === N, 'alter Stand ohne Ruß-Raster');
+  run(O, 240);
+  assert(O.state.industry.soot > 0, 'Ruß entsteht nach dem Laden nicht neu');
+  // stillgelegt: Ruß klingt ab
+  sim.actions.setLaw('industry', false);
+  run(sim, 240 * 14);
+  assert(st.industry.soot === 0 && !st.soot.some((v) => v > 0), 'Ruß klingt nicht ab');
 });
 
 // -----------------------------------------------------------------------------

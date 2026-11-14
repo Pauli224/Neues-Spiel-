@@ -53,6 +53,7 @@
     for (let i = 0; i < W * H; i++) this.decorSig[i] = st.structAt && st.structAt[i] >= 0 ? -2 : st.terrain[i];
     this.groundDirty.clear();
     this.fx.length = 0;
+    this._ancH = null; this._rc = null; this._dk = null; this._objCount = 0; this._shownP = null; this._opT = null; this._bKey = this._aKey = ''; this.muzzleT = null;
     this.labelCache.clear();
     this.buildMini();
     this.queueAll(cam);
@@ -213,6 +214,8 @@
     this.trimChunks();
     c.built = true;
     c.late = null;
+    this._gver = (this._gver | 0) + 1;
+    this.objForget(c.cx * CH, c.cy * CH, c.cx * CH + CH - 1, c.cy * CH + CH - 1);
     c.decorDirty = true;
     c.waterDirty = true;
   };
@@ -274,7 +277,7 @@
     return m;
   };
 
-  Renderer.prototype.decorAt = function (i) {
+  Renderer.prototype.decorAt = function (i, noTime) {
     const st = this.st;
     if (st.structAt && st.structAt[i] >= 0) return null;
     if (this.path[i]) return null;
@@ -285,7 +288,7 @@
       const k = fresh ? 'd_log_' + (h & 1) : h % 5 === 0 && this.S.has('d_deadtree_0') ? 'd_deadtree_0' : 'd_stump_' + (this.S.has('d_stump_1') ? h % 3 : 0);
       return this.S.has(k) ? { key: k, dx: (h & 3) - 1, dy: -((h >> 2) & 1) } : (this.S.has('d_stump_0') ? { key: 'd_stump_0', dx: 0, dy: 0 } : null);
     }
-    if (st.deposit && st.deposit[i] > 0) { const d = this.depositDecor(i); if (d) return d; }
+    if (st.deposit && st.deposit[i] > 0) { const d = this.depositDecor(i, noTime); if (d) return d; }
     if (st.owner && st.owner[i] >= 0) {
       // Ergebnis je Kachel eine Sekunde zwischenspeichern (Nachbarsuche ist teuer)
       const N = st.W * st.H;
@@ -380,13 +383,13 @@
   };
 
   // Vorkommen: Deko d_deposit_<art>_<n>; Art aus state.depositKinds / WW.DEPOSIT_KEYS / WW.DEPOSITS
-  Renderer.prototype.depositDecor = function (i) {
+  Renderer.prototype.depositDecor = function (i, noTime) {
     const st = this.st, v = st.deposit[i], S = this.S;
     const kinds = st.depositKinds || WW.DEPOSIT_KEYS || (WW.DEPOSITS ? (Array.isArray(WW.DEPOSITS) ? WW.DEPOSITS.map(d => d && (d.key || d)) : Object.keys(WW.DEPOSITS)) : null);
     const kind = typeof v === 'string' ? v : kinds ? (kinds[v] || kinds[v - 1]) : ['iron', 'coal', 'gold', 'crystal'][v - 1];
     if (!kind) return null;
     const n = (Math.imul(i, 2654435761) >>> 28) % 3;
-    if (kind === 'fish' && S.has('d_fish_0')) return { key: 'd_fish_' + (((this.time * 2) | 0) & 1), dx: 0, dy: 0 };
+    if (kind === 'fish' && S.has('d_fish_0')) return noTime ? { key: 'd_fish_0', dx: 0, dy: 0, fish: true } : { key: 'd_fish_' + (((this.time * 2) | 0) & 1), dx: 0, dy: 0 };
     for (const k of ['d_ore_' + kind + '_' + (n & 1), 'd_' + kind, 'd_deposit_' + kind + '_' + n, 'd_deposit_' + kind + '_0', 'd_deposit_' + kind]) if (S.has(k)) return { key: k, dx: 0, dy: 0 };
     return null;
   };
@@ -437,6 +440,7 @@
       if (kt[i] !== k) {
         kt[i] = k;
         const x = i % W, y = (i / W) | 0;
+        if (this._dk) this.objForget(x, y, x, y);
         dirtyChunks.add(this.chunkAt(x, y));
         if (x % CH === 0 && x > 0) dirtyChunks.add(this.chunkAt(x - 1, y));
         if (x % CH === CH - 1 && x < W - 1) dirtyChunks.add(this.chunkAt(x + 1, y));
@@ -457,6 +461,7 @@
     for (let y = y0; y < y1 && !any; y++) for (let x = x0; x < x1; x++) if (kt[y * W + x] >= 0) { any = true; break; }
     c.terrDirty = false;
     c.terrEmpty = !any;
+    this._gver = (this._gver | 0) + 1;
     if (!any) return;
     if (!c.terr) { c.terr = document.createElement('canvas'); c.terr.width = CPX; c.terr.height = CPX; }
     const g = c.terr.getContext('2d');
@@ -530,7 +535,7 @@
       // Boden nur neu zeichnen, wenn sich an dieser Kachel oder ihren Nachbarn sichtbar etwas geändert hat
       const sg = this.groundSig(x, y);
       if (this.gsig[i] !== sg) {
-        this.gsig[i] = sg;
+        this.gsig[i] = sg; this._gver = (this._gver | 0) + 1;
         const g = c.ground.getContext('2d'), k = c.hi ? 2 : 1;
         g.setTransform(k, 0, 0, k, -c.cx * CPX * k, -c.cy * CPX * k);
         this.drawGroundTile(g, x, y, c.hi);
@@ -541,7 +546,7 @@
       if (this.waterSig[i] !== wk) { this.waterSig[i] = wk; c.waterDirty = true; const c2 = this.chunkAt(Math.min(st.W - 1, x + 1), y), c3 = this.chunkAt(Math.max(0, x - 1), y), c4 = this.chunkAt(x, Math.min(st.H - 1, y + 1)), c5 = this.chunkAt(x, Math.max(0, y - 1)); c2.waterDirty = c3.waterDirty = c4.waterDirty = c5.waterDirty = true; }
       // Deko-Block nur neu, wenn sich die Deko dieser Kachel ändern kann
       const sig = st.structAt && st.structAt[i] >= 0 ? -2 : (this.path[i] ? -3 : st.terrain[i]);
-      if (this.decorSig[i] !== sig) { this.decorSig[i] = sig; c._decorTouched = true; }
+      if (this.decorSig[i] !== sig) { this.decorSig[i] = sig; c._decorTouched = true; this.objForget(x - 2, y - 2, x + 2, y + 2); }
     }
     for (const c of touched) c.decorDirty = c.decorDirty || c._decorTouched;
     for (const c of touched) c._decorTouched = false;
@@ -655,13 +660,73 @@
     g.globalAlpha = 1;
     this.plumes = out;
   };
-  // Dunst aus dem groben Raster state.pollution: weich gezeichnet, mit dem Wind verschoben; Ansicht „Luft" färbt stärker
-  Renderer.prototype.drawSmog = function (g, cam, airView) {
+  // Untergrund eines Bildes (in Gerätepixeln): Boden-Blöcke, Wasser, Gebietstönung, in der weiten Ansicht die Deko-Blöcke,
+  // dann Narben. Wird ins Standbild gezeichnet oder (bewegte Kamera) direkt; im Ausschnitt der Figuren auch ein zweites Mal.
+  Renderer.prototype.drawBase = function (g) {
+    const F = this._F, st = this.st, S = this.S, cv = this.canvas, rx = F.rx, ry = F.ry, opts = F.opts;
+    const cx0 = F.cx0, cx1 = F.cx1, cy0 = F.cy0, cy1 = F.cy1, vt = F.vt, low = F.low;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.imageSmoothingEnabled = false;
+    g.fillStyle = this.bg || (this.bg = S.groundColor(0));
+    g.fillRect(0, 0, cv.width, cv.height);
+    if (F.missing) {
+      // Platzhalter: Kleinbild hochskaliert, sichtbare Blöcke zuerst bauen
+      g.drawImage(this.mini, 0, 0, st.W, st.H, F.ox, F.oy, Math.round(st.W * 8 * F.s), Math.round(st.H * 8 * F.s));
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+        const c = this.chunks[cy * this.cw + cx];
+        if (!c.built && performance.now() - F.tb < F.budget + 6) this.buildChunk(c);
+      }
+    }
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const c = this.chunks[cy * this.cw + cx];
+      if (!c.built) continue;
+      const X = cx * CPX, Y = cy * CPX;
+      const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
+      const dx = rx(X), dy = ry(Y), k = c.hi ? 2 : 1;
+      c.usedT = this.time;
+      if (c.late) { for (const li of c.late) this.groundDirty.add(li); c.late = null; }   // aufgeschobene Kacheln jetzt nachholen
+      g.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
+    }
+    // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
+    if (this.gfx.water !== false && !this.autoOff.glints) this.drawWaterLayer(g, cx0, cx1, cy0, cy1, rx, ry, low);
+    // (2) Gebietstönung
+    if (st.owner && opts.territory !== false) {
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+        const c = this.chunks[cy * this.cw + cx];
+        if (c.terrDirty) this.buildTerr(c);
+        if (c.terrEmpty) continue;
+        const X = cx * CPX, Y = cy * CPX;
+        const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
+        const dx = rx(X), dy = ry(Y);
+        g.drawImage(c.terr, 0, 0, w, h, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
+      }
+    }
+    // weite Ansicht: Deko-Blöcke (veraltete höchstens einer je Bild neu, damit es keine Spitzen gibt)
+    if (low) {
+      let builds = 1, refreshed = false;
+      const dcy1 = Math.min(this.chh - 1, ((vt.y1 + 5) / CH) | 0);
+      const dcx0 = Math.max(0, ((vt.x0 - 3) / CH) | 0);
+      for (let cy = cy0; cy <= dcy1; cy++) for (let cx = dcx0; cx <= cx1; cx++) {
+        const c = this.chunks[cy * this.cw + cx];
+        if (!c.built) continue;
+        if (c.decorT == null) this.buildDecor(c);
+        else if (c.decorDirty && builds > 0) { this.buildDecor(c); builds--; }
+        else if (!refreshed && builds > 0 && this.time - c.decorT > 8 && this.time - (this._decorRefT || 0) > 0.5) { this.buildDecor(c); refreshed = true; builds--; this._decorRefT = this.time; }
+        const X = cx * CPX - DL, Y = cy * CPX - DECOR_TOP;
+        const dx = rx(X), dy = ry(Y);
+        g.drawImage(c.decor, dx, dy, rx(X + CPX + DL + DR) - dx, ry(Y + CPX + DECOR_TOP) - dy);
+      }
+    }
+    if (st.scars && st.scars.length) { g.setTransform(F.s, 0, 0, F.s, F.ox, F.oy); this.drawScars(g, vt); g.setTransform(1, 0, 0, 1, 0, 0); }
+  };
+
+  // Dunst: grobes Raster jede Sekunde neu, weich auf 4 Pixel je Kachel vergrößert (einmal), dann je Bild nur kopiert
+  Renderer.prototype.smogUpdate = function (airView) {
     const st = this.st, pol = st.pollution;
     let cell = st.pollutionCell || (WW.INDUSTRY && WW.INDUSTRY.CFG && WW.INDUSTRY.CFG.CELL);
     if (!(cell > 0)) cell = Math.max(1, Math.round(Math.sqrt((st.W * st.H) / pol.length)));
     const cw = Math.ceil(st.W / cell), chh = Math.ceil(st.H / cell);
-    if (this.time - (this._smogT || -9) > 1 || !this._smog || this._smogAir !== airView) {
+    if (this.time - (this._smogT == null ? -9 : this._smogT) > 1 || !this._smog || this._smogAir !== airView) {
       this._smogT = this.time; this._smogAir = airView;
       const cv = this._smog || (this._smog = document.createElement('canvas'));
       if (cv.width !== cw || cv.height !== chh) { cv.width = cw; cv.height = chh; }
@@ -675,13 +740,24 @@
       let any = false; for (let i = 3; i < d.length; i += 4) if (d[i] > 6) { any = true; break; }
       this._smogAny = any;
       c.putImageData(img, 0, 0);
+      if (any) {
+        const q = Math.max(1, Math.min(4, Math.floor(1536 / (cw * cell))));
+        const M = this._smogM || (this._smogM = document.createElement('canvas'));
+        if (M.width !== cw * cell * q || M.height !== chh * cell * q) { M.width = cw * cell * q; M.height = chh * cell * q; }
+        const mg = M.getContext('2d');
+        mg.clearRect(0, 0, M.width, M.height);
+        mg.imageSmoothingEnabled = true;
+        mg.drawImage(cv, 0, 0, M.width, M.height);
+        this._smogWW = cw * cell * 8; this._smogWH = chh * cell * 8;
+      }
     }
-    if (!this._smogAny) return;   // saubere Luft: keine bildschirmfüllende Ebene
-    const w = this.wind(), sh = airView ? 0 : 4 * Math.sin(this.time * 0.2);
-    g.save();
-    g.imageSmoothingEnabled = true;
-    g.drawImage(this._smog, sh * w.x, sh * w.y, cw * cell * 8, chh * cell * 8);
-    g.restore();
+    return !!this._smogAny;
+  };
+  // Dunst-Ebene in Weltkoordinaten (Transformation ist gesetzt), pixelgenau (kein Weichzeichnen je Bild)
+  Renderer.prototype.drawSmogLayer = function (g) {
+    if (!this._smogAny || !this._smogM) return;
+    const w = this.wind(), sh = this._smogAir ? 0 : (this._smogSh || 0);
+    g.drawImage(this._smogM, sh * w.x, sh * w.y, this._smogWW, this._smogWH);
   };
 
   Renderer.prototype.drawWindArrow = function (g, cam) {
@@ -1181,78 +1257,57 @@
     const cy0 = Math.max(0, (vt.y0 / CH) | 0), cy1 = Math.min(this.chh - 1, ((vt.y1) / CH) | 0);
     let missing = false;
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) if (!this.chunks[cy * this.cw + cx].built) missing = true;
-    // Standbild: ruht die Kamera, wird die Landschaft (Boden, Wasser, Gebiete, Deko der weiten Ansicht) nur 5-mal je Sekunde
-    // neu gezeichnet und sonst als ein Bild kopiert. Das spart je Bild mehrere bildschirmfüllende Durchgänge.
+    const rx = (wx) => Math.round(ox + wx * s), ry = (wy) => Math.round(oy + wy * s);
+    this._F = { s: s, ox: ox, oy: oy, rx: rx, ry: ry, cx0: cx0, cx1: cx1, cy0: cy0, cy1: cy1, vt: vt, low: low, missing: missing, tb: tb, budget: budget, opts: opts };
+    // nahe Ansicht: ruhende Objekte aus vorgebackenen Block-Bildern, Bewegtes darüber (siehe Objekt-Ebene)
+    const near = !low && this.gfx.objcache !== false;
+    const urgent = !!(opts.brush || opts.held);
+    const smogOn = !!(st.pollution && st.pollution.length) && this.smogUpdate(opts.view === 'air');
+    let P = 0;
+    if (near) { this.objPass(); P = this.objPrepare(cx0, cx1, cy0, cy1, s, urgent); }
+    // Standbild: ruht die Kamera, wird der Boden (Gelände, Wasser, Gebiete, Narben, Deko der weiten Ansicht) nur 5-mal je
+    // Sekunde neu zusammengesetzt, mit Werkzeug in der Hand sofort bei jeder Bodenänderung. Darüber liegt ein zweites Bild mit
+    // den ruhenden Objekten und dem Dunst; je Bild wird nur dieses kopiert und Bewegtes darübergelegt.
     const SK = s + '|' + ox + '|' + oy + '|' + cv.width + '|' + cv.height + '|' + (low ? 1 : 0);
     const camStill = SK === this._camKey && !(this.shake > 0);
     this._camKey = SK;
     const wf = (this.time * 5) | 0;
-    let g = ctx, fromStill = false;
-    if (camStill && !missing && !opts.firstFrames && !opts.brush && !opts.held && this.gfx.still !== false) {   // mit Werkzeug in der Hand wird direkt gezeichnet: Malen bleibt sofort sichtbar
-      const sc = this._still || (this._still = document.createElement('canvas'));
-      if (sc.width !== cv.width || sc.height !== cv.height) { sc.width = cv.width; sc.height = cv.height; this._stillKey = ''; }
-      if (this._stillKey === SK && this._stillF === wf) fromStill = true;
-      else { g = sc.getContext('2d', { alpha: false }); this._stillKey = SK; this._stillF = wf; }
-    } else this._stillKey = '';
-    const rx = (wx) => Math.round(ox + wx * s), ry = (wy) => Math.round(oy + wy * s);
-    if (!fromStill) {
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.imageSmoothingEnabled = false;
-      g.fillStyle = this.bg || (this.bg = S.groundColor(0));
-      g.fillRect(0, 0, cv.width, cv.height);
-      if (missing) {
-        // Platzhalter: Kleinbild hochskaliert, sichtbare Blöcke zuerst bauen
-        g.drawImage(this.mini, 0, 0, st.W, st.H, ox, oy, Math.round(st.W * 8 * s), Math.round(st.H * 8 * s));
-        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-          const c = this.chunks[cy * this.cw + cx];
-          if (!c.built && performance.now() - tb < budget + 6) this.buildChunk(c);
+    this._patchBase = null;
+    if (camStill && !missing && !opts.firstFrames && this.gfx.still !== false) {
+      const mk = (c) => { if (!c) c = document.createElement('canvas'); if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; } return c; };
+      const bc = this._stBase = mk(this._stBase);
+      const bkey = SK + '|' + wf;
+      let baseNew = false;
+      if (this._bKey !== bkey || (urgent && this._bG !== this._gver)) {
+        this.drawBase(bc.getContext('2d', { alpha: false }));
+        this._bKey = bkey; this._bG = this._gver; baseNew = true;
+      }
+      if (near || smogOn) {
+        const ac = this._stA = mk(this._stA);
+        const akey = P + '|' + (near ? 1 : 0) + '|' + (smogOn ? 1 : 0);
+        if (baseNew || this._aKey !== akey || (urgent && this._aO !== this._over)) {
+          const g = ac.getContext('2d', { alpha: false });
+          g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false;
+          g.drawImage(bc, 0, 0);
+          if (near) this.drawRegions(g, P);
+          if (smogOn) { this._smogSh = 4 * Math.sin(this.time * 0.2); g.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(g); g.setTransform(1, 0, 0, 1, 0, 0); }
+          this._aKey = akey; this._aO = this._over;
         }
-      }
-      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-        const c = this.chunks[cy * this.cw + cx];
-        if (!c.built) continue;
-        const X = cx * CPX, Y = cy * CPX;
-        const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
-        const dx = rx(X), dy = ry(Y), k = c.hi ? 2 : 1;
-        c.usedT = this.time;
-        if (c.late) { for (const li of c.late) this.groundDirty.add(li); c.late = null; }   // aufgeschobene Kacheln jetzt nachholen
-        g.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
-      }
-      // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)
-      if (this.gfx.water !== false && !this.autoOff.glints) this.drawWaterLayer(g, cx0, cx1, cy0, cy1, rx, ry, low);
-      // (2) Gebietstönung
-      if (st.owner && opts.territory !== false) {
-        for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-          const c = this.chunks[cy * this.cw + cx];
-          if (c.terrDirty) this.buildTerr(c);
-          if (c.terrEmpty) continue;
-          const X = cx * CPX, Y = cy * CPX;
-          const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
-          const dx = rx(X), dy = ry(Y);
-          g.drawImage(c.terr, 0, 0, w, h, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
-        }
-      }
-
-      // (3) Deko, Bauwerke, Figuren
-      let refreshed = false;
-      if (low) {
-        const dcy1 = Math.min(this.chh - 1, ((vt.y1 + 5) / CH) | 0);
-        const dcx0 = Math.max(0, ((vt.x0 - 3) / CH) | 0);
-        for (let cy = cy0; cy <= dcy1; cy++) for (let cx = dcx0; cx <= cx1; cx++) {
-          const c = this.chunks[cy * this.cw + cx];
-          if (!c.built) continue;
-          if (c.decorDirty || c.decorT == null) this.buildDecor(c);
-          else if (!refreshed && this.time - c.decorT > 8 && this.time - (this._decorRefT || 0) > 0.5) { this.buildDecor(c); refreshed = true; this._decorRefT = this.time; }
-          const X = cx * CPX - DL, Y = cy * CPX - DECOR_TOP;
-          const dx = rx(X), dy = ry(Y);
-          g.drawImage(c.decor, dx, dy, rx(X + CPX + DL + DR) - dx, ry(Y + CPX + DECOR_TOP) - dy);
-        }
-      }
+        ctx.drawImage(ac, 0, 0);
+      } else ctx.drawImage(bc, 0, 0);
+      this._patchBase = bc;
+    } else {
+      this._bKey = ''; this._aKey = '';
+      this.drawBase(ctx);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (near) this.drawRegions(ctx, P);
+      if (smogOn) { this._smogSh = 4 * Math.sin(this.time * 0.2); ctx.setTransform(s, 0, 0, s, ox, oy); this.drawSmogLayer(ctx); }
     }
-    if (fromStill || g !== ctx) ctx.drawImage(this._still, 0, 0);
     ctx.setTransform(s, 0, 0, s, ox, oy);
-    if (st.scars && st.scars.length) this.drawScars(ctx, vt);
-    let drawn = low && (opts.scale || 1) < 0.9 ? this.drawDots(ctx, vt, opts) : this.drawObjects(ctx, vt, low, opts);
+    let drawn;
+    if (low && (opts.scale || 1) < 0.9) drawn = this.drawDots(ctx, vt, opts);
+    else if (near || low) drawn = this.drawDynamic(ctx, vt, opts, near, P, smogOn);
+    else drawn = this.drawObjects(ctx, vt, low, opts);
     if (!low && typeof S.flagKey === 'function') this.drawFlags(ctx, vt);
 
     // Feuer auf Kacheln
@@ -1269,7 +1324,6 @@
     if (!low) this.drawLife(ctx, vt, dt, opts);
     // Rauch aus Fabriken, Dunst
     if (st.structs) this.updatePlumes(ctx, vt, dt);
-    if (st.pollution && st.pollution.length) this.drawSmog(ctx, cam, opts.view === 'air');
     // (4) Effekte, Flugzeuge
     this._lastDt = dt;
     this.drawFx(ctx, dt);
@@ -1303,7 +1357,482 @@
     this.stats.frameMs = this.stats.frameMs * 0.9 + (performance.now() - t0) * 0.1;
   };
 
-  // Deko, Bauwerke und Figuren zeilenweise von oben nach unten
+  // ===========================================================================
+  // Objekt-Ebene der nahen Ansicht (Leistung): ruhende Deko und Bauwerke liegen vorgebacken je Block in einem
+  // Bild (genau die Pixelfläche des Blocks, alle hineinragenden Objekte in Malreihenfolge, drei Wiege-Phasen).
+  // Bewegtes (Figuren, Tiere, Lagerfeuer, feuernde Mauergeräte, Fischschwärme) wird je Bild darübergelegt:
+  // In den Rechtecken der bewegten Dinge wird der Boden neu kopiert und alles, was dort liegt, in der richtigen
+  // Reihenfolge neu gezeichnet (Ausschnitt). So stehen Figuren richtig vor oder hinter Häusern und Bäumen.
+  // ===========================================================================
+  const OBJ_L = 5, OBJ_R = 1;      // Ankerspalten links/rechts außerhalb eines Blocks, die hineinragen können
+  const OBJ_MAXC = 54;             // höchstens so viele vorgebackene Block-Bilder behalten
+  function mixH(h, v) { return Math.imul(h ^ (v | 0), 16777619); }
+  Renderer.prototype.strId = function (v) {
+    if (v == null || v === false) return 0;
+    if (v === true) return 1;
+    if (typeof v === 'number') return v | 0;
+    const m = this._strIds || (this._strIds = new Map());
+    let n = m.get(v);
+    if (n === undefined) { n = m.size + 7; m.set(v, n); }
+    return n;
+  };
+  // sichtbare Merkmale eines Bauwerks als Zahl (ändert sich eine davon, wird der Block neu gebacken)
+  Renderer.prototype.structHash = function (s, k) {
+    let h = 2166136261 | 0;
+    h = mixH(h, this.strId(s.type)); h = mixH(h, s.x); h = mixH(h, s.y); h = mixH(h, s.w); h = mixH(h, s.h);
+    h = mixH(h, (s.built === false ? 1 : 0) | (s.closed ? 2 : 0) | (s.filtered ? 4 : 0) | (s.ruin ? 8 : 0) | (s.upgrading ? 16 : 0) | (s.active ? 32 : 0));
+    h = mixH(h, s.level | 0); h = mixH(h, s.growth | 0); h = mixH(h, s.stage == null ? -1 : s.stage | 0); h = mixH(h, s.variant | 0); h = mixH(h, s.mask | 0);
+    h = mixH(h, this.strId(s.style)); h = mixH(h, this.strId(s.kind)); h = mixH(h, this.strId(s.orient)); h = mixH(h, this.strId(s.ruinOf));
+    h = mixH(h, this.strId(s.device)); h = mixH(h, this.strId(s.res || s.ore)); h = mixH(h, this.strId(s.culture)); h = mixH(h, this.strId(s.gov));
+    h = mixH(h, s.cityId | 0);
+    if (k) { h = mixH(h, k.colorIndex | 0); h = mixH(h, this.strId(k.gov)); h = mixH(h, this.strId(k.culture)); }
+    const c = this._cityById ? this._cityById.get(s.cityId) : null;
+    if (c) { h = mixH(h, this.strId(c.kind)); h = mixH(h, this.strId(c.culture)); h = mixH(h, c.tier | 0); }
+    return h | 0;
+  };
+  // Pixelrechteck (Logikpixel) eines Sprites an (px, py)
+  Renderer.prototype.keyBox = function (key) {
+    const m = this._kb || (this._kb = new Map());
+    let b = m.get(key);
+    if (b === undefined) {
+      const inf = this.S.info(key);
+      b = inf ? [inf.ox, inf.oy, inf.dw, inf.dh, inf.fw * 8 - inf.dw - inf.ox] : null;
+      m.set(key, b);
+    }
+    return b;
+  };
+  // Rechteck eines Bauwerks samt Gerüst, Gerät und Lagerfeuer; dyn = wird je Bild gezeichnet (Lagerfeuer)
+  Renderer.prototype.structRect = function (s, k, vh) {
+    const S = this.S, key = this.structKey(s, k ? k.gov : 'tribe');
+    const rc = { h: vh, x: s.x, y: s.y, w: s.w, hh: s.h, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9, dyn: false, spike: false, dx0: 0, dy0: 0, dx1: 0, dy1: 0, seen: 0 };
+    const add = (bx, x, y) => { if (!bx) return; rc.x0 = Math.min(rc.x0, x + bx[0]); rc.y0 = Math.min(rc.y0, y + bx[1]); rc.x1 = Math.max(rc.x1, x + bx[0] + bx[2]); rc.y1 = Math.max(rc.y1, y + bx[1] + bx[3]); };
+    if (key !== null) {
+      const bx = this.keyBox(key), inf = bx ? S.info(key) : null, fh = inf ? inf.fh : s.h;
+      const px = s.x * 8, py = (s.type === 'ruin' && fh > s.h ? s.y : s.y + s.h - fh) * 8;
+      add(bx, px, py);
+      if (s.upgrading && s.built !== false) {
+        const sk = s.w >= 3 ? 's_scaffold_3' : (s.w >= 2 ? 's_scaffold_2' : 's_scaffold');
+        const sc = S.has(sk) ? sk : (s.w >= 3 ? 's_site_3' : s.w >= 2 ? 's_site_2' : 's_site'), si = S.info(sc);
+        add(this.keyBox(sc), px, (s.y + s.h - (si ? si.fh : s.h)) * 8);
+      }
+      if (s.type === 'center' && s.stage === 0 && s.built !== false && key.indexOf('s_camp') === 0) { rc.dyn = true; rc.x0 -= 2; rc.y0 -= 8; rc.x1 += 2; }
+    }
+    if (s.device && s.built !== false) {
+      const base = 's_walldev_' + s.device, dk = S.has(base + '_0') ? base + '_0' : (S.has(base) ? base : null), db = dk ? this.keyBox(dk) : null;
+      if (db) {
+        if (s.device === 'spikes' || s.device === 'trap') { rc.spike = true; rc.dx0 = s.x * 8 + db[0]; rc.dy0 = s.y * 8 + 8 + db[1]; rc.dx1 = rc.dx0 + db[2]; rc.dy1 = rc.dy0 + db[3]; }
+        else { let off = 0; if (typeof S.wallDevOffset === 'function') { try { const o = S.wallDevOffset(s.style || (k && k.gov) || 'tribe', s.level, s.device); if (typeof o === 'number') off = o; } catch (e) { /* egal */ } } add(db, s.x * 8, s.y * 8 + off); rc.x0 -= 1; rc.x1 += 1; rc.y0 -= 1; }
+      }
+    }
+    if (rc.x0 > rc.x1) { rc.x0 = rc.x1 = s.x * 8; rc.y0 = rc.y1 = s.y * 8; }
+    // höchste Ausdehnung über die Ankerzeile (bestimmt, wie weit unterhalb eines Blocks noch gesucht wird)
+    const up = Math.ceil(((s.y + s.h) * 8 - rc.y0) / 8);
+    if (up + 1 > (this._objExt || 0)) { this._objExt = Math.min(14, up + 1); this._objExtGrew = true; }
+    return rc;
+  };
+
+  // Deko einer Kachel, zwischengespeichert als Zahl: 0 = noch nicht berechnet, 1 = keine, sonst Schlüssel + Versatz (+ Fischschwarm-Bit)
+  Renderer.prototype.encDeco = function (d) {
+    if (!d) return 1;
+    const m = this._dkIdx || (this._dkIdx = new Map()), keys = this._dkKeys || (this._dkKeys = []);
+    let ki = m.get(d.key);
+    if (ki === undefined) { ki = keys.length; keys.push(d.key); m.set(d.key, ki); }
+    return (ki + 2) | (((d.dx + 8) & 31) << 20) | (((d.dy + 8) & 15) << 25) | (d.fish ? 1 << 29 : 0);
+  };
+  Renderer.prototype.decoCode = function (i) {
+    let v = this._dk[i];
+    if (v === 0) v = this._dk[i] = this.encDeco(this.decorAt(i, true));
+    return v;
+  };
+  // Schlüssel einer Deko in Wiege-Phase p (Zwischenspeicher je Schlüssel und Phase)
+  Renderer.prototype.decoKey = function (ki, x, y, p, sway) {
+    const base = this._dkKeys[ki];
+    if (!sway || typeof this.S.swayKey !== 'function') return base;
+    const ph = (x + y + p) % 3, sk = this._dkSw || (this._dkSw = []);
+    let k = sk[ki * 3 + ph];
+    if (k === undefined) {
+      k = base;
+      if (SWAY_RE.test(base)) { const k2 = this.S.swayKey(base, ph); if (k2 !== base && this.S.has(k2)) k = k2; }
+      sk[ki * 3 + ph] = k;
+    }
+    return k;
+  };
+
+  // Blöcke, deren Suchbereich das Kachelrechteck berührt, als veraltet markieren
+  Renderer.prototype.objTouch = function (tx0, ty0, tx1, ty1) {
+    if (!this.chunks.length) return;
+    const ext = this._objExt || 6;
+    const ca = Math.max(0, Math.floor((tx0 - OBJ_R) / CH)), cb = Math.min(this.cw - 1, Math.floor((tx1 + OBJ_L) / CH));
+    const ra = Math.max(0, Math.floor((ty0 - ext + 1) / CH)), rb = Math.min(this.chh - 1, Math.floor((ty1 + 1) / CH));
+    for (let cy = ra; cy <= rb; cy++) for (let cx = ca; cx <= cb; cx++) this.chunks[cy * this.cw + cx].objV = (this.chunks[cy * this.cw + cx].objV | 0) + 1;
+  };
+  // Deko-Zwischenspeicher eines Kachelrechtecks verwerfen (und Blöcke markieren)
+  Renderer.prototype.objForget = function (tx0, ty0, tx1, ty1) {
+    const st = this.st; if (!st || !this._dk) return;
+    const W = st.W, H = st.H;
+    tx0 = Math.max(0, tx0); ty0 = Math.max(0, ty0); tx1 = Math.min(W - 1, tx1); ty1 = Math.min(H - 1, ty1);
+    for (let y = ty0; y <= ty1; y++) this._dk.fill(0, y * W + tx0, y * W + tx1 + 1);
+    this.objTouch(tx0, ty0, tx1, ty1);
+  };
+
+  // Bauwerke einsammeln (alle 0,2 s): Anker-Index je Kachel, Merkmals-Prüfsumme je Block, Lagerfeuer, Balken-Kandidaten
+  Renderer.prototype.objPass = function (force) {
+    const st = this.st;
+    if (!force && this._ancH && this.time - (this._opT == null ? -9 : this._opT) < 0.2) return;
+    this._opT = this.time;
+    const W = st.W, H = st.H, N = W * H;
+    if (!this._ancH || this._ancH.length !== N) { this._ancH = new Int32Array(N); this._rc = new Map(); this._dk = new Int32Array(N); this._stamp = new Int32Array(N); this._objExt = this._objExt || 6; }
+    const head = this._ancH; head.fill(-1);
+    const list = this._anc || (this._anc = []); list.length = 0;
+    const structs = st.structs || [];
+    if (!this._ancN || this._ancN.length < structs.length) { this._ancN = new Int32Array(structs.length + 512); this._stS = new Int32Array(structs.length + 512); this._stD = new Int32Array(structs.length + 512); }
+    const next = this._ancN;
+    const cityK = this._objCityK = this.cityKingdoms();
+    const nr = this.chunks.length;
+    const sig = this._rsig && this._rsig.length === nr ? this._rsig.fill(0) : (this._rsig = new Int32Array(nr));
+    const fires = this._campfires || (this._campfires = []); fires.length = 0;
+    const barC = this._barCand || (this._barCand = []); barC.length = 0;
+    const pass = this._passN = (this._passN | 0) + 1;
+    const rcm = this._rc;
+    for (const s of structs) {
+      if (s.dead || s.type === 'rail') continue;
+      const by = s.y + s.h - 1;
+      if (s.x < 0 || by < 0 || s.x >= W || by >= H) continue;
+      const ai = by * W + s.x, idx = list.length;
+      list.push(s); next[idx] = head[ai]; head[ai] = idx;
+      const k = cityK.get(s.cityId);
+      const vh = this.structHash(s, k);
+      let rc = rcm.get(s.id);
+      if (!rc || rc.h !== vh) {
+        if (rc) this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1);
+        rc = this.structRect(s, k, vh); rcm.set(s.id, rc);
+        this.objForget(s.x - 2, s.y - 2, s.x + s.w + 1, s.y + s.h + 1);
+      }
+      rc.seen = pass;
+      const mh = mixH(vh, s.id * 40503);
+      const xa = Math.min(rc.x0, rc.spike ? rc.dx0 : 1e9), xb = Math.max(rc.x1, rc.spike ? rc.dx1 : -1e9), ya = rc.y0, yb = Math.max(rc.y1, rc.spike ? rc.dy1 : -1e9);
+      const c0 = Math.max(0, Math.floor(xa / CPX)), c1 = Math.min(this.cw - 1, Math.floor((xb - 1) / CPX));
+      const r0 = Math.max(0, Math.floor(ya / CPX)), r1 = Math.min(this.chh - 1, Math.floor((yb - 1) / CPX));
+      for (let cy = r0; cy <= r1; cy++) for (let cx = c0; cx <= c1; cx++) { const ri = cy * this.cw + cx; sig[ri] = (sig[ri] + mh) | 0; }
+      if (rc.dyn) fires.push(s);
+      if ((s.built === false && s.progress > 0) || s.upgrading || (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin')) barC.push(s);
+    }
+    // verschwundene Bauwerke: Deko ringsum neu bestimmen
+    if ((pass & 3) === 0 || rcm.size > list.length) for (const [id, rc] of rcm) if (rc.seen !== pass) { this.objForget(rc.x - 2, rc.y - 2, rc.x + rc.w + 1, rc.y + rc.hh + 1); rcm.delete(id); }
+    for (let i = 0; i < nr; i++) this.chunks[i].sSig = sig[i];
+    if (this._objExtGrew) { this._objExtGrew = false; for (const c of this.chunks) c.objV = (c.objV | 0) + 1; }
+  };
+
+  // geordnete Objekte einer Kachelzeile (Felder, Deko, Bauwerke, Stacheln der Zeile darüber) in out schreiben
+  Renderer.prototype.objRow = function (y, tx0, tx1, p, sway, out, fish) {
+    const st = this.st, W = st.W, head = this._ancH, next = this._ancN, list = this._anc, rcm = this._rc;
+    const row = y * W;
+    for (let x = tx0; x <= tx1; x++) for (let a = head[row + x]; a >= 0; a = next[a]) { const s = list[a]; if (s.type === 'field') out.push(0, a); }
+    for (let x = tx0; x <= tx1; x++) {
+      const v = this.decoCode(row + x);
+      if (v <= 1) continue;
+      if (v & (1 << 29)) { if (fish) fish.push(row + x); continue; }
+      out.push(2, row + x);
+    }
+    for (let x = tx0; x <= tx1; x++) for (let a = head[row + x]; a >= 0; a = next[a]) { const s = list[a]; if (s.type !== 'field') { const rc = rcm.get(s.id); if (!rc || !rc.dyn) out.push(3, a); } }
+    if (y > 0) for (let x = tx0; x <= tx1; x++) for (let a = head[row - W + x]; a >= 0; a = next[a]) { const rc = rcm.get(list[a].id); if (rc && rc.spike) out.push(4, a); }
+    void p; void sway;
+  };
+  // ein ruhendes Objekt zeichnen (Art, Index aus objRow)
+  Renderer.prototype.objDraw = function (g, kind, v, p, sway) {
+    const S = this.S;
+    if (kind === 2) {
+      const code = this._dk[v], W = this.st.W, x = v % W, y = (v / W) | 0;
+      const key = this.decoKey((code & 0xfffff) - 2, x, y, p, sway);
+      S.drawFast(g, key, x * 8 + ((code >> 20) & 31) - 8, y * 8 + ((code >> 25) & 15) - 8, 0, false);
+    } else if (kind === 4) this.drawDevice(g, this._anc[v]);
+    else this.drawStruct(g, this._anc[v], this._objCityK, false, OBJ_NOBARS, p);
+  };
+  const OBJ_NOBARS = { push: function () {} };
+  // Rechteck (Logikpixel) eines ruhenden Objekts in r[0..3] (x0, y0, x1, y1); false = unbekannt
+  Renderer.prototype.objRect = function (kind, v, p, sway, r) {
+    if (kind === 2) {
+      const code = this._dk[v], W = this.st.W, x = v % W, y = (v / W) | 0;
+      const bx = this.keyBox(this.decoKey((code & 0xfffff) - 2, x, y, p, sway));
+      if (!bx) return false;
+      const px = x * 8 + ((code >> 20) & 31) - 8 + bx[0], py = y * 8 + ((code >> 25) & 15) - 8 + bx[1];
+      r[0] = px - 1; r[1] = py - 1; r[2] = px + bx[2] + 1; r[3] = py + bx[3] + 1;
+      return true;
+    }
+    const rc = this._rc.get(this._anc[v].id);
+    if (!rc) return false;
+    if (kind === 4) { r[0] = rc.dx0 - 1; r[1] = rc.dy0 - 1; r[2] = rc.dx1 + 1; r[3] = rc.dy1 + 1; }
+    else { r[0] = rc.x0 - 1; r[1] = rc.y0 - 1; r[2] = rc.x1 + 1; r[3] = rc.y1 + 1; }
+    return true;
+  };
+
+  // Block-Bild für Phase p backen (genau die Pixelfläche des Blocks)
+  Renderer.prototype.bakeRegion = function (c, p) {
+    const st = this.st, W = st.W, H = st.H, ob = c.ob, k = ob.k, sway = ob.sway;
+    const size = CPX * k;
+    let cv = ob.cv[p];
+    if (!cv) { cv = ob.cv[p] = document.createElement('canvas'); cv.width = cv.height = size; this._objCount = (this._objCount | 0) + 1; }
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, size, size); g.imageSmoothingEnabled = false;
+    const X0 = c.cx * CPX, Y0 = c.cy * CPX, X1 = X0 + CPX, Y1 = Y0 + CPX;
+    g.setTransform(k, 0, 0, k, -X0 * k, -Y0 * k);
+    const ext = this._objExt || 6;
+    const tx0 = Math.max(0, c.cx * CH - OBJ_L), tx1 = Math.min(W - 1, c.cx * CH + CH - 1 + OBJ_R);
+    const ty0 = Math.max(0, c.cy * CH - 1), ty1 = Math.min(H - 1, c.cy * CH + CH - 1 + ext);
+    const fish = []; const out = this._objOut || (this._objOut = []); const r = this._objR || (this._objR = [0, 0, 0, 0]);
+    this._bakeNoShot = true;
+    for (let y = ty0; y <= ty1; y++) {
+      out.length = 0;
+      this.objRow(y, tx0, tx1, p, sway, out, fish);
+      for (let j = 0; j < out.length; j += 2) {
+        if (!this.objRect(out[j], out[j + 1], p, sway, r)) continue;
+        if (r[2] <= X0 || r[0] >= X1 || r[3] <= Y0 || r[1] >= Y1) continue;
+        this.objDraw(g, out[j], out[j + 1], p, sway);
+      }
+    }
+    this._bakeNoShot = false;
+    // Fischschwärme dieses Blocks (werden je Bild gezeichnet)
+    const x0 = c.cx * CH, y0 = c.cy * CH;
+    ob.fish = fish.filter(i => { const x = i % W, y = (i / W) | 0; return x >= x0 && x < x0 + CH && y >= y0 && y < y0 + CH; });
+    ob.v[p] = c.objV | 0; ob.bs[p] = c.sSig | 0;
+    c.objT = this.time;
+  };
+
+  // Vor dem Zeichnen: Block-Bilder der sichtbaren Blöcke bereitstellen; liefert die anzuzeigende Wiege-Phase
+  Renderer.prototype.objPrepare = function (cx0, cx1, cy0, cy1, devS, urgent) {
+    const S = this.S;
+    const k = devS >= 1.25 ? 2 : 1;
+    const sway = devS >= 2 && this.gfx.quality !== 'low' && !this.autoOff.sway;
+    const cfg = k + (sway ? 's' : 'n');
+    const want = typeof S.swayKey === 'function' ? ((this.time * 2) | 0) % 3 : 0;
+    const vis = this._objVis || (this._objVis = []); vis.length = 0;
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const c = this.chunks[cy * this.cw + cx];
+      if (!c.ob || c.ob.cfg !== cfg) { if (c.ob) this._objCount = (this._objCount | 0) - c.ob.cv.filter(Boolean).length; c.ob = { cfg: cfg, k: k, sway: sway, cv: [], v: [], bs: [], fish: [] }; }
+      c.obT = this.time;
+      vis.push(c);
+    }
+    const fresh = (c, p) => c.ob.cv[p] && c.ob.v[p] === (c.objV | 0) && c.ob.bs[p] === (c.sSig | 0);
+    // Phase: die gewünschte, sobald jeder sichtbare Block sie hat; sonst die zuletzt gezeigte; sonst sofort backen
+    let P = want;
+    if (!vis.every(c => c.ob.cv[want])) {
+      const prev = this._shownP;
+      if (prev != null && prev !== want && vis.every(c => c.ob.cv[prev])) P = prev;
+      else for (const c of vis) if (!c.ob.cv[want]) { this.bakeRegion(c, want); this._over = (this._over | 0) + 1; }
+    }
+    // Zeitbudget: zuerst veraltete gezeigte Bilder, dann die gewünschte Phase, dann die übrigen Phasen vorbacken
+    const t0 = performance.now(), lim = urgent ? 6 : 2;
+    let n = 0;
+    const step = (c, p) => { this.bakeRegion(c, p); n++; if (p === P) this._over = (this._over | 0) + 1; };
+    for (const c of vis) { if (performance.now() - t0 > lim && n) break; if (!fresh(c, P)) step(c, P); }
+    if (P !== want) for (const c of vis) { if (performance.now() - t0 > lim) break; if (!c.ob.cv[want] || !fresh(c, want)) step(c, want); }
+    if (typeof S.swayKey === 'function') for (let d = 1; d <= 2; d++) { const q = (want + d) % 3; for (const c of vis) { if (performance.now() - t0 > lim * 0.8) break; if (!fresh(c, q)) step(c, q); } }
+    // Deko-Prüfung als Sicherheitsnetz (Stümpfe, Stadtdeko …): alle 0,4 s ein sichtbarer Block
+    if (this.time - (this._odT || 0) > 0.4 && vis.length) { this._odT = this.time; this._odI = ((this._odI | 0) + 1) % vis.length; this.objCheckDeco(vis[this._odI]); }
+    this._shownP = P; this._regSway = sway;
+    this.objTrim();
+    return P;
+  };
+  // Deko eines Blocks frisch berechnen und mit dem Zwischenspeicher vergleichen
+  Renderer.prototype.objCheckDeco = function (c) {
+    const st = this.st, W = st.W, H = st.H, dk = this._dk, ext = this._objExt || 6;
+    const tx0 = Math.max(0, c.cx * CH - OBJ_L), tx1 = Math.min(W - 1, c.cx * CH + CH - 1 + OBJ_R);
+    const ty0 = Math.max(0, c.cy * CH - 1), ty1 = Math.min(H - 1, c.cy * CH + CH - 1 + ext);
+    let changed = false;
+    for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) {
+      const i = y * W + x;
+      if (dk[i] === 0) continue;
+      const v = this.encDeco(this.decorAt(i, true));
+      if (v !== dk[i]) { dk[i] = v; changed = true; this.objTouch(x, y, x, y); }
+    }
+    return changed;
+  };
+  // Speicher: lange unbenutzte Block-Bilder freigeben
+  Renderer.prototype.objTrim = function () {
+    if ((this._objCount | 0) <= OBJ_MAXC) return;
+    const cand = this.chunks.filter(c => c.ob && c.ob.cv.length && this.time - (c.obT || 0) > 1.5).sort((a, b) => (a.obT || 0) - (b.obT || 0));
+    for (const c of cand) { if ((this._objCount | 0) <= OBJ_MAXC * 0.75) break; this._objCount -= c.ob.cv.filter(Boolean).length; c.ob = null; }
+  };
+  // Block-Bilder der Phase P zeichnen
+  Renderer.prototype.drawRegions = function (g, P) {
+    const F = this._F;
+    for (let cy = F.cy0; cy <= F.cy1; cy++) for (let cx = F.cx0; cx <= F.cx1; cx++) {
+      const c = this.chunks[cy * this.cw + cx], ob = c.ob, cv = ob && ob.cv[P];
+      if (!cv) continue;
+      const X = cx * CPX, Y = cy * CPX, dx = F.rx(X), dy = F.ry(Y);
+      g.drawImage(cv, 0, 0, cv.width, cv.height, dx, dy, F.rx(X + CPX) - dx, F.ry(Y + CPX) - dy);
+    }
+  };
+
+  // Bewegtes über das Standbild legen. near: mit ruhenden Objekten im Ausschnitt (sonst nur Figuren);
+  // clip: Ausschnitt nötig (nahe Ansicht oder Dunst über den Figuren)
+  Renderer.prototype.drawDynamic = function (ctx, vt, opts, near, P, smogOn) {
+    const st = this.st, S = this.S, W = st.W, H = st.H, F = this._F;
+    const kings = this._kings || (this._kings = new Map());
+    kings.clear();
+    if (st.kingdoms) for (const k of st.kingdoms) kings.set(k.id, k);
+    const cityK = this._cityK || (this._cityK = new Map());
+    cityK.clear();
+    if (st.cities) for (const c of st.cities) cityK.set(c.id, kings.get(c.kingdomId));
+    const time = this.time, sway = near && this._regSway;
+    const zoomBig = opts.scale >= 2.5;
+    const pool = this._dynPool || (this._dynPool = []);
+    let np = 0;
+    const item = () => { let o = pool[np]; if (!o) o = pool[np] = { cls: 0, row: 0, sub: 0, t: 0, x0: 0, y0: 0, x1: 0, y1: 0, key: null, px: 0, py: 0, team: 0, flip: false, u: null, v: 0, sick: false }; np++; return o; };
+    const dyn = this._dynList || (this._dynList = []); dyn.length = 0;
+    const bubbles = [], bars = [], flyers = [];
+    const prev = opts.prev, a = opts.alpha == null ? 1 : opts.alpha;
+    const y0 = vt.y0, y1 = vt.y1;
+    const addU = (u, isAnimal) => {
+      let x = u.x, y = u.y;
+      if (prev) { const pp = prev.get(isAnimal ? -u.id : u.id); if (pp) { const dx = x - pp[0], dy = y - pp[1]; if (dx * dx + dy * dy < 4) { x = pp[0] + dx * a; y = pp[1] + dy * a; } } }
+      if (x < vt.x0 - 1 || x > vt.x1 + 2 || y < y0 || y >= y1 + 1) return;
+      if (isAnimal && u.flying) { flyers.push({ u: u, x: x, y: y }); return; }
+      const o = item();
+      o.cls = 1; o.row = y | 0; o.sub = y; o.u = u; o.flip = u.dir < 0; o.sick = false;
+      o.px = Math.round(x * 8 - 4); o.py = Math.round(y * 8 - 6);
+      if (isAnimal) {
+        o.t = 2; o.v = u.moving ? (((time * 5 + (u.id & 7) * 0.37) | 0) & 1) : 0;
+        o.key = 'a_' + u.kind + '_' + o.v; if (!S.has(o.key)) o.key = 'a_' + u.kind + '_0';
+        o.team = 0;
+      } else {
+        o.t = 1;
+        const k = kings.get(u.kingdomId);
+        o.team = k ? k.colorIndex | 0 : 10;
+        o.key = this.unitKey(u, k ? k.gov : 'tribe', this.unitFrame(u));
+        o.sick = !!(u.sick && (((time * 2) | 0) + u.id) & 1);
+        if (u.bubble && u.bubble.icon) bubbles.push({ x: o.px, y: o.py, icon: u.bubble.icon });
+        if (zoomBig && u.hp < u.maxHp * 0.95 && u.maxHp > 0) bars.push({ x: o.px + 1, y: o.py - 11, w: 6, v: u.hp / u.maxHp, col: '#7ecb5a' });
+      }
+      const bx = S.has(o.key) ? this.keyBox(o.key) : null;
+      if (bx) { const ox = o.flip ? bx[4] : bx[0]; o.x0 = o.px + ox - 1; o.y0 = o.py + bx[1] - 1; o.x1 = o.px + ox + bx[2] + 1; o.y1 = o.py + bx[1] + bx[3] + 1; }
+      else { o.x0 = o.px - 1; o.y0 = o.py - 1; o.x1 = o.px + 9; o.y1 = o.py + 9; }
+      if (o.sick) o.y0 = Math.min(o.y0, o.py - 11);
+      dyn.push(o);
+    };
+    if (st.units) for (const u of st.units) if (!u.dead && u.ind !== 'train') addU(u, false);
+    if (st.animals) for (const an of st.animals) if (!an.dead && !an.buried) addU(an, true);
+    if (near) {
+      // Fischschwärme, Lagerfeuer, feuernde Mauergeräte
+      for (let cy = F.cy0; cy <= F.cy1; cy++) for (let cx = F.cx0; cx <= F.cx1; cx++) {
+        const ob = this.chunks[cy * this.cw + cx].ob;
+        if (!ob || !ob.fish.length) continue;
+        for (const i of ob.fish) {
+          const code = this._dk[i]; if (!(code & (1 << 29))) continue;
+          const x = i % W, y = (i / W) | 0;
+          if (x < vt.x0 || x > vt.x1 || y < vt.y0 || y > vt.y1) continue;
+          const o = item(); o.cls = 2; o.row = y; o.sub = x; o.t = 3; o.team = 0; o.flip = false;
+          o.key = 'd_fish_' + (((time * 2) | 0) & 1); o.px = x * 8 + ((code >> 20) & 31) - 8; o.py = y * 8 + ((code >> 25) & 15) - 8;
+          const bx = this.keyBox(o.key) || [0, 0, 8, 8, 0];
+          o.x0 = o.px + bx[0] - 1; o.y0 = o.py + bx[1] - 1; o.x1 = o.px + bx[0] + bx[2] + 1; o.y1 = o.py + bx[1] + bx[3] + 1;
+          dyn.push(o);
+        }
+      }
+      const addS = (s) => {
+        const rc = this._rc.get(s.id); if (!rc) return;
+        if (rc.x1 < vt.x0 * 8 - 8 || rc.x0 > vt.x1 * 8 + 16 || rc.y1 < vt.y0 * 8 || rc.y0 > vt.y1 * 8 + 16) return;
+        const o = item(); o.cls = s.type === 'field' ? 0 : 3; o.row = s.y + s.h - 1; o.sub = s.x; o.t = 4; o.u = s;
+        o.x0 = rc.x0 - 1; o.y0 = rc.y0 - 1; o.x1 = rc.x1 + 1; o.y1 = rc.y1 + 1;
+        dyn.push(o);
+      };
+      for (const s of this._campfires || []) if (!s.dead) addS(s);
+      if (this.muzzleT && this.muzzleT.size) for (const [ti, t] of this.muzzleT) {
+        if (time - t > 0.3) { this.muzzleT.delete(ti); continue; }
+        const sid = st.structAt ? st.structAt[ti] : -1, s = sid >= 0 && this.structById ? this.structById(sid) : null;
+        if (s && s.device && s.device !== 'spikes' && s.device !== 'trap' && !s.dead) addS(s);
+      }
+    }
+    let drawn = dyn.length;
+    if (dyn.length) {
+      const items = this._dynItems || (this._dynItems = []); items.length = 0;
+      for (const o of dyn) items.push(o);
+      if (near) {
+        // ruhende Objekte, die ein bewegtes Rechteck berühren (davor und dahinter)
+        const ext = this._objExt || 6, stamp = this._stamp, stS = this._stS, stD = this._stD;
+        const fr = this._stampN = ((this._stampN | 0) + 1) & 0x3fffffff;
+        const out = this._objOut2 || (this._objOut2 = []), r = this._objR2 || (this._objR2 = [0, 0, 0, 0]);
+        const nDyn = dyn.length;
+        // bewegte Bauwerke (Lagerfeuer, feuerndes Gerät) nicht zusätzlich als ruhend zeichnen
+        for (const o of dyn) if (o.t === 4) { const s = o.u; for (let q = this._ancH[(s.y + s.h - 1) * W + s.x]; q >= 0; q = this._ancN[q]) if (this._anc[q] === s) stS[q] = fr; }
+        for (let d = 0; d < nDyn; d++) {
+          const o = dyn[d];
+          const ta = Math.max(0, Math.floor(o.x0 / 8) - OBJ_L), tb = Math.min(W - 1, Math.floor(o.x1 / 8) + OBJ_R);
+          const ra = Math.max(0, Math.floor(o.y0 / 8) - 1), rb = Math.min(H - 1, Math.floor(o.y1 / 8) + ext);
+          for (let y = ra; y <= rb; y++) {
+            out.length = 0;
+            this.objRow(y, ta, tb, P, sway, out, null);
+            for (let j = 0; j < out.length; j += 2) {
+              const kind = out[j], v = out[j + 1];
+              const arr = kind === 2 ? stamp : kind === 4 ? stD : stS;
+              if (arr[v] === fr) continue;
+              if (!this.objRect(kind, v, P, sway, r)) continue;
+              if (r[2] <= o.x0 || r[0] >= o.x1 || r[3] <= o.y0 || r[1] >= o.y1) continue;
+              arr[v] = fr;
+              const it = item(); it.t = 5; it.cls = kind; it.v = v;
+              if (kind === 2) { it.row = (v / W) | 0; it.sub = v % W; }
+              else { const s = this._anc[v]; it.row = s.y + s.h - 1 + (kind === 4 ? 1 : 0); it.sub = s.x; }
+              items.push(it);
+            }
+          }
+        }
+      }
+      items.sort((p, q) => p.row - q.row || p.cls - q.cls || p.sub - q.sub);
+      const clip = near || smogOn;
+      if (clip) {
+        // Ausschnitt: Rechtecke der bewegten Dinge
+        ctx.save();
+        ctx.beginPath();
+        for (const o of dyn) ctx.rect(o.x0, o.y0, o.x1 - o.x0, o.y1 - o.y0);
+        ctx.clip();
+        if (this._patchBase) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(this._patchBase, 0, 0); }
+        else this.drawBase(ctx);
+        ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
+      }
+      for (const it of items) {
+        if (it.t === 1) {
+          S.drawFast(ctx, it.key, it.px, it.py, it.team, it.flip);
+          if (it.sick) { ctx.globalAlpha = 0.6; S.drawFast(ctx, 'fx_plague', it.px, it.py - 10, 0, false); ctx.globalAlpha = 1; }
+        } else if (it.t === 2) this.drawAnimal(ctx, it.u, it.px, it.py, it.v);
+        else if (it.t === 3) S.drawFast(ctx, it.key, it.px, it.py, 0, false);
+        else if (it.t === 4) this.drawStruct(ctx, it.u, cityK, false, OBJ_NOBARS, P);
+        else { this.objDraw(ctx, it.cls, it.v, P, sway); drawn++; }
+      }
+      if (clip) {
+        if (smogOn) this.drawSmogLayer(ctx);
+        ctx.restore();
+        ctx.setTransform(F.s, 0, 0, F.s, F.ox, F.oy);
+      }
+    }
+    // Fliegende Wesen über allem, mit Schatten am Boden
+    for (const it of flyers) {
+      const u = it.u, px = Math.round(it.x * 8 - 4), py = Math.round(it.y * 8 - 6);
+      const frame = (((time * 5 + (u.id & 7) * 0.37) | 0) & 1);
+      if (S.has('a_' + u.kind + '_shadow')) S.drawFast(ctx, 'a_' + u.kind + '_shadow', px, py, 0, u.dir < 0);
+      else { ctx.fillStyle = 'rgba(10,26,33,0.3)'; ctx.fillRect(px + 1, py + 6, 6, 2); }
+      this.drawAnimal(ctx, u, px, py - 14 - Math.round(Math.sin(time * 3 + u.id) * 2), frame);
+    }
+    if (near) {
+      for (const b of bubbles) {
+        if (!S.has('b_' + b.icon)) continue;
+        S.drawFast(ctx, 'b_frame', b.x, b.y - 19, 0, false);
+        S.drawFast(ctx, 'b_' + b.icon, b.x, b.y - 19, 0, false);
+      }
+      if (zoomBig) for (const s of this._barCand || []) {
+        if (s.dead || s.x + s.w < vt.x0 || s.x > vt.x1 || s.y + s.h < vt.y0 || s.y > vt.y1) continue;
+        const px = s.x * 8;
+        if (s.upgrading && s.built !== false) bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.progress || 0, col: '#f2b541' });
+        else if (!s.built && s.progress > 0) bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.progress, col: '#f2b541' });
+        else if (s.built && s.hp < s.maxHp * 0.98 && s.type !== 'field' && s.type !== 'ruin') bars.push({ x: px, y: (s.y + s.h) * 8 - 2, w: s.w * 8, v: s.hp / s.maxHp, col: '#e2543d' });
+      }
+      for (const b of bars) {
+        ctx.fillStyle = '#0a1a21'; ctx.fillRect(b.x, b.y, b.w, 2);
+        ctx.fillStyle = b.col; ctx.fillRect(b.x, b.y, Math.max(1, Math.round(b.w * Math.max(0, Math.min(1, b.v)))), 1);
+      }
+    }
+    return drawn;
+  };
+
+  // Deko, Bauwerke und Figuren zeilenweise von oben nach unten (ohne Objekt-Ebene)
   Renderer.prototype.drawObjects = function (ctx, vt, low, opts) {
     const st = this.st, S = this.S, W = st.W;
     const y0 = vt.y0, y1 = vt.y1, nrows = y1 - y0 + 1;
@@ -1462,7 +1991,7 @@
     ctx.globalAlpha = 1;
   };
 
-  Renderer.prototype.drawStruct = function (ctx, s, cityK, zoomBig, bars) {
+  Renderer.prototype.drawStruct = function (ctx, s, cityK, zoomBig, bars, phase) {
     const S = this.S;
     const k = cityK.get(s.cityId);
     const gov = k ? k.gov : 'tribe';
@@ -1470,7 +1999,7 @@
     let key = this.structKey(s, gov);
     if (key === null) return;
     if (s.type === 'field' && typeof S.swayKey === 'function' && (key === 's_field_3' || key === 's_field_2')) {
-      const k2 = S.swayKey(key, (s.x + s.y + ((this.time * 2) | 0)) % 3); if (k2 && S.has(k2)) key = k2;
+      const k2 = S.swayKey(key, (s.x + s.y + (phase != null ? phase : ((this.time * 2) | 0))) % 3); if (k2 && S.has(k2)) key = k2;
     }
     const inf = S.info(key);
     const fh = inf ? inf.fh : s.h;
@@ -1511,7 +2040,7 @@
 
   Renderer.prototype.drawDevice = function (ctx, s) {
     const S = this.S, base = 's_walldev_' + s.device;
-    const shot = this.muzzleT && this.time - (this.muzzleT.get(s.y * this.st.W + s.x) || -9) < 0.25;
+    const shot = !this._bakeNoShot && this.muzzleT && this.time - (this.muzzleT.get(s.y * this.st.W + s.x) || -9) < 0.25;
     const k = S.has(base + '_' + (shot ? 1 : 0)) ? base + '_' + (shot ? 1 : 0) : (S.has(base) ? base : null);
     let off = s.device === 'spikes' || s.device === 'trap' ? 8 : 0;
     if (typeof S.wallDevOffset === 'function' && off === 0) {

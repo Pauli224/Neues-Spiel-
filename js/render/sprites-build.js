@@ -1,6 +1,8 @@
 // Wuselwelt – Pixelkunst: Bauwerke (Zentren, Häuser, Betriebe, Denkmäler, Mauern, Tore, Türme).
 // Gebäude haben eine dunkle Kontur und ragen nach oben über ihre Grundfläche hinaus.
 // Grundflächen: Zentrum 3×3, Haus/Kaserne/Markt/Holzfäller/Steinbruch 2×2, alles andere 1×1.
+// Ausbau 9 (Schlüsselliste im Kopf von sprites.js): Zeichen e_<gov>, Fahnen mit Zeichen, Kulturbauten (sahel/nil/nord),
+// Pyramide, Karawanserei, Langhaus, Arsenal, Lagerstadt (Kommandantur, Baracke, Wachturm, Zaun, Gefangenenlager).
 (function (WW) { 'use strict';
 
   (WW._spriteBuilders = WW._spriteBuilders || []).push(function (L) {
@@ -2842,7 +2844,7 @@
         for (j = 18; j < 60; j++) for (i = 0; i < CG; i++) { var seam = (i % 9 === 8) || (j % 8 === 7); g.set(i, j, seam ? Cc[3] : (i < 1 ? Cc[0] : (i > 44 ? Cc[2] : Cc[1]))); }
         for (j = 12; j < 60; j++) for (i = 12; i < 34; i++) g.set(i, j, (i === 12) ? C.white : (i === 33 ? Cc[2] : ((j % 8 === 7) ? Cc[2] : Cc[0])));
         for (i = 3; i < 11; i += 3) for (y = 22; y < 52; y += 10) { g.vline(i, y, 6, lit && hash(i, y, 5) < 0.6 ? LITC[1] : C.ink); g.vline(i + 33, y, 6, lit && hash(i + 33, y, 5) < 0.6 ? LITC[1] : C.ink); }
-        [14, 27].forEach(function (bx) { cloth(g, bx, 14, 5, 34, pat == null ? 0 : pat, 0, true); g.set(bx + 2, 48, 'Td'); });
+        [14, 26].forEach(function (bx) { govBanner(g, bx, 15, 6, 32, 'fascism', pat == null ? 0 : pat); });
         archDoor(g, 20, 46, 6, 14, lit);
         g.hline(8, 60, 30, Cc[0]); g.hline(6, 61, 34, Cc[1]); g.hline(4, 62, 38, Cc[2]);
       } else if (gov === 'communism') {
@@ -2855,6 +2857,8 @@
         for (i = 11; i < 44; i += 6) { winH(g, i, 41, lit && hash(i, 1, 3) < 0.8); winH(g, i, 51, lit && hash(i, 2, 3) < 0.8); }
         archDoor(g, 23, 52, 8, 12, lit);
         flagH(g, 36, 4, 18);
+        S._star(g, 3, 0, 'm', EG);
+        govBanner(g, 14, 39, 6, 13, 'communism', 0); govBanner(g, 34, 39, 6, 13, 'communism', 0);
         g.hline(8, 64, 38, PANEL[1]); g.hline(8, 65, 38, C.stone);
       } else if (gov === 'theocracy') {
         g = new Grid(CG, 76);
@@ -3154,6 +3158,623 @@
     L.ALIAS.s_memorial = 'hm_memorial';
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
+    // ======================================================================
+    // Ausbau 9, Teil 1: Zeichen der Regierungen (e_<gov>), Fahnen und Banner mit Zeichen.
+    // Leitplanken: Faschismus = Liktorenbündel (Rutenbündel mit Beil) auf dunkler Standarte; Kommunismus = Hammer und
+    // Sichel mit Stern auf Rot. Keine Kreisscheibe hinter einem Zeichen (nie rotes Tuch + heller Kreis + dunkles Zeichen).
+    // Zeichen als Ziffernraster: 1 hell, 2 mittel, 3 dunkel (Metallton der Farbe), 4/5 Klinge hell/dunkel, 6 Rot, 7 Weiß.
+    var EMB = {
+      fascism: { m: ['....1.1..', '...12121.', '.4412121.', '44512121.', '45533333.', '.4512121.', '...12121.', '...33333.', '...12121.', '...12121.', '...33333.', '....2.2..'],
+                 s: ['..1.1', '..121', '44121', '45333', '.4121', '..121', '..333', '..121', '...2.'] },
+      monarchy: { m: ['1...1...1', '12.121.12', '122222221', '262272262', '333333333'], s: ['1.1.1', '12121', '26272', '33333'] },
+      democracy: { m: ['....77...', '....77...', '.1133332.', '.1222222.', '.1222222.', '.1222232.', '.3333333.'], s: ['..7..', '1132.', '1222.', '3333.'] },
+      theocracy: { m: ['....1....', '.1.....1.', '...111...', '..11221..', '1.12222.1', '..12223..', '...223...', '.2.....3.', '....3....'], s: ['..1..', '.121.', '12223', '.223.', '..3..'] },
+      republic: { m: ['..1112..', '.112222.', '11233223', '12232223', '12232223', '12333223', '.222223.', '..3333..'], s: ['.112.', '12322', '13332', '.233.'] },
+      anarchy: { m: ['.111.......', '1...2......', '1....7.222.', '1...2.2...3', '.223..7...3', '......2...3', '.......333.'], s: ['11...', '1.7..', '.2.22', '..7.3', '...33'] },
+      tribe: { m: ['..111..', '1121211', '.12221.', '..262..', '..121..', '..323..', '..222..', '..363..', '..222..', '..121..', '..333..'], s: ['.111.', '12221', '.262.', '.323.', '.222.', '.363.', '.222.'] }
+    };
+    // Kommunismus: Hammer und Sichel prozedural (Größe S), Stern als Raster
+    function hammerSickle(S, thick) {
+      var rows = [], x, y, cx = S * 0.47, cy = S * 0.47, ro = S * 0.46, ri = ro - Math.max(1.1, S * 0.17);
+      for (y = 0; y < S; y++) { var r = ''; for (x = 0; x < S; x++) r += '.'; rows.push(r.split('')); }
+      function put(px, py, ch) { px = Math.round(px); py = Math.round(py); if (px >= 0 && py >= 0 && px < S && py < S) rows[py][px] = ch; }
+      for (y = 0; y < S; y++) for (x = 0; x < S; x++) {
+        var dx = x + 0.5 - cx, dy = y + 0.5 - cy, d = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx) * 180 / Math.PI;
+        if (d <= ro && d >= ri && (a >= -100 && a <= 128)) put(x, y, a < 20 ? '1' : '2');
+      }
+      // Griff der Sichel nach links unten
+      for (var k = 0; k < Math.max(2, S * 0.22); k++) { put(S * 0.2 - k * 0.7, S * 0.8 + k * 0.7, '3'); if (thick) put(S * 0.2 - k * 0.7 + 1, S * 0.8 + k * 0.7, '3'); }
+      // Hammer: Stiel von links oben nach rechts unten, Kopf quer
+      var n = Math.round(S * 0.62);
+      for (k = 0; k <= n; k++) { var t = k / n; put(S * 0.3 + t * (S * 0.62), S * 0.3 + t * (S * 0.62), '2'); if (thick) put(S * 0.3 + t * (S * 0.62) + 1, S * 0.3 + t * (S * 0.62), '3'); }
+      var hl = Math.round(S * 0.42);
+      for (k = 0; k <= hl; k++) { var u = k / hl - 0.5, hx = S * 0.27 + u * S * 0.42, hy = S * 0.27 - u * S * 0.42; put(hx, hy, '1'); put(hx + 0.7, hy + 0.7, '1'); if (thick) put(hx - 0.7, hy - 0.7, '1'); }
+      return rows.map(function (r) { return r.join(''); });
+    }
+    EMB.communism = { m: hammerSickle(11, true), s: hammerSickle(7, false) };
+    var STAR = { m: ['..1..', '11211', '.222.', '.2.3.'], s: ['.1.', '121', '2.3'] };
+    // Farbsätze für Zeichen
+    var EG = { 1: C.goldL, 2: C.gold, 3: C.goldD, 4: C.metalL, 5: C.metalD, 6: C.red, 7: C.white };
+    var EC = { 1: C.white, 2: C.cream, 3: C.goldL, 4: C.white, 5: C.stone, 6: C.red, 7: C.white };   // hell (Armbinde)
+    function stampE(g, x, y, rows, pal) {
+      for (var j = 0; j < rows.length; j++) for (var i = 0; i < rows[j].length; i++) { var ch = rows[j].charAt(i); if (ch >= '1' && ch <= '7') g.set(x + i, y + j, pal[ch]); }
+    }
+    function embSize(rows) { var w = 0; rows.forEach(function (r) { w = Math.max(w, r.length); }); return { w: w, h: rows.length }; }
+    S._emblem = function (g, gov, x, y, size, pal) { var e = EMB[gov] || EMB.tribe, rows = e[size] || e.m; stampE(g, x, y, rows, pal || EG); return embSize(rows); };
+    S._emblemSize = function (gov, size) { var e = EMB[gov] || EMB.tribe; return embSize(e[size] || e.m); };
+    S._star = function (g, x, y, size, pal) { stampE(g, x, y, STAR[size] || STAR.m, pal || EG); };
+    S._EG = EG; S._EC = EC;
+    // Zeichen als 16×16-Bild (wie Icons)
+    GOVS.forEach(function (gv) {
+      var g = new Grid(14, 14), sz = embSize(EMB[gv].m);
+      stampE(g, Math.floor((14 - sz.w) / 2), Math.floor((14 - sz.h) / 2) + (gv === 'communism' ? 1 : 0), EMB[gv].m, EG);
+      if (gv === 'communism') stampE(g, 9, 0, STAR.m, EG);
+      def('e_' + gv, g.pad(1, 1, 1, 1).outline(), { group: 'emblem', anchor: 'icon' });
+    });
+    S.emblemKey = function (gov) { return 'e_' + (GOVS.indexOf(gov) >= 0 ? gov : 'tribe'); };
+
+    // ---------------------------------------------------------------- Tücher mit Zeichen (flach gemalt, dann gewellt)
+    var STD = [HCOL('#4a4a54'), HCOL('#36363e'), HCOL('#26262c')];      // dunkle Standarte
+    var REDC = [C.redL, C.red, C.redD];
+    function clothGov(w, h, gov, p, vertical) {
+      var g = new Grid(w, h), i, j;
+      if (gov === 'fascism') {
+        for (j = 0; j < h; j++) for (i = 0; i < w; i++) g.set(i, j, (vertical ? (i === 0) : (j === 0)) ? STD[0] : ((vertical ? i === w - 1 : j === h - 1) ? STD[2] : STD[1]));
+        if (vertical) { g.vline(1, 0, h, 'T'); g.vline(w - 2, 0, h, 'Td'); } else { g.hline(0, h - 3, w, 'T'); g.hline(0, h - 2, w, 'Td'); g.vline(w - 1, 0, h, C.goldD); }
+        var e = embSize(EMB.fascism[w >= 16 || h >= 20 ? 'm' : 's']), sz = w >= 16 || h >= 20 ? 'm' : 's';
+        stampE(g, Math.floor((w - e.w) / 2) + (vertical ? 0 : 1), vertical ? Math.max(1, Math.floor(h * 0.18)) : Math.max(1, Math.floor((h - 3 - e.h) / 2)), EMB.fascism[sz], EG);
+      } else if (gov === 'communism') {
+        for (j = 0; j < h; j++) for (i = 0; i < w; i++) g.set(i, j, (vertical ? i === 0 : j === 0) ? REDC[0] : ((vertical ? i === w - 1 : j === h - 1) ? REDC[2] : REDC[1]));
+        if (vertical) { g.hline(0, h - 2, w, 'T'); g.hline(0, h - 1, w, 'Td'); } else { g.vline(0, 0, h, 'Tl'); g.vline(1, 0, h, 'T'); g.vline(2, 0, h, 'Td'); }
+        var big = w >= 20 || h >= 24, s2 = big ? 'm' : 's', e2 = embSize(EMB.communism[s2]);
+        var ex = vertical ? Math.floor((w - e2.w) / 2) : 4, ey = vertical ? Math.max(4, Math.floor(h * 0.24)) : Math.max(3, Math.floor((h - e2.h) / 2) + 1);
+        stampE(g, ex, ey, EMB.communism[s2], EG);
+        stampE(g, vertical ? Math.floor((w - 3) / 2) + (big ? -1 : 0) : ex + e2.w - 2, vertical ? ey - (big ? 5 : 4) : Math.max(0, ey - 4), STAR[big ? 'm' : 's'], EG);
+      } else {
+        for (j = 0; j < h; j++) for (i = 0; i < w; i++) { var u = vertical ? j / h : i / w, v = vertical ? i / w : j / h; g.set(i, j, FPAT[p](u, v)); }
+        var es = embSize(EMB[gov] ? EMB[gov].s : EMB.tribe.s), cw = es.w + 3, ch = es.h + 3;
+        var kx = vertical ? Math.floor((w - cw) / 2) : 0, ky = vertical ? 1 : 0;
+        g.rect(kx, ky, cw, ch, 'Td'); g.hline(kx, ky + ch - 1, cw, 'Td'); g.vline(kx + cw - 1, ky, ch, 'Td');
+        stampE(g, kx + 1, ky + 1, (EMB[gov] || EMB.tribe).s, EG);
+      }
+      return g;
+    }
+    function waveCopy(dst, src, x0, y0, f, amp) {
+      for (var i = 0; i < src.w; i++) { var dy = Math.round(Math.sin(i * 0.42 + f * 1.7) * amp * (i / src.w)); for (var j = 0; j < src.h; j++) { var c = src.d[j * src.w + i]; if (c) dst.set(x0 + i, y0 + j + dy, c); } }
+    }
+    var FLAGGOVS = GOVS;
+    L.lazyDef('fl_', function (key) {
+      var m = /^fl_(pole|hang)_([a-z]+)_(\d)(?:_(\d))?$/.exec(key); if (!m || FLAGGOVS.indexOf(m[2]) < 0) return null;
+      var gov = m[2], p = +m[3] & 7, f = +(m[4] || 0) & 1, g;
+      if (m[1] === 'pole') {
+        g = new Grid(34, 50);
+        g.vline(2, 2, 44, C.metalD); g.vline(3, 2, 44, C.metal); g.set(2, 1, C.goldD); g.set(3, 1, C.goldL); g.set(3, 0, C.goldL); g.set(2, 0, C.gold);
+        waveCopy(g, clothGov(26, 17, gov, p, false), 4, 3, f + 1, 1.4);
+        g.rect(0, 45, 7, 4, C.stone); g.hline(0, 45, 7, C.stoneL); g.hline(0, 48, 7, C.stoneD);
+        g = g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 1).footShade();
+        return { grid: g, scale: 0.5, ox: -1, oy: 8 - g.h * 0.5 };
+      }
+      g = new Grid(14, 34);
+      g.hline(0, 0, 14, C.woodD); g.set(0, 0, C.wood); g.set(13, 0, C.wood);
+      var cl = clothGov(12, 30, gov, p, true); g.blit(cl, 1, 1);
+      for (var k = 0; k < 4; k++) { g.set(1 + 5 - k, 31 - 3 + k, 0); g.set(1 + 6 + k, 31 - 3 + k, 0); }   // Schwalbenschwanz
+      for (k = 0; k < 3; k++) { g.set(6 - k, 30 - k, 0); g.set(7 + k, 30 - k, 0); }
+      g = g.pad(1, 1, 1, 1).outline();
+      return { grid: g, scale: 0.5, ox: 0, oy: 0 };
+    });
+    var flagKeyOld = S.flagKey;
+    S.flagKey = function (kind, pattern, frame, team, gov) {
+      if (gov && FLAGGOVS.indexOf(gov) >= 0 && (kind === 'pole' || kind === 'hang' || kind == null)) {
+        var p = team == null ? (((pattern | 0) % 8) + 8) % 8 : S.safePattern(pattern, team);
+        return kind === 'hang' ? 'fl_hang_' + gov + '_' + p : 'fl_pole_' + gov + '_' + p + '_' + ((frame | 0) & 1);
+      }
+      return flagKeyOld(kind, pattern, frame, team);
+    };
+    // Senkrechtes Banner mit Zeichen für Fassaden (feines Raster), oben Querstange
+    function govBanner(g, x, y, w, h, gov, p) {
+      g.hline(x - 1, y - 1, w + 2, C.woodD);
+      var cl = clothGov(w, h, gov, p == null ? 0 : p, true); g.blit(cl, x, y);
+      g.set(x, y + h - 1, 0); g.set(x + w - 1, y + h - 1, 0); g.set(x + (w >> 1), y + h - 1, 0);
+    }
+    S._govBanner = govBanner;
+    // ======================================================================
+    // Ausbau 9, Teil 2: Bauten der Kulturen (sahel: Lehmbau mit Holzsparren und Zinnenkronen; nil: Sandstein, Pylone,
+    // kleine steile Pyramide; nord: Holz, Torf, Langhaus), Arsenal, Lagerstadt (Kommandantur, Baracke, Wachturm,
+    // Zaun, Gefangenenlager). Alles feines Raster (Maßstab 0,5), träge erzeugt (hk_*, hz_*).
+    var MUD = [HCOL('#e6b07a'), HCOL('#cc915a'), HCOL('#ad7442'), HCOL('#82522c')];
+    var MUDR = [HCOL('#dba878'), HCOL('#c4925e'), HCOL('#a87848')];             // Dachfläche Lehm
+    var SST = [HCOL('#f2dcaa'), HCOL('#dcc086'), HCOL('#bc9c62'), HCOL('#8e7042')]; // Sandstein
+    var WWASH = [C.white, HCOL('#f0eadc'), HCOL('#d6ccb6'), HCOL('#ac9e82')];
+    var NW = [HCOL('#a8744a'), HCOL('#86583a'), HCOL('#643e26'), HCOL('#432818')];  // nordisches Holz
+    var TURF = [HCOL('#9ccc68'), HCOL('#78a84c'), HCOL('#56803a'), HCOL('#3e5e2c')];
+    var SHNG = [HCOL('#8a7a6a'), HCOL('#6a5c50'), HCOL('#4c4038')];
+    var PALM = [HCOL('#c8c070'), HCOL('#a09a50'), HCOL('#76723a')];
+    var TORON = C.woodD, PAINT = [HCOL('#4a7ab8'), HCOL('#c84a3a'), HCOL('#e8c048')];
+    var RUGS = [[C.red, C.redD], [HCOL('#4a5aa0'), HCOL('#2f3a78')], [C.gold, C.goldD]];
+    function mudWall(g, x, y, w, h, M, seed) {
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var hv = hash(x + i, y + j, seed || 811), c = hv < 0.08 ? M[0] : (hv > 0.93 ? M[2] : M[1]);
+        if (i === 0) c = M[0]; if (i === w - 1) c = M[2]; if (j === h - 1) c = M[3];
+        g.set(x + i, y + j, c);
+      }
+    }
+    function flatTop(g, x, y, w, d, R, rim) {   // Dachfläche (von schräg vorn sichtbar) mit Brüstungskante
+      for (var j = 0; j < d; j++) for (var i = 0; i < w; i++) g.set(x + i, y + j, (j === 0 || i === 0) ? R[0] : (i === w - 1 ? R[2] : (hash(x + i, y + j, 812) < 0.06 ? R[2] : R[1])));
+      if (rim) g.hline(x, y + d - 1, w, rim);
+    }
+    function toron(g, x, y, w, h, M) {   // herausragende Holzsparren
+      for (var j = 3; j < h - 3; j += 6) for (var i = 2 + ((j / 6 | 0) & 1) * 2; i < w - 1; i += 5) { g.set(x + i, y + j, TORON); g.set(x + i + 1, y + j, C.wood); g.set(x + i, y + j + 1, M[3]); }
+    }
+    function pinnacle(g, cx, by, h, M, egg) {   // runde Zinnenkrone aus Lehm
+      for (var j = 0; j < h; j++) { var hw = j < 2 ? 0.6 : (j < 4 ? 1.2 : 1.6); for (var i = Math.floor(cx - hw); i <= Math.ceil(cx + hw); i++) { var dx = i + 0.5 - cx; if (Math.abs(dx) <= hw + 0.1) g.set(i, by - h + j, dx < -0.4 ? M[0] : (dx > 0.5 ? M[2] : M[1])); } }
+      if (egg) { g.set(Math.round(cx) - 1, by - h - 1, C.white); g.set(Math.round(cx), by - h - 1, C.cream); g.set(Math.round(cx) - 1, by - h - 2, C.cream); }
+    }
+    function crownRow(g, x, by, w, M, step, h) { for (var i = x + 1; i < x + w - 1; i += step || 5) pinnacle(g, i, by, h || 4, M); }
+    function darkDoor(g, x, y, w, h, frame, lit) { g.rect(x - 1, y - 1, w + 2, h + 1, frame || C.woodD); g.rect(x, y, w, h, lit ? LITC[2] : C.plum); g.vline(x, y, h, lit ? LITC[1] : C.ink); g.hline(x - 2, y + h, w + 4, C.stoneD); }
+    function smallWin(g, x, y, w, h, lit) { g.rect(x - 1, y - 1, w + 2, h + 2, C.woodD); g.rect(x, y, w, h, lit ? LITC[1] : C.ink); if (!lit) g.set(x, y, C.dusk); }
+    function triDeco(g, x, y, n, col) { for (var k = 0; k < n; k++) { g.set(x + k * 3, y, col); g.set(x + k * 3 + 1, y - 1, col); g.set(x + k * 3 + 2, y, col); } }
+    function cornice(g, x, y, w, S2) { g.hline(x - 1, y, w + 2, S2[0]); g.hline(x - 1, y + 1, w + 2, S2[2]); g.hline(x, y + 2, w, S2[3]); }   // Hohlkehle (Niltal)
+    function pylon(g, x, y, w, h, S2, flag) {   // geböschter Turm: unten breiter
+      for (var j = 0; j < h; j++) { var ins = Math.round((h - j) * 0.12); for (var i = ins; i < w - ins; i++) { var c = i === ins ? S2[0] : (i === w - ins - 1 ? S2[2] : ((j % 5 === 4 || (i + (j / 5 | 0) * 3) % 7 === 6) ? S2[2] : S2[1])); g.set(x + i, y + j, c); } }
+      var ti = Math.round(h * 0.12); cornice(g, x + ti, y, w - 2 * ti, S2);
+      g.hline(x + ti + 1, y + 5, w - 2 * ti - 2, PAINT[0]); g.hline(x + ti + 1, y + 6, w - 2 * ti - 2, PAINT[1]);
+      if (flag) { g.vline(x + ti + 1, y - 14, 14, C.woodD); g.paint(x + ti + 2, y - 14, ['TTTu', 'TTt.', 'Tt..']); }
+    }
+    function turfRoof(g, x, y, w, h, back) {   // Satteldach mit Torf (Seitenansicht der Traufe)
+      back = back || Math.max(3, h >> 2);
+      for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) {
+        var c = j < back ? (i === w - 1 ? TURF[2] : TURF[0]) : (j === back ? TURF[0] : (j >= h - 2 ? (j === h - 1 ? NW[3] : NW[2]) : (hash(x + i, y + j, 821) < 0.18 ? TURF[2] : (hash(x + i, y + j, 822) < 0.12 ? TURF[0] : TURF[1]))));
+        if (i === 0 && j < h - 2) c = TURF[0]; if (i === w - 1 && j < h - 2) c = TURF[2];
+        g.set(x + i, y + j, c);
+      }
+      for (var k = 1; k < w - 1; k += 4) g.set(x + k, y - 1, TURF[1]);   // Grasbüschel
+      g.set(x, y, 0); g.set(x + w - 1, y, 0);
+    }
+    function crossGable(g, x, y) { g.line(x - 2, y - 3, x + 2, y + 1, NW[2]); g.line(x + 2, y - 3, x - 2, y + 1, NW[1]); g.set(x - 3, y - 4, NW[0]); g.set(x + 3, y - 4, NW[0]); }
+    function logWall(g, x, y, w, h) { for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) g.set(x + i, y + j, j % 3 === 2 ? NW[3] : (j % 3 === 0 ? NW[0] : NW[1])); for (j = 0; j < h; j += 3) { g.set(x - 1, y + j, NW[2]); g.set(x + w, y + j + 1, NW[2]); } }
+    function stoneBase(g, x, y, w) { for (var i = 0; i < w; i++) { g.set(x + i, y, (i % 4 === 3) ? C.stoneD : C.stone); g.set(x + i, y + 1, (i % 5 === 1) ? C.stoneD : C.stoneL); } }
+    function shieldRow(g, x, y, n) { for (var k = 0; k < n; k++) g.ellipse(x + k * 6 + 2.5, y + 2.5, 2.4, 2.4, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.7 ? NW[3] : (d < 0.15 ? C.metalL : (((px + py) & 1) ? 'T' : 'Tl')); }); }
+
+    // ---------------------------------------------------------------- Häuser je Kultur (2×2) und Zelte (Stufe 0)
+    function houseCult(cult, lv, v, lit) {
+      var GW = 30, g, x, y;
+      if (cult === 'sahel') {
+        var stories = lv >= 2 ? 2 : 1, wallH = 12 + (stories - 1) * 10 + (lv >= 3 ? 4 : 0), D = 8, top = 10, w = v ? 20 : 24, x0 = v ? 2 : 3;
+        g = new Grid(GW, top + D + wallH + 1);
+        flatTop(g, x0, top, w, D, MUDR, MUD[2]);
+        mudWall(g, x0, top + D, w, wallH, MUD, lv * 7 + v);
+        crownRow(g, x0, top + 1, w, MUD, lv >= 3 ? 4 : 6, lv >= 3 ? 5 : 3); pinnacle(g, x0 + 1, top + 2, 6, MUD); pinnacle(g, x0 + w - 2, top + 2, 6, MUD);
+        if (lv >= 3) for (var px = x0 + 5; px < x0 + w - 3; px += 6) { g.vline(px, top + D, wallH - 1, MUD[0]); g.vline(px + 1, top + D, wallH - 1, MUD[2]); pinnacle(g, px + 1, top + D + 1, 7, MUD); }
+        toron(g, x0, top + D, w, wallH, MUD);
+        var dx = x0 + (w >> 1) - 2; darkDoor(g, dx, top + D + wallH - 9, 5, 8, C.woodD, lit); triDeco(g, dx - 1, top + D + wallH - 11, 3, MUD[3]);
+        for (var s = 0; s < stories; s++) { var wy = top + D + 3 + s * 10; smallWin(g, x0 + 3, wy, 2, 3, lit && hash(s, v, 3) < 0.7); smallWin(g, x0 + w - 5, wy, 2, 3, lit); }
+        if (v === 1) {   // Speicher mit Strohkegel daneben
+          g.ellipse(26, top + D + wallH - 6, 3.5, 6, function (px2, py, nx, ny) { return nx < -0.3 ? MUD[0] : (nx > 0.5 ? MUD[2] : MUD[1]); });
+          coneThatch(g, 26, top + D + wallH - 17, 9, 7);
+        }
+        return g;
+      }
+      if (cult === 'nil') {
+        var st2 = lv >= 2 ? 2 : 1, wh = 11 + (st2 - 1) * 10, D2 = 7, top2 = 12, w2 = 24, xa = 3, M2 = v ? SST : WWASH;
+        g = new Grid(GW, top2 + D2 + wh + 1);
+        flatTop(g, xa, top2, w2, D2, v ? [SST[0], SST[1], SST[2]] : [WWASH[1], WWASH[2], WWASH[3]], M2[2]);
+        if (lv >= 2 || v) { for (var j = 0; j < wh; j++) { var ins = lv >= 3 ? Math.round((wh - j) * 0.1) : 0; for (var i = ins; i < w2 - ins; i++) g.set(xa + i, top2 + D2 + j, i === ins ? M2[0] : (i === w2 - ins - 1 ? M2[2] : ((v && (j % 4 === 3 || (i + (j >> 2) * 3) % 6 === 5)) ? M2[2] : M2[1]))); } }
+        else mudWall(g, xa, top2 + D2, w2, wh, WWASH, 3);
+        cornice(g, xa, top2 + D2 - 1, w2, v ? SST : WWASH);
+        g.hline(xa + 1, top2 + D2 + 3, w2 - 2, PAINT[0]);
+        // Sonnensegel aus Palmwedeln auf dem Dach
+        for (var k = 0; k < 4; k++) { g.vline(xa + 3 + k * 6, top2 - 4, 6, C.woodD); }
+        for (var i2 = xa + 1; i2 < xa + w2 - 1; i2++) { g.set(i2, top2 - 5, (i2 & 1) ? PALM[0] : PALM[1]); g.set(i2, top2 - 4, (i2 % 3) ? PALM[1] : PALM[2]); }
+        darkDoor(g, xa + 10, top2 + D2 + wh - 9, 5, 8, M2[3], lit);
+        for (var s2 = 0; s2 < st2; s2++) { smallWin(g, xa + 4, top2 + D2 + 5 + s2 * 10, 3, 2, lit); smallWin(g, xa + w2 - 6, top2 + D2 + 5 + s2 * 10, 3, 2, lit && s2 === 0); }
+        if (lv >= 3) { g.vline(xa - 1, top2 - 6, 30, C.woodD); g.paint(xa, top2 - 6, ['TTu', 'Tt.']); }
+        g.rect(xa + w2 - 3, top2 + D2 + wh - 5, 3, 5, HCOL('#c86a3a')); g.set(xa + w2 - 3, top2 + D2 + wh - 5, HCOL('#e08a5a'));   // Tonkrug
+        return g;
+      }
+      // nord
+      var wl = lv >= 2 ? 26 : 22, x3 = lv >= 2 ? 2 : 4, rh = 12 + lv * 2, wallN = lv >= 3 ? 18 : 11, topN = 8;
+      g = new Grid(GW, topN + rh + wallN + 3);
+      if (v === 0 || lv >= 3) turfRoof(g, x3 - 2, topN, wl + 4, rh);
+      else { roofTiles(g, x3 - 2, topN, wl + 4, rh, SHNG); }
+      crossGable(g, x3 - 1, topN + 1); crossGable(g, x3 + wl, topN + 1);
+      logWall(g, x3, topN + rh, wl, wallN);
+      stoneBase(g, x3 - 1, topN + rh + wallN, wl + 2);
+      darkDoor(g, x3 + (wl >> 1) - 2, topN + rh + wallN - 9, 5, 9, NW[3], lit);
+      smallWin(g, x3 + 3, topN + rh + 3, 3, 3, lit); smallWin(g, x3 + wl - 6, topN + rh + 3, 3, 3, lit);
+      if (lv >= 3) { smallWin(g, x3 + 3, topN + rh + 10, 3, 3, lit); smallWin(g, x3 + wl - 6, topN + rh + 10, 3, 3, lit); g.hline(x3, topN + rh + 8, wl, NW[3]); }
+      if (lv >= 2) { g.rect(x3 + wl - 6, topN - 4, 3, 6, C.stoneD); g.hline(x3 + wl - 7, topN - 4, 5, C.stone); }
+      if (v === 1 && lv < 3) { g.rect(1, topN + rh + wallN - 5, 4, 5, NW[1]); g.hline(1, topN + rh + wallN - 5, 4, NW[0]); g.hline(0, topN + rh + wallN - 6, 6, NW[2]); }   // Holzstapel
+      return g;
+    }
+    function tentCult(cult, v) {
+      var g = new Grid(30, 26), x, y;
+      if (cult === 'sahel' && v === 0) {   // Nomadenzelt: flaches Ledertuch auf Stangen, Mattenwände, Teppich davor
+        for (y = 4; y < 11; y++) for (x = 1 + (10 - y) * 0; x < 29; x++) g.set(x, y, y === 4 ? HCOL('#d88a5a') : (((x + y) % 6 === 0) ? HCOL('#8a4a2c') : (y < 7 ? HCOL('#c06a40') : HCOL('#a85a36'))));
+        for (x = 2; x < 28; x += 4) g.set(x, 10, HCOL('#6e3a20'));
+        for (y = 11; y < 22; y++) for (x = 3; x < 27; x++) g.set(x, y, (x % 3 === 0) ? PALM[2] : (y < 14 ? C.plum : PALM[1]));
+        g.rect(10, 13, 10, 9, C.ink); g.rect(11, 15, 8, 7, C.plum);
+        [2, 14, 27].forEach(function (px) { g.vline(px, 3, 20, C.woodD); g.set(px, 2, C.woodL); });
+        g.rect(6, 22, 18, 3, RUGS[0][0]); g.hline(6, 23, 18, C.gold); g.hline(6, 24, 18, RUGS[0][1]); g.hline(6, 22, 18, 'T');
+        return g;
+      }
+      if (cult === 'sahel') {   // Mattenhütte: Kuppel aus geflochtenen Matten
+        g.ellipse(15, 16, 13, 10, function (px, py, nx, ny) { if (py > 23) return null; var row = ((py >> 1) + (px >> 2)) & 1; return nx + ny < -0.6 ? PALM[0] : (nx > 0.5 ? PALM[2] : (row ? PALM[1] : HCOL('#b4ae60'))); });
+        g.rect(12, 16, 6, 8, C.plum); g.vline(12, 16, 8, C.ink); g.hline(4, 12, 22, 'T');
+        return g;
+      }
+      if (cult === 'nil') {   // Schilfhütte mit Palmdach
+        for (y = 6; y < 12; y++) for (x = 2; x < 28; x++) g.set(x, y, y === 11 ? PALM[2] : ((x + y * 2) % 4 === 0 ? PALM[2] : (y < 8 ? PALM[0] : PALM[1])));
+        for (y = 12; y < 23; y++) for (x = 4; x < 26; x++) g.set(x, y, x % 2 ? HCOL('#d8c890') : HCOL('#bcaa70'));
+        g.hline(4, 16, 22, HCOL('#8a7a4a')); g.rect(13, 15, 5, 8, C.plum); g.hline(4, 13, 22, 'T');
+        return g;
+      }
+      // nord: Kegelzelt aus Fellen bzw. kleine Torfhütte
+      if (v === 0) {
+        for (y = 2; y < 24; y++) { var hw = 1 + (y - 2) * 0.6; for (x = Math.floor(15 - hw); x <= Math.ceil(15 + hw); x++) { var d = (x + 0.5 - 15) / hw; if (Math.abs(d) > 1) continue; g.set(x, y, d < -0.4 ? CC2.hideL : (d > 0.5 ? CC2.hideD : ((y % 6 === 5) ? CC2.hideD : CC2.hide))); } }
+        g.line(13, 0, 15, 4, NW[2]); g.line(17, 0, 15, 4, NW[2]); g.hline(8, 15, 15, 'T'); g.rect(13, 17, 5, 7, C.plum);
+        return g;
+      }
+      turfRoof(g, 3, 4, 24, 12); logWall(g, 5, 16, 20, 7); g.rect(13, 17, 4, 6, C.plum);
+      return g;
+    }
+    var CC2 = { hideL: HCOL('#e8d0a8'), hide: HCOL('#ccac7c'), hideD: HCOL('#9c7c50') };
+    // ---------------------------------------------------------------- Zentren (Stufe 2) je Kultur, Banner je Regierung (3×3)
+    function centerCult(cult, gov, lit) {
+      var g, i, j, x, y;
+      if (cult === 'sahel') {   // großes Lehmhaus im Sudan-Sahel-Stil: Pfeilerfassade, drei Türme mit Straußeneiern, Holzsparren
+        g = new Grid(CG, 72);
+        flatTop(g, 2, 20, 42, 10, MUDR, MUD[2]);
+        mudWall(g, 2, 30, 42, 36, MUD, 31);
+        for (x = 4; x < 42; x += 5) { g.vline(x, 30, 35, MUD[0]); g.vline(x + 1, 30, 35, MUD[2]); pinnacle(g, x + 1, 31, 6, MUD); }
+        [[8, 12], [23, 2], [38, 12]].forEach(function (t, k) {   // Türme
+          var tw = k === 1 ? 10 : 8, tx = t[0] - (tw >> 1), ty = t[1];
+          for (j = 0; j < 64 - ty; j++) { var ins = Math.round((64 - ty - j) * 0.05); for (i = ins; i < tw - ins; i++) g.set(tx + i, ty + 6 + j, i === ins ? MUD[0] : (i === tw - ins - 1 ? MUD[2] : MUD[1])); }
+          pinnacle(g, t[0], ty + 7, 7, MUD, true); pinnacle(g, tx + 1, ty + 8, 4, MUD); pinnacle(g, tx + tw - 1, ty + 8, 4, MUD);
+          toron(g, tx, ty + 8, tw, 64 - ty - 8, MUD);
+        });
+        toron(g, 2, 30, 42, 34, MUD);
+        darkDoor(g, 20, 52, 7, 13, C.woodD, lit); triDeco(g, 19, 50, 3, MUD[3]); g.rect(19, 49, 9, 1, MUD[3]);
+        [[12, 40], [31, 40], [12, 54], [31, 54]].forEach(function (p) { smallWin(g, p[0], p[1], 3, 4, lit); });
+        govBanner(g, 14, 33, 5, 14, gov, 0); govBanner(g, 28, 33, 5, 14, gov, 0);
+        g.hline(0, 66, 46, MUD[3]); g.hline(1, 67, 44, MUD[2]);
+        return g;
+      }
+      if (cult === 'nil') {   // Palast mit zwei Pylonen, Säulenhalle dahinter, Fahnenmasten
+        g = new Grid(CG, 70);
+        flatTop(g, 6, 18, 34, 8, [SST[0], SST[1], SST[2]], SST[2]);
+        for (x = 8; x < 40; x += 5) { g.rect(x, 26, 3, 20, SST[1]); g.vline(x, 26, 20, SST[0]); g.vline(x + 2, 26, 20, SST[2]); g.rect(x - 1, 25, 5, 2, PALM[0]); }
+        g.rect(6, 26, 34, 20, C.plum); for (x = 8; x < 40; x += 5) { g.rect(x, 26, 3, 20, SST[1]); g.vline(x, 26, 20, SST[0]); g.vline(x + 2, 26, 20, SST[2]); g.hline(x - 1, 26, 5, PALM[1]); }
+        cornice(g, 6, 25, 34, SST);
+        pylon(g, 0, 30, 18, 36, SST, true); pylon(g, 28, 30, 18, 36, SST, true);
+        g.rect(17, 40, 12, 26, SST[2]); cornice(g, 17, 39, 12, SST);
+        darkDoor(g, 20, 50, 6, 15, SST[3], lit);
+        govBanner(g, 5, 42, 6, 16, gov, 0); govBanner(g, 35, 42, 6, 16, gov, 0);
+        g.hline(0, 66, 46, SST[3]); g.hline(1, 67, 44, SST[2]);
+        return g;
+      }
+      // nord: große Halle mit Torfdach, geschnitzten Giebeln, Schilden, Treppe
+      g = new Grid(CG, 64);
+      turfRoof(g, 1, 14, 44, 26, 8);
+      crossGable(g, 3, 15); crossGable(g, 42, 15);
+      g.vline(22, 6, 10, NW[2]); g.vline(23, 6, 10, NW[1]); g.paint(24, 6, ['TTTu', 'TTTT', 'Tt..']);
+      logWall(g, 3, 40, 40, 18); stoneBase(g, 2, 58, 42);
+      for (x = 5; x < 42; x += 9) { g.vline(x, 40, 18, NW[3]); g.vline(x + 1, 40, 18, NW[0]); }
+      shieldRow(g, 6, 44, 6);
+      darkDoor(g, 19, 47, 8, 11, NW[3], lit); g.line(18, 46, 23, 41, NW[0]); g.line(28, 46, 23, 41, NW[2]);
+      govBanner(g, 10, 49, 5, 8, gov, 0); govBanner(g, 31, 49, 5, 8, gov, 0);
+      g.hline(16, 60, 14, C.stoneL); g.hline(15, 61, 16, C.stone);
+      return g;
+    }
+    // Stufe 1: Halle je Kultur (3×3)
+    function hallCult(cult, lit) {
+      var g, x;
+      if (cult === 'sahel') {   // Gehöft: Lehmmauer mit Tor vorn, Haus mit Zinnen dahinter, zwei Speicher
+        g = new Grid(CG, 46);
+        flatTop(g, 8, 8, 28, 7, MUDR, MUD[2]); mudWall(g, 8, 15, 28, 16, MUD, 41); crownRow(g, 8, 9, 28, MUD, 6, 4); toron(g, 8, 15, 28, 16, MUD);
+        smallWin(g, 13, 20, 2, 3, lit); smallWin(g, 30, 20, 2, 3, lit);
+        [4, 41].forEach(function (cx) { g.ellipse(cx, 26, 3.5, 6, function (px, py, nx) { return nx < -0.3 ? MUD[0] : (nx > 0.5 ? MUD[2] : MUD[1]); }); coneThatch(g, cx, 15, 9, 7); });
+        flatTop(g, 1, 31, 44, 3, MUDR, MUD[2]); mudWall(g, 1, 34, 44, 8, MUD, 42);
+        g.rect(19, 34, 8, 8, C.plum); g.rect(18, 32, 10, 2, MUD[3]); pinnacle(g, 18, 33, 5, MUD); pinnacle(g, 27, 33, 5, MUD);
+        return g;
+      }
+      if (cult === 'nil') {   // Lehmziegelhalle mit Säulenvorhalle
+        g = new Grid(CG, 44);
+        flatTop(g, 4, 6, 38, 8, [WWASH[1], WWASH[2], WWASH[3]], WWASH[3]); cornice(g, 4, 13, 38, SST);
+        mudWall(g, 4, 16, 38, 20, WWASH, 43); g.hline(5, 19, 36, PAINT[0]); g.hline(5, 20, 36, PAINT[1]);
+        g.rect(4, 22, 38, 14, C.plum); for (x = 6; x < 42; x += 6) { g.rect(x, 22, 3, 14, SST[1]); g.vline(x, 22, 14, SST[0]); g.vline(x + 2, 22, 14, SST[2]); g.rect(x - 1, 22, 5, 2, PALM[0]); }
+        darkDoor(g, 21, 27, 5, 9, SST[3], lit);
+        g.hline(2, 36, 42, SST[2]); g.hline(3, 37, 40, SST[3]);
+        g.vline(2, 2, 34, C.woodD); g.paint(3, 2, ['TTTu', 'Tt..']);
+        return g;
+      }
+      g = new Grid(CG, 44);   // nord: kleines Langhaus
+      turfRoof(g, 2, 8, 42, 18, 5); crossGable(g, 4, 9); crossGable(g, 41, 9);
+      logWall(g, 5, 26, 36, 12); stoneBase(g, 4, 38, 38);
+      darkDoor(g, 20, 29, 6, 9, NW[3], lit); smallWin(g, 9, 29, 3, 3, lit); smallWin(g, 34, 29, 3, 3, lit);
+      g.rect(36, 2, 3, 8, C.stoneD); g.hline(35, 2, 5, C.stone);
+      return g;
+    }
+    // Märkte, Tempel (2×2)
+    function stall9(g, x, y, w, aw, goods) {
+      g.vline(x, y, 10, C.woodD); g.vline(x + w - 1, y, 10, C.woodD);
+      for (var i = -1; i <= w; i++) { g.set(x + i, y - 1, ((i >> 1) & 1) ? aw[0] : aw[1]); g.set(x + i, y, ((i >> 1) & 1) ? aw[1] : aw[2]); }
+      g.rect(x, y + 6, w, 4, C.wood); g.hline(x, y + 6, w, C.woodL);
+      goods.forEach(function (c2, k) { g.set(x + 1 + k * 2, y + 5, c2); g.set(x + 2 + k * 2, y + 5, c2); g.set(x + 1 + k * 2, y + 4, c2); });
+    }
+    function marketCult(cult) {
+      var g = new Grid(30, 30), pot = HCOL('#c86a3a'), potL = HCOL('#e08a5a');
+      if (cult === 'sahel') {
+        flatTop(g, 2, 2, 26, 4, MUDR, MUD[2]); mudWall(g, 2, 6, 26, 8, MUD, 51); crownRow(g, 2, 3, 26, MUD, 5, 3); toron(g, 2, 6, 26, 8, MUD);
+        stall9(g, 2, 15, 11, [PALM[0], PALM[1], PALM[2]], [C.gold, C.red, pot, C.white]); stall9(g, 16, 15, 11, ['T', 'Tl', 'Td'], [HCOL('#4a5aa0'), C.gold, C.red, pot]);
+        g.ellipse(14, 27, 2, 2.4, function (px, py, nx, ny) { return nx < -0.2 ? potL : pot; }); g.ellipse(9, 28, 1.6, 1.8, pot); g.rect(18, 26, 6, 3, RUGS[1][0]); g.hline(18, 27, 6, C.gold);
+      } else if (cult === 'nil') {
+        cornice(g, 2, 5, 26, SST); mudWall(g, 2, 8, 26, 6, WWASH, 52); g.hline(3, 10, 24, PAINT[0]);
+        stall9(g, 2, 15, 11, [C.white, CC3.linen, CC3.linenD], [pot, PALM[0], C.gold, pot]); stall9(g, 16, 15, 11, ['T', 'Tl', 'Td'], [HCOL('#4a9ad0'), pot, C.white, C.gold]);
+        g.ellipse(14, 27, 2, 2.6, function (px, py, nx) { return nx < -0.2 ? potL : pot; }); g.rect(20, 26, 5, 3, PALM[1]);
+      } else {
+        g.rect(2, 4, 26, 2, NW[2]); for (var x = 3; x < 27; x += 4) { g.vline(x, 6, 7, NW[2]); g.rect(x + 1, 7, 2, 4, HCOL('#c8d0d8')); g.set(x + 1, 7, C.white); }   // Fischgestell
+        stall9(g, 2, 15, 11, [NW[0], NW[1], NW[2]], [CC2.hide, CC2.hideL, C.white, CC2.hideD]); stall9(g, 16, 15, 11, ['T', 'Tl', 'Td'], [C.metal, NW[0], CC2.hide, C.gold]);
+        g.rect(13, 25, 4, 4, NW[1]); g.hline(13, 25, 4, NW[0]);
+      }
+      return g;
+    }
+    var CC3 = { linen: HCOL('#ebe2cc'), linenD: HCOL('#c9bd9e') };
+    function templeCult(cult, lit) {
+      var g, x;
+      if (cult === 'sahel') {   // Lehmtempel mit drei Türmen und Holzsparren
+        g = new Grid(30, 48);
+        mudWall(g, 1, 22, 28, 24, MUD, 61); flatTop(g, 1, 17, 28, 5, MUDR, MUD[2]);
+        [[5, 8, 6], [15, 0, 8], [25, 8, 6]].forEach(function (t) { var tx = t[0] - (t[2] >> 1); for (var j = 0; j < 46 - t[1] - 4; j++) { var ins = Math.round((46 - t[1] - j) * 0.06); for (var i = ins; i < t[2] - ins; i++) g.set(tx + i, t[1] + 4 + j, i === ins ? MUD[0] : (i === t[2] - ins - 1 ? MUD[2] : MUD[1])); } pinnacle(g, t[0], t[1] + 5, 5, MUD, true); toron(g, tx, t[1] + 6, t[2], 40 - t[1], MUD); });
+        darkDoor(g, 13, 36, 5, 9, C.woodD, lit); toron(g, 1, 22, 28, 22, MUD);
+        g.hline(0, 46, 30, MUD[3]);
+        return g;
+      }
+      if (cult === 'nil') {   // kleiner Pylontempel
+        g = new Grid(30, 46);
+        flatTop(g, 6, 10, 18, 6, [SST[0], SST[1], SST[2]], SST[2]); g.rect(6, 16, 18, 10, C.plum); for (x = 8; x < 24; x += 5) { g.rect(x, 16, 2, 10, SST[1]); g.vline(x, 16, 10, SST[0]); }
+        pylon(g, 0, 18, 12, 26, SST, true); pylon(g, 18, 18, 12, 26, SST, true);
+        g.rect(11, 26, 8, 18, SST[2]); cornice(g, 11, 25, 8, SST); darkDoor(g, 13, 33, 4, 10, SST[3], lit);
+        g.ellipse(15, 29, 2.4, 1.2, C.gold); g.set(12, 29, C.goldD); g.set(18, 29, C.goldD);   // geflügelte Scheibe (stilisiert, golden)
+        g.hline(0, 44, 30, SST[3]);
+        return g;
+      }
+      g = new Grid(30, 46);   // nord: hohe Holzhalle mit Stufendach
+      roofTiles(g, 4, 2, 22, 14, SHNG); crossGable(g, 5, 3); crossGable(g, 24, 3);
+      roofTiles(g, 0, 16, 30, 10, SHNG); crossGable(g, 1, 17); crossGable(g, 28, 17);
+      logWall(g, 3, 26, 24, 16); stoneBase(g, 2, 42, 26);
+      darkDoor(g, 13, 32, 5, 10, NW[3], lit); g.line(12, 31, 15, 28, NW[0]); g.line(19, 31, 16, 28, NW[2]);
+      shieldRow(g, 4, 34, 1); shieldRow(g, 21, 34, 1);
+      return g;
+    }
+    // Steile kleine Pyramide (Niltal) in drei Baustufen, 2×2
+    function pyramid(stage) {
+      var g = new Grid(30, 56), base = 50, W = 24, x0 = 3, H = stage === 2 ? 46 : (stage === 1 ? 26 : 6);
+      for (var j = 0; j < H; j++) {
+        var hw = W / 2 * (1 - j / 46), y = base - j;
+        for (var x = Math.floor(15 - hw); x < Math.ceil(15 + hw); x++) {
+          var dx = x + 0.5 - 15, row = Math.floor(j / 3), seam = j % 3 === 2 || ((x + (row & 1) * 2) % 4 === 3);
+          g.set(x, y, dx < -hw + 1 ? SST[0] : (dx > 0 ? (seam ? SST[3] : SST[2]) : (seam ? SST[2] : SST[1])));
+        }
+        if (stage < 2 && j === H - 1) g.hline(Math.floor(15 - hw), y, Math.ceil(2 * hw), SST[0]);
+      }
+      if (stage === 2) { g.set(15, base - 46, C.gold); g.hline(14, base - 45, 2, C.goldD); g.set(14, base - 46, C.goldL);
+        pylon(g, 9, 38, 12, 12, SST, false); g.rect(13, 44, 4, 6, C.plum); }      // Opferkapelle vorn
+      else {
+        g.line(0, base, 9, base - H, C.woodD); g.line(1, base, 10, base - H, C.wood);   // Rampe
+        for (var k = 0; k < 3; k++) { g.rect(20 + k * 3, base - 2 - (k & 1) * 2, 3, 2, SST[1]); g.hline(20 + k * 3, base - 2 - (k & 1) * 2, 3, SST[0]); }
+        if (stage === 1) { g.vline(22, base - H - 8, 8, C.woodD); g.vline(26, base - H - 8, 8, C.woodD); g.hline(21, base - H - 8, 7, C.woodL); g.vline(24, base - H - 7, 5, C.stoneD); }
+        else { g.rect(5, base - 1, 20, 2, SST[2]); for (var s = 6; s < 25; s += 4) g.set(s, base - 2, C.woodD); }
+      }
+      return g;
+    }
+    // Karawanserei (3×3): Lehmgeviert mit Hof, Arkade, großem Tor, Zinnen, Brunnen und Lasten im Hof
+    function caravanserai(lit) {
+      var g = new Grid(CG, 62), x;
+      flatTop(g, 1, 6, 44, 6, MUDR, MUD[2]); mudWall(g, 1, 12, 44, 12, MUD, 71);   // Rückwand
+      for (x = 4; x < 42; x += 6) { g.rect(x, 15, 4, 9, C.plum); g.set(x, 15, MUD[2]); g.set(x + 3, 15, MUD[2]); }   // Arkade
+      crownRow(g, 1, 7, 44, MUD, 5, 4); toron(g, 1, 12, 44, 12, MUD);
+      g.rect(5, 24, 36, 18, PATHC); for (var i = 0; i < 40; i++) g.set(5 + Math.floor(hash(i, 1, 72) * 36), 24 + Math.floor(hash(i, 2, 72) * 18), PATHD);   // Hof
+      g.ellipse(23, 32, 4, 2.5, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.4 ? C.waterD : C.stone; }); g.vline(20, 26, 6, C.woodD); g.vline(26, 26, 6, C.woodD); g.hline(20, 26, 7, C.wood);
+      g.rect(8, 28, 5, 4, CC2.hide); g.hline(8, 28, 5, CC2.hideL); g.rect(33, 28, 6, 4, RUGS[1][0]); g.hline(33, 29, 6, C.gold); g.rect(10, 35, 4, 3, RUGS[0][0]);
+      [[1, 12], [41, 12]].forEach(function (s) { flatTop(g, s[0], s[1], 4, 30, MUDR, null); g.vline(s[0] + 3, s[1], 30, MUD[2]); });   // Seitenmauern (Krone)
+      flatTop(g, 1, 40, 44, 4, MUDR, MUD[2]); mudWall(g, 1, 44, 44, 14, MUD, 73); crownRow(g, 1, 41, 44, MUD, 5, 3); toron(g, 1, 44, 44, 14, MUD);
+      g.rect(17, 36, 12, 8, MUD[1]); pinnacle(g, 18, 38, 7, MUD, true); pinnacle(g, 28, 38, 7, MUD, true);
+      g.rect(19, 44, 8, 14, C.plum); g.vline(19, 44, 14, C.ink); g.rect(18, 43, 10, 1, MUD[3]); triDeco(g, 19, 41, 3, MUD[3]);
+      [[1, 34], [41, 34]].forEach(function (t) { mudWall(g, t[0], t[1], 5, 24, MUD, 74); pinnacle(g, t[0] + 2, t[1] + 1, 6, MUD, true); });
+      smallWin(g, 9, 49, 2, 3, lit); smallWin(g, 35, 49, 2, 3, lit);
+      g.hline(0, 58, 46, MUD[3]);
+      return g;
+    }
+    // Langhaus (3×2): lange Halle mit gewölbtem Torfdach, geschnitzten Giebeln, Schilden
+    function longhall(lit) {
+      var g = new Grid(CG, 40);
+      for (var j = 0; j < 20; j++) { var sag = Math.round(Math.sin(j / 19 * Math.PI) * 0) ; }
+      turfRoof(g, 1, 6, 44, 18, 5);
+      for (var x = 1; x < 45; x++) { var lift = Math.round(Math.pow((x - 23) / 22, 2) * 3); for (var k = 0; k < lift; k++) g.set(x, 6 + k, 0); g.set(x, 6 + lift, TURF[0]); }
+      crossGable(g, 3, 4); crossGable(g, 43, 4);
+      logWall(g, 4, 24, 38, 10); stoneBase(g, 3, 34, 40);
+      shieldRow(g, 7, 26, 2); shieldRow(g, 29, 26, 2);
+      darkDoor(g, 20, 25, 6, 9, NW[3], lit); g.line(19, 24, 23, 20, NW[0]); g.line(27, 24, 23, 20, NW[2]);
+      return g;
+    }
+    // ---------------------------------------------------------------- Arsenal (3×2): Fabrikhalle mit Sheddach, großem Tor, Kran, Bannern
+    function arsenal(st, lit) {
+      var g = new Grid(CG, 44), x;
+      if (st === 'fascism' || st === 'communism') {
+        var W2 = st === 'fascism' ? DCON : PANEL, F = st === 'fascism' ? [DCON[0], DCON[1], DCON[2]] : [PANEL[2], PANEL[0], PANEL[1]];
+        for (x = 0; x < 6; x++) { var sx = 2 + x * 7; for (var j = 0; j < 7; j++) { g.hline(sx, 8 + j, Math.max(1, 7 - j), RF[1]); g.set(sx + 6 - j, 8 + j, C.glass); } }   // Sheddach mit Oberlichtern
+        g.hline(1, 15, 44, RF[2]);
+        for (var yy = 16; yy < 38; yy++) for (x = 1; x < 45; x++) g.set(x, yy, (x % 9 === 8 || yy % 8 === 7) ? F[2] : (x === 1 ? F[0] : F[1]));
+        g.rect(16, 22, 14, 16, C.ink); for (yy = 23; yy < 38; yy += 2) g.hline(17, yy, 12, st === 'fascism' ? DCON[2] : C.metalD);   // Rolltor
+        g.hline(15, 21, 16, C.stoneD);
+        govBanner(g, 6, 19, 6, 16, st, 0); govBanner(g, 34, 19, 6, 16, st, 0);
+        g.rect(40, 0, 3, 16, C.stoneD); g.hline(39, 0, 5, C.stone);   // Schornstein
+        if (st === 'communism') { S._star(g, 21, 16, 'm', EG); }
+      } else {   // Zeughaus: Backstein mit Zinnen, Tor, Fahne
+        flatTop(g, 1, 8, 44, 6, [C.stoneL, C.stone, C.stoneD], C.stoneD); merlons(g, 1, 6, 44, STN);
+        wallFill('brick', g, 1, 14, 44, 24, BRK2, 81);
+        archDoor(g, 17, 22, 12, 16, lit); slit(g, 6, 20, lit); slit(g, 38, 20, lit); slit(g, 10, 20, lit); slit(g, 34, 20, lit);
+        g.paint(5, 30, ['MMMMMM', '.oMMo.']); g.paint(35, 30, ['MMMMMM', '.oMMo.']);   // Kanonenrohre davor gestapelt
+        flagH(g, 22, 0, 8);
+      }
+      g.hline(0, 38, 46, C.stoneD); g.hline(0, 39, 46, C.stone);
+      return g;
+    }
+    // ---------------------------------------------------------------- Lagerstadt: Kommandantur, Baracke, Wachturm, Gefangenenlager (sachlich, ohne Schrift, Streifen, Nummern, Schornsteine)
+    var TARP = [HCOL('#5c5a5e'), HCOL('#46444a'), HCOL('#323036')], BARW = [HCOL('#9a8a72'), HCOL('#7e6e58'), HCOL('#5e5040')];
+    function camphq(st, lit) {
+      var g = new Grid(30, 44);
+      if (st === 'fascism') { flatT(g, 1, 6, 28, 10); for (var y = 16; y < 40; y++) for (var x = 1; x < 29; x++) g.set(x, y, (x % 9 === 8 || y % 8 === 7) ? DCON[3] : (x === 1 ? DCON[0] : DCON[1])); }
+      else if (st === 'communism') { roofTiles(g, 0, 4, 30, 12, [C.stoneL, C.stone, C.stoneD], 4); wallFill('panel', g, 1, 16, 28, 24, PANEL, 91); }
+      else { roofTiles(g, 0, 4, 30, 12, WOODR, 4); wallFill('planks', g, 1, 16, 28, 24, null, 92); }
+      for (var k = 0; k < 2; k++) { winH(g, 4, 19 + k * 10, lit && k === 0); winH(g, 21, 19 + k * 10, lit); }
+      doorH(g, 12, 30, 9, null, lit);
+      if (st === 'fascism' || st === 'communism') govBanner(g, 13, 18, 5, 10, st, 0);
+      g.vline(28, 0, 40, C.metalD); g.set(28, 0, C.goldL); g.paint(29, 1, ['T', 'T', 't']);
+      return g;
+    }
+    function barrack9(lit) {
+      var g = new Grid(30, 30);
+      roofTiles(g, 0, 4, 30, 11, TARP, 3);
+      for (var y = 15; y < 26; y++) for (var x = 1; x < 29; x++) g.set(x, y, x % 3 === 2 ? BARW[2] : (x === 1 ? BARW[0] : BARW[1]));
+      for (var k = 3; k < 27; k += 6) { if (k === 15) continue; g.rect(k, 17, 3, 3, C.woodD); g.rect(k + 0, 17, 2, 2, lit ? LITC[1] : C.ink); }
+      g.rect(14, 18, 4, 8, C.plum); g.vline(14, 18, 8, C.ink); g.hline(13, 26, 6, C.wood); g.hline(13, 27, 6, C.woodD);
+      for (x = 1; x < 29; x++) g.set(x, 26, BARW[2]);
+      g.hline(1, 27, 12, C.stoneD); g.hline(19, 27, 10, C.stoneD);
+      return g;
+    }
+    function watchtower(lit) {
+      var g = new Grid(16, 52);
+      g.line(2, 50, 4, 18, C.woodD); g.line(13, 50, 11, 18, C.woodD); g.line(3, 50, 5, 18, C.wood); g.line(12, 50, 10, 18, C.wood);
+      g.line(3, 46, 12, 32, C.woodD); g.line(12, 46, 3, 32, C.woodD); g.line(4, 30, 11, 20, C.woodD); g.line(11, 30, 4, 20, C.woodD);
+      g.hline(2, 31, 12, C.woodL); g.hline(1, 18, 14, C.woodL); g.hline(1, 19, 14, C.woodD);
+      g.rect(2, 11, 12, 7, C.wood); g.hline(2, 11, 12, C.woodL); g.rect(4, 12, 8, 3, C.ink); g.vline(2, 11, 7, C.woodL); g.vline(13, 11, 7, C.woodD);
+      for (var j = 0; j < 6; j++) g.hline(1 + Math.max(0, 5 - j) - 0, 4 + j, 14 - 2 * Math.max(0, 5 - j), j < 2 ? TARP[0] : TARP[1]);
+      g.hline(0, 10, 16, TARP[2]);
+      g.rect(10, 13, 3, 2, C.metal); g.set(12, 13, lit ? C.white : C.fireY);   // Scheinwerfer
+      g.line(5, 50, 7, 33, C.woodL);   // Leiter
+      return g;
+    }
+    function stockade(lit) {
+      var g = new Grid(30, 34), x, y;
+      for (y = 8; y < 32; y++) for (x = 1; x < 29; x++) g.set(x, y, hash(x, y, 95) < 0.15 ? PATHD : PATHC);
+      // Unterstand mit Pultdach
+      shedT(g, 4, 9, 22, 7, WOODR); for (x = 5; x < 25; x++) g.set(x, 16, C.woodD); g.rect(5, 16, 20, 5, C.plum); g.vline(5, 16, 5, C.woodD); g.vline(24, 16, 5, C.woodD);
+      g.rect(20, 23, 4, 3, C.woodD); g.hline(20, 23, 4, C.wood);   // Wassertrog
+      // Palisade ringsum: hinten und an den Seiten hoch, vorn mit Tor
+      function stake(px, py, h) { g.vline(px, py - h, h + 1, C.wood); g.set(px, py - h, C.woodL); g.set(px, py - h - 1, C.woodD); }
+      for (x = 0; x < 30; x += 2) stake(x, 8, 6);
+      for (y = 9; y < 32; y += 2) { stake(0, y, 5); stake(29, y, 5); }
+      for (x = 0; x < 30; x += 2) if (x < 12 || x > 17) stake(x, 32, 6);
+      g.vline(11, 24, 9, C.woodD); g.vline(18, 24, 9, C.woodD); g.hline(11, 24, 8, C.woodD);
+      return g;
+    }
+    // Zaun: Holzpfosten und Draht (Maske Bit0 N, Bit1 O, Bit2 S, Bit3 W), Tor h/v
+    var WIRE = HCOL('#8a8e98');
+    function fenceGrid(mask, gate) {
+      var H = 12, g = new Grid(16, 16 + H), base = H + 8, px, k;   // Pfostenfuß in Kachelmitte bei y = base
+      function post(x, y, h) { g.vline(x, y - h, h + 1, C.wood); g.vline(x + 1, y - h, h + 1, C.woodD); g.set(x, y - h, C.woodL); }
+      var horiz = mask & 10, vert = mask & 5;
+      if (gate === 'h') {
+        post(1, base, 9); post(13, base, 9);
+        for (k = 0; k < 4; k++) g.hline(3, base - 7 + k * 2, 10, k & 1 ? C.woodD : C.wood); g.line(3, base - 1, 12, base - 7, C.woodD);   // Lattentor
+        g.hline(0, base - 8, 1, WIRE); g.hline(15, base - 8, 1, WIRE);
+        return g;
+      }
+      if (gate === 'v') {
+        post(7, 2 + H, 9); post(7, 15 + H, 9); for (var y = 3; y < 15; y++) { g.set(8, y + H - 8, C.woodD); g.set(6, y + H - 6, C.woodD); }
+        return g;
+      }
+      // waagrechte Drahtzüge zu den Nachbarn O/W
+      if (horiz || !vert) {
+        var x0 = (mask & 8) ? 0 : 7, x1 = (mask & 2) ? 15 : 8;
+        for (k = 0; k < 3; k++) for (px = x0; px <= x1; px++) g.set(px, base - 2 - k * 3 + ((px & 3) === 1 && k === 1 ? 1 : 0), WIRE);
+        for (px = x0 + ((x0 & 1) ? 0 : 1); px <= x1; px += 5) if (px !== 7 && px !== 8) post(px, base, 8);
+      }
+      // senkrechte Züge (nach N und S): Pfosten hintereinander, Draht als senkrechte Linie
+      if (vert) {
+        var y0 = (mask & 1) ? 0 : 8, y1 = (mask & 4) ? 15 : 8;
+        for (var yy = y0; yy <= y1; yy++) { g.set(8, yy + H - 8, WIRE); g.set(8, yy + H - 5, WIRE); g.set(8, yy + H - 2, WIRE); }
+        for (yy = y0 + 2; yy <= y1; yy += 5) if (Math.abs(yy - 8) > 1) post(7, yy + H, 8);
+      }
+      post(7, base, 9);
+      return g;
+    }
+
+    // ---------------------------------------------------------------- Registrierung (träge) und Umleitungen
+    var CULTS9 = ['sahel', 'nil', 'nord'];
+    function lazyB(g, n, fh) { g = finishH(g, n); fh = fh || n; return { grid: g, scale: 0.5, fw: n, fh: fh, ox: 0, oy: fh * 8 - g.h * 0.5 + 0.5 }; }
+    L.lazyDef('hk_', function (key) {
+      var lit = /_lit$/.test(key), k = key.replace(/_lit$/, ''), m;
+      if ((m = /^hk_house_([a-z]+)_([1-3])_([ab])$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0) return lazyB(houseCult(m[1], +m[2], m[3] === 'b' ? 1 : 0, lit), 2);
+      if ((m = /^hk_tent_([a-z]+)_([ab])$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0) return lazyB(tentCult(m[1], m[2] === 'b' ? 1 : 0), 2);
+      if ((m = /^hk_center_([a-z]+)_([a-z]+)$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0 && GOVS.indexOf(m[2]) >= 0) return lazyB(centerCult(m[1], m[2], lit), 3);
+      if ((m = /^hk_hall_([a-z]+)$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0) return lazyB(hallCult(m[1], lit), 3);
+      if ((m = /^hk_camp_([a-z]+)_([01])$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0 && S._campHi) {
+        var cg = S._campHi(m[1] === 'nord' ? 1 : 0, +m[2]), pr = new Grid(cg.w, cg.h);
+        if (m[1] === 'sahel') { pr.rect(4, 36, 10, 5, RUGS[0][0]); pr.hline(4, 38, 10, C.gold); pr.hline(4, 40, 10, RUGS[0][1]); pr.ellipse(36, 44, 2.6, 3.2, function (x, y, nx) { return nx < -0.2 ? HCOL('#e08a5a') : HCOL('#c86a3a'); }); pr.ellipse(41, 46, 2, 2.6, HCOL('#c86a3a')); }
+        else if (m[1] === 'nil') { pr.rect(30, 8, 12, 4, PALM[1]); pr.hline(30, 8, 12, PALM[0]); pr.ellipse(10, 40, 2.4, 3, HCOL('#c86a3a')); pr.ellipse(14, 41, 2, 2.4, HCOL('#e08a5a')); }
+        else { pr.vline(8, 30, 12, NW[2]); pr.vline(16, 30, 12, NW[2]); pr.hline(7, 30, 11, NW[1]); pr.rect(9, 32, 6, 7, CC2.hide); pr.hline(9, 32, 6, CC2.hideL); }
+        cg = cg.clone(); cg.blit(pr.outline(), 0, 0);
+        return { grid: cg, scale: 0.5, fw: 3, fh: 3, ox: 0, oy: 24 - cg.h * 0.5 };
+      }
+      if ((m = /^hk_market_([a-z]+)$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0) return lazyB(marketCult(m[1]), 2);
+      if ((m = /^hk_temple_([a-z]+)$/.exec(k)) && CULTS9.indexOf(m[1]) >= 0) return lazyB(templeCult(m[1], lit), 2);
+      if ((m = /^hk_monument_([0-2])$/.exec(k))) return lazyB(pyramid(+m[1]), 2);
+      if (k === 'hk_caravanserai') return lazyB(caravanserai(lit), 3);
+      if (k === 'hk_longhall') { var lg = finishH(longhall(lit), 2); return { grid: lg, scale: 0.5, fw: 3, fh: 2, ox: 0, oy: 16 - lg.h * 0.5 + 0.5 }; }
+      if ((m = /^hk_arsenal_(fascism|communism|plain)$/.exec(k))) { var ag = finishH(arsenal(m[1], lit), 2); return { grid: ag, scale: 0.5, fw: 3, fh: 2, ox: 0, oy: 16 - ag.h * 0.5 + 0.5 }; }
+      if ((m = /^hk_camphq_(fascism|communism|plain)$/.exec(k))) return lazyB(camphq(m[1], lit), 2);
+      if (k === 'hk_barrack') return lazyB(barrack9(lit), 2);
+      if (k === 'hk_stockade') return lazyB(stockade(lit), 2);
+      if (k === 'hk_watchtower') { var wg = finishH(watchtower(lit), 1); return { grid: wg, scale: 0.5, fw: 1, fh: 1, ox: 0, oy: 8 - wg.h * 0.5 + 0.5 }; }
+      return null;
+    });
+    L.lazyDef('hz_', function (key) {
+      var m = /^hz_(fence|gate)_(\w+)$/.exec(key); if (!m) return null;
+      var g = (m[1] === 'gate' ? fenceGrid(10, m[2] === 'v' ? 'v' : 'h') : fenceGrid(+m[2] & 15, null)).pad(0, 0, 0, 0);
+      g = g.outline().footShade();
+      return { grid: g, scale: 0.5, ox: 0, oy: 8 - g.h * 0.5 };
+    });
+    function al(pub, tgt, lit) { L.ALIAS[pub] = tgt; if (lit) { LITMAP[pub] = tgt + '_lit'; LITMAP[tgt] = tgt + '_lit'; } }
+    CULTS9.forEach(function (cu) {
+      for (var lv = 1; lv <= 3; lv++) ['a', 'b'].forEach(function (v) { al('s_house_' + cu + '_' + lv + '_' + v, 'hk_house_' + cu + '_' + lv + '_' + v, true); });
+      ['a', 'b'].forEach(function (v) { al('s_tent_' + cu + '_' + v, 'hk_tent_' + cu + '_' + v); });
+      GOVS.forEach(function (gv) { al('s_center_' + cu + '_' + gv, 'hk_center_' + cu + '_' + gv, true); });
+      al('s_hall_' + cu, 'hk_hall_' + cu, true); al('s_camp_' + cu + '_0', 'hk_camp_' + cu + '_0'); al('s_camp_' + cu + '_1', 'hk_camp_' + cu + '_1'); al('s_camp_' + cu, 'hk_camp_' + cu + '_0');
+      al('s_market_' + cu, 'hk_market_' + cu); al('s_temple_' + cu, 'hk_temple_' + cu, true);
+    });
+    for (var ms = 0; ms < 3; ms++) al('s_monument_' + ms, 'hk_monument_' + ms);
+    al('s_caravanserai', 'hk_caravanserai', true); al('s_longhall', 'hk_longhall', true);
+    GOVS.forEach(function (gv) { al('s_arsenal_' + gv, 'hk_arsenal_' + (gv === 'fascism' || gv === 'communism' ? gv : 'plain'), true); });
+    al('s_arsenal', 'hk_arsenal_plain', true);
+    ['fascism', 'communism'].forEach(function (gv) { al('s_camphq_' + gv, 'hk_camphq_' + gv, true); });
+    al('s_camphq', 'hk_camphq_plain', true); al('s_barrack', 'hk_barrack', true); al('s_watchtower', 'hk_watchtower', true); al('s_stockade', 'hk_stockade');
+    for (var fm = 0; fm < 16; fm++) al('s_wall_fence_' + fm, 'hz_fence_' + fm);
+    al('s_gate_fence_h', 'hz_gate_h'); al('s_gate_fence_v', 'hz_gate_v');
+    // Sicherheitsregel auch für die neuen Fahnen (rote Reichsfarbe: kein Kreis/Punkt/Kreuz-Muster)
+    Object.keys(SAFE[0]).forEach(function (from) { var to = SAFE[0][from]; GOVS.forEach(function (gv) { SWAP0['fl_pole_' + gv + '_' + from + '_0'] = 'fl_pole_' + gv + '_' + to + '_0'; SWAP0['fl_pole_' + gv + '_' + from + '_1'] = 'fl_pole_' + gv + '_' + to + '_1'; SWAP0['fl_hang_' + gv + '_' + from] = 'fl_hang_' + gv + '_' + to; }); });
+    // Helfer für den Renderer
+    var houseKeyOld = S.houseKey, wallKeyOld = S.wallKey, gateKeyOld = S.gateKey, hvcOld = S.houseVariantCount;
+    S.houseKey = function (gov, level, variant, culture) {
+      if (culture && CULTS9.indexOf(culture) >= 0) { var v = ((variant | 0) % 2 + 2) % 2 ? 'b' : 'a'; return (level | 0) <= 0 ? 's_tent_' + culture + '_' + v : 's_house_' + culture + '_' + Math.max(1, Math.min(3, level | 0)) + '_' + v; }
+      return houseKeyOld(gov, level, variant);
+    };
+    S.houseVariantCount = function (gov, level, culture) { return culture && CULTS9.indexOf(culture) >= 0 ? 2 : hvcOld(gov, level); };
+    S.centerKey = function (gov, stage, culture, variant) {
+      var cu = culture && CULTS9.indexOf(culture) >= 0 ? culture : null;
+      if (stage === 0) return cu ? 's_camp_' + cu + '_' + (((variant | 0) & 1)) : S.campKey(variant);
+      if (stage === 1) return cu ? 's_hall_' + cu : S.hallKey(variant);
+      return cu ? 's_center_' + cu + '_' + (GOVS.indexOf(gov) >= 0 ? gov : 'tribe') : 's_center_' + (GOVS.indexOf(gov) >= 0 ? gov : 'tribe');
+    };
+    S.marketKey = function (culture) { return culture && CULTS9.indexOf(culture) >= 0 ? 's_market_' + culture : 's_market'; };
+    S.templeKey = function (culture) { return culture && CULTS9.indexOf(culture) >= 0 ? 's_temple_' + culture : null; };
+    S.monumentKey = function (gov, culture, stage) { return culture === 'nil' ? 's_monument_' + Math.max(0, Math.min(2, stage == null ? 2 : stage | 0)) : 's_monument_' + (GOVS.indexOf(gov) >= 0 ? gov : 'tribe'); };
+    S.arsenalKey = function (gov) { return 's_arsenal_' + (GOVS.indexOf(gov) >= 0 ? gov : 'monarchy'); };
+    S.campBuildKey = function (type, gov) { if (type === 'camphq') return gov === 'fascism' || gov === 'communism' ? 's_camphq_' + gov : 's_camphq'; return 's_' + type; };
+    S.wallKey = function (gov, level, mask) { return gov === 'fence' ? 's_wall_fence_' + (mask & 15) : wallKeyOld(gov, level, mask); };
+    S.gateKey = function (gov, level, dir) { return gov === 'fence' ? 's_gate_fence_' + (dir === 'v' ? 'v' : 'h') : gateKeyOld(gov, level, dir); };
+    var towerKeyOld = S.towerKey; S.towerKey = function (gov, level) { return gov === 'fence' ? 's_watchtower' : towerKeyOld(gov, level); };
   });
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

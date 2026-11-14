@@ -801,6 +801,8 @@
         if (kind === 'pasture') {
           for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) { const t = ter[i0 + dy * W + dx]; if (LUT.fertile[t] >= 0.3 && !LUT.wood[t]) n++; }
           if (n < 4) continue;
+        } else if (kind === 'smithy') {
+          n = 1;   // Schmiede vor der Mauer: kein Vorkommen nötig, möglichst nah am Zentrum
         } else {
           for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 2; dx++) if (dep[i0 + dy * W + dx] === code) n++;
           if (n < (kind === 'fishery' ? 3 : 2)) continue;
@@ -834,16 +836,22 @@
       else if (have[type]) continue;
       if (type === 'smithy' && (city.pop < 20 || (!have['mine:iron'] && sk.iron < 3))) continue;
       if (type === 'fishery' && city.noFish && st.year < city.noFish) continue;
+      if (type === 'smithy' && city.noSmithy && st.year < city.noSmithy) continue;
       if (type === 'mine' && city.noDep && city.noDep[res] && st.year < city.noDep[res]) continue;
       const cost = WW.Structs.costFor(sim, type, 1, city.id);
       if (!WW.Cities.canPay(sim, city, cost)) continue;
       let at = null;
-      if (type === 'smithy') { const i = WW.Cities.findCoreSpot(sim, city, 'smithy'); at = i >= 0 ? { i: i, n: 0 } : null; }
+      if (type === 'smithy') {
+        // zuerst in der Stadt, sonst (Stadt voll) vor der Mauer wie Minen
+        const i = WW.Cities.findCoreSpot(sim, city, 'smithy');
+        at = i >= 0 ? { i: i, n: 0 } : findSpot(sim, city, 'smithy', null);
+      }
       else at = findSpot(sim, city, type, type === 'fishery' ? 'fish' : res);
       if (!at) {
         // nichts in Reichweite: für ein paar Jahre nicht mehr suchen
         if (type === 'fishery') city.noFish = st.year + 4;
         else if (type === 'mine') { city.noDep = city.noDep || {}; city.noDep[res] = st.year + 4; }
+        else if (type === 'smithy') city.noSmithy = st.year + 2;
         continue;
       }
       const opt = { style: k ? k.gov : 'tribe' };
@@ -947,18 +955,35 @@
     return all > 0 && n * 3 >= all;
   }
 
-  // Zufriedenheit aus Wolle und Kristall (für happinessTarget)
+  // Zufriedenheit aus Wolle und Kristall (für happinessTarget); Kälte ohne Wolle drückt (nicht bei Kultur nord)
   function happiness(sim, city, sk) {
     let h = 0;
+    const cp = WW.Culture && WW.Culture.info(city.culture).coldProof;
     if (sk.wool >= 1) h += city.cold ? 8 : 3;
+    else if (city.cold && !cp) h -= 4;
+    if (city.cold && cp && sk.wool < 1) h += 2;
     if (sk.crystal >= 1) h += 3;
     return h;
+  }
+
+  // Rohstoffe prüfen / entnehmen (alles oder nichts), z. B. für Arsenal und Panzer: take(sim, city, { iron: 2, coal: 1 })
+  function has(sim, city, need) {
+    if (!city || !need) return false;
+    const sk = WW.Cities.stock(sim, city);
+    for (const r in need) if (!(typeof sk[r] === 'number' && sk[r] >= need[r])) return false;
+    return true;
+  }
+  function take(sim, city, need) {
+    if (!has(sim, city, need)) return false;
+    const sk = WW.Cities.stock(sim, city);
+    for (const r in need) sk[r] = Math.max(0, sk[r] - need[r]);
+    return true;
   }
 
   // Kampfkraft/Rüstung der Soldaten einer Stadt mit Schmiede
   function armMul(sim, cityId) { const c = sim._cities.get(cityId); return c && c.armed ? (c.armed >= 2 ? 1.35 : 1.25) : 1; }
   function armorMul(sim, cityId) { const c = sim._cities.get(cityId); return c && c.armed ? 1.15 : 1; }
 
-  WW.Resources = { generate: generate, depAt: depAt, update: update, plan: plan, findSpot: findSpot, wishList: wishList, happiness: happiness, armMul: armMul, armorMul: armorMul, isCold: isCold, YIELD: Y, RES_NAME: RES_NAME };
+  WW.Resources = { has: has, take: take, generate: generate, depAt: depAt, update: update, plan: plan, findSpot: findSpot, wishList: wishList, happiness: happiness, armMul: armMul, armorMul: armorMul, isCold: isCold, YIELD: Y, RES_NAME: RES_NAME };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

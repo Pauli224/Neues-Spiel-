@@ -1,34 +1,82 @@
 // =============================================================================
-// Wuselwelt – Arbeitslager (Teil des Bildes autoritärer Regime; bewusst KRITISCH dargestellt: Angst statt Ordnung,
-// dauerhaft unzufriedene Städte, Verurteilung durch Nachbarn, Befreiung als Freudentag). DOM-frei, deterministisch
-// (verbraucht KEINEN sim.rng). Daten: WW.CAMPS in js/core/config-industry.js. Takt aus js/sim/industry.js.
+// Wuselwelt – Lagerstädte und Kriegsgefangene. Teil des Bildes autoritärer Regime, bewusst KRITISCH dargestellt:
+// Angst statt Ordnung, dauerhaft unzufriedene Städte, Verurteilung durch Nachbarn, Befreiung als Freudentag.
+// DOM-frei, deterministisch: eigener Zufall nur über Hashes aus Seed/Tick/ID; sim.rng nur indirekt, wenn eine Stadt
+// gegründet/abgespalten wird (WW.Cities.found, WW.Diplo.secede). Daten: WW.CAMPS in js/core/config-industry.js,
+// Texte: js/data/texts-industry.js. Takt aus js/sim/industry.js (WW.Camps.tick).
 //
-// LEITPLANKEN (fest im Code): Insassen sind ausschließlich politische Gefangene – besiegte Rebellen, Kriegsgefangene,
-//   abgeholte Unzufriedene. Die Auswahl fragt NIE nach dem Volk (u.race wird nirgends gelesen). Keine Tötungen im Lager:
-//   Insassen sind für niemanden Angriffsziel (units.js hostile, markierte Zeile) und sterben nur wie alle (Alter/Seuche).
-//   Keine Bezüge zu realen Lagern, Orten, Bezeichnungen oder Symbolen.
-// WELTGESETZ 'camps' (WW.LAW_INFO, Standard an): aus = keine Lager; bestehende werden aufgelöst (Insassen frei).
+// LEITPLANKEN (fest im Code, Test prüft sie): Insassen sind ausschließlich KRIEGSGEFANGENE (gegnerische Soldaten) und
+//   POLITISCHE GEFANGENE (besiegte Rebellen, abgeholte Unzufriedene). Die Auswahl fragt NIE nach Volk, Kultur oder
+//   Herkunft (diese Datei liest weder Volk noch Kultur einer Einheit/Stadt). Keine Tötungen: Insassen sind nie
+//   Angriffsziel (units.js hostile) und sterben nur wie alle (Alter/Seuche); Arbeit tötet nicht. Keine Bezüge zu realen
+//   Lagern (keine Torsprüche, Streifen, Nummern, Öfen, Züge für Zivilisten). Gefangene marschieren zu Fuß.
+// WELTGESETZ 'camps' (WW.LAW_INFO, Standard an): aus = keine Lagerstädte; bestehende lösen sich auf (Befreiung).
+//   Kriegsgefangene gibt es auch ohne das Gesetz – sie sitzen dann wie bei allen anderen im Gefangenenlager (stockade).
 //
-// BAUWERK laborcamp (2×2, außerhalb des Mauerrings, umzäunt zeichnen), cityId = Stadt, style = Regierung, Felder:
-//   inmates (Anzahl), cap (Plätze). Gebaut von Regierungen in WW.CAMPS.GOVS (Faschismus, Kommunismus) ab Stufe „Stadt",
-//   sobald es Gefangene gäbe (Rebellen/Aufstand, Krieg oder Zufriedenheit < WW.CAMPS.UNHAPPY).
-//   Nach der Befreiung: Ruinen mit ruinOf 'laborcamp' (als Mahnmal zeichnen).
-// EINHEITEN role 'prisoner': u.ind = 'camp', u.camp (Lager-ID), u.cityId -1 (zählen nicht zur Bevölkerung), kingdomId =
-//   Reich des Regimes, u.origK/u.origC (Herkunft). Laufen nicht selbst (units.js-Haken), sondern zwischen Lager und
-//   Arbeitsplatz in der Nähe: Gleisbaustellen (helfen beim Bau), sonst Steine brechen/Holz (Ertrag ans Lager der Stadt).
-// WIE MAN HINEINKOMMT: besiegte Rebellen und Kriegsgefangene (Haken in units.js hitUnit: WW.Camps.capture) statt zu
-//   sterben, wenn das siegreiche Reich ein Lager mit Platz hat; jährlich holt das Regime in Städten mit Zufriedenheit
-//   < UNHAPPY ein bis drei Unzufriedene ab (nie nach Volk; Erwachsene ohne Amt).
-// FOLGEN (WW.Mods, source 'camp' / 'campfear' / 'campfree'): Zufriedenheit −10 und Loyalität −12 dauerhaft (solange
-//   das Lager steht); nach jeder Abholung/Internierung 2 Jahre 'Angst' (Zufriedenheit +6: weniger offener Aufstand, die
-//   Wut bleibt). Nachbarn verurteilen es jährlich (Meinung −4, Demokratien ×2,5) und vermerken einen Kriegsgrund:
-//   relations[id].grievance = 'liberation'. Befreiung: Zufriedenheit +15 für 6 Jahre.
-// EREIGNISSE: Ausbruch (Insassen werden Rebellen), Lageraufstand (einige brechen aus), Protest (Nachbarn), Befreiung.
-// BEFREIUNG: Regierung ohne Lager (Sturz, Wechsel, Eroberung durch ein anderes Reich), Gesetz aus -> alle Insassen werden
-//   freie Bürger der Stadt (role 'farmer'), das Lager wird zur Ruine/zum Mahnmal.
-// EREIGNISTYPEN (group 'politics', mit effectText): campBuilt, campPickup, campIntern, campBreakout, campRiot, campProtest,
-//   campLiberated
-// SCHNITTSTELLE: WW.Camps.tick(sim), defaults(st), unit(sim, u), capture(sim, att, t), campsOf(sim, k), liberate(sim, s, why)
+// -----------------------------------------------------------------------------
+// SCHNITTSTELLE FÜR GRAFIK UND DARSTELLUNG (verbindlich)
+// -----------------------------------------------------------------------------
+// STADT
+//   city.kind        'town' (normale Stadt; fehlt bei ganz alten Ständen = 'town', wird nachgerüstet) | 'camp' (Lagerstadt)
+//   Lagerstadt (kind 'camp'): gehört dem Regime (kingdomId), steht abseits der Hauptstadt (≥ CAMPS.MIN_CAP_DIST), bevorzugt
+//   bei Wald/Fels/Rohstoff/Gleis. Kein Zentrum (centerId -1, centerOk false), keine Häuser/Felder/Familien, kein
+//   natürliches Wachstum, keine Wahl/Abspaltung. cx, cy = rechte untere Kachel der Kommandantur (die 3×3-Fläche
+//   cx-1..cx+1 × cy-1..cy+1 bleibt frei für das spätere Zentrum nach der Befreiung). Eigenes kleines Gebiet (Fluren).
+//   Felder an der Lagerstadt (alle Laufzeit-gepflegt, gespeichert):
+//     city.inmates    Anzahl Insassen (Kriegsgefangene + politische)       city.pows     davon Kriegsgefangene
+//     city.guards     Anzahl Wachen (Soldaten des Regimes mit cityId = Lager)  city.guardsWant  Sollstärke (1 je 6, ≥ 2)
+//     city.cap        Plätze (8 je fertiger Baracke)                        city.campHome Stadt-ID, die den Ertrag bekommt
+//     city.powFrom    { [Reich-ID]: Anzahl } Herkunft der Kriegsgefangenen  city.campFounded Jahr der Gründung
+//     city.campUnrest 0..100 Spannung im Lager (Wachen zu wenige, Lager voll) – über 100 droht der Aufstand
+//     city.campOut    Ertrag seit Gründung { stone, wood } (für das Info-Fenster: „wofür das alles")
+//   Normale Städte: city.campFree (Jahr der Befreiung, falls die Stadt früher Lagerstadt war), city.memorialId.
+// BAUWERKE (WW.STRUCT_INFO in config-industry.js; style = Regierung wie überall)
+//   laborcamp   2×2  Keimzelle: das Regime setzt sie als Baustelle (cityId = Mutterstadt); fertig -> wird zur
+//                    Kommandantur der neuen Lagerstadt (type wechselt auf 'camphq', cityId = Lagerstadt).
+//   camphq      2×2  Kommandantur (Mittelpunkt), Banner des Regimes. Sprite S.campBuildKey('camphq', gov).
+//   barrack     2×2  Baracke, Felder inmates (Belegung), cap (8).          S.campBuildKey('barrack', gov)
+//   watchtower  1×1  Wachturm (hoch, Scheinwerfer erlaubt), 2 je Lager an den Ecken innen.
+//   Zaun        Mauerstücke type 'wall'/'gate' mit mat 'fence', level 1 (S.wallKey('fence', 1, mask), S.gateKey('fence', 1, orient)),
+//               city.wall.style 'fence'. Ring über js/sim/walls.js (WW.Walls.planFence): genau EIN Tor, keine Türme, keine
+//               Geräte, niedrige Haltbarkeit (WW.CAMPS.FENCE_HP), wird nie zu Stein ausgebaut. Gebaut von den Wachen.
+//   stockade    2×2  Gefangenenlager für Kriegsgefangene am Stadtrand einer NORMALEN Stadt (alle Regierungen; Regime
+//                    nur, bis ihre Lagerstadt steht). Felder inmates, cap (12). Keine Arbeit. cityId = Stadt.
+//   memorial    1×1  Mahnmal (cityId -1: gehört niemandem, bleibt stehen), Felder campName (Name des Lagers), year.
+//                    Sprite 's_memorial'. Alte Stände: Ruinen mit ruinOf 'laborcamp' bleiben ebenfalls Mahnmal.
+//   Arbeitsstätten der Lagerstadt: 'quarry' bzw. 'lumber' im Zaun (cityId = Lager); Minen legt js/sim/growth.js
+//   (WW.Resources) bei Vorkommen von selbst an; Gleisanschluss über js/sim/rail.js.
+// EINHEITEN
+//   role 'prisoner' (graue Kleidung, ohne Waffe; Kriegsgefangene in der abgetragenen Uniform ihres Reichs):
+//     u.ind 'camp' (Bewegung macht diese Datei, nicht die KI), u.camp = ID des Haftorts (Lagerstadt-ID ODER stockade-ID),
+//     u.pow = Heimatreich (Kriegsgefangener) | -1 (politischer Gefangener), u.powC = Heimatstadt | -1,
+//     u.campState 'march' (wird hingeführt) | 'held' (im Lager) | 'home' (Heimweg nach Befreiung/Freilassung),
+//     u.kingdomId = Reich des Haftorts (Insassen zählen NICHT zur Bevölkerung: u.cityId = -1), u.origK/u.origC (Herkunft),
+//     u.work (ID der Arbeitsstätte | -1), u.tx/u.ty (Ziel), u.powUntil (Jahr der vertraglichen Freilassung | 0).
+//     Heimweg ('home'): u.role bleibt 'prisoner' (ohne Waffe), kingdomId = Heimatreich; bei Ankunft wieder Soldat.
+//   Wachen: normale Soldaten des Regimes mit cityId = Lagerstadt.
+// REICH
+//   kingdom.powsHeld  Anzahl Kriegsgefangener, die dieses Reich hält     kingdom.powsLost  eigene Soldaten in fremder Haft
+//   relations[id].grievance = 'liberation' (Kriegsgrund gegen Lager-Regime; js/sim/diplo.js wertet ihn aus)
+// EREIGNISTYPEN (alle mit group 'politics' und effectText)
+//   campBuilt (Keimzelle gesetzt), campFounded (Lagerstadt steht), campFence (Zaun fertig), campBarrack (neue Baracke),
+//   campPickup, campIntern (Rebellen), campPow (Kriegsgefangene eingeliefert), campBreakout, campRiot (Teil entkommt),
+//   campUprising (Insassen übernehmen: freie Stadt, eigenes Reich), campProtest, campLiberated (Befreiung, why:
+//   'conquest'|'gov'|'law'|'uprising'|'fall'), campMemorial, powTaken (Kriegsgefangene, stockade), powReturn (Rückgabe
+//   beim Frieden), powKept (Regime behält einen Teil), powExchange (Gefangenenaustausch), powHome (Heimkehr), powEscape.
+// FX
+//   campgate { x, y } (Tor öffnet sich für einen Zug Gefangener), freed { x, y } (Befreiung: Konfetti/Freude),
+//   memorial { x, y } (Mahnmal enthüllt). Bewegung der Gefangenen ist normale Einheiten-Bewegung (moving, dir).
+// FUNKTIONEN (WW.Camps)
+//   tick(sim), defaults(st), unit(sim, u) (Haken über WW.Industry.unit), capture(sim, att, t, opts?) -> bool
+//     (Haken in units.js hitUnit und für js/sim/military.js bei Aufgabe; opts.surrender = true: ohne Zufall/Unterzahl-
+//     Prüfung), onPeace(sim, a, b) (Haken in diplo.js makePeace), cityUpdate(sim, city) (Haken in cities.js updateAll),
+//   campsOf(sim, k) -> [Lagerstädte], stockadesOf(sim, k) -> [stockade], inmatesOf(sim, place) -> [Einheiten],
+//   holdOf(sim, u) -> Lagerstadt | stockade | null, liberate(sim, camp, why), intern(sim, u, place) (place = Lagerstadt
+//   oder stockade; alte Signatur mit laborcamp-Bauwerk geht weiter), found(sim, k, mother, force) -> Lagerstadt | null,
+//   uprising(sim, camp), isRegime(sim, k).
+// HAKEN IN FREMDEN DATEIEN (markiert // [industry]): cities.js found (kind 'town'), updateAll (kind 'camp' ->
+//   WW.Camps.cityUpdate statt Wirtschaft/Berufe/Bauplanung), yearly (Lagerstadt überspringen); diplo.js makePeace
+//   (WW.Camps.onPeace); units.js hostile/hitUnit/updateAll (wie bisher).
 // =============================================================================
 (function (WW) { 'use strict';
 

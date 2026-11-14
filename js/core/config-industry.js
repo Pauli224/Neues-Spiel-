@@ -7,7 +7,7 @@
 //   WW.INDUSTRY.CFG         Zellgröße, Schwellen, Takte
 //   WW.STRUCT_INFO.factory  Bauwerkstyp (2×2; level 2 = 3×3 bei Großstädten)
 //   Weltgesetze 'industry' und 'camps' (Standard an) werden an WW.LAW_INFO angehängt.
-//   WW.RAIL (Eisenbahn, js/sim/rail.js), WW.CAMPS (Arbeitslager, js/sim/camps.js), STRUCT_INFO station/rail/laborcamp.
+//   WW.RAIL (Eisenbahn, js/sim/rail.js), WW.CAMPS (Arbeitslager, js/sim/camps.js), STRUCT_INFO station/rail/laborcamp/camphq/barrack/watchtower/stockade/memorial.
 // =============================================================================
 (function (WW) { 'use strict';
 
@@ -43,6 +43,8 @@
       TH_BARREN: 45,        // ab dieser Luftverschmutzung laugt der Boden aus (state.barren steigt) …
       TH_BARREN_HEAL: 30,   // … unter dieser heilt er (BARREN_HEAL je Folgen-Durchlauf)
       BARREN_HEAL: 4, SOOT: 3, SOOT_R: 3.5,   // Ruß im Umkreis aktiver Fabriken
+      BARREN_HYST: 3,       // Hysterese der Kachel-Meldung an den Stufen 85/170
+      SOOT_MAX: 120, SOOT_DECAY: 3,   // Rußschicht state.soot: Höchstwert, Abklingen je Folgen-Durchlauf
       BARREN_DEADTREES: 95, BARREN_ASH: 230, BARREN_FIELD: 80,   // Stufen: tote Bäume, Aschefeld, Feld trägt weniger
       COAL_USE: 0.5, COAL_BOOST: 1.5, COAL_EMIT: 1.25,   // Kohle je aktiver Fabrik und Planung; Ertrags-Exponent; Ausstoß
       CLOSE_YEARS: 1,       // stillgelegt -> nach so vielen Jahren Ruine
@@ -82,21 +84,48 @@
     WW.STRUCT_INFO.rail = { name: 'Gleis', w: 1, h: 1, work: 7, hp: [60], cost: [{ wood: 1, stone: 1 }], burn: 0.2 };
   }
 
-  // Arbeitslager (js/sim/camps.js) – kritisch dargestellt; Insassen nur politische Gefangene, nie nach Volk
+  // Lagerstädte und Kriegsgefangene (js/sim/camps.js) – kritisch dargestellt; Insassen nur Kriegsgefangene und
+  // politische Gefangene, nie nach Volk oder Kultur. Schnittstelle: Kopfkommentar von js/sim/camps.js.
   WW.CAMPS = {
-    GOVS: { fascism: 1, communism: 1 },
-    MIN_TIER: 2, CAP: 12, PLAN_EVERY: 120,
-    UNHAPPY: 35,        // darunter: Lager wird gebaut, Unzufriedene werden abgeholt
-    PICKUP: 0.5,        // Wahrscheinlichkeit einer Abholung je Jahr und Lager
-    CAPTURE: 0.6,       // Anteil besiegter Rebellen/Kriegsgefangener, die interniert werden (wenn Platz)
-    UNHAPPY_MOD: 10, LOYALTY_MOD: 12, FEAR: 6,   // dauerhaft −10 Zufriedenheit / −12 Loyalität; 2 Jahre „Angst" +6
+    GOVS: { fascism: 1, communism: 1 },   // Regime mit Lagerstädten (Tabelle, erweiterbar)
+    MIN_TIER: 2,        // Anlass „Unzufriedene/Rebellen" erst, wenn das Regime eine Stadt dieser Stufe hat
+    PLAN_EVERY: 120,    // Ticks je Planung (Gründung, Ausbau, Wachen, Haftorte)
+    BUILD_EVERY: 40,    // Ticks je Bauschritt der Lagerstadt
+    BUILD_WORK: 30,     // Arbeit je Bauschritt und Kopf der Bautrupps (Wachen + Insassen)
+    UNHAPPY: 35,        // darunter: Anlass für ein Lager, Unzufriedene werden abgeholt
+    PICKUP: 0.5,        // Wahrscheinlichkeit einer Abholung je Jahr und Lagerstadt
+    CAPTURE: 0.6,       // Anteil Unterlegener, die sich ergeben (statt zu fallen)
+    SURRENDER_R: 4,     // Unterzahl wird in diesem Umkreis gezählt
+    UNHAPPY_MOD: 10, LOYALTY_MOD: 12, FEAR: 6,   // Folgen in der Mutterstadt (andere Städte des Regimes halb)
     CONDEMN: 4,         // Meinungsverlust der Nachbarn je Jahr (Demokratien ×2,5)
-    BREAKOUT: 0.07, RIOT: 0.08,   // je Jahr ab 4 Insassen
+    BREAKOUT: 0.05,     // Ausbruch je Jahr (ab 4 Insassen)
+    RIOT: 0.3,          // Aufstand (ein Teil entkommt) je Jahr, wenn Wachen unter Soll
+    UPRISE: 0.6, UPRISE_MIN: 6,   // Lageraufstand (Übernahme) je Jahr, wenn Wachen unter der Hälfte des Solls
     WORK_R: 16, RAIL_WORK: 0.12, YIELD: 0.6,
-    SELF_BUILD: 0.1     // Baufortschritt je Planung (120 Ticks) durch Soldaten des Regimes
+    SELF_BUILD: 0.1,    // Baufortschritt der Keimzelle (laborcamp) je Planung
+    CAP: 12,            // Plätze eines Gefangenenlagers (stockade)
+    BARRACK_CAP: 8, BARRACKS_START: 2, BARRACKS_MAX: 6,
+    GUARD_PER: 6, GUARD_MIN: 2,   // Sollstärke der Wachen: 1 je 6 Insassen, mindestens 2
+    FENCE_HP: 70,       // Haltbarkeit eines Zaunstücks (Palisade ~200)
+    RESERVE: 5.7, MARGIN: 1.5,    // Innenfläche des Zauns (Radius um die Kommandantur) und Abstand
+    MIN_CAP_DIST: 14, SITE_MIN: 15, SITE_MAX: 30, CITY_DIST: 12,   // Lage abseits der Hauptstadt
+    MAX_CAMPS: 1,       // Lagerstädte je Regime (+1 ab 5 Städten)
+    RETURN_SHARE: 0.34, KEEP_YEARS: 5,   // Regime geben beim Frieden nur ein Drittel zurück, den Rest nach Jahren
+    EXCHANGE: 0.3,      // Gefangenenaustausch je Jahr und Kriegspaar
+    ESCAPE: 0.04,       // Flucht aus einem Gefangenenlager je Jahr und Lager
+    HOME_JOY: 6, FREE_JOY: 15,   // Freude der Heimat bei Heimkehr (3 Jahre), der befreiten Stadt (6 Jahre)
+    MARCH_MAX: 1800     // Ticks, nach denen ein festgefahrener Marsch am Ziel ankommt (Notausgang)
   };
-  if (WW.STRUCT_INFO && !WW.STRUCT_INFO.laborcamp) {
-    WW.STRUCT_INFO.laborcamp = { name: 'Arbeitslager', w: 2, h: 2, work: 110, hp: [180], cost: [{ wood: 10, stone: 6 }], burn: 0.6 };
+  const SI = WW.STRUCT_INFO;
+  if (SI && !SI.laborcamp) {
+    SI.laborcamp = { name: 'Arbeitslager', w: 2, h: 2, work: 110, hp: [180], cost: [{ wood: 10, stone: 6 }], burn: 0.6 };
+  }
+  if (SI && !SI.camphq) {
+    SI.camphq = { name: 'Kommandantur', w: 2, h: 2, core: true, work: 120, hp: [260], cost: [{ wood: 10, stone: 6 }], burn: 0.4 };
+    SI.barrack = { name: 'Baracke', w: 2, h: 2, core: true, work: 90, hp: [140], cost: [{ wood: 8, stone: 2 }], burn: 0.8 };
+    SI.watchtower = { name: 'Wachturm', w: 1, h: 1, core: true, work: 50, hp: [120], cost: [{ wood: 4 }], burn: 0.8 };
+    SI.stockade = { name: 'Gefangenenlager', w: 2, h: 2, work: 60, hp: [120], cost: [{ wood: 8 }], burn: 0.8 };
+    SI.memorial = { name: 'Mahnmal', w: 1, h: 1, work: 60, hp: [500], cost: [{ stone: 4 }], burn: 0 };
   }
   if (Array.isArray(WW.LAW_INFO) && WW.LAW_DEFAULTS && !('camps' in WW.LAW_DEFAULTS)) {
     WW.LAW_INFO.push({ key: 'camps', name: 'Arbeitslager', desc: 'Autoritäre Regime sperren politische Gegner ein. Aus = gibt es in dieser Welt nicht.', def: true });

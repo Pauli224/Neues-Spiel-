@@ -3,6 +3,7 @@
 // nah verwandten Detailpixeln. Höhe kommt aus WW.TERRAIN[id].rank: eine höhere Kachel zeigt zur
 // tieferen Südnachbarin eine Kante aus Seitenmaterial, am Wasser mit heller Brandungslinie.
 // Alles Aufragende (Bäume, Pilze, Kristalle, Gipfel …) sind eigene Sprites d_<art>_<n>.
+// Ausbau 9: Graben t_trench_<maske> (weiche Bodenüberlagerung wie t_cleared, siehe Kopf von sprites.js).
 (function (WW) { 'use strict';
 
   var S = WW.Sprites, L = S.lib, hash = L.hash, C = L.C, addColor = L.addColor, hexOf = L.hexOf;

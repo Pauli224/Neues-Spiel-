@@ -626,5 +626,89 @@
     S.draw(c, 'fx_fire_2', 45 * 8, 27 * 8); S.draw(c, 'fx_glow_warm', 45 * 8, 26 * 8);
   }
 
-  WW.SpriteScene = { renderEffects: renderEffects, renderLandscapeHi: renderLandscapeHi, renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain };
+  // ------------------------------------------------------------------ Ausbau 9: Abnahmebilder (?ausbau=<name>)
+  var AGOVS = ['tribe', 'monarchy', 'democracy', 'fascism', 'communism', 'theocracy', 'republic', 'anarchy'];
+  var AUS = {};
+  function dsort(c, items) { items.sort(function (a, b) { return a[2] - b[2] || a[1] - b[1]; }); items.forEach(function (it) { S.draw(c, it[0], it[1], it[2], it[3] || null); }); }
+  AUS.zeichen = { size: [64, 30], draw: function (c, P) {
+    P.groundRect(c, P.fill(T.GRASS, 64, 30), 0, 0);
+    c.fillStyle = '#1d3b47'; c.fillRect(0, 0, 64 * 8, 22);
+    AGOVS.forEach(function (gv, i) {
+      var x0 = i * 64 + 4, team = [9, 2, 4, 0, 1, 3, 7, 6][i];
+      S.draw(c, S.emblemKey(gv), x0 + 22, 3);
+      var it = [];
+      it.push([S.flagKey('pole', i, 0, team, gv), x0 + 2, 48, { team: team }]);
+      it.push([S.flagKey('pole', i, 1, team, gv), x0 + 22, 48, { team: team }]);
+      it.push([S.unitKey('human', 'soldier', gv, 4), x0 + 2, 72, { team: team }]);
+      it.push([S.unitKey('human', 'soldier', gv, 1), x0 + 14, 72, { team: team }]);
+      it.push([S.unitKey('human', 'soldier', gv, 5), x0 + 26, 72, { team: team }]);
+      if (gv !== 'anarchy') it.push([S.unitKey('human', 'leader', gv, 4), x0 + 40, 72, { team: team }]);
+      dsort(c, it);
+      S.draw(c, S.flagKey('hang', i, 0, team, gv), x0 + 44, 26, { team: team });
+    });
+    var it2 = [];
+    it2.push(['s_center_fascism', 8, 216, { team: 5 }]); it2.push(['s_center_communism', 40, 216, { team: 0 }]);
+    it2.push(['s_center_fascism', 72, 216, { team: 0 }]);
+    for (var t = 0; t < 12; t++) { it2.push([S.flagKey('pole', 1, t & 1, t, t % 2 ? 'fascism' : 'communism'), 120 + t * 14, 144, { team: t }]); }
+    dsort(c, it2);
+    AGOVS.forEach(function (gv, i) { var cv = S.iconCanvas(S.emblemKey(gv), 2); c.drawImage(cv, 300 + (i % 4) * 36, 160 + Math.floor(i / 4) * 36, 32, 32); });
+  } };
+  AUS.figuren = { size: [60, 20], draw: function (c, P) {
+    P.groundRect(c, P.fill(T.DESERT, 60, 20), 0, 0);
+    var roles = ['farmer', 'lumberjack', 'miner', 'builder', 'trader', 'settler', 'child', 'caravan', 'soldier', 'leader', 'pow'];
+    var it = [];
+    ['sahel', 'nil', 'nord', null].forEach(function (cu, j) {
+      roles.forEach(function (ro, i) { it.push([S.unitKey('human', ro, ro === 'pow' ? 'fascism' : 'monarchy', 4, cu), 6 + i * 13, 22 + j * 30, { team: 3 }]); it.push([S.unitKey('human', ro, ro === 'pow' ? 'communism' : 'fascism', 1, cu), 6 + i * 13 + 160, 22 + j * 30, { team: 0 }]); });
+      ['tribe', 'theocracy', 'republic', 'democracy', 'communism'].forEach(function (gv, i) { it.push([S.unitKey('human', 'leader', gv, 4, cu), 320 + i * 13, 22 + j * 30, { team: 5 }]); it.push([S.unitKey('human', 'soldier', gv, 0, cu), 390 + i * 13, 22 + j * 30, { team: 5 }]); });
+    });
+    for (var f = 0; f < 4; f++) { it.push(['a_camel_' + f, 20 + f * 24, 150, null]); it.push(['a_camel_load_' + f, 130 + f * 24, 150, { team: 1 }]); }
+    dsort(c, it);
+  } };
+  AUS.fahrzeuge = { size: [60, 24], draw: function (c, P) {
+    P.groundRect(c, P.fill(T.GRASS, 60, 24), 0, 0);
+    var it = [];
+    ['fascism', 'communism', 'monarchy'].forEach(function (gv, j) {
+      ['e', 'w', 'n', 's'].forEach(function (d, i) { it.push([S.vehicleKey('tank', gv, d, 0), 16 + i * 28, 24 + j * 30, { team: j * 4 }]); it.push([S.vehicleKey('artillery', gv, d, i & 1), 140 + i * 30, 24 + j * 30, { team: j * 4 }]); });
+    });
+    ['d_wreck_tank', 'd_wreck_tank_old', 'd_wreck_gun', 'd_wreck_gun_old'].forEach(function (k, i) { it.push([k, 280 + i * 28, 40, null]); });
+    for (var f = 0; f < 4; f++) { it.push(['fx_shell_' + f, 280 + f * 20, 90, null]); it.push(['fx_tankfire_' + f, 280 + f * 20, 120, null]); }
+    dsort(c, it);
+  } };
+  AUS.kulturen = { size: [72, 33], draw: function (c, P) {
+    var rows = []; for (var y = 0; y < 33; y++) { rows.push([]); for (var x = 0; x < 72; x++) { var t = x < 40 ? [T.DESERT, T.SAVANNA, T.TUNDRA][Math.min(2, Math.floor(y / 11))] : T.DESERT; if (x >= 40 && (x === 58 || x === 59) ) t = T.RIVER; if (x >= 40 && (x === 57 || x === 60) && y % 5 !== 0) t = T.SAVANNA; rows[y].push(t); } }
+    P.groundRect(c, rows, 0, 0);
+    ['sahel', 'nil', 'nord'].forEach(function (cu, j) {
+      var y0 = j * 88, it = [], team = [1, 3, 5][j], gov = ['monarchy', 'theocracy', 'monarchy'][j];
+      it.push([S.houseKey(gov, 0, 0, cu), 4, y0 + 24, { team: team }]); it.push([S.houseKey(gov, 0, 1, cu), 24, y0 + 24, { team: team }]);
+      it.push([S.houseKey(gov, 1, 0, cu), 4, y0 + 56, { team: team }]); it.push([S.houseKey(gov, 2, 1, cu), 24, y0 + 56, { team: team }]); it.push([S.houseKey(gov, 3, 0, cu), 44, y0 + 56, { team: team }]); it.push([S.houseKey(gov, 3, 1, cu), 64, y0 + 56, { team: team }]);
+      it.push([S.marketKey(cu), 48, y0 + 24, { team: team }]); it.push([S.templeKey(cu), 70, y0 + 24, { team: team }]);
+      it.push([S.centerKey(gov, 0, cu, 0), 90, y0 + 56, { team: team }]); it.push([S.centerKey(gov, 1, cu), 120, y0 + 56, { team: team }]); it.push([S.centerKey(gov, 2, cu), 150, y0 + 56, { team: team }]);
+      it.push([S.centerKey('fascism', 2, cu), 182, y0 + 56, { team: 0 }]); it.push([S.centerKey('communism', 2, cu), 214, y0 + 56, { team: 7 }]);
+      if (cu === 'sahel') it.push(['s_caravanserai', 246, y0 + 56, { team: team }]);
+      if (cu === 'nil') { it.push(['s_monument_0', 246, y0 + 64, null]); it.push(['s_monument_1', 266, y0 + 64, null]); it.push(['s_monument_2', 286, y0 + 64, null]); }
+      if (cu === 'nord') it.push(['s_longhall', 246, y0 + 64, { team: team }]);
+      ['farmer', 'trader', 'caravan', 'child', 'soldier', 'leader'].forEach(function (ro, i) { it.push([S.unitKey('human', ro, gov, 4, cu), 92 + i * 11, y0 + 80, { team: team }]); });
+      ['monarchy', 'fascism', 'communism'].forEach(function (gv, i) { it.push([S.unitKey('human', 'soldier', gv, 0, cu), 160 + i * 11, y0 + 80, { team: 0 }]); it.push([S.unitKey('human', 'leader', gv, 4, cu), 196 + i * 11, y0 + 80, { team: 0 }]); });
+      if (cu === 'sahel') { it.push(['a_camel_load_0', 240, y0 + 80, { team: team }]); it.push(['a_camel_2', 262, y0 + 80, null]); }
+      dsort(c, it);
+    });
+    // kleine Wüstenstadt am Fluss: Sahel-Lehmstadt links, Niltal-Ort mit Pyramiden rechts vom Fluss
+    var it2 = [], tm = 1;
+    it2.push(['s_center_sahel_monarchy', 46 * 8, 9 * 8, { team: tm }]);
+    [[42, 4, 1, 0], [45, 4, 2, 1], [48, 4, 3, 0], [51, 4, 1, 1], [42, 7, 2, 1], [51, 7, 3, 1], [42, 13, 1, 0], [45, 13, 2, 0], [51, 13, 2, 1], [54, 6, 1, 0]].forEach(function (h) { it2.push([S.houseKey('monarchy', h[2], h[3], 'sahel'), h[0] * 8, h[1] * 8, { team: tm }]); });
+    it2.push(['s_market_sahel', 48 * 8, 13 * 8, { team: tm }]); it2.push(['s_temple_sahel', 54 * 8, 10 * 8, { team: tm }]);
+    it2.push(['s_caravanserai', 43 * 8, 19 * 8, { team: tm }]); it2.push([S.houseKey('monarchy', 0, 0, 'sahel'), 48 * 8, 19 * 8, { team: tm }]); it2.push([S.houseKey('monarchy', 0, 1, 'sahel'), 51 * 8, 18 * 8, { team: tm }]);
+    it2.push(['s_monument_2', 64 * 8, 6 * 8, null]); it2.push(['s_monument_2', 67 * 8, 5 * 8, null]); it2.push(['s_monument_1', 69 * 8, 8 * 8, null]);
+    it2.push(['s_temple_nil', 62 * 8, 12 * 8, { team: 3 }]); it2.push([S.houseKey('theocracy', 1, 0, 'nil'), 65 * 8, 12 * 8, { team: 3 }]); it2.push([S.houseKey('theocracy', 2, 1, 'nil'), 68 * 8, 12 * 8, { team: 3 }]);
+    it2.push([S.houseKey('theocracy', 0, 0, 'nil'), 62 * 8, 16 * 8, { team: 3 }]); it2.push(['s_field_3', 61 * 8, 19 * 8, null]); it2.push(['s_field_2', 62 * 8, 19 * 8, null]); it2.push(['s_field_3', 61 * 8, 20 * 8, null]);
+    [[44, 23], [46, 24], [49, 22], [55, 16], [53, 23], [63, 22], [66, 18]].forEach(function (p, k) { it2.push(['d_palm_' + (k % 2), p[0] * 8, p[1] * 8, null]); });
+    [[50, 26, 0], [52, 26, 1], [54, 26, 2], [56, 25, 3]].forEach(function (p) { it2.push(['a_camel_load_' + p[2], p[0] * 8, p[1] * 8, { team: tm }]); });
+    it2.push([S.unitKey('human', 'caravan', 'monarchy', 1, 'sahel'), 58 * 8 - 2, 25 * 8, { team: tm }]);
+    [[47, 12, 'farmer'], [50, 11, 'trader'], [44, 17, 'child'], [53, 17, 'soldier'], [49, 17, 'builder']].forEach(function (u, k) { it2.push([S.unitKey('human', u[2], 'monarchy', k % 4, 'sahel'), u[0] * 8, u[1] * 8, { team: tm }]); });
+    [[64, 15, 'farmer'], [67, 16, 'trader'], [63, 20, 'farmer']].forEach(function (u, k) { it2.push([S.unitKey('human', u[2], 'theocracy', k, 'nil'), u[0] * 8, u[1] * 8, { team: 3 }]); });
+    dsort(c, it2);
+  } };
+  WW.SpriteScene_AUS = AUS;
+
+  WW.SpriteScene = { renderEffects: renderEffects, renderLandscapeHi: renderLandscapeHi, renderTownCompare: renderTownCompare, renderRailway: renderRailway, renderPollutionStages: renderPollutionStages, renderFlags: renderFlags, renderIndustry: renderIndustry, renderStages: renderStages, render: render, renderTowns: renderTowns, renderDestruction: renderDestruction, W: W, H: H, buildTerrain: buildTerrain, ausbau: AUS };
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

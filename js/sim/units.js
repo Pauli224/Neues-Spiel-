@@ -65,6 +65,7 @@
     if (!u || u.dead) return;
     u.dead = true; u.hp = 0; u.moving = false;
     sim._unitsDirty = true;
+    if (WW.Military) WW.Military.onKill(sim, u, cause);   // [mil] Wrack, Verluste der Schlacht
     const dc = sim._deaths || (sim._deaths = {});
     dc[cause] = (dc[cause] || 0) + 1;
     sim.fx({ type: cause === 'drown' ? 'splash' : 'poof', x: u.x, y: u.y });
@@ -125,7 +126,7 @@
   // --------------------------------------------------------------------------
   // Feindschaft und Kampf
   // --------------------------------------------------------------------------
-  function isFighterRole(r) { return r === 'soldier' || r === 'rebel' || r === 'leader' || r === 'ram' || r === 'catapult'; }
+  function isFighterRole(r) { return r === 'soldier' || r === 'rebel' || r === 'leader' || r === 'ram' || r === 'catapult' || r === 'tank' || r === 'artillery'; }   // [mil] Fahrzeuge kämpfen
   function isEngine(r) { return r === 'ram' || r === 'catapult'; }
 
   function hostile(sim, a, b) {
@@ -160,6 +161,7 @@
   }
 
   function hitUnit(sim, att, t, dmg) {
+    if (WW.Military && (t.vehicle || (sim.state.mil && sim.state.mil.trenchN > 0))) dmg = WW.Military.armor(sim, att, t, dmg);   // [mil] Panzerung, Deckung im Graben
     t.hp -= dmg;
     if (t.foe < 0 && att.id != null) t.foe = att.id;
     if (t.hp <= 0) {
@@ -989,6 +991,7 @@
       const u = units[i];
       if (u.dead) continue;
       if (u.ind && WW.Industry && WW.Industry.unit(sim, u)) continue;   // [industry] im Zug / im Arbeitslager
+      if (u.vehicle && WW.Military && WW.Military.unit(sim, u)) continue;   // [mil] Panzer, Geschütze
       if (u.cd > 0) u.cd--;
       if (((tick + u.id) & 7) === 0) { think(sim, u); if (u.dead) continue; }
       move(sim, u);

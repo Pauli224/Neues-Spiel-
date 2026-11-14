@@ -78,6 +78,9 @@
     WW.GOVERNMENTS[k] = Object.freeze(Object.assign({}, g, { wallMax: lv.length, wallLevels: lv }));
   }
 
+  // Lagerzaun der Lagerstädte (js/sim/camps.js, WW.Walls.planFence): mat 'fence'
+  if (WW.WALL_STYLE_NAMES && !WW.WALL_STYLE_NAMES.fence) WW.WALL_STYLE_NAMES.fence = 'Lagerzaun';
+
   // Hilfen für structs.js (Lebenspunkte/Kosten je Regierung und Stufe)
   WW.wallLevelInfo = function (govKey, level) {
     const lv = LEVELS[govKey] || LEVELS.monarchy;

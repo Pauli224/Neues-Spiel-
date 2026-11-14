@@ -1,6 +1,8 @@
 // Wuselwelt – Pixelkunst: Einheiten (Völker × Berufe), Tiere, Effekte, Sprechblasen, Banner.
 // Figuren blicken nach rechts; nach links per flip. Sie werden aus Körper (je Volk) und
 // Beruf (Hut, Werkzeug, Kleidung) zusammengesetzt und danach automatisch umrandet.
+// Ausbau 9 (Schlüsselliste im Kopf von sprites.js): Trachten der Kulturen (hu_*), Kriegsgefangene (pow), Kamel,
+// Panzer und Geschütze (hv_*), Wracks, Granaten- und Mündungsfeuer-Effekte.
 (function (WW) { 'use strict';
 
   var RACES = ['human', 'elf', 'dwarf', 'orc', 'gnome', 'frog'];
@@ -1060,9 +1062,22 @@
     var BANDIT = { top: T3(K2.brownL, K2.brown, K2.brownD), sleeve: T3(K2.brownL, K2.brown, K2.brownD), pants: T3(C.dusk, C.plum, C.plum), shoes: C.ink, hoodC: K2.oliveD, hat: 'banditHood' };
     HAT.banditHood = function (g, A) { g.rect(A.hx0 - 1, A.hy0 - 1, A.hx1 - A.hx0 + 2, 4, K2.oliveD); g.vline(A.hx0 - 1, A.hy0, 8, K2.oliveD); g.hline(A.hx0, A.hy0 - 1, A.hx1 - A.hx0, K2.olive); g.hline(A.hx0 + 2, A.hy0 + 6, A.hx1 - A.hx0, K2.brownD); };
 
+    // Armbinden 3×4 (feines Raster): B = Grund (hell/dunkel), Ziffern = Zeichenfarben. Faschismus dunkel mit goldenem Bündel
+    // (Beil links), Kommunismus rot mit goldenem Stern, übrige in Reichsfarbe mit kleinem Zeichen. Kein Kreis.
+    var ABG = { 1: C.goldL, 2: C.gold, 3: C.goldD, 4: C.metalL, 7: C.white, 6: C.red, 8: C.ink };
+    var ARMBAND = {
+      fascism:   { b: [HC('#3a3a42'), HC('#26262c')], c: ABG, m: ['B1B', '41B', 'B2B', 'B3B'] },
+      communism: { b: [C.red, C.redD], c: ABG, m: ['B1B', '121', 'B2B', '2B3'] },
+      monarchy:  { b: ['T', 'Td'], c: ABG, m: ['BBB', '1B1', '121', 'BBB'] },
+      democracy: { b: ['T', 'Td'], c: ABG, m: ['B7B', '777', '777', 'BBB'] },
+      theocracy: { b: [C.white, HC('#d8d0bc')], c: ABG, m: ['BBB', 'B1B', '121', 'B2B'] },
+      republic:  { b: ['T', 'Td'], c: ABG, m: ['BBB', 'B1B', '122', 'B2B'] },
+      anarchy:   { b: [HC('#3a3a42'), HC('#26262c')], c: ABG, m: ['6BB', 'B6B', 'BB6', 'BBB'] }
+    };
     function shade3(c, x, x0, x1) { return x === x0 ? c[0] : (x === x1 ? c[2] : c[1]); }
-    function figure(race, role, gov, frame) {
+    function figure(race, role, gov, frame, cult) {
       var B = BODY[race] || BODY.human, child = role === 'child';
+      var CU = cult && CULT[cult]; if (CU) B = cultBody(B, CU, race, role);
       var g = new Grid(GW2, GH2);
       var cls = role === 'soldier' ? 'soldier' : (role === 'leader' ? 'leader' : 'citizen');
       var cs;
@@ -1072,6 +1087,8 @@
       else if (cls === 'soldier') cs = SOLD[gov] || SOLD.tribe;
       else if (cls === 'leader') { var Ld = LEAD[gov] || LEAD.tribe; cs = merge(COST[Ld.base], Ld); }
       else cs = COST[gov] || COST.neutral;
+      if (role === 'pow') cs = powCostume(gov);
+      else if (CU) { var ccs = cultCostume(cult, role, gov, cls); if (ccs) cs = ccs; }
       var walk = frame < 4, bob = (frame === 0 || frame === 2) ? 1 : 0;
       var leg = child ? Math.max(2, B.leg - 2) : B.leg, th = child ? Math.max(3, B.th - 2) : B.th, tw = child ? Math.max(5, B.tw - 2) : B.tw;
       var hr = child ? B.hr - 0.3 : B.hr;
@@ -1134,6 +1151,11 @@
         if (cs.sash) g.line(tx0, ty0, tx1, ty1 - 1, cs.sash);
         if (cs.chain) { g.line(tx0 + 1, ty0, Math.round(cx), ty0 + 3, cs.chain); g.line(tx1 - 1, ty0, Math.round(cx), ty0 + 3, cs.chain); }
       }
+      if (cs.kilt) { var kc = cs.kilt; for (y = ty1; y <= Math.min(FY - 3, hipY + 3); y++) for (x = tx0 - 1; x <= tx1 + 1; x++) g.set(x, y, shade3(kc, x, tx0 - 1, tx1 + 1)); g.hline(tx0 - 1, ty1, tw + 2, cs.kiltBelt || kc[2]); }
+      if (cs.wraps) for (y = hipY + 2; y < FY; y += 2) for (x = tx0 - 3; x <= tx1 + 3; x++) { var wc = g.get(x, y); if (wc && cs.pants && (wc === cs.pants[1] || wc === cs.pants[2] || wc === cs.pants[0])) g.set(x, y, cs.wraps); }
+      if (cs.usekh) { for (x = tx0 - 1; x <= tx1 + 1; x++) { g.set(x, ty0, cs.usekh[(x + 9) % cs.usekh.length]); if (x > tx0 - 1 && x < tx1 + 1) g.set(x, ty0 + 1, cs.usekh[(x + 10) % cs.usekh.length]); } }
+      if (cs.neck) { g.set(Math.round(cx) - 1, ty0, cs.neck); g.set(Math.round(cx), ty0 + 1, cs.neck); g.set(Math.round(cx) + 1, ty0, cs.neck); g.vline(Math.round(cx), ty0 + 2, Math.min(3, th - 2), cs.neck); }
+      if (cs.worn) { for (x = tx0; x <= tx1; x += 2) if (hash(x, frame, 1801) < 0.6) g.set(x, ty1 + 1, (cs.top || skin)[2]); g.set(tx0 + 1, ty0 + 2, (cs.top || skin)[2]); g.set(tx1 - 1, ty0 + 4, (cs.top || skin)[0]); }
       if (cs.chain && !robe) { g.line(tx0 + 1, ty0, Math.round(cx), ty0 + 3, cs.chain); g.line(tx1 - 1, ty0, Math.round(cx), ty0 + 3, cs.chain); g.set(Math.round(cx), ty0 + 4, C.goldL); }
       // --- Kopf
       var hairC = B.hair;
@@ -1165,16 +1187,17 @@
       if (race === 'gnome' && cls === 'citizen' && hat !== 'mohawk') HAT.gnomecap(g, A, cs.top ? [cs.top[1], cs.top[2]] : null);
       else if (hat === 'minerhelm') { g.rect(A.hx0, A.hy0 - 1, A.hx1 - A.hx0 + 1, 3, C.gold); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, C.goldD); g.set(A.hx1 + 1, A.hy0, C.fireY); g.set(A.hx1 + 2, A.hy0, C.goldL); }
       else if (hat && HAT[hat]) HAT[hat](g, A);
+      if (cs.veil) { g.rect(A.hx0, eyY + 2, A.hx1 - A.hx0 + 2, 3, cs.veil[1]); g.hline(A.hx0, eyY + 2, A.hx1 - A.hx0 + 2, cs.veil[0]); g.vline(A.hx0 - 1, eyY - 1, 5, cs.veil[2]); }
       if (cs.mask) g.hline(A.hx0 + 1, eyY + 2, A.hx1 - A.hx0, cs.mask);
       // --- Soldaten: Schulterstücke in Teamfarbe, Glanzlicht am Helm
-      if (cls === 'soldier' && gov !== 'fascism') {
+      if (cls === 'soldier' && gov !== 'fascism' && !cs.noShoulder) {
         g.hline(tx0 - 1, ty0, tw + 2, 'T'); g.set(tx0 - 1, ty0, 'Tl'); g.set(tx0, ty0, 'Tl'); g.set(tx0 - 1, ty0 + 1, 'Td'); g.set(tx1 + 1, ty0 + 1, 'Td');
         if (hat && hat !== 'pot') { g.set(A.hx0 + 1, A.hy0, C.white); g.set(A.hx0 + 2, A.hy0, C.white); }
       }
       var attack = frame === 5;
       // --- vorderer Arm und Hand, Werkzeug
       if (cs.ragged) { g.rect(tx1 - 1, ty0 + 1, 6, 2, sl[1]); g.rect(tx1 + 5, ty0 + 1, 2, 2, skin[1]); g.rect(tx0 - 1, ty0 + 2, 2, 1, sl[2]); }
-      var tool = cls === 'soldier' ? WEAP[gov] || WEAP.tribe : (cls === 'leader' ? null : TOOL2[role]);
+      var tool = cs.weap ? WEAPC[cs.weap] : (cls === 'soldier' ? WEAP[gov] || WEAP.tribe : (cls === 'leader' ? null : TOOL2[role]));
       var hold = !!tool || cls === 'leader';
       var fa = walk && !hold ? [[1, 0], [0, 0], [-1, 0], [0, 0]][frame][0] : 0;
       var ax = tx1 - 1 + fa, ay = ty0 + 1, hx = hold ? Math.max(tx1 + 2, Math.ceil(hcx + hr) + 1) : ax, hy = ty0 + th - 2;
@@ -1182,10 +1205,11 @@
       else { g.rect(ax, ay, 2, th - 2, sl[1]); g.vline(ax, ay, th - 2, sl[0]); g.rect(ax, ty0 + th - 1, 2, 1, skin[1]); }
       if (attack && hold) { g.rect(tx1, ty0 - 3, 2, 5, sl[1]); g.rect(hx, ty0 - 4, 2, 2, skin[1]); hy = ty0 - 4; hx = hx + 1; }
       // Armbinde (nur Faschismus, Soldat und Anführer): Teamfarbe mit zwei schmalen hellen Querstreifen, sonst nichts
-      if (gov === 'fascism' && (cls === 'soldier' || cls === 'leader')) {
+      // Ausbau 9: Armbinde mit dem Zeichen der Regierung (Soldaten aller Regierungen außer Stamm; Anführer bei Faschismus/Kommunismus)
+      var band = ARMBAND[gov];
+      if (band && role !== 'pow' && (cls === 'soldier' || (cls === 'leader' && (gov === 'fascism' || gov === 'communism')))) {
         var abx = attack ? tx1 : tx1 - 1, aby = attack ? ty0 - 2 : ay;
-        for (var ab = 0; ab < 4; ab++) g.hline(abx, aby + ab, 3, (ab === 1 || ab === 3) ? C.cream : 'T');
-        g.set(abx + 2, aby, 'Td'); g.set(abx + 2, aby + 2, 'Td');
+        for (var ab = 0; ab < 4; ab++) for (var abi = 0; abi < 3; abi++) { var ch = band.m[ab].charAt(abi); g.set(abx + abi, aby + ab, ch === 'B' ? band.b[abi === 2 ? 1 : 0] : band.c[ch]); }
       }
       if (tool) tool(g, hx, hy, A);
       if (cls === 'soldier' && /tribe|democracy|communism|theocracy|anarchy/.test(gov)) {   // Wimpel an der Waffe
@@ -1760,6 +1784,7 @@
       }
       return S._finishH(g, 2);
     }
+    S._campHi = function (v, f) { return campHi(v, f); };
     function campHi(v, f) {
       var g = new Grid(46, 54), G0 = 8;   // Grundfläche ab Zeile G0
       function log(x, y, w) { g.rect(x, y, w, 3, C.wood); g.hline(x, y, w, C.woodL); g.hline(x, y + 2, w, C.woodD); g.rect(x + w - 2, y, 2, 3, C.strawL); g.set(x + w - 1, y + 1, C.woodD); g.hline(x, y + 3, w + 1, C.shade); }
@@ -1785,8 +1810,317 @@
     Object.keys(S._litmap || {}).forEach(function (k) { if (/^s_(tent|camp)_/.test(k)) delete S._litmap[k]; });
     ['a', 'b'].forEach(function (v) { L.ALIAS['s_camp_' + v] = 'ht_camp_' + v + '_0'; L.ALIAS['s_camp_' + v + '_0'] = 'ht_camp_' + v + '_0'; L.ALIAS['s_camp_' + v + '_1'] = 'ht_camp_' + v + '_1'; });
 
+    // ================================================================== Ausbau 9: Kulturen (sahel, nil, nord), Kriegsgefangene, Karawane
+    // Vorbilder: Sahel-Reiche (weite Gewänder/Boubou, Kopftücher, Indigo-Schleier der Karawanenführer), Niltal/Kusch
+    // (Leinen, breiter Halskragen), Norden (Wolle, Pelz). Natürliche Hauttöne, gleiche Gesichtszüge wie alle Figuren.
+    var CSK = {
+      deep: [HC('#a86e48'), HC('#86522f'), HC('#653b20')], brown: [HC('#c08458'), HC('#9e6840'), HC('#7a4c2c')],
+      warm: [HC('#d6a072'), HC('#b8814f'), HC('#946038')], fair: [HC('#ffe4cf'), HC('#f6caa8'), HC('#d9a07e')]
+    };
+    var CC = {
+      indigo: T3(HC('#4c5aa0'), HC('#2f3a78'), HC('#1e2554')), white: T3(C.white, HC('#e8e2d2'), HC('#c4bca8')),
+      ochre: T3(HC('#e8b870'), HC('#c8924a'), HC('#9a6a32')), earth: T3(HC('#c88a62'), HC('#a2643e'), HC('#7a4628')),
+      green: T3(HC('#8ab070'), HC('#5e8a4a'), HC('#3e6234')), linen: T3(HC('#fbf6e8'), HC('#ebe2cc'), HC('#c9bd9e')),
+      wool: T3(HC('#b8a890'), HC('#94846c'), HC('#6c5e4a')), woolG: T3(HC('#a8aab0'), HC('#84868e'), HC('#5e6068')),
+      quilt: T3(HC('#f0e2c0'), HC('#d8c49a'), HC('#ac9468')), hide: T3(HC('#e0c090'), HC('#c09a64'), HC('#8a6a3e'))
+    };
+    var HAIRK = HC('#2a2024'), USEKH = [C.gold, 'T', HC('#4a9ad0'), C.gold, C.red];
+    var CULT = {
+      sahel: { tones: [CSK.deep, CSK.brown], hair: HAIRK },
+      nil: { tones: [CSK.brown, CSK.warm], hair: HAIRK },
+      nord: { tones: [CSK.fair, K2.skin ? [K2.skinL, K2.skin, K2.skinD] : CSK.fair], hair: K2.hairBl, hair2: K2.hairRd }
+    };
+    var ROLEIDX = { farmer: 0, lumberjack: 1, miner: 2, builder: 3, soldier: 4, child: 5, trader: 6, rebel: 7, settler: 8, hunter: 9, leader: 10, bandit: 11, prisoner: 12, caravan: 13, pow: 14 };
+    function cultBody(B, CU, race, role) {
+      if (race !== 'human' && race !== 'elf' && race !== 'dwarf') return B;
+      var o = merge(B, {}), k = (ROLEIDX[role] || 0) & 1;
+      o.skin = CU.tones[k]; o.hair = k && CU.hair2 ? CU.hair2 : CU.hair; if (o.beard) o.beard = o.hair;
+      return o;
+    }
+    var TRAD = /^(tribe|monarchy|theocracy|republic|anarchy|neutral)$/;
+    function cultCostume(cult, role, gov, cls) {
+      if (role === 'rebel' || role === 'bandit' || role === 'prisoner') return null;
+      var R = role;
+      if (cult === 'sahel') {
+        if (R === 'caravan') return { top: CC.indigo, sleeve: CC.indigo, robe: CC.indigo, shoes: K2.brownD, neck: C.gold, hat: 'tagel', veil: CC.indigo, weap: 'staff' };
+        if (cls === 'soldier') return TRAD.test(gov) ? { top: CC.quilt, quilted: 1, sleeve: CC.quilt, pants: CC.white, shoes: K2.brownD, belt: 'T', hat: 'turbanhelm', weap: 'sahel', noShoulder: 1 } : null;
+        if (cls === 'leader') return TRAD.test(gov) ? { top: TEAM3, sleeve: TEAM3, robe: TEAM3, shoes: C.goldD, neck: C.gold, trimR: C.gold, hat: { monarchy: 'goldturban', theocracy: 'whiteturban', republic: 'turbanT', tribe: 'turbanT', anarchy: 'kufi' }[gov] || 'turbanT', cape: null } : null;
+        var col = { farmer: CC.ochre, lumberjack: CC.green, miner: CC.earth, builder: CC.white, trader: CC.indigo, settler: CC.white, hunter: CC.earth, child: CC.white }[R] || CC.white;
+        return { top: col, sleeve: col, robe: R === 'child' ? null : col, pants: R === 'child' ? col : null, shoes: K2.brownD, neck: 'T', hat: R === 'farmer' ? 'conehat' : (R === 'child' ? null : (R === 'trader' || R === 'settler' ? 'turban' : 'kufi')) };
+      }
+      if (cult === 'nil') {
+        if (R === 'caravan') return { top: CC.linen, sleeve: CC.linen, robe: CC.linen, shoes: K2.brownD, usekh: USEKH, hat: 'headcloth', weap: 'staff' };
+        if (cls === 'soldier') return TRAD.test(gov) ? { top: CC.linen, sleeve: null, pants: null, kilt: CC.linen, kiltBelt: 'T', shoes: K2.brownD, usekh: [K2.brownD, K2.brown, 'T'], hat: 'nilband', weap: 'nilbow', noShoulder: 1 } : null;
+        if (cls === 'leader') return TRAD.test(gov) ? { top: CC.linen, sleeve: CC.linen, robe: CC.linen, shoes: C.goldD, usekh: USEKH, cape: TEAM3, hat: { monarchy: 'nubcap', theocracy: 'nilpriest', republic: 'nilwig', tribe: 'nilwig', anarchy: 'nilwig' }[gov] || 'nilwig' } : null;
+        return { top: CC.linen, sleeve: R === 'child' ? null : CC.linen, pants: null, kilt: CC.linen, kiltBelt: 'T', shoes: K2.brownD, usekh: R === 'child' ? null : USEKH, hat: R === 'child' ? null : (R === 'farmer' || R === 'builder' || R === 'miner' ? 'headcloth' : 'nilwig') };
+      }
+      if (cult === 'nord') {
+        if (R === 'caravan') return { top: CC.wool, sleeve: CC.wool, pants: CC.woolG, wraps: K2.brownD, shoes: K2.brownD, collar: K2.furL, cape: T3(K2.furL, K2.fur, K2.furD), hat: 'furhat', weap: 'staff' };
+        if (cls === 'soldier') return TRAD.test(gov) ? { top: TEAM3, sleeve: CC.wool, pants: CC.woolG, wraps: K2.brownD, shoes: K2.brownD, collar: K2.furL, belt: K2.brownD, hat: 'nordhelm', weap: 'nord', noShoulder: 1 } : null;
+        if (cls === 'leader') return TRAD.test(gov) ? { top: TEAM3, sleeve: TEAM3, pants: CC.woolG, wraps: K2.brownD, shoes: K2.brownD, collar: K2.furL, cape: T3(K2.furL, K2.fur, K2.furD), belt: C.gold, hat: { monarchy: 'circlet', theocracy: 'hood', republic: 'circlet' }[gov] || 'furhat' } : null;
+        var nc0 = 0; var nc = { farmer: CC.wool, lumberjack: T3(HC('#c46a4a'), HC('#9a4a34'), HC('#6e3224')), miner: CC.woolG, builder: CC.wool, trader: TEAM3, settler: CC.wool, hunter: CC.green, child: TEAM3 }[R] || TEAM3;
+        return { top: nc, sleeve: nc, pants: CC.woolG, wraps: K2.brownD, shoes: K2.brownD, collar: R === 'child' ? null : K2.furL, belt: K2.brownD, hat: R === 'child' ? null : (R === 'farmer' || R === 'settler' ? 'woolcap' : 'furhat') };
+      }
+      return null;
+    }
+    function powCostume(gov) {
+      var s = SOLD[gov] || SOLD.tribe;
+      return merge(s, { hat: null, worn: 1, tabard: null, sash: null, belt: null, warpaint: null, noShoulder: 1 });
+    }
+    // neue Kopfbedeckungen
+    HAT.kufi = function (g, A) { g.rect(A.hx0, A.hy0 - 1, A.hx1 - A.hx0 + 1, 3, C.white); g.hline(A.hx0, A.hy0 + 1, A.hx1 - A.hx0 + 1, 'T'); g.set(A.hx1, A.hy0 - 1, K2.robeD); };
+    HAT.turban = function (g, A) { g.rect(A.hx0 - 1, A.hy0 - 2, A.hx1 - A.hx0 + 3, 4, CC.white[1]); for (var x = A.hx0 - 1; x <= A.hx1 + 1; x++) g.set(x, A.hy0 - 2 + ((x + 1) & 1), CC.white[0]); g.line(A.hx0 - 1, A.hy0 + 1, A.hx1, A.hy0 - 2, CC.white[2]); g.vline(A.hx0 - 1, A.hy0 + 1, 3, CC.white[1]); };
+    HAT.turbanT = function (g, A) { HAT.turban(g, A); g.line(A.hx0, A.hy0 + 1, A.hx1, A.hy0 - 2, 'T'); };
+    HAT.whiteturban = function (g, A) { HAT.turban(g, A); g.hline(A.hx0 - 1, A.hy0 - 3, A.hx1 - A.hx0 + 3, CC.white[0]); g.set((A.hx0 + A.hx1) >> 1, A.hy0 - 1, C.gold); };
+    HAT.goldturban = function (g, A) { HAT.turban(g, A); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, C.gold); g.set((A.hx0 + A.hx1) >> 1, A.hy0 - 1, C.goldL); g.set((A.hx0 + A.hx1) >> 1, A.hy0 - 2, C.gold); g.hline(A.hx0, A.hy0 - 3, A.hx1 - A.hx0 + 1, C.goldD); };
+    HAT.tagel = function (g, A) { g.rect(A.hx0 - 1, A.hy0 - 2, A.hx1 - A.hx0 + 3, 3, CC.indigo[1]); g.hline(A.hx0 - 1, A.hy0 - 2, A.hx1 - A.hx0 + 3, CC.indigo[0]); g.hline(A.hx0, A.hy0, A.hx1 - A.hx0 + 1, CC.indigo[2]); g.vline(A.hx0 - 1, A.hy0, 6, CC.indigo[1]); g.vline(A.hx0 - 2, A.hy0 + 2, 4, CC.indigo[2]); };
+    HAT.conehat = function (g, A) { var m = (A.hx0 + A.hx1) / 2 + 0.5; for (var j = 0; j < 4; j++) { var hw = 1 + j * 1.6; for (var x = Math.floor(m - hw); x <= Math.ceil(m + hw); x++) g.set(x, A.hy0 - 3 + j, j === 3 ? C.strawD : (x < m ? C.strawL : C.straw)); } g.set(Math.round(m), A.hy0 - 4, C.strawD); };
+    HAT.turbanhelm = function (g, A) { HAT.turban(g, A); g.ellipse((A.hx0 + A.hx1) / 2 + 0.5, A.hy0 - 2, (A.hx1 - A.hx0) / 2 + 0.5, 2, function (x, y, nx, ny) { return y > A.hy0 - 2 ? null : (nx < -0.2 ? C.metalL : C.metal); }); g.set((A.hx0 + A.hx1) >> 1, A.hy0 - 4, C.metalD); };
+    HAT.headcloth = function (g, A) { g.rect(A.hx0 - 1, A.hy0 - 1, A.hx1 - A.hx0 + 2, 3, CC.linen[0]); g.vline(A.hx0 - 1, A.hy0, 6, CC.linen[1]); g.vline(A.hx0, A.hy0 + 2, 4, CC.linen[2]); g.hline(A.hx0, A.hy0 + 1, A.hx1 - A.hx0 + 1, 'T'); };
+    HAT.nilwig = function (g, A) { g.rect(A.hx0 - 1, A.hy0 - 1, A.hx1 - A.hx0 + 2, 3, HAIRK); g.vline(A.hx0 - 1, A.hy0, 6, HAIRK); g.vline(A.hx0, A.hy0 + 2, 4, HAIRK); g.set(A.hx0 + 1, A.hy0 - 1, HC('#4a3a40')); };
+    HAT.nilband = function (g, A) { HAT.nilwig(g, A); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 2, 'T'); g.set(A.hx0 - 2, A.hy0 + 1, 'Td'); g.set(A.hx0 - 2, A.hy0 + 2, 'Td'); };
+    HAT.nubcap = function (g, A) { g.rect(A.hx0 - 1, A.hy0 - 2, A.hx1 - A.hx0 + 2, 4, HAIRK); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, C.gold); g.hline(A.hx0 - 1, A.hy0 - 2, A.hx1 - A.hx0 + 2, C.goldD); g.set(A.hx1 + 1, A.hy0, C.goldL); g.set(A.hx1 + 1, A.hy0 - 1, C.gold); g.vline(A.hx0 - 1, A.hy0 + 2, 3, C.gold); };
+    HAT.nilpriest = function (g, A) { g.hline(A.hx0, A.hy0 + 1, A.hx1 - A.hx0 + 1, C.gold); g.set(A.hx0, A.hy0 + 1, C.goldL); };
+    HAT.circlet = function (g, A) { g.hline(A.hx0, A.hy0 + 1, A.hx1 - A.hx0 + 1, C.gold); g.set((A.hx0 + A.hx1) >> 1, A.hy0, C.goldL); g.set(A.hx0, A.hy0 + 1, C.goldL); };
+    HAT.nordhelm = function (g, A) { var m = (A.hx0 + A.hx1) / 2 + 0.5; for (var j = 0; j < 4; j++) { var hw = 1.2 + j * 1.0; for (var x = Math.floor(m - hw); x <= Math.ceil(m + hw); x++) g.set(x, A.hy0 - 2 + j, x < m - 0.5 ? C.metalL : (x > m + 1 ? C.metalD : C.metal)); } g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, C.metalD); g.vline(A.hx1 - 1, A.hy0 + 2, 2, C.metalD); };
+    HAT.woolcap = function (g, A) { g.rect(A.hx0, A.hy0 - 2, A.hx1 - A.hx0 + 1, 4, 'T'); g.hline(A.hx0 - 1, A.hy0 + 1, A.hx1 - A.hx0 + 3, CC.wool[0]); g.set(A.hx0 - 1, A.hy0 - 2, 'Tl'); g.set(A.hx0 - 2, A.hy0 - 1, 'T'); g.hline(A.hx0, A.hy0 - 2, A.hx1 - A.hx0 + 1, 'Tl'); };
+    // Waffen und Stäbe der Kulturen
+    var WEAPC = {
+      staff: function (g, hx, hy, A) { g.vline(hx + 1, A.top - 3, FY - A.top + 2, C.woodD); g.set(hx + 1, A.top - 4, C.wood); g.set(hx + 2, A.top - 3, C.woodD); },
+      sahel: function (g, hx, hy, A) { g.vline(hx + 1, A.top - 5, FY - A.top + 3, C.woodD); g.paint(hx, A.top - 9, ['.n.', 'nnm', 'nmM', '.M.', '.M.']);
+        g.ellipse(A.tx0 + 1, A.ty0 + 4, 3.6, 3.8, function (x, y, nx, ny) { var d = nx * nx + ny * ny; return d > 0.68 ? CC.hide[2] : (d < 0.12 ? 'T' : (nx + ny < -0.3 ? CC.hide[0] : CC.hide[1])); }); },
+      nilbow: function (g, hx, hy, A) { for (var y = -8; y <= 7; y++) g.set(hx + 3 - Math.round(y * y / 22), hy + y, Math.abs(y) > 6 ? C.woodD : C.wood); g.vline(hx + 1, hy - 7, 15, C.cream);
+        g.rect(A.tx0 - 3, A.ty0, 4, 7, CC.hide[1]); g.vline(A.tx0 - 3, A.ty0, 7, CC.hide[0]); g.set(A.tx0 - 2, A.ty0 + 2, K2.brownD); g.set(A.tx0 - 1, A.ty0 + 4, K2.brownD); g.hline(A.tx0 - 3, A.ty0 + 6, 4, 'T'); },
+      nord: function (g, hx, hy, A) { g.vline(hx + 1, A.top - 5, FY - A.top + 3, C.woodD); g.paint(hx, A.top - 8, ['.n.', 'nnm', '.m.', '.M.']);
+        g.ellipse(A.tx0 + 1, A.ty0 + 4, 4.2, 4.2, function (x, y, nx, ny) { var d = nx * nx + ny * ny; if (d > 0.72) return C.woodD; if (d < 0.1) return C.metalL; return ((Math.atan2(ny, nx) * 2 / Math.PI + 4) | 0) & 1 ? 'T' : C.woodL; }); }
+    };
+    TOOL2.caravan = WEAPC.staff;
+    ROLES2.push('caravan', 'pow');
+    var CULTS = ['sahel', 'nil', 'nord'];
+    L.lazyDef('hu_', function (key) {
+      var p = key.split('_');   // hu, cult, race, role, gov, frame
+      if (p.length !== 6 || CULTS.indexOf(p[1]) < 0 || RACES2.indexOf(p[2]) < 0 || GOVS2.indexOf(p[4]) < 0) return null;
+      var fr = +p[5]; if (!(fr >= 0 && fr <= 5)) return null;
+      var g = figure(p[2], p[3], p[4], fr, p[1]);
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    });
+    var unitKeyOld = S.unitKey;
+    S.unitKey = function (race, role, gov, frame, culture) {
+      var k = unitKeyOld(race, role, gov, frame);
+      return culture && CULTS.indexOf(culture) >= 0 ? 'hu_' + culture + '_' + k.slice(2) : k;
+    };
+    S.CULTURE_KEYS = CULTS.slice();
+    // ---------------------------------------------------------------- Kamel (Lasttier) und Karawane: a_camel_<f>, a_camel_load_<f>
+    var CAM = [HC('#ecd29e'), HC('#d2ae74'), HC('#a8834e'), HC('#7a5a34')];
+    function camelGrid(f, load) {
+      var g = new Grid(36, 34), o = GAIT[f];
+      // Beine (lang, dünn, Hufschwielen)
+      [[9, o[0]], [12, o[1]], [24, o[1]], [27, o[0]]].forEach(function (L2, i) { var far = i === 1 || i === 2; g.line(L2[0], 20, L2[0] + L2[1], 31, far ? CAM[2] : CAM[1]); g.line(L2[0] + 1, 20, L2[0] + 1 + L2[1], 31, far ? CAM[3] : CAM[2]); g.hline(L2[0] - 1 + L2[1], 32, 3, CAM[3]); g.set(L2[0] + (L2[1] >> 1), 26, CAM[3]); });
+      // Rumpf mit Höcker
+      g.ellipse(18, 17, 11, 5.5, function (x, y, nx, ny) { var s2 = nx * 0.6 + ny; return s2 < -0.7 ? CAM[0] : (s2 > 0.55 ? CAM[2] : CAM[1]); });
+      g.ellipse(17, 10.5, 6, 5, function (x, y, nx, ny) { if (y > 13) return null; return nx + ny < -0.5 ? CAM[0] : (nx > 0.5 ? CAM[2] : CAM[1]); });
+      g.line(7, 15, 4, 21, CAM[2]); g.set(4, 22, CAM[3]); g.set(3, 22, CAM[3]);   // Schwanz
+      // Hals nach vorn und oben, Kopf
+      for (var k = 0; k < 9; k++) { var nx0 = 28 + k * 0.6, ny0 = 17 - k * 1.2; g.hline(Math.round(nx0), Math.round(ny0), 3, k < 2 ? CAM[1] : CAM[1]); g.set(Math.round(nx0), Math.round(ny0), CAM[0]); g.set(Math.round(nx0) + 2, Math.round(ny0), CAM[2]); }
+      g.ellipse(33, 5.5, 3, 2.2, function (x, y, nx, ny) { return ny < -0.2 ? CAM[0] : CAM[1]; }); g.hline(33, 7, 3, CAM[2]); g.set(35, 6, CAM[3]);
+      g.set(31, 3, CAM[2]); g.set(32, 4, C.ink); g.set(34, 5, CAM[3]);
+      if (load) {
+        // Satteldecke in Reichsfarbe, Packen auf beiden Seiten, Wasserschlauch, aufgerollter Teppich
+        g.rect(12, 9, 11, 4, 'T'); g.hline(12, 9, 11, 'Tl'); g.hline(12, 12, 11, 'Td'); for (var x = 12; x < 23; x += 3) g.set(x, 13, 'Td');
+        g.rect(10, 13, 6, 6, CC.hide[1]); g.vline(10, 13, 6, CC.hide[0]); g.hline(10, 18, 6, CC.hide[2]); g.hline(10, 15, 6, K2.brownD);
+        g.rect(19, 13, 6, 6, CC.indigo[1]); g.vline(19, 13, 6, CC.indigo[0]); g.hline(19, 18, 6, CC.indigo[2]); g.set(21, 15, C.white); g.set(23, 16, C.white);
+        g.rect(11, 5, 13, 4, CC.ochre[1]); g.hline(11, 5, 13, CC.ochre[0]); g.hline(11, 8, 13, CC.ochre[2]); g.vline(14, 5, 4, C.red); g.vline(20, 5, 4, C.red); g.set(23, 6, CC.ochre[2]);
+        g.ellipse(26, 15, 1.6, 2.6, K2.brownD);
+      }
+      return g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
+    }
+    L.lazyDef('c9_', function (key) {
+      var m = /^c9_camel(_load)?_(\d)$/.exec(key); if (!m) return null;
+      var g = camelGrid(+m[2] & 3, !!m[1]);
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    });
+    for (var cf = 0; cf < 4; cf++) { L.ALIAS['a_camel_' + cf] = 'c9_camel_' + cf; L.ALIAS['a_camel_load_' + cf] = 'c9_camel_load_' + cf; }
+    S.camelKey = function (loaded, frame) { return 'a_camel_' + (loaded ? 'load_' : '') + (((frame | 0) % 4 + 4) % 4); };
+
+    // ---------------------------------------------------------------- Panzer und Geschütze: hv_<tank|artillery>_<stil>_<e|w|n|s>_<0|1>
+    var VP = {
+      fascism: { body: [HC('#7a7e88'), HC('#5a5e68'), HC('#40434c'), HC('#2c2e36')], emb: 'fascism' },
+      communism: { body: [HC('#9aa070'), HC('#757c4e'), HC('#565c38'), HC('#3c4026')], emb: 'communism' },
+      plain: { body: [HC('#a89a78'), HC('#857858'), HC('#62583e'), HC('#443c2a')], emb: null }
+    };
+    var TRK = [HC('#5a5652'), HC('#3c3a38'), HC('#262424')], RUB = HC('#1e1c1e');
+    var FIELD = { wood: [C.woodL, C.wood, C.woodD], bronze: [HC('#e6b25a'), HC('#b8823a'), HC('#7e5426')], iron: [HC('#6e7078'), HC('#4a4c54'), HC('#2e3038')] };
+    function vstyle(gov) { return gov === 'fascism' ? 'fascism' : (gov === 'communism' ? 'communism' : 'plain'); }
+    function boxP(g, x, y, w, h, P) { g.rect(x, y, w, h, P[1]); g.hline(x, y, w, P[0]); g.vline(x, y, h, P[0]); g.vline(x + w - 1, y, h, P[2]); g.hline(x, y + h - 1, w, P[2]); }
+    function vEmblem(g, st, x, y) {
+      if (st === 'fascism') S._emblem(g, 'fascism', x, y, 's', S._EG);
+      else if (st === 'communism') S._star(g, x, y + 2, 'm', { 1: C.redL, 2: C.red, 3: C.redD });
+      else { g.rect(x, y + 2, 4, 3, 'T'); g.hline(x, y + 2, 4, 'Tl'); g.hline(x, y + 4, 4, 'Td'); }
+    }
+    function trackSide(g, x, y, w, f) {
+      g.rect(x + 1, y, w - 2, 7, TRK[1]); g.hline(x + 2, y - 1, w - 4, TRK[0]); g.rect(x, y + 1, w, 5, TRK[1]); g.hline(x + 1, y + 6, w - 2, TRK[2]);
+      for (var i = x + 1; i < x + w - 1; i++) if (((i + f * 2) % 4) === 0) { g.set(i, y - 1, TRK[2]); g.set(i, y + 6, RUB); }
+      for (var wx = x + 3; wx <= x + w - 4; wx += 5) g.ellipse(wx + 0.5, y + 3, 2.2, 2.2, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d < 0.2 ? TRK[0] : (d > 0.7 ? RUB : TRK[2]); });
+    }
+    function tankGrid(st, dir, f) {
+      var P = VP[st].body, g;
+      if (dir === 'e' || dir === 'w') {
+        g = new Grid(38, 24);
+        trackSide(g, 2, 16, 28, f);
+        if (st === 'fascism') {   // kantig: steile Bugplatte, Kastenwanne, Kastenturm mit schrägen Flächen
+          boxP(g, 1, 10, 30, 7, P); g.line(30, 10, 33, 15, P[2]); g.line(31, 10, 34, 15, P[3]); g.hline(1, 10, 30, P[0]);
+          g.rect(1, 9, 30, 1, P[3]); g.rect(8, 3, 15, 7, P[1]); g.hline(8, 3, 15, P[0]); g.vline(8, 3, 7, P[0]); g.line(22, 3, 24, 9, P[2]); g.line(23, 3, 25, 9, P[3]);
+          g.rect(25, 5, 12, 2, P[2]); g.hline(25, 5, 12, P[1]); g.rect(35, 4, 2, 4, P[3]);   // Rohr mit Mündungsbremse
+          g.rect(11, 1, 4, 2, P[2]); g.hline(11, 1, 4, P[1]);   // Luke
+          vEmblem(g, st, 15, 1); g.hline(2, 14, 8, 'T'); g.hline(2, 15, 8, 'Td');
+        } else if (st === 'communism') {   // rund: schräge Wanne, Gussturm
+          for (var y = 10; y < 17; y++) { var ins = y < 12 ? 12 - y : 0; for (var x = 1 + ins; x < 33 - (y < 13 ? (13 - y) * 2 : 0); x++) g.set(x, y, y === 10 ? P[0] : (y === 16 ? P[2] : P[1])); }
+          g.ellipse(15, 7, 8, 4.6, function (px, py, nx, ny) { if (py > 9) return null; var s2 = nx * 0.7 + ny; return s2 < -0.6 ? P[0] : (s2 > 0.5 ? P[2] : P[1]); });
+          g.rect(22, 5, 14, 2, P[2]); g.hline(22, 5, 14, P[1]); g.set(36, 5, P[3]); g.set(36, 6, P[3]);
+          g.ellipse(13, 2.5, 2, 1, P[2]);
+          vEmblem(g, st, 9, 3); g.hline(4, 13, 6, 'T');
+        } else {
+          boxP(g, 2, 11, 28, 6, P); g.line(29, 11, 31, 15, P[2]);
+          g.ellipse(14, 8, 6.5, 3.6, function (px, py, nx, ny) { if (py > 10) return null; return nx + ny < -0.4 ? P[0] : (nx > 0.5 ? P[2] : P[1]); });
+          g.rect(19, 6, 12, 2, P[2]); g.hline(19, 6, 12, P[1]);
+          vEmblem(g, st, 10, 4);
+        }
+        // Wimpel in Reichsfarbe an der Antenne
+        g.vline(4, 1, 9, P[3]); g.paint(5, 1, ['TTu', 'Tt.']);
+      } else {
+        var front = dir === 's';
+        g = new Grid(28, 26);
+        boxP(g, 0, 10, 6, 15, [TRK[0], TRK[1], TRK[2]]); boxP(g, 22, 10, 6, 15, [TRK[0], TRK[1], TRK[2]]);
+        for (var ty = 11 + (f ? 1 : 0); ty < 25; ty += 2) { g.hline(1, ty, 4, RUB); g.hline(23, ty, 4, RUB); }
+        boxP(g, 5, 11, 18, 12, P); if (front) { g.rect(7, 19, 4, 2, C.fireY); g.rect(17, 19, 4, 2, C.fireY); g.set(7, 19, C.white); g.set(17, 19, C.white); } else { for (var gx = 8; gx < 21; gx += 2) g.vline(gx, 13, 4, P[3]); }
+        if (st === 'communism') g.ellipse(14, 9, 7.5, 5, function (px, py, nx, ny) { return nx + ny < -0.5 ? P[0] : (nx > 0.5 ? P[2] : P[1]); });
+        else { boxP(g, 7, 4, 14, 9, P); g.hline(7, 4, 14, P[0]); }
+        if (front) { g.rect(13, 9, 3, 5, P[3]); g.ellipse(14.5, 14.5, 2, 2, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.35 ? C.ink : P[3]; }); }
+        else { g.rect(13, 0, 3, 6, P[2]); g.hline(13, 0, 3, P[1]); }
+        if (st === 'fascism') S._emblem(g, 'fascism', 11, 4, 's', S._EG); else if (st === 'communism') S._star(g, 12, 6, 's', { 1: C.redL, 2: C.red, 3: C.redD }); else { g.rect(12, 6, 4, 3, 'T'); }
+        g.hline(5, 22, 18, 'T');
+        g.vline(front ? 24 : 3, 0, 10, P[3]); g.paint(front ? 25 : 4, 0, ['TTu', 'Tt.']);
+      }
+      var o = g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
+      return dir === 'w' ? o.flipX() : o;
+    }
+    function spoked(g, cx, cy, r, P, f) {
+      g.ellipse(cx, cy, r, r, function (px, py, nx, ny) { var d = Math.sqrt(nx * nx + ny * ny); if (d > 0.82) return C.ink; if (d < 0.25) return P[2]; var a = Math.atan2(ny, nx) + f * 0.4; return Math.abs(Math.sin(a * 4)) < 0.3 ? P[1] : null; });
+      g.ellipse(cx, cy, r * 0.85, r * 0.85, function (px, py, nx, ny) { return nx * nx + ny * ny > 0.72 ? P[2] : null; });
+    }
+    function gunGrid(gov, dir, f) {
+      var st = vstyle(gov), field = st === 'plain', P = VP[st].body, rc = f ? 2 : 0, g;
+      if (dir === 'e' || dir === 'w') {
+        if (field) {   // Feldgeschütz mit Protze: Bronzerohr auf Holzlafette, Speichenrad; links die Protze (Munitionskasten auf zwei Rädern)
+          g = new Grid(46, 24);
+          g.line(8, 19, 22, 14, FIELD.wood[2]); g.line(8, 20, 22, 15, FIELD.wood[1]); g.rect(18, 12, 9, 4, FIELD.wood[1]); g.hline(18, 12, 9, FIELD.wood[0]);
+          for (var k = 0; k < 16; k++) { var bx = 19 + k - rc, by = 12 - Math.round(k * 0.35); g.set(bx, by, FIELD.bronze[0]); g.set(bx, by + 1, FIELD.bronze[1]); g.set(bx, by + 2, k < 6 ? FIELD.bronze[2] : FIELD.bronze[1]); }
+          g.set(34 - rc, 6, FIELD.bronze[2]); g.set(34 - rc, 7, FIELD.bronze[2]);
+          spoked(g, 24, 17, 5.5, FIELD.wood, 0);
+          boxP(g, 0, 10, 9, 6, FIELD.wood); g.hline(1, 12, 7, 'T'); g.rect(2, 7, 5, 3, FIELD.wood[0]); g.hline(2, 7, 5, C.white);   // Protze mit Teamstreifen, Deckel
+          spoked(g, 4.5, 18, 4, FIELD.wood, 1); g.line(8, 15, 10, 19, FIELD.wood[2]);
+        } else {   // moderne Haubitze: Schutzschild, langes Rohr, Spreizlafette, Gummiräder
+          g = new Grid(42, 24);
+          g.line(1, 21, 18, 18, P[2]); g.line(1, 22, 18, 19, P[3]); g.hline(0, 22, 4, P[3]);   // Spreizlafette am Boden
+          for (var k2 = 0; k2 < 20; k2++) { var x2 = 20 + k2 - rc, y2 = 9 - Math.round(k2 * 0.18); g.set(x2, y2, P[0]); g.set(x2, y2 + 1, P[2]); }
+          g.rect(39 - rc, 4, 2, 4, P[3]); g.rect(17, 8, 6, 4, P[2]);   // Mündungsbremse, Rohrwiege
+          boxP(g, 13, 5, 6, 13, P); g.vline(13, 5, 13, P[0]); g.hline(13, 5, 6, P[0]); g.set(19, 6, P[2]);   // Schutzschild
+          g.ellipse(18, 18, 4.6, 4.6, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d > 0.55 ? RUB : (d < 0.15 ? P[0] : P[2]); });
+          if (st === 'fascism') S._emblem(g, 'fascism', 13, 6, 's', S._EG); else S._star(g, 14, 8, 's', { 1: C.redL, 2: C.red, 3: C.redD });
+          g.hline(13, 16, 6, 'T');
+        }
+      } else {
+        var front2 = dir === 's';
+        g = new Grid(28, 24);
+        if (field) {
+          spoked(g, 4.5, 16, 5, FIELD.wood, 0); spoked(g, 23.5, 16, 5, FIELD.wood, 0); g.rect(8, 14, 12, 3, FIELD.wood[1]); g.hline(8, 14, 12, FIELD.wood[0]);
+          if (front2) { g.ellipse(14, 11, 3, 3, function (px, py, nx, ny) { var d = nx * nx + ny * ny; return d < 0.3 ? C.ink : (nx + ny < -0.3 ? FIELD.bronze[0] : FIELD.bronze[1]); }); }
+          else { g.rect(12, 2 + rc, 4, 12, FIELD.bronze[1]); g.vline(12, 2 + rc, 12, FIELD.bronze[0]); g.vline(13, 14, 8, FIELD.wood[2]); g.vline(14, 14, 8, FIELD.wood[1]); }
+          g.set(14, 15, 'T'); g.set(13, 15, 'T');
+        } else {
+          g.ellipse(4, 17, 3.5, 4.5, RUB); g.ellipse(24, 17, 3.5, 4.5, RUB); g.ellipse(4, 17, 1.4, 2, P[2]); g.ellipse(24, 17, 1.4, 2, P[2]);
+          boxP(g, 6, 6, 16, 12, P);
+          if (front2) { g.ellipse(14, 9, 2, 2, function (px, py, nx, ny) { return nx * nx + ny * ny < 0.4 ? C.ink : P[3]; }); if (st === 'fascism') S._emblem(g, 'fascism', 12, 12, 's', S._EG); else S._star(g, 13, 13, 's', { 1: C.redL, 2: C.red, 3: C.redD }); }
+          else { g.rect(13, 0 + rc, 3, 8, P[2]); g.line(8, 18, 4, 23, P[3]); g.line(20, 18, 24, 23, P[3]); }
+          g.hline(6, 17, 16, 'T');
+        }
+      }
+      var o = g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
+      return dir === 'w' ? o.flipX() : o;
+    }
+    L.lazyDef('hv_', function (key) {
+      var m = /^hv_(tank|artillery)_([a-z]+)_([ewns])_([01])$/.exec(key); if (!m) return null;
+      var g = m[1] === 'tank' ? tankGrid(VP[m[2]] ? m[2] : 'plain', m[3], +m[4]) : gunGrid(m[2], m[3], +m[4]);
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    });
+    S.vehicleKey = function (type, gov, dir, frame) {
+      type = type === 'artillery' ? 'artillery' : 'tank';
+      dir = /^[ewns]$/.test(dir) ? dir : 'e';
+      var st = type === 'tank' ? vstyle(gov) : (gov === 'fascism' || gov === 'communism' ? gov : 'plain');
+      return 'hv_' + type + '_' + st + '_' + dir + '_' + ((frame | 0) & 1);
+    };
+
+    // ---------------------------------------------------------------- Wracks (Deko, 1×1, ragen über): frisch verkohlt bzw. rostig und bewachsen
+    var BURN = [HC('#5a5458'), HC('#3e3a3e'), HC('#2a2629'), HC('#1a1719')], RUST = [HC('#c07a4a'), HC('#9a5634'), HC('#6e3a22'), HC('#4a2616')];
+    var MOSS = [HC('#8fc25c'), HC('#5e9a40')];
+    function wreckGrid(kind, old) {
+      var P = old ? RUST : BURN, g;
+      if (kind === 'tank') {
+        g = new Grid(36, 22);
+        g.rect(2, 14, 26, 6, TRK[1]); for (var i = 3; i < 27; i += 5) g.ellipse(i + 0.5, 17, 2, 2, old ? RUST[2] : TRK[2]);
+        g.rect(26, 17, 6, 2, TRK[2]); g.set(32, 18, TRK[2]);   // abgesprungene Kette
+        boxP(g, 1, 9, 28, 6, P); g.line(28, 9, 30, 13, P[2]);
+        for (var y = 2; y < 9; y++) g.hline(9 + Math.round((y - 2) * 0.4), y + (y > 5 ? 0 : 0), 13, y === 2 ? P[0] : P[1]);   // verrutschter Turm
+        g.line(21, 5, 33, 9, P[2]); g.line(21, 6, 33, 10, P[3]);   // hängendes Rohr
+        g.ellipse(14, 12, 2.4, 1.6, C.ink); g.set(6, 11, C.ink); g.set(7, 11, C.ink);
+        if (old) { g.set(12, 2, MOSS[0]); g.set(13, 2, MOSS[1]); g.hline(0, 20, 6, MOSS[1]); g.hline(20, 20, 5, MOSS[0]); g.set(4, 19, MOSS[0]); g.set(24, 19, MOSS[1]); for (i = 2; i < 28; i += 3) if (hash(i, 3, 1901) < 0.5) g.set(i, 10, RUST[0]); }
+        else { g.set(16, 3, HC('#ff9a3a')); g.set(10, 12, HC('#ff9a3a')); }
+      } else {
+        g = new Grid(32, 20);
+        g.line(2, 17, 16, 13, P[2]); g.line(2, 18, 16, 14, P[1]);
+        for (var k = 0; k < 14; k++) { g.set(13 + k, 15 + (k > 8 ? 1 : 0), P[1]); g.set(13 + k, 14 + (k > 8 ? 1 : 0), P[0]); }   // Rohr am Boden
+        g.ellipse(12, 12, 5, 5, function (px, py, nx, ny) { var d = Math.sqrt(nx * nx + ny * ny); if (d > 0.82) return old ? RUST[3] : C.ink; if (nx > 0.2 && ny < 0) return null; return Math.abs(Math.sin(Math.atan2(ny, nx) * 4)) < 0.3 ? (old ? RUST[1] : BURN[1]) : null; });
+        g.rect(19, 8, 7, 5, P[1]); g.hline(19, 8, 7, P[0]); g.line(19, 8, 21, 6, P[2]);   // Schild, verbogen
+        if (old) { g.hline(0, 19, 8, MOSS[1]); g.set(10, 18, MOSS[0]); g.set(20, 18, MOSS[0]); g.set(26, 18, MOSS[1]); }
+      }
+      return g.pad(1, 1, 1, 0).outline().pad(0, 0, 0, 2).footShade();
+    }
+    L.lazyDef('d_wreck_', function (key) {
+      var m = /^d_wreck_(tank|gun)(_old)?$/.exec(key); if (!m) return null;
+      var g = wreckGrid(m[1], !!m[2]);
+      return { grid: g, scale: 0.5, ox: Math.floor((8 - g.w * 0.5) / 2), oy: 8 - g.h * 0.5 };
+    });
+    S.wreckKey = function (kind, age) { return 'd_wreck_' + (kind === 'gun' ? 'gun' : 'tank') + ((age || 0) >= 4 ? '_old' : ''); };
+
+    // ---------------------------------------------------------------- Granaten und Mündungsfeuer (mittig verankert)
+    var SOILC = HC('#8a6a44');
+    function shellFx(f) {
+      var g = new Grid(16, 16);
+      if (f < 3) {
+        for (var k = 0; k < 3; k++) { var r = 1.2 + k * 0.6, cx = 8 - (k + 1) * 1.6, cy = 8 + (k + 1) * 1.2; g.ellipse(cx + ((f + k) & 1) * 0.5, cy, r, r, FXC.smoke[1 + Math.min(2, k)]); }
+        g.ellipse(9, 7, 2, 2, function (px, py, nx, ny) { return nx + ny < -0.4 ? FXC.fire[1] : HC('#2a2a30'); }); g.set(10, 6, FXC.fire[f === 1 ? 0 : 2]);
+      } else {   // Einschlag: Erdfontäne
+        g = new Grid(24, 24);
+        for (k = 0; k < 13; k++) { var a = -Math.PI / 2 + (k - 6) * 0.2, d = 8 + hash(k, 1, 1910) * 10; g.line(12, 20, Math.round(12 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), k & 1 ? FXC.debris[0] : SOILC); g.line(13, 20, Math.round(13 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), FXC.debris[1]); g.ellipse(12 + Math.cos(a) * d, 20 + Math.sin(a) * d, 1.4, 1.4, k % 3 ? SOILC : FXC.smoke[1]); }
+        g.ellipse(12, 19, 6, 3, function (px, py, nx, ny) { return ny < 0 ? FXC.fire[2] : FXC.smoke[2]; }); g.ellipse(12, 18.5, 3, 1.6, FXC.fire[1]);
+      }
+      return g;
+    }
+    function tankFire(f) {
+      var g = new Grid(24, 16), L1 = [10, 8, 5, 0][f];
+      for (var k = 0; k < 3; k++) { var r = 2 + k * 1.2 + f * 0.8, cx = 4 + k * 3 + f * 2; g.ellipse(cx, 8 - k * 0.6 - f * 0.6, r, r * 0.8, FXC.smoke[Math.min(3, k + (f >> 1))]); }
+      if (L1) { g.ellipse(4 + L1 / 2, 8, L1 / 2 + 1, 2.4 + (f === 0 ? 1 : 0), function (px, py, nx, ny) { var d = Math.abs(ny) + Math.abs(nx) * 0.6; return d < 0.45 ? FXC.fire[0] : (d < 0.8 ? FXC.fire[1] : FXC.fire[3]); }); if (f === 0) { g.line(4, 8, 4 + L1 + 4, 4, FXC.fire[2]); g.line(4, 8, 4 + L1 + 4, 12, FXC.fire[2]); } }
+      return g;
+    }
+    L.lazyDef('fx9_', function (key) {
+      var m = /^fx9_(shell|tankfire)_(\d)$/.exec(key); if (!m) return null;
+      var g = m[1] === 'shell' ? shellFx(+m[2] & 3) : tankFire(+m[2] & 3);
+      var dw = g.w * 0.5, dh = g.h * 0.5;
+      return { grid: g, scale: 0.5, ox: (8 - dw) / 2, oy: (8 - dh) / 2 };
+    });
+    for (var sf = 0; sf < 4; sf++) { L.ALIAS['fx_shell_' + sf] = 'fx9_shell_' + sf; L.ALIAS['fx_tankfire_' + sf] = 'fx9_tankfire_' + sf; }
     // Phasenzahl je Effekt für den Renderer
-    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, nuke_l: 10, bolt: 2, rain: 2, snow: 2, treefall: 5 }[name] || 1; };
+    S.fxFrames = function (name) { return { fire: 6, smoke: 4, chimney: 4, blast_s: 8, blast_m: 8, blast_l: 8, nuke: 10, nuke_l: 10, bolt: 2, rain: 2, snow: 2, treefall: 5, shell: 4, tankfire: 4 }[name] || 1; };
   });
 
   WW.SPRITE_RACES = RACES;
