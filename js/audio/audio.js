@@ -101,7 +101,7 @@
   const TOK_RATE = 4, TOK_MAX = 4, AMB_RATE = 1, AMB_MAX = 2;
   let tokens = TOK_MAX, tokT = 0, ambTok = AMB_MAX, ambT = 0;
   let speed = 1, spTick = -1, spT = 0;   // geschätztes Spieltempo (Ticks je s / 10)
-  const stats = { fx: 0, amb: 0, played: 0, dropped: 0, stolen: 0, silent: 0, peakVoices: 0, errors: 0 };
+  const stats = { names: {}, fx: 0, amb: 0, played: 0, dropped: 0, stolen: 0, silent: 0, peakVoices: 0, errors: 0 };
 
   function now() { return ctx ? ctx.currentTime : 0; }
   function safe(fn) { return function () { try { return fn.apply(null, arguments); } catch (e) { stats.errors++; return undefined; } }; }
@@ -342,7 +342,7 @@
       if (lastPlay[g.key] != null && t - lastPlay[g.key] < gap) { stats.dropped++; continue; }
       if (lastPlay['@' + g.name] != null && t - lastPlay['@' + g.name] < (sd.gap || 0.1) * 0.5) { stats.dropped++; continue; }
       const v = playVoice(g.name, { x: g.x, y: g.y, rate: g.rate, gain: g.gain * (1 + Math.min(0.3, Math.log(g.n) * 0.1)) });
-      if (v) { lastPlay[g.key] = t; lastPlay['@' + g.name] = t; played++; stats.fx++; if (SND[g.name].prio < 8) tokens -= 1; }
+      if (v) { lastPlay[g.key] = t; lastPlay['@' + g.name] = t; played++; stats.fx++; stats.names[g.key] = (stats.names[g.key] || 0) + 1; if (SND[g.name].prio < 8) tokens -= 1; }
     }
   }
 
@@ -356,7 +356,7 @@
   // Lager-Ereignisse (js/sim/camps.js: campBuilt, campPickup, campIntern, campBreakout, campRiot, campProtest, campLiberated)
   // bekommen bewusst kein Signal.
   const DARK_EV = { godNuke: 90, godNukeWild: 90, godTsar: 120, godTsarWild: 120, godBlackhole: 50, godBlackholeWild: 50, godMeteor: 30,
-    godVolcano: 40, godVolcanoWild: 40, godQuake: 40, randomPlague: 50, godPlague: 50, zombieOutbreak: 50, kingdomGone: 40, fallen: 30, famine: 25 };
+    godVolcano: 40, godVolcanoWild: 40, godQuake: 40, randomPlague: 50, godPlague: 50, zombieOutbreak: 50, kingdomGone: 40, fallen: 20 };
   let pendingSting = null;
   function onEvent(e) {
     if (!e || typeof e.type !== 'string') return;
@@ -502,7 +502,7 @@
       setMix: safe((m) => { mixOverride = m ? Object.assign(A.analyze(null, null), m) : null; if (!m && beds) beds.set(A.analyze(null, null), now()); }),
       play: safe((name, x, y, rate) => playVoice(name, { x, y, rate })),
       voices: () => voices.map((v) => ({ name: v.name, prio: v.prio, group: v.group })),
-      stats: () => Object.assign({ voices: voices.length }, stats),
+      stats: () => Object.assign({ voices: voices.length }, stats, { names: Object.assign({}, stats.names) }),
       sounds: () => Object.keys(SND),
       ctx: () => ctx, out: () => out
     }

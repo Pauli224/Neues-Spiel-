@@ -2408,7 +2408,8 @@
     defB('s_mine_iron', finishB(mine(['.hQ.', 'QhRQ', 'hQhR'])), 2);
     defB('s_mine_coal', finishB(mine(['.oO.', 'OoOo', 'oOdo'])), 2);
     defB('s_mine_gold', finishB(mine(['.kj.', 'kjKk', 'jKkK'])), 2);
-    S.mineKey = function (ore) { return /^(iron|coal|gold)$/.test(ore) ? 's_mine_' + ore : 's_mine'; };
+    defB('s_mine_crystal', finishB(mine(['.b..', 'bbB.', 'bBbB'])), 2);
+    S.mineKey = function (ore) { return /^(iron|coal|gold|crystal)$/.test(ore) ? 's_mine_' + ore : 's_mine'; };
     def('s_smithy', L.DEFS.s_factory_schmiede_1.grid, { group: 'build', fw: 2, fh: 2, ox: 0, oy: L.DEFS.s_factory_schmiede_1.oy });
     // Fischerei am Ufer: Hütte oben, Steg nach unten ins Wasser, Netz, Boot (Wasser scheint durch)
     g = new Grid(14, 20);
@@ -3137,6 +3138,20 @@
         ['tribe', 'anarchy'].forEach(function (st) { for (var lv3 = 2; lv3 <= 4; lv3++) { set('s_wall_' + st + '_' + lv3 + '_water_' + d, 'wh_wall_' + st + '_' + lv3 + '_water_' + d); set('s_gate_' + st + '_' + lv3 + '_' + d, 'wh_gate_' + st + '_' + lv3 + '_' + d); } });
       });
     })();
+    // ---------------------------------------------------------------- Mahnmal (Ruine eines Arbeitslagers): schlichter Gedenkstein mit Blumen, ohne Zeichen
+    var MEMC = [HCOL('#d8d6d2'), HCOL('#b4b2ae'), HCOL('#8e8c8a'), HCOL('#6a6866')], MEMF = [HCOL('#f2e4a0'), HCOL('#f4b8c8'), HCOL('#ffffff'), HCOL('#c8a8e8')];
+    L.lazyDef('hm_', function (key) {
+      if (key !== 'hm_memorial') return null;
+      var g = new Grid(30, 34), x, y;
+      for (y = 22; y < 31; y++) for (x = 3; x < 27; x++) { var e = Math.abs(x + 0.5 - 15) / 12 + Math.abs(y + 0.5 - 26.5) / 5; if (e < 1) g.set(x, y, hash(x, y, 1501) < 0.15 ? C.leafD : C.leaf); }
+      g.rect(8, 26, 14, 3, MEMC[2]); g.hline(8, 26, 14, MEMC[1]); g.hline(8, 28, 14, MEMC[3]);          // Sockel
+      for (y = 8; y < 26; y++) for (x = 11; x < 19; x++) { var tp = y < 10 && (x === 11 || x === 18); if (tp) continue; g.set(x, y, x === 11 ? MEMC[0] : (x === 18 ? MEMC[2] : (hash(x, y, 1502) < 0.08 ? MEMC[2] : MEMC[1]))); }
+      g.hline(12, 8, 6, MEMC[0]); g.hline(13, 14, 4, MEMC[2]); g.hline(13, 17, 4, MEMC[2]); g.hline(13, 20, 3, MEMC[2]);   // schlichte Inschriftzeilen (abstrakt)
+      [[6, 25], [8, 27], [21, 27], [23, 25], [10, 29], [19, 29], [14, 30], [16, 29]].forEach(function (p, k) { g.set(p[0], p[1], MEMF[k % 4]); g.set(p[0], p[1] + 1, C.leafD); });
+      g = finishH(g, 2);
+      return { grid: g, scale: 0.5, fw: 2, fh: 2, ox: 0, oy: 16 - g.h * 0.5 + 0.5 };
+    });
+    L.ALIAS.s_memorial = 'hm_memorial';
     // Bodenschatten unter Mauern, Toren, Türmen, Barrikaden
     Object.keys(L.DEFS).forEach(function (k) { if (L.DEFS[k].group === 'wall') L.DEFS[k].grid.footShade(); });
   });
