@@ -359,7 +359,8 @@
     const kind = typeof v === 'string' ? v : kinds ? (kinds[v] || kinds[v - 1]) : ['iron', 'coal', 'gold', 'crystal'][v - 1];
     if (!kind) return null;
     const n = (Math.imul(i, 2654435761) >>> 28) % 3;
-    for (const k of ['d_deposit_' + kind + '_' + n, 'd_deposit_' + kind + '_0', 'd_deposit_' + kind]) if (S.has(k)) return { key: k, dx: 0, dy: 0 };
+    if (kind === 'fish' && S.has('d_fish_0')) return { key: 'd_fish_' + (((this.time * 2) | 0) & 1), dx: 0, dy: 0 };
+    for (const k of ['d_ore_' + kind + '_' + (n & 1), 'd_' + kind, 'd_deposit_' + kind + '_' + n, 'd_deposit_' + kind + '_0', 'd_deposit_' + kind]) if (S.has(k)) return { key: k, dx: 0, dy: 0 };
     return null;
   };
 
@@ -772,7 +773,7 @@
     if (c[type]) return c[type];
     const out = [];
     // feine Phasen der Grafik: Explosion -> blast_*, Pilzwolke -> nuke
-    const alias = { mushroom: 'nuke', explosion: 'blast_m', explosion_big: 'blast_l', explosion_small: 'blast_s' }[type];
+    const alias = { mushroom: this.S.has('fx_nuke_l_0') ? 'nuke_l' : 'nuke', explosion: 'blast_m', explosion_big: 'blast_l', explosion_small: 'blast_s' }[type];
     if (alias && typeof this.S.fxFrames === 'function' && this.S.has('fx_' + alias + '_0')) {
       const n = this.S.fxFrames(alias);
       for (let i = 0; i < n; i++) out.push('fx_' + alias + '_' + i);
@@ -879,6 +880,13 @@
           break;
         }
         case 'treeFall': {
+          if (S.has('fx_treefall_0')) {
+            const n = typeof S.fxFrames === 'function' ? S.fxFrames('treefall') : 5;
+            g.globalAlpha = k > 0.75 ? (1 - k) / 0.25 : 1;
+            S.drawFast(g, 'fx_treefall_' + Math.min(n - 1, (k / 0.75 * n) | 0), Math.round(px - 4), Math.round(py - 4), 0, (f.seed & 1) === 1);
+            g.globalAlpha = 1;
+            break;
+          }
           // Baum kippt um seinen Fuß, schlägt auf und verblasst
           const key = S.has('d_tree_0') ? 'd_tree_' + ((f.seed & 3) % (S.has('d_tree_3') ? 4 : 1)) : null;
           if (!key) break;
@@ -933,7 +941,7 @@
         case 'mushroom': case 'explosion': {
           let fr = this.fxFrames(f.type === 'explosion' ? ((f.r || 1) >= 3 ? 'explosion_big' : (f.r || 1) < 1.5 && this.S.has('fx_blast_s_0') ? 'explosion_small' : 'explosion') : f.type);
           const fine = this.S.has('fx_blast_m_0');
-          const sc = fine ? (f.type === 'explosion' ? Math.max(1, Math.min(2.5, (f.r || 1) / 4)) : Math.max(1.6, (f.r || 10) / 6)) :
+          const sc = fine ? (f.type === 'explosion' ? Math.max(1, Math.min(2.5, (f.r || 1) / 4)) : (this.S.has('fx_nuke_l_0') ? Math.max(1, (f.r || 10) / 12) : Math.max(1.6, (f.r || 10) / 6))) :
             f.type === 'explosion' ? Math.max(1, Math.min(4, (f.r || 1) / (this.fxFrames('explosion_big').length && (f.r || 1) >= 3 ? 3 : 1.2))) : Math.max(1, (f.r || 1) / 4);
           if (!fr.length) {   // Ersatz: Feuerball aus vorhandenen Sprites
             const r = (f.r || 1.5) * 8 * (0.4 + k);
@@ -1002,7 +1010,7 @@
           // Mahnmal: großes Ruinenbild nur auf der linken oberen Ruinen-Kachel, die übrigen leer lassen
           const st2 = this.st, W2 = st2.W;
           const isCampRuin = (x, y) => { const o = this.structById ? this.structById(st2.structAt[y * W2 + x]) : null; return o && o.type === 'ruin' && o.ruinOf === 'laborcamp'; };
-          const ck = typeof S.laborcampKey === 'function' ? S.laborcampKey(style, true) : 's_laborcamp_ruin';
+          const ck = S.has('s_memorial') ? 's_memorial' : typeof S.laborcampKey === 'function' ? S.laborcampKey(style, true) : 's_laborcamp_ruin';
           if (S.has(ck)) return (s.x > 0 && isCampRuin(s.x - 1, s.y)) || (s.y > 0 && isCampRuin(s.x, s.y - 1)) ? null : ck;
         }
         return s.w >= 3 ? 's_ruin_3' : (s.w >= 2 ? 's_ruin_2' : 's_ruin');

@@ -728,7 +728,7 @@
     const st = sim.state, W = st.W, H = st.H, T = WW.T;
     if (!st.deposit || st.deposit.length !== W * H) st.deposit = new Uint8Array(W * H);
     const dep = st.deposit; dep.fill(0);
-    const rng = new WW.RNG(((st.seed | 0) ^ 0x5eed0de9) >>> 0);
+    const rng = WW.RNG.create('deposit/' + String(st.seed));
     const CS = 10, cw = Math.ceil(W / CS), ch = Math.ceil(H / CS);
     const metal = new Uint8Array(cw * ch), rich = new Float32Array(cw * ch), fishR = new Float32Array(cw * ch);
     for (let c = 0; c < cw * ch; c++) {
