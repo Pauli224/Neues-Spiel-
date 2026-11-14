@@ -430,6 +430,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 22px; background: v
 }
 @media (max-width: 340px) {
   .tb-stats .st-k { display: none; }
+  .tb-stats .st-fps small { display: none; }
 }
 @media (max-height: 520px) and (orientation: landscape) {
   :root { --topbar-h: 44px; }

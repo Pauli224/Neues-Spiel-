@@ -518,7 +518,8 @@
         ['weather', 'Wetter', 'Regenschauer, Schnee in kalten Gegenden, Morgennebel, Gewitter.'],
         ['clouds', 'Wolkenschatten', 'Weiche Schatten ziehen mit dem Wind über das Land.'],
         ['water', 'Lebendiges Wasser', 'Glitzern, Strömung und Brandung.'],
-        ['sharp', 'Volle Auflösung', 'Zeichnet in der vollen Auflösung des Bildschirms. Schärfer, aber deutlich langsamer – nur für starke Geräte.']]) {
+        ['sharp', 'Volle Auflösung', 'Zeichnet in der vollen Auflösung des Bildschirms. Schärfer, aber deutlich langsamer – nur für starke Geräte.'],
+        ['fps', 'Bildrate anzeigen', 'Zeigt oben die Bilder pro Sekunde. Mehr als die Bildwiederholrate des Bildschirms (meist 60 oder 120) kann kein Spiel im Browser zeigen.']]) {
         const on = gx[r[0]] !== false;
         box.appendChild(h('div.law', [h('div.lt', [h('b', r[1]), h('span', r[2])]),
           h('button.btn.switch' + (on ? '.on' : ''), { type: 'button', role: 'switch', 'aria-checked': on ? 'true' : 'false', on: { click: () => { gx[r[0]] = !on; game.applyGfx(); render(); } } }, on ? 'An' : 'Aus')]));

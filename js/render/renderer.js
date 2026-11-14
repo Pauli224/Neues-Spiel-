@@ -47,6 +47,7 @@
     this.traffic = new Uint16Array(W * H);
     this.kingTile = new Int16Array(W * H).fill(-1);
     this.decorSig = new Int16Array(W * H);
+    this.gsig = new Int32Array(W * H);   // Prüfsumme des zuletzt gezeichneten Bodens je Kachel
     this.waterSig = new Uint8Array(W * H);
     for (let i = 0; i < W * H; i++) this.waterSig[i] = waterKind(st.terrain[i]);
     for (let i = 0; i < W * H; i++) this.decorSig[i] = st.structAt && st.structAt[i] >= 0 ? -2 : st.terrain[i];
@@ -86,6 +87,31 @@
 
   // ------------------------------------------------------------------ Boden-Blöcke
   Renderer.prototype.chunkAt = function (tx, ty) { return this.chunks[((ty / CH) | 0) * this.cw + ((tx / CH) | 0)]; };
+
+  // Prüfsumme über alles, was drawGroundTile für diese Kachel liest: Gelände, Pfad und weiche Überlagerungen der Kachel
+  // und ihrer 8 Nachbarn, dazu Variante, Beweidung, Trübung, Risse, Fallout, Krater und Gleis.
+  Renderer.prototype.groundSig = function (x, y) {
+    const st = this.st, W = st.W, H = st.H, i = y * W + x, t = st.terrain, path = this.path;
+    const cl = st.cleared, ba = st.barren, so = st.soot;
+    let h = 2166136261 | 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      let v = -1;
+      if (xx >= 0 && yy >= 0 && xx < W && yy < H) {
+        const j = yy * W + xx;
+        v = t[j] | (path[j] ? 256 : 0) | (cl && cl[j] > 0 ? 512 : 0) | (so && so[j] > 0 ? 1024 : 0) | (ba && ba[j] > 0 ? (ba[j] > 170 ? 3 : ba[j] > 85 ? 2 : 1) << 11 : 0);
+      }
+      h = Math.imul(h ^ v, 16777619);
+    }
+    h = Math.imul(h ^ (st.variant ? st.variant[i] : 0), 16777619);
+    h = Math.imul(h ^ ((st.graze && st.graze[i] >= 128 ? 1 : 0) | (st.murk ? (st.murk[i] >> 3) << 1 : 0)), 16777619);
+    h = Math.imul(h ^ ((st.crack ? st.crack[i] >> 3 : 0) | (st.fallout ? (st.fallout[i] >> 3) << 8 : 0) | (st.mark ? st.mark[i] << 16 : 0)), 16777619);
+    if (st.structAt && st.structAt[i] >= 0 && this.structById) {
+      const rs = this.structById(st.structAt[i]);
+      if (rs && rs.type === 'rail') h = Math.imul(h ^ (64 + ((rs.mask | 0) & 15) * 2 + (rs.bridge ? 1 : 0)), 16777619);
+    }
+    return h | 0;
+  };
 
   Renderer.prototype.drawGroundTile = function (g, x, y, hi) {
     const st = this.st, W = st.W, H = st.H, i = y * W + x, t = st.terrain;
@@ -186,6 +212,7 @@
     c.usedT = this.time;
     this.trimChunks();
     c.built = true;
+    c.late = null;
     c.decorDirty = true;
     c.waterDirty = true;
   };
@@ -498,10 +525,16 @@
       const x = i % W, y = (i / W) | 0;
       const c = this.chunkAt(x, y);
       this.updateMiniTile(i);
-      if (!c.built) continue;
-      const g = c.ground.getContext('2d'), k = c.hi ? 2 : 1;
-      g.setTransform(k, 0, 0, k, -c.cx * CPX * k, -c.cy * CPX * k);
-      this.drawGroundTile(g, x, y, c.hi);
+      if (!c.built) { this.gsig[i] = 0x7fffffff; continue; }   // Block wird später ganz neu gebaut: Prüfsumme verwerfen
+      if (this.time - (c.usedT || 0) > 1.5) { (c.late || (c.late = new Set())).add(i); continue; }   // Block nicht im Bild: merken, später zeichnen
+      // Boden nur neu zeichnen, wenn sich an dieser Kachel oder ihren Nachbarn sichtbar etwas geändert hat
+      const sg = this.groundSig(x, y);
+      if (this.gsig[i] !== sg) {
+        this.gsig[i] = sg;
+        const g = c.ground.getContext('2d'), k = c.hi ? 2 : 1;
+        g.setTransform(k, 0, 0, k, -c.cx * CPX * k, -c.cy * CPX * k);
+        this.drawGroundTile(g, x, y, c.hi);
+      }
       touched.add(c);
       // Wasser-Masken nur neu, wenn sich an Wasser/Land dieser Kachel etwas geändert hat
       const wk = waterKind(st.terrain[i]);
@@ -1159,7 +1192,7 @@
       const sc = this._still || (this._still = document.createElement('canvas'));
       if (sc.width !== cv.width || sc.height !== cv.height) { sc.width = cv.width; sc.height = cv.height; this._stillKey = ''; }
       if (this._stillKey === SK && this._stillF === wf) fromStill = true;
-      else { g = sc.getContext('2d'); this._stillKey = SK; this._stillF = wf; }
+      else { g = sc.getContext('2d', { alpha: false }); this._stillKey = SK; this._stillF = wf; }
     } else this._stillKey = '';
     const rx = (wx) => Math.round(ox + wx * s), ry = (wy) => Math.round(oy + wy * s);
     if (!fromStill) {
@@ -1182,6 +1215,7 @@
         const w = Math.min(CPX, st.W * 8 - X), h = Math.min(CPX, st.H * 8 - Y);
         const dx = rx(X), dy = ry(Y), k = c.hi ? 2 : 1;
         c.usedT = this.time;
+        if (c.late) { for (const li of c.late) this.groundDirty.add(li); c.late = null; }   // aufgeschobene Kacheln jetzt nachholen
         g.drawImage(c.ground, 0, 0, w * k, h * k, dx, dy, rx(X + w) - dx, ry(Y + h) - dy);
       }
       // lebendiges Wasser: Glitzern, Strömung, Brandung (über dem Boden-Cache)

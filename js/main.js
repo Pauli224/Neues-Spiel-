@@ -413,10 +413,18 @@
 
   // ------------------------------------------------------------------ Schleife
   let last = 0, statT = 0, infoT = 0, decayT = 0;
+  let fpsN = 0, fpsT0 = 0;
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = last ? Math.min(0.1, (now - last) / 1000) : 0.016;
     last = now;
+    // Bildraten-Anzeige (echte Bilder je Sekunde, alle halbe Sekunde aktualisiert)
+    fpsN++;
+    if (now - fpsT0 >= 500) {
+      game.perf.fps = Math.round(fpsN * 1000 / (now - fpsT0)); fpsN = 0; fpsT0 = now;
+      const el = document.getElementById('stFps');
+      if (el) { const on = !!(game.gfx && game.gfx.fps); if (el.hidden === on) el.hidden = !on; if (on) document.getElementById('stFpsN').textContent = game.perf.fps; }
+    }
     resize();
     const sim = game.sim;
     if (!sim) return;
@@ -595,7 +603,7 @@
   game.uiSound = function (name) { if (game.audioOn && game.audioSet.on && WW.Audio && WW.Audio.ui) { try { WW.Audio.ui(name); } catch (e) { /* egal */ } } };
   // Grafik-Einstellungen der Pixel-Ansicht (gespeichert)
   const GFX_KEY = 'wuselwelt.gfx2';
-  game.gfx = (function () { const small = window.innerWidth < 760; const d = { daynight: false, weather: false, clouds: false, water: true, sharp: false, quality: small ? 'low' : 'mid' };
+  game.gfx = (function () { const small = window.innerWidth < 760; const d = { daynight: false, weather: false, clouds: false, water: true, sharp: false, fps: true, quality: small ? 'low' : 'mid' };
     try { return Object.assign(d, JSON.parse(D().store.get(GFX_KEY) || '{}')); } catch (e) { return d; } })();
   game.applyGfx = function () { D().store.set(GFX_KEY, JSON.stringify(game.gfx)); if (game.renderer) game.renderer.gfx = game.gfx; };
   game.quality = (function () { const q = D().store.get('wuselwelt.quality'); return q || (window.innerWidth < 760 ? 'low' : 'mid'); })();
