@@ -712,6 +712,16 @@
   // ---------------------------------------------------------------------------
   // Schlachten
   // ---------------------------------------------------------------------------
+  // Vorfeld einer ummauerten Stadt (Ringradius + BATTLE.siegeMargin): dort wird belagert, nicht im Feld geschlagen
+  function siegeZone(sim, x, y) {
+    const m = M().BATTLE.siegeMargin;
+    for (const c of sim.state.cities) {
+      if (!c.wall || !(c.wall.level >= 1) || !c.wall.inside) continue;
+      const r = Math.sqrt(c.wall.inside / 3.14) + m, dx = x - c.cx - 0.5, dy = y - c.cy - 0.5;
+      if (dx * dx + dy * dy <= r * r) return true;
+    }
+    return false;
+  }
   function sideOf(sim, b, kid) {
     if (kid === b.a) return 1;
     if (kid === b.b) return 2;
@@ -834,7 +844,7 @@
         if (u.vehicle || u.foe >= 0 || u.role !== 'soldier') continue;
         budget--;
         let best = null, bd = B.engageR * B.engageR;
-        WW.Units.forNear(sim, u.x, u.y, B.engageR, false, (v, d2) => { if (d2 < bd && FIGHTER[v.role] && WW.Units.hostile(sim, u, v)) { bd = d2; best = v; } });
+        WW.Units.forNear(sim, u.x, u.y, B.engageR, false, (v, d2) => { if (d2 < bd && FIGHTER[v.role] && outside(v.x, v.y) && WW.Units.hostile(sim, u, v)) { bd = d2; best = v; } });   // nie hinter eine Mauer locken
         if (best) { u.foe = best.id; u.path = null; }
       }
     };
@@ -843,7 +853,7 @@
       if (!hostileK(sim, g1.kid, g2.kid)) continue;
       const dx = g1.x - g2.x, dy = g1.y - g2.y;
       if (dx * dx + dy * dy > B.interceptR * B.interceptR) continue;
-      if (!outside(g1.x, g1.y) && !outside(g2.x, g2.y)) continue;
+      if (!outside(g1.x, g1.y) || !outside(g2.x, g2.y) || siegeZone(sim, g1.x, g1.y) || siegeZone(sim, g2.x, g2.y)) continue;
       engage(g1.list); engage(g2.list);
     }
     // Ausfall: Heer nähert sich einer Stadt -> deren freie Soldaten ziehen ihm ins Feld entgegen
@@ -872,7 +882,7 @@
     return engaged;
   }
 
-  // Feldschlacht erkennen
+  // Feldschlacht erkennen (außerhalb der Ringe und ihres Vorfelds)
   function detect(sim, engaged) {
     const st = sim.state, B = M().BATTLE, W = st.W;
     let tries = 0;
@@ -888,7 +898,7 @@
       if (near) continue;
       tries++;
       const i = Math.floor(cy) * W + Math.floor(cx);
-      if (st.inRing[i] !== -1) continue;
+      if (st.inRing[i] !== -1 || siegeZone(sim, cx, cy)) continue;   // Kampf an der Mauer ist Belagerung, keine Feldschlacht
       const tmp = { a: u.kingdomId, b: f.kingdomId };
       if (!hostileK(sim, tmp.a, tmp.b)) continue;
       let nA = 0, nB = 0, mA = 0, mB = 0;
@@ -929,7 +939,7 @@
   function updateBattle(sim, b) {
     const st = sim.state, B = M().BATTLE, W = st.W;
     const ka = sim._kingdoms.get(b.a), kb = sim._kingdoms.get(b.b);
-    if (!ka || !kb || !hostileK(sim, b.a, b.b)) { finish(sim, b); return; }
+    if (!ka || !kb || !hostileK(sim, b.a, b.b) || siegeZone(sim, b.x, b.y)) { finish(sim, b); return; }
     const memA = [], memB = [];
     let sx = 0, sy = 0;
     WW.Units.forNear(sim, b.x, b.y, b.r + 3, false, (v) => {

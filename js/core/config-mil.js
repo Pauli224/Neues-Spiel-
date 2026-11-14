@@ -41,7 +41,7 @@
 
     // Feldschlacht: mindestens min Kämpfer (beide Seiten zusammen, je Seite sideMin) im Umkreis r außerhalb der Mauerringe
     BATTLE: { min: 12, sideMin: 3, r: 10, rMax: 15, check: 20, breakAt: 0.4, ratio: 2, surrenderRatio: 3, minTicks: 100,
-              maxTicks: 720, quiet: 2, paroleTicks: 480, minLosses: 4, interceptR: 16, engageR: 12, sortieR: 30, sortieYears: 2 },
+              maxTicks: 720, quiet: 2, paroleTicks: 480, siegeMargin: 5, minLosses: 4, interceptR: 16, engageR: 12, sortieR: 30, sortieYears: 2 },
     // Gräben: dig je Prüfung und eingegrabenem Kämpfer, cover ab diesem Wert; Schaden × coverRanged (Fernkampf) bzw.
     // × coverMelee; decay: jährlicher Abbau nach Naturmodus des Gebiets (care wächst am schnellsten zu)
     TRENCH: { dig: 45, cover: 60, coverRanged: 0.55, coverMelee: 0.85, decay: { care: 40, use: 24, exploit: 12, none: 24 } },

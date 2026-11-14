@@ -77,6 +77,20 @@
 //     Wagen, vergitterte Fensterchen, Schiebetür, Zeichen am Wagen), S.trainKey('car', 'guard', dir, gov) ->
 //     'tr_car_guard_<stil>_<dir>' (Plattformwagen mit Wachhäuschen und Wachposten des Reichs); stil fascism | communism
 //     | plain. Gleiche Maße und Anker wie die übrigen tr_car_* (seitlich 15×11, vorn/hinten 10×12,5).
+//  Garnisonen und Megastadt (9.10)
+//   S.garrisonKey(gov, culture) -> 's_garrison_<stil>' (Kaserne 2×2, Nachtfassung über S.litKey). Stile: fascism (strenger
+//     Block mit Exerzierhof, Bündel-Banner), communism (Plattenbau mit Stern), monarchy (Wachhaus mit Zinnen), civic
+//     (Demokratie/Handelsrepublik: Bürgerwehr-Haus), theocracy (Ordenshaus), tribe (Kriegerhütte); für traditionelle
+//     Regierungen je Kultur: sahel, nil, nord. Faschismus und Kommunismus behalten ihren Stil in jeder Kultur.
+//     Icons 'i_garrison', 'i_occupied' (kleines Banner-Symbol für besetzte Städte, auch als Marke über der Stadt).
+//   Wohnblöcke Stufe 4/5 (nur Faschismus): S.houseKey('fascism', 4|5, variant) -> 's_house_mega_<4|5>_<a|b>' (2×2,
+//     Stufe 4 etwa 18×40, Stufe 5 etwa 18×52 Logikpixel, unten bündig wie alle Häuser).
+//   Monumentales Zentrum: S.centerKey('fascism', 3|4) -> 's_center_fascism_3' (Megastadt) bzw. '_4' (Riesenstadt), 3×3,
+//     ragt weit nach oben (etwa 26×50 bzw. 26×62). Andere Regierungen: Stufe ≥ 3 = Stufe 2.
+//   Prachtstraße (Stadt-Deko 1×1): 's_deco_parade_lamp' (Laterne), 's_deco_parade_mast' (Fahnenmast mit dunkler
+//     Standarte, Saum in Reichsfarbe), 's_deco_parade_column' (Säule mit Bündel), 's_deco_parade_tribune' (Tribüne,
+//     2×1), Aufmarschplatz als Bodenbelag 's_deco_parade_ground_<maske>' (8×8 Überlagerung, Maske wie t_cleared).
+//   Rüstungsviertel: 's_warworks' (Rüstungswerk 3×3, Hallen, Schlote, Bündel-Banner); dazu s_arsenal_fascism.
 //   Zauntor mit Gleis: S.gateKey('fence', level, dir, true) -> 's_gate_fence_rail_h|v' (breit offen, Gleis liegt als
 //     Bodenüberlagerung darunter).
 // ============================================================================

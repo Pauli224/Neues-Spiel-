@@ -97,6 +97,7 @@
     for (const u of st.units) {
       if (u.dead) continue;
       if (!hostileWorld && (u.role === 'bandit' || u.role === 'rebel' || (u.wMad && u.wMad > st.tick))) hostileWorld = true;
+      if (u.seaS === 'aboard') continue;   // [see] an Bord: unsichtbar, weder Ziel noch Nachbar
       const cx = Math.min(bw - 1, Math.max(0, (u.x / CELL) | 0)), cy = Math.min(bh - 1, Math.max(0, (u.y / CELL) | 0));
       B[cy * bw + cx].push(u);
     }
@@ -137,7 +138,6 @@
     if (a === b || a.dead || b.dead) return false;
     if (a.role === 'prisoner' || b.role === 'prisoner') return false;   // [industry] Lager-Insassen sind nie Ziel
     if ((a.parole && a.parole > sim.state.tick) || (b.parole && b.parole > sim.state.tick)) return false;   // [mil] Waffen niedergelegt
-    if (a.seaS === 'aboard' || b.seaS === 'aboard' || a.seaS === 'swim' || b.seaS === 'swim') return false;   // [see] an Bord / schwimmt
     // Wildnis: Räuber sind allen feind, Wahnsinnige ebenso
     if (a.role === 'bandit' || b.role === 'bandit') return a.role !== b.role;
     const t = sim.state.tick;

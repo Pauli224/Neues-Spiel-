@@ -8,8 +8,9 @@
 //   sim.js    tick -> WW.Naval.tick(sim); defaults/create -> WW.Naval.defaults(st); actions -> WW.Naval.actions(sim, safe);
 //             Konstruktor -> Object.assign(sim.query, WW.Naval.queries(sim)). Speichern/Laden braucht keinen Haken:
 //             state.ships / state.naval sind reine Daten (keine Typed Arrays) und laufen über das normale JSON.
-//   units.js  updateAll: Einheiten mit u.sea steuert WW.Naval.unit(sim, u) (zum Hafen gehen, an Bord, schwimmen);
-//             hostile: Einheiten an Bord (u.seaS === 'aboard') sind nie Ziel
+//   units.js  updateAll: Einheiten mit u.sea steuert WW.Naval.unit(sim, u) (zum Hafen gehen, an Bord, schwimmen).
+//             buildBuckets: Einheiten an Bord (u.seaS === 'aboard') kommen nicht in die Nachbarschafts-Raster, sind also
+//             weder Ziel noch Nachbar (billiger als eine Prüfung in hostile).
 //   diplo.js  update: liegt die nächste Feindstadt auf einer anderen Landmasse -> WW.Naval.seaWar (Truppenlandung);
 //             yearly: Kriegsgefahr auch zwischen Nachbarn über das Meer, wenn beide einen Hafen am selben Meer haben (seaReach)
 //   powers.js nichts: die Kräfte hängt dieses Modul beim Laden an WW.POWERS / WW.POWER_KEYS an (wie military.js)
