@@ -1118,6 +1118,9 @@
       const cap = sim._cities.get(k.capitalId) || sim._cities.get(k.cityIds[0]);
       if (cap && cap.culture && k.culture !== cap.culture) k.culture = cap.culture;
     }
+    // Mitglieder frisch aus st.units (city._members ist nach dem Laden noch leer)
+    const mem = new Map();
+    for (const u of st.units) { if (u.dead || u.cityId < 0) continue; let l = mem.get(u.cityId); if (!l) { l = []; mem.set(u.cityId, l); } l.push(u); }
     const sp = new Map();
     for (const s of st.structs) {
       if (s.dead || s.cityId < 0) continue;
@@ -1161,17 +1164,18 @@
         }
       }
       // Karawanen der Karawanserei
-      if (cs && cs.built && city._members) {
+      const members = mem.get(city.id) || [];
+      if (cs && cs.built) {
         const want = Math.min(3, 1 + Math.floor(city.pop / 40));
         let have = 0;
-        for (const u of city._members) if (u.role === 'caravan') have++;
+        for (const u of members) if (u.role === 'caravan') have++;
         if (have < want && partners(sim, city).length) {
-          for (const u of city._members) {
+          for (const u of members) {
             if (u.role === 'farmer' && !u.carrying && !u.order) { WW.Units.setRole(sim, u, 'caravan'); break; }
           }
         }
-      } else if (city._members) {
-        for (const u of city._members) if (u.role === 'caravan') WW.Units.setRole(sim, u, 'farmer');
+      } else {
+        for (const u of members) if (u.role === 'caravan') WW.Units.setRole(sim, u, 'farmer');
       }
     }
   }

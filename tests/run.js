@@ -331,7 +331,12 @@ test('3b Regierungen fühlen sich verschieden an', function () {
   for (const r of rows) log(r);
   assert(stats.fascism.sold > stats.democracy.sold, 'Faschismus hat nicht mehr Soldaten als Demokratie');
   assert(stats.democracy.hap > stats.fascism.hap + 15, 'Demokratie nicht deutlich glücklicher als Faschismus');
-  assert(stats.republic.gold > stats.monarchy.gold, 'Handelsrepublik nicht reicher als Monarchie');
+  // Gold schwankt mit Ereignissen stark: über drei Welten vergleichen
+  const goldOf = (gk, seed) => { const sim = makeSim({ seed: seed, world: meadowWorld(100, 76, { hills: true, spots: [{ x: 50, y: 38 }] }), populate: 1, govs: [gk], races: ['human'], animals: false }); sim.state.kingdoms[0].govLocked = true; run(sim, 12 * WW.CONFIG.TPY); return WW.Cities.stock(sim, sim.state.cities[0]).gold; };
+  const gm = stats.monarchy.gold + goldOf('monarchy', 'feel2') + goldOf('monarchy', 'feel3');
+  const gr = stats.republic.gold + goldOf('republic', 'feel2') + goldOf('republic', 'feel3');
+  log('Gold über drei Welten: Monarchie', Math.round(gm), '· Handelsrepublik', Math.round(gr));
+  assert(gr > gm, 'Handelsrepublik nicht reicher als Monarchie');
   assert(stats.communism.gold === 0, 'Kommunismus hat Gold');
   assert(stats.democracy.types.election > 0, 'keine Wahl');
   assert(stats.communism.types.fiveYearPlan > 0, 'kein Fünfjahresplan');

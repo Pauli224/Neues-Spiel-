@@ -545,7 +545,7 @@
     return l;
   }
 
-  function soldierOk(u) { return !u.dead && u.role === 'soldier' && !u.merc && !u.vehicle && !(u.order && u.order.kind === 'march'); }
+  function soldierOk(u) { return !u.dead && u.role === 'soldier' && !u.merc && !u.vehicle && !u.campState && !(u.pow >= 0) && !(u.order && u.order.kind === 'march'); }   // Heimkehrer/Gefangene [industry] nie
 
   function assign(sim, u, city, walk) {
     u.garrison = city.id; u.cityId = city.id;
@@ -558,6 +558,9 @@
   function update(sim) {
     const st = sim.state;
     const cnt = new Map();
+    // Mitglieder je Stadt frisch aus st.units (nicht city._members: nach dem Laden noch leer -> nicht deterministisch)
+    const mem = new Map();
+    for (const u of st.units) { if (u.dead || u.cityId < 0) continue; let l = mem.get(u.cityId); if (!l) { l = []; mem.set(u.cityId, l); } l.push(u); }
     for (const u of st.units) {
       if (u.garrison == null) continue;
       const c = sim._cities.get(u.garrison);
@@ -579,16 +582,17 @@
         sim.event('integrated', { city: city.name, kingdom: k.name }, WW.Cities.atCity(city));
       }
       if (!k) continue;
-      if (n < w && city._members) {
+      const members = mem.get(city.id) || [];
+      if (n < w) {
         // 1) eigene Soldaten der Stadt
-        for (const u of city._members) { if (n >= w) break; if (u.garrison == null && soldierOk(u) && !u.order) { assign(sim, u, city, false); n++; } }
+        for (const u of members) { if (n >= w) break; if (u.garrison == null && soldierOk(u) && !u.order) { assign(sim, u, city, false); n++; } }
         // 2) Nachschub aus der Hauptstadt bzw. der größten anderen Stadt des Reichs (höchstens 3 je Runde)
         if (n < w) {
           let donor = sim._cities.get(k.capitalId);
           if (!donor || donor === city) { donor = null; for (const id of k.cityIds) { const c = sim._cities.get(id); if (c && c !== city && (!donor || c.pop > donor.pop)) donor = c; } }
-          if (donor && donor._members) {
+          if (donor) {
             let sent = 0;
-            for (const u of donor._members) {
+            for (const u of (mem.get(donor.id) || [])) {
               if (n >= w || sent >= 3) break;
               if (u.garrison == null && soldierOk(u) && !u.order) { assign(sim, u, city, true); n++; sent++; }
             }
@@ -596,7 +600,7 @@
           }
         }
         city.garrison = n;
-      } else if (n > w + (city.garrisonSet != null ? 0 : 2) && city._members) {
+      } else if (n > w + (city.garrisonSet != null ? 0 : 2)) {
         // überzählige Garnison wird wieder normale Wache
         let drop = city.garrisonSet != null ? n - w : 1;
         for (const u of st.units) { if (drop <= 0) break; if (u.garrison === city.id && !u.dead && !u.vehicle) { release(u); n--; drop--; } }   // Fahrzeuge bleiben

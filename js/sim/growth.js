@@ -435,7 +435,9 @@
           if (p.progress >= 1) { removePlot(sim, p); WW.Diplo.startRevolt(sim, c); }
         } else {
           if ((c.loyalty == null ? 50 : c.loyalty) > 10 || a.capitalId === c.id || a.cityIds.length < 2) { p.progress -= 0.1; if (p.progress <= 0) removePlot(sim, p); continue; }
-          p.progress += 0.05;
+          // Garnison hält die Stadt (9.10): volle Garnison bremst die Abspaltung stark (Faschismus fast ganz)
+          const gr = (c.garrisonWant | 0) > 0 ? (c.garrisonRatio || 0) : 0;
+          p.progress += 0.05 * (1 - gr * (a.gov === 'fascism' ? 0.95 : 0.6));
           if (p.progress >= 1) { removePlot(sim, p); if (st.laws.govChanges || true) secedeByLoyalty(sim, c); }
         }
       }
