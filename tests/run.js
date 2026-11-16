@@ -685,8 +685,9 @@ test('10 Loyalität, Abspaltung, Statthalter, Tochterstadt-Regeln', function () 
   log('Loyalität', c.name, Math.round(c.loyalty), 'Ziel', Math.round(WW.Growth.loyaltyTarget(sim, c, k)));
   // Fremdes Volk senkt die Loyalität
   const hap0 = c.happiness; c.happiness = 30;   // unter der Obergrenze vergleichen
+  const race0 = c.race; c.race = k.race;   // Vergleich gegen das eigene Volk des Reichs
   const own = WW.Growth.loyaltyRaw(sim, c, k);
-  const race0 = c.race; c.race = WW.RACE_KEYS.filter(r => r !== k.race).sort((x, y) => (WW.RACES[x].govPrefs[k.gov] || 1) - (WW.RACES[y].govPrefs[k.gov] || 1))[0];
+  c.race = WW.RACE_KEYS.filter(r => r !== k.race).sort((x, y) => (WW.RACES[x].govPrefs[k.gov] || 1) - (WW.RACES[y].govPrefs[k.gov] || 1))[0];
   assert(WW.Growth.loyaltyRaw(sim, c, k) < own, 'fremdes Volk ohne Malus');
   c.race = race0; c.happiness = hap0;
   // Abspaltung: Loyalität unter null -> Vorhaben -> eigenes Reich

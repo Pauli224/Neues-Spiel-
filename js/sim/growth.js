@@ -555,7 +555,12 @@
       const t = st.terrain[i];
       if (LUT.walk[t] <= 0 || LUT.water[t] || st.inRing[i] !== -1) continue;
       land.set(o, (land.get(o) || 0) + 1);
-      if (st.structAt[i] === -1 && !st.cleared[i]) intact.set(o, (intact.get(o) || 0) + (LUT.wood[t] ? 1 : 0.8));
+      if (!st.cleared[i]) {
+        const sid = st.structAt[i];
+        // Wald 1, offenes Land 0,6, Feld/Weide 0,4 (Ackerland ist keine Zerstörung), andere Bauwerke 0
+        const v = sid === -1 ? (LUT.wood[t] ? 1 : 0.6) : (((sim._structs.get(sid) || {}).type === 'field' || (sim._structs.get(sid) || {}).type === 'pasture') ? 0.4 : 0);
+        if (v) intact.set(o, (intact.get(o) || 0) + v);
+      }
     }
     for (const c of st.cities) {
       const l = land.get(c.id) || 1;
