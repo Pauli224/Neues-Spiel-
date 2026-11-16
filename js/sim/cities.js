@@ -231,7 +231,7 @@
     // Garnisonssoldaten (9.10) zählen zum Soldatenanteil, arbeiten aber nicht mit
     let garr = 0;
     for (const u of city._members) if (u.garrison != null && u.role === 'soldier') garr++;
-    if (n < 16 && !atWar) soldierShare = Math.min(soldierShare, 0.15);   // kleine Städte im Frieden: nicht zu viele Soldaten
+    if (n < 16 && !atWar) soldierShare = Math.min(soldierShare, 0.15 + Math.max(0, soldierShare - g.soldierShare));   // kleine Städte im Frieden: Regierungsanteil höchstens 15 % (Mods wirken weiter)
     want.soldier = n >= 4 ? Math.max(0, Math.round((n + garr) * Math.min(0.55, soldierShare)) - garr) : 0;
     if (g.soldierShare > 0 && n >= 6 && want.soldier < 1 && !garr) want.soldier = 1;
     const sites = city.sites.length;
