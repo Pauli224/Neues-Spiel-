@@ -255,7 +255,11 @@
     if (city._rebels > 0 && g.soldierShare > 0) soldierShare += 0.1;
     // Garnisonssoldaten (9.10) zählen zum Soldatenanteil, arbeiten aber nicht mit
     let garr = 0;
-    for (const u of city._members) if (u.garrison != null && u.role === 'soldier') garr++;
+    for (const u of city._members) if (u.role === 'soldier' && (u.garrison != null || u.order)) garr++;   // auch Soldaten auf dem Marsch zählen mit (sonst doppelte Aushebung im Krieg)
+    // Megastadt (9.10): die Hauptstadt ist Werkbank und Wohnort, das Heer kommt aus allen Städten
+    if (g.megaHousing && k && k.capitalId === city.id && city.tier >= 3) soldierShare *= 0.6;
+    // Nahrung knapp: keine Wehrpflicht-Verdopplung, bei Hunger noch weniger Soldaten (sonst blutet die Stadt aus)
+    if (st.food < city.pop * 1.5) soldierShare = Math.min(soldierShare, g.soldierShare * (city.hungry ? 0.6 : 1));
     if (n < 16 && !atWar) soldierShare = Math.min(soldierShare, 0.15 + Math.max(0, soldierShare - g.soldierShare));   // kleine Städte im Frieden: Regierungsanteil höchstens 15 % (Mods wirken weiter)
     want.soldier = n >= 4 ? Math.max(0, Math.round((n + garr) * Math.min(0.55, soldierShare)) - garr) : 0;
     if (g.soldierShare > 0 && n >= 6 && want.soldier < 1 && !garr) want.soldier = 1;
@@ -611,7 +615,7 @@
     // kein Land mehr zu holen: dichter bauen statt stehenbleiben (Stockungs-Fix)
     const houseCap = 2 + Math.floor((city.flurs || 1) * (g.housesPerFlur || WW.CONFIG.HOUSES_PER_FLUR) * (city.landFull ? 1.6 : 1));
     // Megastadt (9.10): dicht bauen – zuerst aufstocken (Wohnblöcke), dann neu bauen
-    if (g.megaHousing && city.tier >= 3 && open < maxOpen && city.pop + 4 >= city.housing && sim.rng.chance(0.6)) upgradeHouse(sim, city, sk);
+    if (g.megaHousing && city.tier >= 2 && city.pop + 6 >= city.housing) { upgradeHouse(sim, city, sk); upgradeHouse(sim, city, sk); }   // ab Stadt: aufstocken als Regel
     if (open < maxOpen && city.pop + 2 >= city.housing && city.houses >= houseCap) {
       // wer wachsen will, muss Land nehmen; bis dahin Häuser aufstocken
       city.needLand = true;
@@ -728,7 +732,7 @@
     let best = null;
     for (const s of sim.state.structs) {
       if (s.dead || s.cityId !== city.id || s.type !== 'house' || !s.built || s.upgradeTo) continue;
-      if (s.level >= 3 && !(megaOk && (s.level === 3 ? city.tier >= 3 : (s.level === 4 && city.tier >= 4)))) continue;   // Wohnblöcke ab Großstadt/Metropole
+      if (s.level >= 3 && !(megaOk && (s.level === 3 ? city.tier >= 2 : (s.level === 4 && city.tier >= 3)))) continue;   // Wohnblöcke ab Stadt/Großstadt
       if (s.level === 0 && stage < 1) continue;          // Zelte erst mit der Dorfhalle aufwerten
       if (s.level >= 1 && city.tier < 1) continue;
       if (s.level === 2 && city.tier < 2) continue;
@@ -736,11 +740,11 @@
     }
     if (!best) return false;
     const cost = WW.Structs.costFor(sim, 'house', best.level + 1, city.id);
-    if (!canPayOwn(sim, city, cost)) return false;
+    if (!(megaOk ? canPay : canPayOwn)(sim, city, cost)) return false;   // Megastadt: Wohnblöcke gehen vor der Rücklage
     // nicht mehrere Ausbauten gleichzeitig beginnen, die das Lager nicht trägt
     let unpaid = 0;
     for (const id of city.sites) { const o = sim._structs.get(id); if (o && o.type === 'house' && o.upgradeTo && !o.paid) unpaid++; }
-    if (unpaid >= (megaOk && city.tier >= 3 ? 3 : 1)) return false;
+    if (unpaid >= (megaOk && city.tier >= 2 ? 5 : 1)) return false;
     best.upgradeTo = best.level + 1; best.progress = 0; best.paid = false; best.siteYear = sim.state.year;
     city.sites.push(best.id);
     return true;
@@ -838,7 +842,7 @@
     if (city.pop < city.housing && st.units.length < WW.CONFIG.MAX_UNITS && city.centerOk) {
       const race = WW.RACES[city.race] || WW.RACES.human;
       let p = WW.CONFIG.BIRTH_RATE * city.adults * WW.SimUtil.mod(sim, k, city, 'growth', g.growthMul) * race.fertility;
-      if (g.megaGrowth && city.tier >= 3) p *= g.megaGrowth;   // Megastadt (9.10)
+      if (g.megaGrowth && city.tier >= 1) p *= g.megaGrowth;   // Megastadt (9.10): ab Dorf
       if (city.pop >= WW.CONFIG.CITY_POP_MAX) p = 0;           // Obergrenze je Stadt (Leistung)
       if (sk.food < city.pop * 0.6) p *= 0.15;
       if (city.happiness < 30) p *= 0.4;

@@ -262,16 +262,18 @@
 //   WW.GOVERNMENTS[g].build.noSettle === true (Faschismus): keine Tochterstädte/Siedlertrupps, auch nicht über See (Seefahrt
 //     bitte diese Marke lesen). Vom Spieler gesetzte Siedler und Lagerstädte bleiben erlaubt. Hilfe: WW.govNoSettle(govKey).
 // MEGASTADT
-//   WW.CITY_TIERS[6] = { key 'megacity', name 'Megastadt', minPop 350, govs ['fascism'] }, [7] = { key 'gigacity', 'Riesenstadt',
-//     minPop 550, govs ['fascism'] }. Stufen mit govs gelten nur für diese Regierungen (WW.tierAllowed(tier, govKey)); city.tier 0..7.
+//   WW.CITY_TIERS[6] = { key 'megacity', name 'Megastadt', minPop 250, govs ['fascism'] }, [7] = { key 'gigacity', 'Riesenstadt',
+//     minPop 450, govs ['fascism'] }. Stufen mit govs gelten nur für diese Regierungen (WW.tierAllowed(tier, govKey)); city.tier 0..7.
 //     Fällt die Regierung, sinkt die Stufe auf höchstens 5.
-//   Wohnblöcke: house.level 4 und 5 (nur Regierungen mit megaHousing, also Faschismus; ab Stufe Großstadt bzw. Metropole),
+//   Wohnblöcke: house.level 4 und 5 (nur Regierungen mit megaHousing, also Faschismus; ab Stufe Stadt bzw. Großstadt, als Regel),
 //     Plätze je Haus WW.Cities.HOUSE_CAP = [3, 5, 8, 16, 28]. Sprites: s_house_<gov>_4/5 (bis dahin zeigt die Grafik Stufe 3).
 //     Bis zu 3 Ausbauten gleichzeitig; zuerst aufstocken, dann neu bauen.
 //   Vorstädte: Ist der Ring voll (city.noSpace) und die Stadt mindestens Großstadt, baut eine megaHousing-Stadt Häuser auch vor
 //     der Mauer (an der Mauer bzw. am Bestand entlang, nicht auf Feldern). [walls] Bitte: Ringplanung/Erweiterung bei dieser
 //     Größe (Ring mit 200+ Innenkacheln, Vorstadt davor) prüfen; bisher erweitert sich der Ring der Megastadt kaum (expansions 0).
-//   Faschismus: gov.megaGrowth (Geburten ×1,4 ab Großstadt), gov.housesPerFlur 2,6, Ernte ×1,5 ab Großstadt (Zwangsbewirtschaftung).
+//   Faschismus: gov.megaGrowth (Geburten ×1,4 ab Dorf), gov.housesPerFlur 2,6, Ernte ×1,7 ab Stadt ohne Auslaugen in der Hauptstadt,
+//   jährlicher Zuzug in die Hauptstadt (2 + Stufe), Hauptstadt-Soldatenanteil ×0,6 ab Großstadt, bei Nahrungsmangel keine Wehrpflicht-
+//   Verdopplung; Soldaten auf dem Marsch zählen zum Anteil. Rücklage für Sonderbauten: WW.Cities.reserveOf / canPayOwn.
 //   Weltobergrenze Einwohner WW.CONFIG.MAX_UNITS (2200); je Stadt keine Geburten ab WW.CONFIG.CITY_POP_MAX (700).
 // GARNISONEN (alle Regierungen außer Anarchie; Werte WW.GOVERNMENTS[g].garrison { cap (Loyalität max.), integ (Jahre bis zur
 //   Eingliederung), share (Soll-Anteil besetzt) })

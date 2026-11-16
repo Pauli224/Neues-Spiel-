@@ -72,8 +72,8 @@
     { key: 'city', name: 'Großstadt', nameA: 'eine Großstadt', minPop: 40 },
     { key: 'metro', name: 'Metropole', nameA: 'eine Metropole', minPop: 110 },
     { key: 'world', name: 'Weltstadt', nameA: 'eine Weltstadt', minPop: 220 },
-    { key: 'megacity', name: 'Megastadt', nameA: 'eine Megastadt', minPop: 350, govs: ['fascism'] },     // 9.10
-    { key: 'gigacity', name: 'Riesenstadt', nameA: 'eine Riesenstadt', minPop: 550, govs: ['fascism'] }
+    { key: 'megacity', name: 'Megastadt', nameA: 'eine Megastadt', minPop: 250, govs: ['fascism'] },     // 9.10
+    { key: 'gigacity', name: 'Riesenstadt', nameA: 'eine Riesenstadt', minPop: 450, govs: ['fascism'] }
   ];
 
   // ---------------------------------------------------------------------------

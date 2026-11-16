@@ -692,8 +692,10 @@
       }
       // Zuzug in kleine Dörfer mit Nahrung
       const sk = WW.Cities.stock(sim, city);
-      if (city.pop < 30 && city.pop > 0 && city.centerOk && sk.food > city.pop * 2 + 10 && city.housing > city.pop && st.units.length < C().MAX_UNITS - 50) {
-        const n = Math.max(0, Math.round(WW.SimUtil.mod(sim, k, city, 'immigration', WW.SimUtil.mod(sim, k, city, 'growth', 1) * (1 + sim.rng.int(3)))));
+      // Megastadt (9.10): die Hauptstadt eines megaHousing-Reichs bekommt jedes Jahr Zuzug, solange Wohnraum und Nahrung reichen
+      const megaCap = WW.GOVERNMENTS[k.gov].megaHousing && k.capitalId === city.id && city.pop < C().CITY_POP_MAX;
+      if ((city.pop < 30 || megaCap) && city.pop > 0 && city.centerOk && sk.food > city.pop * 2 + 10 && city.housing > city.pop && st.units.length < C().MAX_UNITS - 50) {
+        const n = Math.max(0, Math.round(WW.SimUtil.mod(sim, k, city, 'immigration', WW.SimUtil.mod(sim, k, city, 'growth', 1) * (1 + sim.rng.int(3)) * (megaCap && city.pop >= 30 ? 2 + city.tier : 1))));
         let made = 0;
         for (let m = 0; m < n && city.housing > city.pop + made; m++) {
           const t = WW.Path.nearestFree(sim, WW.Cities.centerTile(sim, city, sim.rng.int(9)), city.kingdomId, 6);

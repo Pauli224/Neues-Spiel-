@@ -46,7 +46,7 @@
     // Megastadt (9.10): Wohnblöcke aus Beton – Holz wird durch Stein ersetzt
     if (type === 'house' && out.wood > 0 && cityGov(sim, cityId).megaHousing) {
       const mc = sim._cities.get(cityId);
-      if (mc && mc.tier >= 3) { out.stone += out.wood; out.wood = 0; }   // erst ab Großstadt
+      if (mc && mc.tier >= 2) { out.stone = Math.round(out.stone * 0.6 + out.wood * 0.6); out.wood = 0; }   // ab Stadt, Plattenbau: billiger
     }
     // Lehmbau (Kulturen sahel, nil): Mauerwerk aus Lehm, Holz nur für die Sparren
     if (out.wood > 1 && !WALLISH[type]) {
