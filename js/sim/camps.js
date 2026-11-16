@@ -812,7 +812,7 @@
       if (!s.paid) {
         const cost = WW.Structs.siteCost(sim, s, camp.id), p = payer(sim, camp);
         const pk = WW.Cities.stock(sim, p);
-        if (cost.wood && pk.wood - cost.wood < 25) continue;   // Häuser der Mutterstadt gehen vor
+        if (cost.wood && pk.wood - cost.wood < 8) continue;   // Häuser der Mutterstadt gehen vor (kleine Reserve)
         if (!WW.Cities.pay(sim, p, cost)) continue;
         s.paid = true;
       }

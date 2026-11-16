@@ -541,7 +541,7 @@
       if (!f || f.dead) { u.phase = 0; return; }
       if (f.growth >= 3) {
         const fi0 = f.y * W + f.x;
-        const fert = Math.max(0.2, WW.Culture.fieldFert(sim, city, fi0)) * WW.Culture.fieldMul(sim, city, fi0);   // Bewässerung, Flussfelder
+        const fert = Math.max(WW.CONFIG.FERT_FLOOR, WW.Culture.fieldFert(sim, city, fi0)) * WW.Culture.fieldMul(sim, city, fi0);   // Bewässerung, Flussfelder; magere Böden: Rüben und Kartoffeln
         u.carrying = 'food'; u.carryAmt = (u.carryAmt || 0) + C().HARVEST * fert * mul;
         f.growth = 0; f.gprog = 0; sim.markDirty(f.y * W + f.x);
         // ausgelaugte Felder unter Kahlschlag-Regime
@@ -580,10 +580,11 @@
     if (u.phase === 0) {
       const nm = WW.Growth.natureMode(sim, sim._kingdoms.get(u.kingdomId), race);
       // Kahlschlag zieht immer weiter hinaus, Schonende lassen einen Hain um die Stadt stehen
-      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, C().GATHER_R)) : findResourceFrom(sim, u, city, res, 2, C().GATHER_R);   // zwischengespeichert; so weit wie scanResources
-      if (i < 0) { wander(sim, u, city, 4); return; }
+      // Reichweite nach Naturmodus (Kahlschlag am weitesten); höchstens CONFIG.GATHER_R, danach richtet sich auch hasWood/hasStone
+      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResourceFrom(sim, u, city, res, 2, nm === 'exploit' ? C().GATHER_R : 16);
+      if (i < 0) { (city.noRes || (city.noRes = {}))[res] = st.tick; wander(sim, u, city, 4); return; }   // merken: nichts erreichbar
       const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
-      if (g < 0) { wander(sim, u, city, 4); return; }
+      if (g < 0) { (city.noRes || (city.noRes = {}))[res] = st.tick; wander(sim, u, city, 4); return; }
       u.target = i; u.tt = g; u.phase = 1; u.task = res;
       return;
     }

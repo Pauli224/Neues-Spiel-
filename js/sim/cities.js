@@ -253,13 +253,14 @@
     const need = city.pop * WW.CONFIG.FOOD_PER_YEAR;
     // Ertrag je Bauer nach der echten Fruchtbarkeit der Felder (magere Böden brauchen mehr Hände)
     let ff = 0, fn = 0;
-    for (const id of city.fields) { const f = sim._structs.get(id); if (f) { ff += Math.max(0.2, WW.Culture.fieldFert(sim, city, f.y * sim.state.W + f.x)); fn++; } }
+    for (const id of city.fields) { const f = sim._structs.get(id); if (f) { ff += Math.max(WW.CONFIG.FERT_FLOOR, WW.Culture.fieldFert(sim, city, f.y * sim.state.W + f.x)); fn++; } }
     const perFarmer = 11 * race.yields.food * g.workMul * (fn ? Math.max(0.3, Math.min(1, ff / fn)) : 1);
     let farmers = Math.ceil(need / perFarmer * 1.1);
     if (st.food < city.pop * 1.5) farmers += 1;
     if (st.food < city.pop * 0.5) farmers += 1;
     if (st.food > city.pop * 4 + 30) farmers -= 1;
     if (st.food > city.pop * 8 + 60) farmers -= 1;
+    if (st.food > city.pop * 6 + 40) farmers = Math.min(farmers, Math.max(1, Math.ceil(n * 0.25)));   // voller Speicher: Hände für Bau und Rohstoffe
     const plan = k && k.policy && k.policy.plan;
     if (plan && plan.focus === 'food') farmers += 1;
     // reife Felder, die niemand erntet, brauchen mehr Hände
@@ -434,6 +435,8 @@
     const ringed = !!city.wall.plan;
     const minD = ringed ? 0 : WW.CONFIG.WALL_RESERVE + WW.CONFIG.WALL_MARGIN + 1.2;
     const irr = !!WW.Culture.info(city.culture).irrigation;   // sahel/nil: Bewässerung im Sand
+    if (sim._compDirty) WW.Path.updateComponents(sim);
+    const comp = sim.comp, myComp = comp ? comp[city.cy * W + city.cx] : 0;
     let best = -1, bs = -1e9;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
@@ -469,7 +472,8 @@
           }
           if (near) continue;
         }
-        const score = -d + fert * 5 + fieldN * 0.7 + sim._hashNoise(i) * 0.5;
+        if (comp && comp[i] !== myComp) continue;   // nur zu Fuß erreichbare Felder (nicht übers Wasser)
+        const score = -d * (city.tier <= 1 ? 1.6 : 1) + fert * 4 + fieldN * 0.7 + sim._hashNoise(i) * 0.5;   // junge Siedlung: Felder nah
         if (score > bs) { bs = score; best = i; }
       }
     }
@@ -575,7 +579,8 @@
     const open = countSites(sim, city, true);
     const maxOpen = 2 + city.tier;
     // Häuser
-    const houseCap = 2 + Math.floor((city.flurs || 1) * (g.housesPerFlur || WW.CONFIG.HOUSES_PER_FLUR));
+    // kein Land mehr zu holen: dichter bauen statt stehenbleiben (Stockungs-Fix)
+    const houseCap = 2 + Math.floor((city.flurs || 1) * (g.housesPerFlur || WW.CONFIG.HOUSES_PER_FLUR) * (city.landFull ? 1.6 : 1));
     // Megastadt (9.10): dicht bauen – zuerst aufstocken (Wohnblöcke), dann neu bauen
     if (g.megaHousing && city.tier >= 3 && open < maxOpen && city.pop + 4 >= city.housing && sim.rng.chance(0.6)) upgradeHouse(sim, city, sk);
     if (open < maxOpen && city.pop + 2 >= city.housing && city.houses >= houseCap) {
@@ -610,7 +615,7 @@
     // Felder
     const plan = k && k.policy && k.policy.plan;
     let fsum = 0;
-    for (const id of city.fields) { const f = sim._structs.get(id); if (f) fsum += Math.max(0.2, WW.Culture.fieldFert(sim, city, f.y * W + f.x)); }
+    for (const id of city.fields) { const f = sim._structs.get(id); if (f) fsum += Math.max(WW.CONFIG.FERT_FLOOR, WW.Culture.fieldFert(sim, city, f.y * W + f.x)); }
     const avgF = city.fields.length ? fsum / city.fields.length : 1;
     const wantFields = Math.max(2, Math.ceil(city.pop / 2.3 / Math.max(0.4, avgF))) + (plan && plan.focus === 'food' ? 2 : 0);
     if (city.fields.length < wantFields) {
@@ -846,7 +851,9 @@
       if (ts[t]) stone++;
       if (LUT.water[t]) water++;
     }
-    city.hasWood = wood > 0; city.hasStone = stone > 0; city.hasWater = water > 0;
+    // erreichbar? Haben Sammler im letzten Jahr nichts gefunden, gilt der Rohstoff als nicht vorhanden (Berufe, Notbehelf)
+    const nr = city.noRes, t0 = st.tick - WW.CONFIG.TPY;
+    city.hasWood = wood > 0 && !(nr && nr.wood > t0); city.hasStone = stone > 0 && !(nr && nr.stone > t0); city.hasWater = water > 0;
   }
 
   // Ort für eine Tochterstadt
@@ -995,8 +1002,8 @@
       if (city.kind === 'camp') continue;   // [industry] Lagerstadt: keine Tochterstädte, kein Unmut-Zähler
       scanResources(sim, city);
       // Notbehelf: ohne Vorkommen in Reichweite Lesesteine bzw. Treibholz/Gestrüpp sammeln (kein Vorrat bleibt ewig 0)
-      if (!city.hasStone) addStock(sim, city, 'stone', 2 + city.pop * 0.08);
-      if (!city.hasWood) addStock(sim, city, 'wood', 2 + city.pop * 0.08);
+      if (!city.hasStone) addStock(sim, city, 'stone', 4 + city.pop * 0.25);
+      if (!city.hasWood) addStock(sim, city, 'wood', 4 + city.pop * 0.25);
       const g = gov(sim, city);
       // Unzufriedenheit zählt für Aufstände
       const limit = g.key === 'fascism' ? 28 : 20;

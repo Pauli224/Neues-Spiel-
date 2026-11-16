@@ -17,6 +17,17 @@
 //   Ereignisse: wallLevel / wallLevelDone { city, name } (Ausbau auf Stufe 4–6 bzw. Holzstufen von Stamm/Anarchie),
 //   selfshotSheep { city } (Selbstschussanlage trifft ein Schaf), trapOops { city } (Falle trifft die eigenen Leute).
 //
+// [walls] KEIN STILLSTAND (Spielerwunsch „sie bauen nicht weiter"):
+//   - Baustellen: höchstens siteCap = 4 + 3 × Baumeister offene Mauerstücke (Krieg ×3); der Rest des Rings wird nach und
+//     nach angelegt (repairPlan). Tore werden gleich angelegt. Mauerbaustellen zählen nicht gegen die Bauplanung der Stadt.
+//   - w.prog = { built (Höchststand), year (letzter Fortschritt), since (Beginn) }: kommt Bau/Ausbau/Erweiterung
+//     WW.WALL_STALL_YEARS (5) nicht voran oder dauert länger als WW.WALL_MAX_YEARS (9; unter 85 % fertig, sonst +5),
+//     wird er zurückgestellt (Ereignis wallStalled): Ausbau -> abgebrochen, fertige Stücke behalten ihre Stufe
+//     (w.upgradeRetry); Erweiterung -> zurückgenommen, alter Ring (w.prev: plan, gates, towers, gaps, inside, level)
+//     gilt wieder und war nie offen (w.expandRetry); erster Ring -> abgetragen, später neu (w.retryYear).
+//     Neuer Versuch frühestens nach WW.WALL_RETRY_YEARS (8). Die Stadt baut inzwischen vor der Mauer weiter (Vorstädte, Kern).
+//   - Ausbau erst, wenn Stein für den halben Ring da ist und 15 Holz für Häuser übrig bleiben; Erweiterung in Palisade,
+//     wenn der Stein für den neuen Ring fehlt (Stufe sinkt dann, der Ausbau holt sie nach).
 // [walls] GLEISTOR: liegt ein Gleis (eigenes Reich) auf dem geplanten Mauerverlauf, wird das Stück zum Tor mit Gleis
 //   (struct type 'gate', rail: true, line = Strecken-ID; als Tor mit Schienen zeichnen). Gilt als Tor der Stadt
 //   (city.wall.gates), sperrt Feinde wie jedes Tor; Züge fahren durch, sobald es fertig gebaut ist.
@@ -365,9 +376,8 @@
   // [walls] Wie viele Mauer-Baustellen dürfen gleichzeitig offen sein? (an Baumeistern und Vorrat bemessen; im Krieg alle)
   function siteCap(sim, city) {
     const k = sim._kingdoms.get(city.kingdomId);
-    if (k && WW.Diplo.atWar(sim, k.id)) return 1e9;
     const b = (city.jobs && city.jobs.builder) | 0;
-    return 4 + 3 * b;
+    return (4 + 3 * b) * (k && WW.Diplo.atWar(sim, k.id) ? 3 : 1);   // im Krieg mehr auf einmal
   }
   function openPieces(sim, city) {
     let n = 0;
@@ -454,7 +464,7 @@
     for (const t of ring.tiles) { const g = sim._structs.get(st.structAt[t]); if (g && g.type === 'gate' && g.rail && w.gates.indexOf(t) < 0) w.gates.push(t); }   // [walls] Gleistore
     w.towers = ring.towers.filter(t => newSet.has(t));
     w.gateDir = {}; for (const g of w.gates) w.gateDir[g] = ring.gateDir[g] || 'h';   // [walls] für spät angelegte Tore
-    w.prog = { built: 0, year: st.year };   // [walls] Fortschritt (gegen Stillstand)
+    w.prog = { built: 0, year: st.year, since: st.year };   // [walls] Fortschritt (gegen Stillstand)
     w.old = old;
     w.target = level;
     w.style = style;
@@ -560,6 +570,7 @@
     }
     w.target = level;
     w.state = 'upgrading';
+    w.prog = { built: 0, year: st.year, since: st.year };   // [walls]
     WW.Cities.refreshLists(sim, city);
   }
 
@@ -684,7 +695,7 @@
         p.level = 1; p.mat = wallStyle(gov, 1); if (p.type === 'tower') p.type = 'wall'; p.maxHp = WW.Structs.maxHpFor(sim, p); p.paid = false; sim.markDirty(t);
       }
       w.target = 1;
-      w.prog = { built: w.built, year: st.year };
+      w.prog = { built: w.built, year: st.year, since: st.year };
       sim.event('wallStalled', vars, at);
       return;
     } else {
@@ -723,10 +734,15 @@
     // [walls] Stillstand: kommt Bau, Ausbau oder Erweiterung WW.WALL_STALL_YEARS lang nicht voran (kein Baustoff,
     // keine Baumeister), wird er zurückgestellt – der alte Ring bleibt gültig und dicht, die Stadt baut weiter
     if (w.state === 'building' || w.state === 'expanding' || w.state === 'upgrading') {
-      const pr = w.prog || (w.prog = { built: w.built, year: st.year });
+      const pr = w.prog || (w.prog = { built: w.built, year: st.year, since: st.year });
+      if (pr.since == null) pr.since = pr.year;
       if (w.built > pr.built) { pr.built = w.built; pr.year = st.year; }
-      else if (w.built < pr.built) pr.built = w.built;
-      if (st.year - pr.year >= (WW.WALL_STALL_YEARS || 6) && !WW.Diplo.atWar(sim, k.id) && !(w.total > 0 && w.built >= w.total)) {
+      // (Höchststand: Wiederaufbau nach Brand/Bresche zählt nicht als Fortschritt)
+      // kein Fortschritt seit WALL_STALL_YEARS, oder nach WALL_MAX_YEARS noch nicht zu 85 % fertig (Schneckentempo)
+      // nach WALL_MAX_YEARS + 5 auch dann, wenn nur noch wenige Stücke fehlen (einzelne Stücke, die nie fertig werden)
+      const age = st.year - pr.since, max = WW.WALL_MAX_YEARS || 10;
+      const slow = (age >= max && w.built < (w.total || 0) * 0.85) || age >= max + 5;
+      if ((st.year - pr.year >= (WW.WALL_STALL_YEARS || 6) || slow) && !(w.total > 0 && w.built >= w.total)) {
         stalled(sim, city, gov, vars, at);
         return;
       }

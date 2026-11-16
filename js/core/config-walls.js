@@ -80,8 +80,9 @@
 
   // [walls] Stillstand im Mauerbau: nach so vielen Jahren ohne Fortschritt wird Bau/Ausbau/Erweiterung zurückgestellt
   // (alter Ring bleibt), erneuter Versuch frühestens nach WALL_RETRY_YEARS
-  WW.WALL_STALL_YEARS = 6;
+  WW.WALL_STALL_YEARS = 5;
   WW.WALL_RETRY_YEARS = 8;
+  WW.WALL_MAX_YEARS = 9;    // länger darf ein Bau/Ausbau/Erweiterung nicht dauern (sonst unter 85 %: zurückgestellt)
 
   // Lagerzaun der Lagerstädte (js/sim/camps.js, WW.Walls.planFence): mat 'fence'
   if (WW.WALL_STYLE_NAMES && !WW.WALL_STYLE_NAMES.fence) WW.WALL_STYLE_NAMES.fence = 'Lagerzaun';

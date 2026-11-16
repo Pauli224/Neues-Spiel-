@@ -301,6 +301,14 @@
 //   Abgaben (jährlich, WW.Garrison.yearly): andere Städte liefern 25 % ihrer Überschüsse (Nahrung über 3 × Einw.,
 //   Holz/Stein/Eisen/Kohle über 0,5 × Einw.) an die Hauptstadt und bis zu 2 Bauern je Stadt ziehen in die Megastadt.
 //   Ereignis tribute.
+// STOCKUNGS-FIX (tools/diagnose/stall.js): Baustoffe ersetzbar (WW.Cities.adaptCost: fehlt Holz, zahlt Stein ×1,5 und umgekehrt;
+//   canPay/pay und Baumeister nutzen es), Notbehelf jährlich ohne Vorkommen (Lesesteine/Treibholz 4 + 0,25 × Einw.),
+//   hasWood/hasStone nur im Sammelradius CONFIG.GATHER_R (20) und nur, wenn Sammler im letzten Jahr etwas fanden
+//   (city.noRes[res] = Tick des letzten Fehlschlags), Berufe nach Bedarf (Bauern nach echter Fruchtbarkeit, gedeckelt bei
+//   vollem Speicher; Überschuss erst Baumeister, dann Rohstoffe; kleine Städte im Frieden ≤ 15 % Soldaten), Neubauten, die
+//   6 Jahre unbezahlt liegen, werden abgebrochen (s.siteYear), Vorstadt bei vollem Ring für alle Regierungen, freistehender
+//   Bauplatz als Notlösung, Felder nur zu Fuß erreichbar und bei jungen Städten nah, Notfischen für alle Völker bei knapper
+//   Nahrung, Mindestertrag je Feld CONFIG.FERT_FLOOR (0,5), Anfangsvorrat CONFIG.START_STOCK größer.
 // MEGASTADT-RING: Stehen ≥ 3 Häuser vor der Mauer, erweitert die Stadt ihren Ring (WW.Walls.plan expanding) vor weiteren
 //   Mauerstufen, frühestens 3 Jahre nach der letzten Planung; ist kein Platz (Nachbarstadt), bleibt wall.maxed.
 //   Wohnblöcke ab Großstadt aus Beton: Holzkosten werden zu Stein. Bahnbaustellen zählen nicht gegen die Stadtplanung.
