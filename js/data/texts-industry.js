@@ -130,6 +130,11 @@
       'Bei {city} wird eine Gefangenenkolonne überfallen. Die Wache liegt im Gras, die Gefangenen laufen nach Hause.',
       'Die Begleitwache eines Gefangenenzugs bei {city} ist geschlagen – und plötzlich hat niemand mehr Gefangene.'
     ],
+    // Mauerbau zurückgestellt (js/sim/walls.js): Baustoff fehlte jahrelang
+    wallStalled: [
+      'In {city} wird der Mauerbau vertagt. Die Steine sind alle, die Geduld auch. Erst einmal Häuser.',
+      'Der Rat von {city} beschließt: Die neue Mauer kann warten, die Leute brauchen ein Dach.'
+    ],
     campMemorial: [
       'In {city} wird ein Mahnmal enthüllt. Darauf steht nur der Name des Lagers – und dass es nie wieder eines geben soll.'
     ],

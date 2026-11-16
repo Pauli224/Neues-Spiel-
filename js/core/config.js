@@ -19,7 +19,8 @@
     LIFESPAN: 62,             // Jahre (± 14, mal Volksfaktor)
     FOOD_PER_YEAR: 2.2,       // Nahrung je Kopf und Jahr
     BIRTH_RATE: 0.0075,       // Geburtschance je Erwachsenem und Sekunde (bei Platz + Essen)
-    START_STOCK: { food: 48, wood: 26, stone: 4, gold: 0 },
+    START_STOCK: { food: 80, wood: 30, stone: 6, gold: 0 },   // größerer Anfangsvorrat (junge Siedlungen verhungerten)
+    GATHER_R: 20,             // so weit gehen Holzfäller/Steinmetze; danach richtet sich, ob eine Stadt Holz/Stein „hat“
     HARVEST: 14,               // Nahrung je reifem Feld (mal Fruchtbarkeit)
     CHOP: 7, MINE: 5,         // Holz/Stein je Gang
     FISH: 3,

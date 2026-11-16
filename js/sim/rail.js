@@ -31,7 +31,8 @@
 // NUTZEN: Güterzug gleicht beim Abfahren Vorräte aus (Überschuss der Abfahrtsstadt -> Zielstadt; Kommunismus hat ohnehin ein
 //   gemeinsames Lager). Truppenzug: im Krieg steigen marschierende Soldaten am Bahnhof zu, wenn der andere Bahnhof näher am
 //   Ziel liegt, und steigen dort aus. Brennstoff je Abfahrt: stock.coal, wenn vorhanden, sonst Holz (RAIL.FUEL).
-//   Ohne Kohle und Holz fährt der Zug im Notbetrieb (tr.slow = true, halbes Tempo).
+//   Ohne Kohle und Holz fährt der Zug im Notbetrieb (tr.slow = true, halbes Tempo). Holz wird für Bahnbau und Brennstoff
+//   nur über WW.RAIL.WOOD_RESERVE genommen (Reserve für Häuser).
 //   Fahrende Züge stoßen Qualm aus (WW.Industry: RAIL.EMIT in die Zelle des Zugs).
 // FX: trainsmoke { x, y } (alle 8 Ticks je fahrendem Zug), whistle { x, y } (Abfahrt)
 // EREIGNISSE (group 'economy'|'war', mit effectText): railStation, railFirst, railBroken, railRepaired, railTroops
@@ -179,6 +180,12 @@
   // Bauen
   // ---------------------------------------------------------------------------
   const railish = (s) => !!(s && (s.type === 'rail' || (s.type === 'gate' && s.rail)));   // Gleistor (walls.js) zählt als Gleis
+  // Bahnbau und Brennstoff lassen Holz für Häuser übrig (WW.RAIL.WOOD_RESERVE): nie den letzten Baustoff
+  function payKeep(sim, city, cost) {
+    const sk = WW.Cities.stock(sim, city), keep = R().WOOD_RESERVE || 0;
+    if (cost.wood && sk.wood - cost.wood < keep) return false;
+    return WW.Cities.pay(sim, city, cost);
+  }
   function isTrack(sim, i) { const s = sim._structs.get(sim.state.structAt[i]); return !!(s && (railish(s) || s.type === 'station')); }
   function updateMask(sim, i) {
     const st = sim.state, W = st.W, s = sim._structs.get(st.structAt[i]);
@@ -275,7 +282,7 @@
         const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W];
         if (!nb.some((j) => { const o = j >= 0 && sim._structs.get(st.structAt[j]); return o && o.built && (railish(o) || o.type === 'station'); })) break;
         const c = sim._cities.get(s.cityId);
-        if (!s.paid && c && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
+        if (!s.paid && c && payKeep(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
         if (!s.paid) break;
         WW.Structs.complete(sim, s); open--; done++; masksAround(sim, i);
       }
@@ -351,7 +358,7 @@
         for (const o of cities) { if (o === c) continue; const d = Math.abs(o.cx - c.cx) + Math.abs(o.cy - c.cy); if (d < pd) { pd = d; partner = o; } }
         if (!s && ringReady && (c.railNext | 0) <= st.tick) { s = placeStation(sim, c, k, partner); if (!s) c.railNext = st.tick + (TPY() >> 1); }
         if (s && !s.built) {   // Bautrupp hilft auch am Bahnhof
-          if (!s.paid && WW.Cities.pay(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
+          if (!s.paid && payKeep(sim, c, WW.Structs.siteCost(sim, s, c.id))) s.paid = true;
           if (s.paid) { s.progress = Math.min(1, (s.progress || 0) + 0.25); if (s.progress >= 1) { WW.Structs.complete(sim, s); WW.Cities.refreshLists(sim, c); } }
         }
         if (s) stations.push(s);
@@ -477,7 +484,7 @@
   }
   function selfBuild(sim, s, payer) {
     if (!s || s.built) return;
-    if (!s.paid && WW.Cities.pay(sim, payer, WW.Structs.siteCost(sim, s, payer.id))) s.paid = true;
+    if (!s.paid && payKeep(sim, payer, WW.Structs.siteCost(sim, s, payer.id))) s.paid = true;
     if (s.paid) { s.progress = Math.min(1, (s.progress || 0) + 0.25); if (s.progress >= 1) { WW.Structs.complete(sim, s); WW.Cities.refreshLists(sim, sim._cities.get(s.cityId) || payer); } }
   }
   function campLines(sim) {
@@ -532,7 +539,7 @@
     tr.cars = 2; tr.camp = camp.id; tr.prisoners = ids.slice(); tr.guards = 1 + Math.ceil(ids.length / 6);
     const from = cityOfStation(sim, tr.from), sf = from && WW.Cities.stock(sim, from);
     if (sf && typeof sf.coal === 'number' && sf.coal >= R().FUEL) { sf.coal -= R().FUEL; tr.coal = true; }
-    else if (sf && sf.wood >= R().FUEL) sf.wood -= R().FUEL;
+    else if (sf && sf.wood >= R().FUEL + (R().WOOD_RESERVE || 0)) sf.wood -= R().FUEL;
     tr.t = 'run';
     sim.fx({ type: 'whistle', x: tr.x, y: tr.y });
     return tr;
@@ -577,7 +584,7 @@
     const fuelC = from.kind === 'camp' ? to : from, sfu = WW.Cities.stock(sim, fuelC);
     tr.slow = false;
     if (typeof sfu.coal === 'number' && sfu.coal >= C.FUEL) { sfu.coal -= C.FUEL; tr.coal = true; }
-    else if (sfu.wood >= C.FUEL) { sfu.wood -= C.FUEL; tr.coal = false; }
+    else if (sfu.wood >= C.FUEL + (C.WOOD_RESERVE || 0)) { sfu.wood -= C.FUEL; tr.coal = false; }   // Holz nur über der Reserve
     else { tr.coal = false; tr.slow = true; }   // ohne Brennstoff: Notbetrieb mit halbem Tempo (Reste, Gestrüpp)
     tr.cargo = { food: 0, wood: 0, stone: 0, gold: 0 };
     if (tr.kind === 'freight' && line.camp != null) {

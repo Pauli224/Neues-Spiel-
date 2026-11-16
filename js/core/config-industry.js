@@ -74,6 +74,7 @@
     WAIT: 40,           // Ticks Aufenthalt am Bahnhof
     CARS: 4, CAR_CAP: 25, BALANCE_MIN: 30,   // Güterwagen, Ladung je Wagen, ab diesem Unterschied wird ausgeglichen
     FUEL: 2,            // Holz (oder Kohle) je Abfahrt
+    WOOD_RESERVE: 25,   // Bahnbau und Brennstoff nehmen Holz nur über dieser Reserve (Häuser gehen vor)
     COAL_SPEED: 1.4,    // mit Kohle fährt der Zug schneller
     TROOPS: 12,         // Soldaten je Truppenzug
     EMIT: 4             // Qualm je Verschmutzungsschritt in der Zelle eines fahrenden Zugs

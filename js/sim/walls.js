@@ -362,6 +362,19 @@
     w.style = wallStyle(gov, Math.max(1, w.level));
   }
 
+  // [walls] Wie viele Mauer-Baustellen dürfen gleichzeitig offen sein? (an Baumeistern und Vorrat bemessen; im Krieg alle)
+  function siteCap(sim, city) {
+    const k = sim._kingdoms.get(city.kingdomId);
+    if (k && WW.Diplo.atWar(sim, k.id)) return 1e9;
+    const b = (city.jobs && city.jobs.builder) | 0;
+    return 4 + 3 * b;
+  }
+  function openPieces(sim, city) {
+    let n = 0;
+    for (const t of city.wall.plan || []) { const p = sim._structs.get(sim.state.structAt[t]); if (p && p.cityId === city.id && WW.Structs.isWallish(p) && !p.built) n++; }
+    return n;
+  }
+
   // Ring planen und Baustellen anlegen
   function plan(sim, city, margin, level, expanding) {
     const st = sim.state, W = st.W;
@@ -380,6 +393,12 @@
     const style = wallStyle(gov, level);
     const gateSet = new Set(ring.gates), towerSet = new Set(ring.towers);
     const newSet = new Set(ring.all);
+    // [walls] alter Ring für den Fall, dass die Erweiterung steckenbleibt (wird dann zurückgenommen)
+    if (expanding && w.plan) {
+      const ins = [];
+      for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) ins.push(i);
+      w.prev = { plan: w.plan.slice(), gates: (w.gates || []).slice(), towers: (w.towers || []).slice(), gaps: (w.gaps || []).slice(), inside: ins, level: w.level || 1, style: w.style };
+    }
     // Innenfläche markieren
     for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;
     for (const i of ring.inside) if (st.inRing[i] === -1) st.inRing[i] = city.id;
@@ -391,6 +410,9 @@
     // alte Stücke, die nicht im neuen Ring liegen, werden später abgetragen
     const old = [];
     if (expanding && w.plan) for (const t of w.plan) if (!newSet.has(t)) old.push(t);
+    // [walls] nicht alle Stücke auf einmal als Baustelle: höchstens siteCap offen (der Rest folgt über repairPlan)
+    const cap = siteCap(sim, city);
+    let openN = 0;
     const gaps = [];
     let idx = 0;
     for (const t of ring.tiles) {
@@ -411,12 +433,14 @@
         if ((CORE[s.type] && s.type !== 'house') || KEEP[s.type]) continue;   // [walls] Industrie bleibt stehen
         WW.Structs.remove(sim, s);
       }
+      if (openN >= cap && !isGate) continue;   // [walls] später (Tore gleich, damit der Weg hinaus feststeht)
       const tt = st.terrain[t];
       const nt = deforested(tt);
       if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
       const ns = WW.Structs.create(sim, wantType, x, y, city.id, {
         level: level, built: false, mat: style, orient: ring.gateDir[t] || 'h'
       });
+      if (ns) openN++;
       if (ns && level < 2 && towerSet.has(t)) ns.towerSpot = true;
     }
     // Turmplätze merken (für den späteren Ausbau)
@@ -429,6 +453,8 @@
     w.gates = ring.gates.slice();
     for (const t of ring.tiles) { const g = sim._structs.get(st.structAt[t]); if (g && g.type === 'gate' && g.rail && w.gates.indexOf(t) < 0) w.gates.push(t); }   // [walls] Gleistore
     w.towers = ring.towers.filter(t => newSet.has(t));
+    w.gateDir = {}; for (const g of w.gates) w.gateDir[g] = ring.gateDir[g] || 'h';   // [walls] für spät angelegte Tore
+    w.prog = { built: 0, year: st.year };   // [walls] Fortschritt (gegen Stillstand)
     w.old = old;
     w.target = level;
     w.style = style;
@@ -486,11 +512,16 @@
     const gov = WW.GOVERNMENTS[k ? k.gov : 'tribe'];
     const gateSet = new Set(w.gates || []);
     const gaps = w.gaps && w.gaps.length ? new Set(w.gaps) : null;
+    // [walls] höchstens siteCap offene Stücke (Zaun der Lagerstadt: alle, den bauen die Wachen)
+    const cap = w.style === 'fence' ? 1e9 : siteCap(sim, city);
+    let openN = cap < 1e9 ? openPieces(sim, city) : 0;
+    const towerSet = new Set(w.towers || []);
     for (const t of w.plan) {
       if (gaps && gaps.has(t)) continue;
       if (WW.TERRAIN_LUT.walk[st.terrain[t]] <= 0) continue;
       const s = sim._structs.get(st.structAt[t]);
       if (s && s.cityId === city.id && WW.Structs.isWallish(s)) continue;
+      if (openN >= cap && !gateSet.has(t)) continue;
       if (s) {
         const lv0 = w.state === 'upgrading' ? w.target : Math.max(1, w.level || w.target || 1);
         if (railGate(sim, city, s, t, lv0, w.style === 'fence' ? 'fence' : wallStyle(gov, lv0), new Set(w.plan))) { if (w.gates && w.gates.indexOf(t) < 0) w.gates.push(t); continue; }   // [walls] Gleistor
@@ -499,10 +530,12 @@
         WW.Structs.remove(sim, s);
       }
       const x = t % W, y = (t - x) / W;
-      const lv = w.state === 'upgrading' ? w.target : Math.max(1, w.level || w.target || 1);
+      const lv = (w.state === 'upgrading' || w.state === 'building' || w.state === 'expanding') ? Math.max(1, w.target || w.level || 1) : Math.max(1, w.level || w.target || 1);
       const tt = st.terrain[t], nt = deforested(tt);
       if (nt !== tt) { st.terrain[t] = nt; sim.markDirty(t); }
-      WW.Structs.create(sim, gateSet.has(t) ? 'gate' : 'wall', x, y, city.id, { level: lv, built: false, mat: w.style === 'fence' ? 'fence' : wallStyle(gov, lv) });   // [walls] Lagerzaun bleibt Zaun
+      const type = gateSet.has(t) ? 'gate' : (lv >= 2 && towerSet.has(t) && !gov.barricades && w.style !== 'fence' ? 'tower' : 'wall');
+      const ns = WW.Structs.create(sim, type, x, y, city.id, { level: lv, built: false, mat: w.style === 'fence' ? 'fence' : wallStyle(gov, lv), orient: (w.gateDir && w.gateDir[t]) || 'h' });   // [walls] Lagerzaun bleibt Zaun
+      if (ns) { openN++; if (towerSet.has(t)) ns.towerSpot = true; }
     }
   }
 
@@ -514,6 +547,7 @@
     for (const t of w.plan) {
       const s = sim._structs.get(st.structAt[t]);
       if (!s || s.cityId !== city.id || !WW.Structs.isWallish(s)) continue;
+      if (s.built && s.level >= level) continue;   // [walls] schon so hoch (z. B. alter Ring nach Palisaden-Erweiterung)
       if (s.built) {
         s.upgradeTo = level; s.progress = 0; s.paid = false;
         if (towerSet.has(t) && s.type === 'wall') s.towerOnUpgrade = true;
@@ -614,6 +648,56 @@
     return false;
   }
 
+  // [walls] Steckengebliebenen Mauerbau zurückstellen (siehe update)
+  function stalled(sim, city, gov, vars, at) {
+    const st = sim.state, w = city.wall, retry = st.year + (WW.WALL_RETRY_YEARS || 8);
+    if (w.state === 'upgrading') {
+      // Ausbau abbrechen: fertige Stücke bleiben auf ihrer Stufe, Baustellen fallen auf die alte Stufe zurück
+      const lv = Math.max(1, w.level || 1);
+      for (const t of w.plan || []) {
+        const p = sim._structs.get(st.structAt[t]);
+        if (!p || p.cityId !== city.id || !WW.Structs.isWallish(p)) continue;
+        if (p.upgradeTo) { p.upgradeTo = 0; p.towerOnUpgrade = false; p.progress = 1; p.paid = true; sim.markDirty(t); }
+        if (!p.built && p.level > lv) { p.level = lv; p.mat = wallStyle(gov, lv); if (p.type === 'tower' && lv < 2) p.type = 'wall'; p.maxHp = WW.Structs.maxHpFor(sim, p); p.paid = false; sim.markDirty(t); }
+      }
+      w.target = lv; w.state = 'done'; w.style = wallStyle(gov, lv); w.upgradeRetry = retry;
+    } else if (w.state === 'expanding' && w.prev) {
+      // Erweiterung zurücknehmen: neue Stücke weg, alter Ring (der nie abgetragen wurde) gilt wieder
+      const prev = w.prev, keep = new Set(prev.plan);
+      for (const t of w.plan || []) {
+        if (keep.has(t)) continue;
+        const p = sim._structs.get(st.structAt[t]);
+        if (p && p.cityId === city.id && WW.Structs.isWallish(p)) WW.Structs.remove(sim, p);
+      }
+      for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;
+      for (const i of prev.inside) if (st.inRing[i] === -1) st.inRing[i] = city.id;
+      w.plan = prev.plan; w.gates = prev.gates; w.towers = prev.towers; w.gaps = prev.gaps; w.old = [];
+      w.level = prev.level; w.target = prev.level; w.style = prev.style || wallStyle(gov, prev.level);
+      w.inside = prev.inside.length; w.state = 'done'; w.prev = null; w.expandRetry = retry; w.plannedYear = st.year;
+      w.expansions = Math.max(0, (w.expansions || 1) - 1);
+      st.pathVersion++;
+    } else if (w.state === 'expanding') {
+      // (alter Stand ohne gemerkten Ring) Erweiterung bleibt, aber die offenen Stücke werden Palisade aus Holz
+      for (const t of w.plan || []) {
+        const p = sim._structs.get(st.structAt[t]);
+        if (!p || p.cityId !== city.id || !WW.Structs.isWallish(p) || p.built || p.level <= 1) continue;
+        p.level = 1; p.mat = wallStyle(gov, 1); if (p.type === 'tower') p.type = 'wall'; p.maxHp = WW.Structs.maxHpFor(sim, p); p.paid = false; sim.markDirty(t);
+      }
+      w.target = 1;
+      w.prog = { built: w.built, year: st.year };
+      sim.event('wallStalled', vars, at);
+      return;
+    } else {
+      // erster Ring ohne Baustoff: aufgeben, später neu planen
+      demolishAll(sim, city);
+      city.wall.retryYear = retry;
+    }
+    if (city.wall.prog) city.wall.prog = null;
+    refreshCounts(sim, city);
+    WW.Cities.refreshLists(sim, city);
+    sim.event('wallStalled', vars, at);
+  }
+
   // Alle 3 s je Stadt
   function update(sim, city) {
     const st = sim.state, w = city.wall;
@@ -624,6 +708,7 @@
     const vars = { city: city.name, kingdom: k.name };
     const at = { kingdomId: k.id, cityId: city.id, x: city.cx + 0.5, y: city.cy + 0.5 };
     if (!w.state || w.state === 'none') {
+      if (w.retryYear && st.year < w.retryYear) return;   // [walls] erster Ring blieb stecken: später neu versuchen
       const ctr = sim._structs.get(city.centerId);
       // ein Zeltlager zieht noch keine Palisade: erst ab Dorfhalle
       if (city.pop >= gov.wallThreshold && city.centerOk && ctr && (ctr.stage || 0) >= 1 && (city.builtHouses || 0) >= 3) {
@@ -635,9 +720,21 @@
     }
     repairPlan(sim, city);
     refreshCounts(sim, city);
+    // [walls] Stillstand: kommt Bau, Ausbau oder Erweiterung WW.WALL_STALL_YEARS lang nicht voran (kein Baustoff,
+    // keine Baumeister), wird er zurückgestellt – der alte Ring bleibt gültig und dicht, die Stadt baut weiter
+    if (w.state === 'building' || w.state === 'expanding' || w.state === 'upgrading') {
+      const pr = w.prog || (w.prog = { built: w.built, year: st.year });
+      if (w.built > pr.built) { pr.built = w.built; pr.year = st.year; }
+      else if (w.built < pr.built) pr.built = w.built;
+      if (st.year - pr.year >= (WW.WALL_STALL_YEARS || 6) && !WW.Diplo.atWar(sim, k.id) && !(w.total > 0 && w.built >= w.total)) {
+        stalled(sim, city, gov, vars, at);
+        return;
+      }
+    }
     if (w.state === 'building' || w.state === 'expanding') {
       if (w.total > 0 && w.built >= w.total) {
-        w.level = Math.max(w.level || 0, w.target);
+        // [walls] Erweiterung in Palisade (Stein fehlte): Stufe sinkt, der Ausbau holt sie Stück für Stück nach
+        w.level = w.state === 'expanding' && w.target < (w.level || 0) ? w.target : Math.max(w.level || 0, w.target);
         if (w.state === 'expanding') {
           tearDownOld(sim, city);
           sim.event('wallExpandDone', vars, at);
@@ -676,7 +773,11 @@
       const req = (info && info.req) || {};
       const popReq = next === 2 && classic ? Math.max(15, gov.wallThreshold + 5) : (req.pop || 0);
       const goldOk = !req.gold || gov.goldMul <= 0 || stock.gold >= req.gold;
-      if (city.pop >= popReq && city.tier >= (req.tier || 0) && stock.stone >= (req.stone || 0) && stock.wood >= (req.wood || 0) && goldOk) {
+      // [walls] Ausbau erst, wenn Baustoff für einen sinnvollen Teil da ist (die Hälfte des Rings) und Holz für Häuser übrig bleibt;
+      // nach einem steckengebliebenen Ausbau erst nach WW.WALL_RETRY_YEARS wieder
+      const pc = WW.Structs.costFor(sim, 'wall', next, city.id), half = Math.ceil((w.total || 0) / 2);
+      const enough = stock.stone >= (pc.stone || 0) * half && stock.wood >= (pc.wood || 0) * half + 15 && (!pc.gold || gov.goldMul <= 0 || stock.gold >= pc.gold * half);
+      if (st.year >= (w.upgradeRetry | 0) && enough && city.pop >= popReq && city.tier >= (req.tier || 0) && stock.stone >= (req.stone || 0) && stock.wood >= (req.wood || 0) && goldOk) {
         startUpgrade(sim, city, next);
         w.style = wallStyle(gov, next);
         if (classic && next <= 3) sim.event(next === 2 ? 'wallStone' : 'wallFortress', vars, at);
@@ -684,8 +785,10 @@
         return;
       }
     }
-    if (city.noSpace && st.year - (w.plannedYear || 0) >= WW.CONFIG.WALL_EXPAND_YEARS && city.pop >= city.housing - 3) {
-      const lv = Math.max(1, w.level);   // [walls]
+    if (city.noSpace && st.year >= (w.expandRetry | 0) && st.year - (w.plannedYear || 0) >= WW.CONFIG.WALL_EXPAND_YEARS && city.pop >= city.housing - 3) {
+      // [walls] Erweiterung in der jetzigen Stufe, wenn der Stein für den neuen Ring reicht – sonst als Palisade aus Holz
+      let lv = Math.max(1, w.level);
+      if (lv >= 2) { const pc = WW.Structs.costFor(sim, 'wall', lv, city.id); if (stock.stone < (pc.stone || 0) * Math.ceil((w.total || 20) * 0.6)) lv = 1; }
       const before = w.plan ? w.plan.length : 0;
       if (!plan(sim, city, WW.CONFIG.WALL_MARGIN, lv, true)) { w.plannedYear = st.year; w.maxed = true; }
       else {

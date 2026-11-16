@@ -35,13 +35,24 @@
     if (k && k.stock && WW.GOVERNMENTS[k.gov].sharedStock) { pop = 0; for (const id of k.cityIds) { const c = sim._cities.get(id); if (c) pop += c.pop; } }
     return 300 + pop * 15;
   }
+  // Baustoff-Ersatz (Stockungs-Fix): fehlt Holz, darf Stein einspringen und umgekehrt – mit Aufschlag 50 %
+  function adaptCost(s, cost) {
+    if (!cost) return cost;
+    let w = cost.wood || 0, t = cost.stone || 0;
+    if (s.wood < w && s.stone >= t + (w - s.wood) * 1.5) { t += (w - Math.max(0, s.wood)) * 1.5; w = Math.max(0, s.wood); }
+    else if (s.stone < t && s.wood >= w + (t - s.stone) * 1.5) { w += (t - Math.max(0, s.stone)) * 1.5; t = Math.max(0, s.stone); }
+    if (w === cost.wood && t === cost.stone) return cost;
+    return { food: cost.food || 0, wood: w, stone: t, gold: cost.gold || 0 };
+  }
   function canPay(sim, city, cost) {
     const s = stock(sim, city);
+    cost = adaptCost(s, cost);
     return s.wood >= cost.wood && s.stone >= cost.stone && s.gold >= cost.gold && s.food >= (cost.food || 0);
   }
   function pay(sim, city, cost) {
     if (!canPay(sim, city, cost)) return false;
     const s = stock(sim, city);
+    cost = adaptCost(s, cost);
     s.wood -= cost.wood; s.stone -= cost.stone; s.gold -= cost.gold; s.food -= (cost.food || 0);
     return true;
   }
@@ -220,6 +231,7 @@
     // Garnisonssoldaten (9.10) zählen zum Soldatenanteil, arbeiten aber nicht mit
     let garr = 0;
     for (const u of city._members) if (u.garrison != null && u.role === 'soldier') garr++;
+    if (n < 16 && !atWar) soldierShare = Math.min(soldierShare, 0.15);   // kleine Städte im Frieden: nicht zu viele Soldaten
     want.soldier = n >= 4 ? Math.max(0, Math.round((n + garr) * Math.min(0.55, soldierShare)) - garr) : 0;
     if (g.soldierShare > 0 && n >= 6 && want.soldier < 1 && !garr) want.soldier = 1;
     const sites = city.sites.length;
@@ -234,12 +246,15 @@
     needWood = Math.max(0, needWood - st.wood);
     needStone = Math.max(0, needStone - st.stone);
     if (sites > 0) {
-      want.builder = Math.max(1, Math.min(Math.ceil(sites / 5) + 1, Math.floor(n * 0.4)));
+      want.builder = Math.max(sites >= 3 && n >= 6 ? 2 : 1, Math.min(Math.ceil(sites / 3) + 1, Math.floor(n * 0.4)));
       if (sites >= 8 && n >= 5) want.builder = Math.max(want.builder, 2);
     }
     // Nahrung
     const need = city.pop * WW.CONFIG.FOOD_PER_YEAR;
-    const perFarmer = 11 * race.yields.food * g.workMul;
+    // Ertrag je Bauer nach der echten Fruchtbarkeit der Felder (magere Böden brauchen mehr Hände)
+    let ff = 0, fn = 0;
+    for (const id of city.fields) { const f = sim._structs.get(id); if (f) { ff += Math.max(0.2, WW.Culture.fieldFert(sim, city, f.y * sim.state.W + f.x)); fn++; } }
+    const perFarmer = 11 * race.yields.food * g.workMul * (fn ? Math.max(0.3, Math.min(1, ff / fn)) : 1);
     let farmers = Math.ceil(need / perFarmer * 1.1);
     if (st.food < city.pop * 1.5) farmers += 1;
     if (st.food < city.pop * 0.5) farmers += 1;
@@ -277,8 +292,12 @@
     }
     // Überschuss: Holz, wenn knapp, sonst Felder; Kommunismus mit Plan-Schwerpunkt
     while (rest > 0) {
-      if (city.hasWood && (st.wood < 80 || needWood > 0)) want.lumberjack++;
-      else if (city.hasStone && st.stone < 40 && n >= 8) want.miner++;
+      if (st.food < city.pop * 2) want.farmer++;   // knappe Nahrung: zuerst aufs Feld
+      else if (sites > 0 && want.builder < Math.ceil(sites / 2) + 1) want.builder++;
+      else if (city.hasWood && (st.wood < 80 || needWood > 0)) want.lumberjack++;
+      else if (city.hasStone && (st.stone < 60 || needStone > 0) && n >= 6) want.miner++;
+      else if (city.hasWood && st.wood < 200) want.lumberjack++;
+      else if (city.hasStone && st.stone < 150) want.miner++;
       else want.farmer++;
       rest--;
     }
@@ -351,6 +370,7 @@
       if (s && (s.type === 'ruin' || (s.type === 'field' && s.cityId === city.id))) WW.Structs.remove(sim, s);
     }
     const s = WW.Structs.create(sim, type, x, y, city.id, opt || {});
+    if (s && !s.built && s.siteYear == null) s.siteYear = st.year;
     if (s) {
       for (let dy = 0; dy < inf.h; dy++) for (let dx = 0; dx < inf.w; dx++) {
         const i = (y + dy) * W + x + dx;
@@ -367,7 +387,7 @@
     const w = inf.w, h = inf.h;
     const ringed = !!(city.wall.plan && city.wall.state !== 'none');
     // Megastadt (9.10): ist der Ring voll, entstehen Wohnblöcke auch in Vorstädten vor der Mauer
-    const suburb = ringed && type === 'house' && city.noSpace && city.tier >= 3 && !!gov(sim, city).megaHousing;
+    const suburb = ringed && type === 'house' && city.noSpace && (gov(sim, city).megaHousing ? city.tier >= 3 : city.tier >= 1);   // Ring voll: Vorstadt statt Warten
     const r = Math.min(suburb ? 34 : 26, territoryRadius(city, sim));
     const px = city.cx + 0.5, py = city.cy + 0.5;
     const owner = st.owner, inRing = st.inRing, id = city.id;
@@ -377,7 +397,7 @@
       ? (i) => inRing[i] === id
       : (i) => owner[i] === id && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i)));
     const o = { area: area, fieldOk: !suburb, race: city.race, cityId: id, needWalkBorder: true };
-    let best = -1, bs = -1e9;
+    let best = -1, bs = -1e9, loose = -1, lbs = -1e9;
     const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
     const y0 = Math.max(1, Math.floor(py - r)), y1 = Math.min(st.H - 2 - h, Math.ceil(py + r));
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -386,6 +406,8 @@
       if (d > r - 1) continue;
       const nb = footprintOk(sim, x, y, w, h, o);
       if (nb < 0) continue;
+      // Notlösung (Stockungs-Fix): freistehender Platz, falls nichts am Bestand passt (zerklüftetes Gelände)
+      if (nb === 0 && (!ringed || (suburb && inRing[y * W + x] !== id))) { const ls = -d - 4 + sim._hashNoise(y * W + x) * 0.6; if (ls > lbs) { lbs = ls; loose = y * W + x; } }
       // ohne Mauer: dicht am Bestand bleiben
       if (!ringed && nb === 0) continue;
       if (suburb && inRing[y * W + x] !== id && nb === 0) {   // Vorstadt wächst am Bestand oder an der Mauer entlang
@@ -397,7 +419,7 @@
       if (WW.TERRAIN_LUT.wood[st.terrain[y * W + x]]) score -= 0.8;
       if (score > bs) { bs = score; best = y * W + x; }
     }
-    return best;
+    return best >= 0 ? best : loose;
   }
 
   // Feldplatz: fruchtbar, außerhalb der (künftigen) Mauer; Felder dürfen aneinander grenzen
@@ -542,6 +564,13 @@
     for (const id of city.sites) {
       const o = sim._structs.get(id);
       if (o && o.type === 'house' && o.upgradeTo && !o.paid && o.built && st.year - (o.siteYear == null ? st.year : o.siteYear) >= 4) { o.upgradeTo = 0; o.progress = 1; o.towerOnUpgrade = false; }
+    }
+    // liegengebliebene Neubauten (seit 6 Jahren unbezahlt, nie begonnen) abbrechen – außer Mauern und Zentrum
+    for (const id of city.sites.slice()) {
+      const o = sim._structs.get(id);
+      if (!o || o.built || o.paid || (o.progress || 0) > 0 || WW.Structs.isWallish(o) || o.type === 'center' || o.type === 'rail' || o.type === 'station') continue;
+      if (o.siteYear == null) { o.siteYear = st.year; continue; }
+      if (st.year - o.siteYear >= 6) { if (o.type === 'house') city.houses = Math.max(0, city.houses - 1); WW.Structs.remove(sim, o); }
     }
     const open = countSites(sim, city, true);
     const maxOpen = 2 + city.tier;
@@ -807,7 +836,7 @@
   // Rohstoffe in Reichweite? (einmal je Jahr)
   function scanResources(sim, city) {
     const st = sim.state, W = st.W, H = st.H, LUT = WW.TERRAIN_LUT;
-    const r = Math.min(30, territoryRadius(city, sim) + 5);
+    const r = WW.CONFIG.GATHER_R;   // so weit, wie Sammler wirklich gehen (sonst Berufe ohne erreichbaren Rohstoff)
     const px = city.cx, py = city.cy;
     let wood = 0, stone = 0, water = 0;
     const tw = WW.Culture.resTab(city, 'wood'), ts = WW.Culture.resTab(city, 'stone');   // Lehmbau der Wüstenkulturen
@@ -965,6 +994,9 @@
       if (city.dead) continue;
       if (city.kind === 'camp') continue;   // [industry] Lagerstadt: keine Tochterstädte, kein Unmut-Zähler
       scanResources(sim, city);
+      // Notbehelf: ohne Vorkommen in Reichweite Lesesteine bzw. Treibholz/Gestrüpp sammeln (kein Vorrat bleibt ewig 0)
+      if (!city.hasStone) addStock(sim, city, 'stone', 2 + city.pop * 0.08);
+      if (!city.hasWood) addStock(sim, city, 'wood', 2 + city.pop * 0.08);
       const g = gov(sim, city);
       // Unzufriedenheit zählt für Aufstände
       const limit = g.key === 'fascism' ? 28 : 20;
@@ -985,7 +1017,7 @@
     updateAll: updateAll, yearly: yearly, destroyCity: destroyCity, transferCity: transferCity, atCity: atCity,
     findCoreSpot: findCoreSpot, findFieldSpot: findFieldSpot, findDropSpot: findDropSpot, placeStruct: placeStruct,
     centerOff: centerOff, emptyStock: emptyStock, fillStock: fillStock, footprintOk: footprintOk, DIRS16: DIRS16, happinessTarget: happinessTarget, scanResources: scanResources,
-    sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP, countSites: countSites,
+    sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP, countSites: countSites, adaptCost: adaptCost,
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

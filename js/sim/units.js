@@ -484,7 +484,8 @@
         const d = distTo(u, f.x + 0.5, f.y + 0.5) + (f.growth >= 3 ? 0 : 12 + f.growth * 2) + f.workers * 6;
         if (d < bs) { bs = d; best = f; }
       }
-      if (race.fishing && city.hasWater && !(city.besieged > st.tick) && (!best || best.growth < 3) && !(u.noFishUntil > st.tick) && sim.rng.chance(0.6)) {
+      const lowFood = WW.Cities.stock(sim, city).food < city.pop * 1.5 + 4;   // Notnahrung: dann fischen alle Völker
+      if ((race.fishing || lowFood) && city.hasWater && !(city.besieged > st.tick) && (!best || best.growth < 3) && !(u.noFishUntil > st.tick) && sim.rng.chance(0.6)) {
         const i = findResourceFrom(sim, u, city, 'water', 2, 9);   // zwischengespeichert (Leistung)
         if (i >= 0) {
           const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
@@ -579,7 +580,7 @@
     if (u.phase === 0) {
       const nm = WW.Growth.natureMode(sim, sim._kingdoms.get(u.kingdomId), race);
       // Kahlschlag zieht immer weiter hinaus, Schonende lassen einen Hain um die Stadt stehen
-      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResourceFrom(sim, u, city, res, 2, nm === 'exploit' ? 20 : 13);   // zwischengespeichert (Leistung)
+      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, C().GATHER_R)) : findResourceFrom(sim, u, city, res, 2, C().GATHER_R);   // zwischengespeichert; so weit wie scanResources
       if (i < 0) { wander(sim, u, city, 4); return; }
       const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
       if (g < 0) { wander(sim, u, city, 4); return; }
@@ -653,10 +654,7 @@
         const c = sim._structs.get(id);
         if (!c || c.dead || !WW.Structs.needsWork(c)) continue;
         if (c.skipUntil && c.skipUntil > st.tick) continue;
-        if (!c.paid) {
-          const cost = WW.Structs.siteCost(sim, c, city.id);
-          if (sk.wood < cost.wood || sk.stone < cost.stone || sk.gold < cost.gold) continue;
-        }
+        if (!c.paid && !WW.Cities.canPay(sim, city, WW.Structs.siteCost(sim, c, city.id))) continue;   // mit Baustoff-Ersatz
         const sc = siteScore(sim, u, c);
         if (sc < bs) { bs = sc; best = c; }
       }
