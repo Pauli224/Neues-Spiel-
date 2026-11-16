@@ -1257,7 +1257,7 @@ test('21 Faschismus 9.10: keine Dörfer, Megastufen, Garnisonen (halten, abziehe
   // Garnisonssoldaten marschieren nicht, Speichern/Laden trägt alles
   const s = fh.sim;
   const gs = s.state.units.filter(u => u.garrison === fh.city.id);
-  assert(gs.length >= 3 && gs.every(u => !u.order || u.order.kind === 'garrison'), 'Garnison auf dem Marsch');
+  assert(gs.length >= 3 && gs.every(u => !u.order || u.order.kind === 'garrison'), 'Garnison auf dem Marsch: ' + gs.filter(u => u.order && u.order.kind !== 'garrison').map(u => JSON.stringify(u.order) + ' ' + u.role + (u.ind ? ' ind ' + u.ind : '')).join('; '));
   const L = WW.Sim.load(s.serialize());
   assert(L.hash() === s.hash(), 'Garnison: Laden ändert den Stand');
   run(s, 400); run(L, 400);

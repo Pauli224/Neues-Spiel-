@@ -39,8 +39,9 @@
   function adaptCost(s, cost) {
     if (!cost) return cost;
     let w = cost.wood || 0, t = cost.stone || 0;
-    if (s.wood < w && s.stone >= t + (w - s.wood) * 1.5) { t += (w - Math.max(0, s.wood)) * 1.5; w = Math.max(0, s.wood); }
-    else if (s.stone < t && s.wood >= w + (t - s.stone) * 1.5) { w += (t - Math.max(0, s.stone)) * 1.5; t = Math.max(0, s.stone); }
+    // nur wenn der Baustoff praktisch ausgegangen ist (< 2) – sonst normal warten
+    if (s.wood < w && s.wood < 2 && s.stone >= t + (w - s.wood) * 1.5) { t += (w - Math.max(0, s.wood)) * 1.5; w = Math.max(0, s.wood); }
+    else if (s.stone < t && s.stone < 2 && s.wood >= w + (t - s.stone) * 1.5) { w += (t - Math.max(0, s.stone)) * 1.5; t = Math.max(0, s.stone); }
     if (w === cost.wood && t === cost.stone) return cost;
     return { food: cost.food || 0, wood: w, stone: t, gold: cost.gold || 0 };
   }
@@ -54,7 +55,8 @@
     if (city._resT === t) return city._resV;
     let r = 0;
     const k = sim._kingdoms.get(city.kingdomId);
-    if (k && WW.Military && WW.Military.govSpec && WW.Military.govSpec(k.gov) && city.pop >= 30) r = 30;   // [mil] Regime rüsten: Arsenal/Behelf brauchen Vorrat
+    const ms = k && WW.Military && WW.Military.govSpec ? WW.Military.govSpec(k.gov) : null;
+    if (ms && city.pop >= 30) r = ms.tank ? 30 : 15;   // [mil] Regime mit Panzern rüsten stärker; Feldgeschütze brauchen weniger
     for (const id of city.sites) { const s = sim._structs.get(id); if (s && !s.built && !s.paid && SPECIAL[s.type]) { r = Math.max(r, 45); break; } }
     city._resT = t; city._resV = r;
     return r;

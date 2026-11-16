@@ -656,7 +656,7 @@
         if (!c || c.dead || !WW.Structs.needsWork(c)) continue;
         if (c.skipUntil && c.skipUntil > st.tick) continue;
         // mit Baustoff-Ersatz; gewöhnliche Baustellen lassen die Rücklage für Sonderbauten (Rüstung, Seefahrt …) liegen
-        if (!c.paid && !(WW.Cities.isSpecial(c) ? WW.Cities.canPay : WW.Cities.canPayOwn)(sim, city, WW.Structs.siteCost(sim, c, city.id))) continue;
+        if (!c.paid && !(WW.Cities.isSpecial(c) || c.type === 'center' ? WW.Cities.canPay : WW.Cities.canPayOwn)(sim, city, WW.Structs.siteCost(sim, c, city.id))) continue;   // Zentrum geht immer vor
         const sc = siteScore(sim, u, c);
         if (sc < bs) { bs = sc; best = c; }
       }

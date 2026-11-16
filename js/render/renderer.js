@@ -1206,7 +1206,7 @@
         if (s.stage === 1) { const k = this.pickVar(S.hallKey, ['s_hall_a', 's_hall_b'], s); if (k) return k; }
         // Megastadt/Riesenstadt (9.10): monumentales Zentrum ab Ausbaustufe 3
         // Die Simulation baut das Zentrum bis Stufe 2 aus; das monumentale Zentrum folgt der Stadtstufe (Mega-/Riesenstadt)
-        { const cty = this._cityById ? this._cityById.get(s.cityId) : null, ms = Math.max(s.stage | 0, cty && (s.stage == null || s.stage >= 2) && cty.tier >= 6 ? cty.tier - 3 : 0);
+        { const cty = this._cityById ? this._cityById.get(s.cityId) : null, ms = Math.max(s.stage | 0, cty && (s.stage == null || s.stage >= 2) && cty.tier >= 3 ? Math.min(4, cty.tier) : 0);   // Monumentalzentrum schon ab Großstadt (Stufe 3), ab Metropole die größte Fassung (Stufe 4) – nicht erst ab 350 Einwohnern
           if (ms >= 3 && typeof S.centerKey === 'function') { let k = null; try { k = S.centerKey(style, ms); } catch (e) { k = null; } if (k && S.has(k) && k !== 's_center_' + style) return k; } }
         return 's_center_' + style;
       }
