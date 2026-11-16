@@ -127,12 +127,29 @@ test('1b Leere Welt lebt (populate 0, 20 000 Ticks)', function () {
 test('2 Jede Kreatur-Art lässt sich setzen und verhält sich', function () {
   const sim = makeSim({ seed: 'arten', world: testWorld(96, 64), populate: 1, races: ['human'], govs: ['tribe'], animals: false });
   const st = sim.state;
-  const placed = {};
+  const placed = {}, spots = [];
   for (const kind of WW.CREATURE_KEYS) {
     const cr = WW.CREATURES[kind];
     assert(cr.name && cr.desc && cr.category && cr.spawnable === true, kind + ': Tabellenfelder fehlen');
     const key = cr.habitat[0];
-    const t = tileOf(sim, (tt, i) => WW.TERRAIN[tt].key === key && WW.Creatures.canEnter(sim, cr, i) && st.owner[i] === -1) || tileOf(sim, (tt, i) => WW.Creatures.canEnter(sim, cr, i));
+    // im Lebensraum, bevorzugt außerhalb jeden Gebiets (Städte haben inzwischen große Fluren), sonst außerhalb der Ringe;
+    // nur notfalls irgendwo – sonst landen alle Arten in derselben Ecke und fressen einander
+    // Arten möglichst weit auseinander setzen (sonst landen alle in derselben Ecke und die Monster fressen die Tiere sofort)
+    const spread = (pred) => {
+      let best = null, bd = -1;
+      for (let i = 0; i < st.W * st.H; i += 3) {
+        if (!pred(st.terrain[i], i)) continue;
+        const x = (i % st.W) + 0.5, y = Math.floor(i / st.W) + 0.5;
+        let md = 1e9;
+        for (const q of spots) md = Math.min(md, (q.x - x) * (q.x - x) + (q.y - y) * (q.y - y));
+        if (md > bd) { bd = md; best = { x: x, y: y }; }
+      }
+      return best;
+    };
+    const t = spread((tt, i) => WW.TERRAIN[tt].key === key && WW.Creatures.canEnter(sim, cr, i) && st.owner[i] === -1) ||
+      spread((tt, i) => WW.TERRAIN[tt].key === key && WW.Creatures.canEnter(sim, cr, i) && st.inRing[i] === -1 && st.structAt[i] === -1) ||
+      tileOf(sim, (tt, i) => WW.Creatures.canEnter(sim, cr, i));
+    spots.push(t);
     const id = sim.actions.spawnAnimal(t.x, t.y, kind);
     assert(id != null, kind + ' lässt sich nicht setzen');
     placed[kind] = id;

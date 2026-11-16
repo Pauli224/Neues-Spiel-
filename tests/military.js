@@ -234,7 +234,7 @@ test('4 Artillerie trifft auf Distanz, macht Krater, ist im Nahkampf wehrlos', f
 
 // Feldschlacht-Szenario: Faschismus mit Panzern gegen Monarchie
 function battleWorld(seed) {
-  const o = duel('fascism', 'monarchy', { seed: seed });
+  const o = duel('fascism', 'monarchy', { seed: seed, W: 170 });   // breit: Platz für Feldschlachten vor den Vorfeldern
   grow(o, 14, 44);
   for (let i = 0; i < 2; i++) o.sim.actions.placeVehicle(o.ca.cx + 8, o.ca.cy, 'tank');
   o.sim.actions.placeVehicle(o.cb.cx - 8, o.cb.cy, 'artillery');

@@ -19,7 +19,8 @@
 //   Voraussetzung: Stadt ab Stufe „Stadt" (tier ≥ 2), Einwohner ≥ GOVS[gov].minPop, fertige Fabrik ('factory') oder
 //   Schmiede ('smithy') in der Stadt; höchstens GOVS[gov].arsenals je Reich. Gebaut von den Baumeistern (Baustelle).
 //   Felder: style (Regierung, wie alle Bauwerke; Sprite s_arsenal_<gov>), prod ('tank'|'artillery'|null = ruht),
-//   prog 0..1 (Baufortschritt des Fahrzeugs), pay ('res' = Eisen+Kohle | 'alt' = Behelf mit Gold/Holz+Stein, langsam),
+//   prog 0..1 (Baufortschritt des Fahrzeugs), pay ('res' = Eisen+Kohle | 'alt' = Behelf mit Gold/Holz+Stein, langsam |
+//   'scrap' = ohne jeden Vorrat aus Schrott, sehr langsam: COST.scrapSpeed – ein Regime mit Arsenal bekommt so immer Fahrzeuge),
 //   made (gebaute Fahrzeuge), lastPay (Bezahlart des letzten Auftrags), opened (1 = Eröffnung stand in der Chronik), idle (true = Regierung ohne Militärtabelle).
 //   Verbrauch aus WW.Cities.stock(sim, city): iron + coal (WW.MIL.COST, × GOVS.costMul); fehlt das, Behelf
 //   (gold, ohne Goldwirtschaft wood + stone) mit Tempo × COST.altSpeed. Nichts davon da: wartet.
@@ -43,6 +44,9 @@
 //   stationiertes Fahrzeug folgt keinem Marsch, verteidigt aber seine Stadt.
 //   Weltobergrenze WW.MIL.WORLD_MAX (48) Fahrzeuge; eigenes Wegsuche-Teilbudget WW.MIL.PATH_SHARE (nimmt den Heeren nichts weg).
 //   Feldschlachten nie im Vorfeld einer Stadt (Ring bzw. Kernbebauung + BATTLE.siegeMargin): dort gilt die Belagerung.
+//   WIRTSCHAFT (Abstimmung mit dem Kern, Kopf sim.js „STOCKUNGS-FIX"): Die Arsenal-Baustelle bezahlt sich selbst aus ARSENAL_PAY
+//   (danach paid, also nie vom 6-Jahre-Abbruch betroffen; 'arsenal' steht außerdem nicht in dessen Liste); WW.Cities.reserveOf
+//   hält in Regime-Städten Holz/Stein zurück; city.milRes = Eisen, das die Schmiede für ein wartendes Arsenal liegen lässt.
 //   Laufzeitschalter sim._noSiegeEngines (Tests der Belagerung): Arsenale bauen nichts, vorhandene Fahrzeuge ruhen ganz.
 //
 // ZUSTAND
@@ -211,7 +215,7 @@
     const x = i % W, y = Math.floor(i / W);
     for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 3; dx++) {
       const s = sim._structs.get(st.structAt[(y + dy) * W + x + dx]);
-      if (s && (s.type === 'ruin' || (s.type === 'field' && s.cityId === city.id))) WW.Structs.remove(sim, s);
+      if (s && s.type === 'field' && s.cityId === city.id) WW.Structs.remove(sim, s);   // Ruinen bleiben (Mahnmale, Fabrikruinen)
     }
     const s = WW.Structs.create(sim, 'arsenal', x, y, city.id, { style: k.gov });
     if (!s) { city.milNext = st.tick + TPY(); return null; }
@@ -310,14 +314,14 @@
           how = 'alt';
           let ok = false;
           for (let ai = 0; ai < altCount(k) && !ok; ai++) { c = costOf(k, pick, ai); ok = canPay(sk, c, M().COST.keep); }
-          if (!ok) continue;
+          if (!ok) { c = {}; how = 'scrap'; }   // letzter Behelf: Schrott und Zwangsarbeit – kostenlos, aber sehr langsam
         }
         pay(sk, c);
         s.prod = pick; s.prog = 0; s.pay = how; s.lastPay = how; s.waitRes = 0; city.milRes = 0; p[pick]++;
       }
       const C = M().COST;
       const ws = hasWorkshop(sim, city);
-      s.prog = Math.min(1, s.prog + C.step / C[s.prod].work * sp.speedMul * (s.pay === 'alt' ? C.altSpeed : 1) * (ws ? 1 : C.noWorkshop));
+      s.prog = Math.min(1, s.prog + C.step / C[s.prod].work * sp.speedMul * (s.pay === 'alt' ? C.altSpeed : (s.pay === 'scrap' ? C.scrapSpeed : 1)) * (ws ? 1 : C.noWorkshop));
       if (s.prog >= 1) {
         const kind = s.prod;
         s.prod = null; s.prog = 0; s.pay = null;

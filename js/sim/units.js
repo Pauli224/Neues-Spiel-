@@ -655,7 +655,8 @@
         const c = sim._structs.get(id);
         if (!c || c.dead || !WW.Structs.needsWork(c)) continue;
         if (c.skipUntil && c.skipUntil > st.tick) continue;
-        if (!c.paid && !WW.Cities.canPay(sim, city, WW.Structs.siteCost(sim, c, city.id))) continue;   // mit Baustoff-Ersatz
+        // mit Baustoff-Ersatz; gewöhnliche Baustellen lassen die Rücklage für Sonderbauten (Rüstung, Seefahrt …) liegen
+        if (!c.paid && !(WW.Cities.isSpecial(c) ? WW.Cities.canPay : WW.Cities.canPayOwn)(sim, city, WW.Structs.siteCost(sim, c, city.id))) continue;
         const sc = siteScore(sim, u, c);
         if (sc < bs) { bs = sc; best = c; }
       }
@@ -688,12 +689,24 @@
           cand.push([dd, i]);
         }
         cand.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-        const drop = (skip) => { if (skip) s.skipUntil = st.tick + 400; u.target = -1; u.phase = 0; u.fails = 0; u.wtry = 0; u.wait = 24; };
+        const drop = (skip) => {
+          if (skip) {
+            s.skipUntil = st.tick + 400; s.skipN = (s.skipN | 0) + 1;
+            // dauerhaft unerreichbare Baustelle (Stockungs-Fix): nach 4 Fehlversuchen abbrechen, bezahltes Material halb zurück
+            if (s.skipN >= 4 && !s.built && !WW.Structs.isWallish(s) && s.type !== 'center') {
+              if (s.paid) { const c0 = WW.Structs.siteCost(sim, s, city.id); WW.Cities.addStock(sim, city, 'wood', (c0.wood || 0) * 0.5); WW.Cities.addStock(sim, city, 'stone', (c0.stone || 0) * 0.5); }
+              if (s.type === 'house') city.houses = Math.max(0, city.houses - 1);
+              WW.Structs.remove(sim, s);
+            }
+          }
+          u.target = -1; u.phase = 0; u.fails = 0; u.wtry = 0; u.wait = 24;
+        };
         if (!cand.length) { drop(true); return; }
         const tries = u.wtry || 0;
         if (tries >= Math.min(cand.length, 5)) { drop(true); return; }
         const goal = cand[tries][1];
-        const r = goTo(sim, u, goal, { limit: 1500 });
+        const far = Math.abs(s.x - u.x) + Math.abs(s.y - u.y) > 14;   // ferne Baustellen (Vorstadt, Rohstoffbauten): längere Wegsuche
+        const r = goTo(sim, u, goal, { limit: far ? C().PATH_LIMIT_LONG : 1500 });
         if (r === null) u.wtry = tries + 1;
         else if (r === true && !u.path) u.wtry = tries + 1;
       }

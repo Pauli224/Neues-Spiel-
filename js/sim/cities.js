@@ -44,6 +44,29 @@
     if (w === cost.wood && t === cost.stone) return cost;
     return { food: cost.food || 0, wood: w, stone: t, gold: cost.gold || 0 };
   }
+  // Rücklage für Sonderbauten (Rüstung, Seefahrt, Rohstoffbauten): gewöhnliche Baustellen (Häuser, Mauern, Märkte …) lassen
+  // so viel Holz/Stein liegen. Laufzeit-Zwischenspeicher je Tick (aus dem Zustand ableitbar, deterministisch).
+  const SPECIAL = { arsenal: 1, harbor: 1, garrison: 1, caravanserai: 1, pyramid: 1, mine: 1, smithy: 1, factory: 1, fishery: 1, pasture: 1, station: 1, rail: 1, camphq: 1, barrack: 1, stockade: 1 };
+  function isSpecial(s) { return !!(s && SPECIAL[s.type]); }
+  const ABANDON = { house: 1, market: 1, barracks: 1, monument: 1, lumber: 1, quarry: 1 };
+  function reserveOf(sim, city) {
+    const t = sim.state.tick;
+    if (city._resT === t) return city._resV;
+    let r = 0;
+    const k = sim._kingdoms.get(city.kingdomId);
+    if (k && WW.Military && WW.Military.govSpec && WW.Military.govSpec(k.gov) && city.pop >= 30) r = 30;   // [mil] Regime rüsten: Arsenal/Behelf brauchen Vorrat
+    for (const id of city.sites) { const s = sim._structs.get(id); if (s && !s.built && !s.paid && SPECIAL[s.type]) { r = Math.max(r, 45); break; } }
+    city._resT = t; city._resV = r;
+    return r;
+  }
+  // wie canPay, aber die Rücklage bleibt liegen (für gewöhnliche Bauten)
+  function canPayOwn(sim, city, cost) {
+    const r = reserveOf(sim, city);
+    if (!r) return canPay(sim, city, cost);
+    if (!canPay(sim, city, cost)) return false;
+    const s = stock(sim, city), c = adaptCost(s, cost);
+    return (c.wood <= 0 || s.wood - c.wood >= r) && (c.stone <= 0 || s.stone - c.stone >= r);
+  }
   function canPay(sim, city, cost) {
     const s = stock(sim, city);
     cost = adaptCost(s, cost);
@@ -373,10 +396,10 @@
     const s = WW.Structs.create(sim, type, x, y, city.id, opt || {});
     if (s && !s.built && s.siteYear == null) s.siteYear = st.year;
     if (s) {
-      for (let dy = 0; dy < inf.h; dy++) for (let dx = 0; dx < inf.w; dx++) {
-        const i = (y + dy) * W + x + dx;
-        if (st.owner[i] === -1) { st.owner[i] = city.id; sim.markDirty(i); }
-      }
+      // Land unter dem Bauwerk über die Fluren nehmen (Besitz-Raster folgt den Fluren; run.js Test 9)
+      const free = [];
+      for (let dy = 0; dy < inf.h; dy++) for (let dx = 0; dx < inf.w; dx++) { const i = (y + dy) * W + x + dx; if (st.owner[i] === -1) free.push(i); }
+      if (free.length) WW.Growth.claimTiles(sim, city, free);
     }
     return s;
   }
@@ -399,6 +422,7 @@
       : (i) => owner[i] === id && inRing[i] === -1 && !(sAt(sim, i) && WW.Structs.isWallish(sAt(sim, i)));
     const o = { area: area, fieldOk: !suburb, race: city.race, cityId: id, needWalkBorder: true };
     let best = -1, bs = -1e9, loose = -1, lbs = -1e9;
+    const ccomp = sim._compDirty ? null : sim.comp, cComp = ccomp ? ccomp[city.cy * W + city.cx] : 0;
     const x0 = Math.max(1, Math.floor(px - r)), x1 = Math.min(W - 2 - w, Math.ceil(px + r));
     const y0 = Math.max(1, Math.floor(py - r)), y1 = Math.min(st.H - 2 - h, Math.ceil(py + r));
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -407,6 +431,7 @@
       if (d > r - 1) continue;
       const nb = footprintOk(sim, x, y, w, h, o);
       if (nb < 0) continue;
+      if (ccomp && ccomp[y * W + x] !== cComp && ccomp[y * W + x] >= 0) continue;   // nur zu Fuß erreichbar (nicht übers Wasser)
       // Notlösung (Stockungs-Fix): freistehender Platz, falls nichts am Bestand passt (zerklüftetes Gelände)
       if (nb === 0 && (!ringed || (suburb && inRing[y * W + x] !== id))) { const ls = -d - 4 + sim._hashNoise(y * W + x) * 0.6; if (ls > lbs) { lbs = ls; loose = y * W + x; } }
       // ohne Mauer: dicht am Bestand bleiben
@@ -531,6 +556,9 @@
       if (filterWall && WW.Structs.isWallish(s)) continue;
       if (filterWall && s.built && s.restyle && !s.upgradeTo) continue;
       if (filterWall && (s.type === 'rail' || s.type === 'station')) continue;   // Bahnbau zählt nicht gegen die Stadtplanung
+      // wartende gewöhnliche Baustellen (unbezahlt) halten Sonderbauten der Kollegen (Hafen, Arsenal …) nicht auf;
+      // die eigene Planung zählt sie mit (filterWall === 'all')
+      if (filterWall === true && !s.paid && !s.built && ABANDON[s.type]) continue;
       n++;
     }
     return n;
@@ -571,11 +599,11 @@
     // liegengebliebene Neubauten (seit 6 Jahren unbezahlt, nie begonnen) abbrechen – außer Mauern und Zentrum
     for (const id of city.sites.slice()) {
       const o = sim._structs.get(id);
-      if (!o || o.built || o.paid || (o.progress || 0) > 0 || WW.Structs.isWallish(o) || o.type === 'center' || o.type === 'rail' || o.type === 'station') continue;
+      if (!o || o.built || o.paid || (o.progress || 0) > 0 || !ABANDON[o.type]) continue;   // nur gewöhnliche Bauten; Sonderbauten bleiben
       if (o.siteYear == null) { o.siteYear = st.year; continue; }
       if (st.year - o.siteYear >= 6) { if (o.type === 'house') city.houses = Math.max(0, city.houses - 1); WW.Structs.remove(sim, o); }
     }
-    const open = countSites(sim, city, true);
+    const open = countSites(sim, city, 'all');
     const maxOpen = 2 + city.tier;
     // Häuser
     // kein Land mehr zu holen: dichter bauen statt stehenbleiben (Stockungs-Fix)
@@ -706,7 +734,7 @@
     }
     if (!best) return false;
     const cost = WW.Structs.costFor(sim, 'house', best.level + 1, city.id);
-    if (!canPay(sim, city, cost)) return false;
+    if (!canPayOwn(sim, city, cost)) return false;
     // nicht mehrere Ausbauten gleichzeitig beginnen, die das Lager nicht trägt
     let unpaid = 0;
     for (const id of city.sites) { const o = sim._structs.get(id); if (o && o.type === 'house' && o.upgradeTo && !o.paid) unpaid++; }
@@ -1024,6 +1052,7 @@
     findCoreSpot: findCoreSpot, findFieldSpot: findFieldSpot, findDropSpot: findDropSpot, placeStruct: placeStruct,
     centerOff: centerOff, emptyStock: emptyStock, fillStock: fillStock, footprintOk: footprintOk, DIRS16: DIRS16, happinessTarget: happinessTarget, scanResources: scanResources,
     sendSettlers: sendSettlers, findSettleSite: findSettleSite, HOUSE_CAP: HOUSE_CAP, countSites: countSites, adaptCost: adaptCost,
+    canPayOwn: canPayOwn, reserveOf: reserveOf, isSpecial: isSpecial,
   };
 
 })(typeof window !== 'undefined' ? (window.WW = window.WW || {}) : (globalThis.WW = globalThis.WW || {}));

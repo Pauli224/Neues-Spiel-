@@ -800,6 +800,7 @@
       fieldOk: kind === 'pasture', race: city.race, cityId: id, needWalkBorder: false
     };
     const minD = (city.wall.plan ? 0 : WW.CONFIG.WALL_RESERVE) + WW.CONFIG.WALL_MARGIN + 2;
+    const comp = sim._compDirty ? null : sim.comp, myComp = comp ? comp[city.cy * W + city.cx] : 0;
     let best = -1, bs = -1e9, bestN = 0;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 4, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 4, Math.ceil(px + r)); x++) {
@@ -826,6 +827,7 @@
         }
         if (near) continue;
         if (WW.Cities.footprintOk(sim, x, y, 2, 2, o) < 0) continue;
+        if (comp && comp[i0] !== myComp) continue;   // zu Fuß erreichbar
         const score = n * 0.8 - d * 0.4 + sim._hashNoise(i0) * 0.3;
         if (score > bs) { bs = score; best = i0; bestN = n; }
       }
