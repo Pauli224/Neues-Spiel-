@@ -407,7 +407,7 @@
     if (expanding && w.plan) {
       const ins = [];
       for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) ins.push(i);
-      w.prev = { plan: w.plan.slice(), gates: (w.gates || []).slice(), towers: (w.towers || []).slice(), gaps: (w.gaps || []).slice(), inside: ins, level: w.level || 1, style: w.style };
+      w.prev = { plan: w.plan.slice(), gates: (w.gates || []).slice(), towers: (w.towers || []).slice(), gaps: (w.gaps || []).slice(), inside: ins, level: w.level || 1, style: w.style, gateDir: Object.assign({}, w.gateDir || {}) };
     }
     // Innenfläche markieren
     for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;
@@ -435,6 +435,7 @@
       const wantType = isGate ? 'gate' : ((level >= 2 && towerSet.has(t) && !gov.barricades) ? 'tower' : 'wall');
       if (s && s.cityId === city.id && WW.Structs.isWallish(s)) {
         if (s.type === wantType || (wantType === 'wall' && s.type === 'tower') || (s.type === 'gate' && s.rail)) continue;   // [walls] Gleistor bleibt
+        if (expanding && s.type === 'gate' && s.built) { gateSet.add(t); continue; }   // [walls] Tor des alten Rings bleibt Tor (sonst ist die Altstadt bis zum Ende der Erweiterung eingesperrt)
         WW.Structs.remove(sim, s); s = null;
       } else if (s) {
         if (railGate(sim, city, s, t, level, style, newSet)) { gateSet.add(t); continue; }   // [walls] Gleis im Ring -> Gleistor (dicht für Feinde)
@@ -460,10 +461,11 @@
     }
     w.plan = ring.all.slice();
     w.gaps = gaps;
-    w.gates = ring.gates.slice();
+    w.gates = [...gateSet].filter((t) => newSet.has(t));   // [walls] inkl. behaltener Tore des alten Rings
     for (const t of ring.tiles) { const g = sim._structs.get(st.structAt[t]); if (g && g.type === 'gate' && g.rail && w.gates.indexOf(t) < 0) w.gates.push(t); }   // [walls] Gleistore
     w.towers = ring.towers.filter(t => newSet.has(t));
-    w.gateDir = {}; for (const g of w.gates) w.gateDir[g] = ring.gateDir[g] || 'h';   // [walls] für spät angelegte Tore
+    const gd0 = w.gateDir || {};
+    w.gateDir = {}; for (const g of w.gates) w.gateDir[g] = ring.gateDir[g] || gd0[g] || 'h';   // [walls] für spät angelegte Tore
     w.prog = { built: 0, year: st.year, since: st.year };   // [walls] Fortschritt (gegen Stillstand)
     w.old = old;
     w.target = level;
@@ -682,7 +684,17 @@
       }
       for (let i = 0; i < st.inRing.length; i++) if (st.inRing[i] === city.id) st.inRing[i] = -1;
       for (const i of prev.inside) if (st.inRing[i] === -1) st.inRing[i] = city.id;
+      w.gateDir = prev.gateDir || {};
       w.plan = prev.plan; w.gates = prev.gates; w.towers = prev.towers; w.gaps = prev.gaps; w.old = [];
+      // Tore des alten Rings wiederherstellen (falls die Erweiterung dort ein Mauerstück vorgesehen hatte)
+      for (const g of prev.gates) {
+        const p = sim._structs.get(st.structAt[g]);
+        if (p && p.cityId === city.id && WW.Structs.isWallish(p) && p.type !== 'gate') {
+          p.type = 'gate'; p.orient = (prev.gateDir && prev.gateDir[g]) || 'h'; p.towerOnUpgrade = false;
+          p.maxHp = WW.Structs.maxHpFor(sim, p); p.hp = Math.min(p.hp, p.maxHp);
+          WW.Structs.setBlockAt(sim, p); WW.Structs.updateMasksAround(sim, p.x, p.y); sim.markDirty(g);
+        }
+      }
       w.level = prev.level; w.target = prev.level; w.style = prev.style || wallStyle(gov, prev.level);
       w.inside = prev.inside.length; w.state = 'done'; w.prev = null; w.expandRetry = retry; w.plannedYear = st.year;
       w.expansions = Math.max(0, (w.expansions || 1) - 1);

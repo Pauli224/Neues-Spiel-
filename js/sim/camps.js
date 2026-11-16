@@ -388,7 +388,13 @@
     if (st.tick - (u.marchT || st.tick) > C().MARCH_MAX) { u.x = gx; u.y = gy; u.path = null; u.moving = false; return true; }   // Notausgang
     const cur = Math.floor(u.y) * W + Math.floor(u.x);
     if (!u.path && ((st.tick + u.id) & 15) === 0) {
-      const p = WW.Path.find(sim, cur, goal, { k: u.kingdomId, breach: true, limit: WW.CONFIG.PATH_LIMIT_LONG || 4000 });
+      // Wege durch Tore: erst mit den Toren des Haftorts/der Heimat (Wachen öffnen), dann der anderen Seite, zuletzt mit
+      // Durchbruchskosten (nur als Richtung; Mauern selbst werden nie betreten)
+      const lim = WW.CONFIG.PATH_LIMIT_LONG || 4000;
+      const hk = u.role === 'prisoner' ? (u.campState === 'home' ? u.pow : ((holdKingdom(sim, holdOf(sim, u)) || {}).id)) : u.kingdomId;
+      let p = hk != null && hk >= 0 ? WW.Path.find(sim, cur, goal, { k: hk, limit: lim }) : null;
+      if (p === null && u.origK != null && u.origK >= 0 && u.origK !== hk) p = WW.Path.find(sim, cur, goal, { k: u.origK, limit: lim });
+      if (p === null) p = WW.Path.find(sim, cur, goal, { k: u.kingdomId, breach: true, limit: lim });
       if (p === null) {
         u.fails = (u.fails | 0) + 1;
         // anderes Ufer (kein Landweg): werden übergesetzt

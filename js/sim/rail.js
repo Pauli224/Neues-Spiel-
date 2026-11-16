@@ -241,7 +241,7 @@
     }
     const s = WW.Structs.create(sim, 'station', x, y, city.id, { style: k.gov });
     if (!s) return null;
-    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) { const j = (y + dy) * W + x + dx; if (st.owner[j] === -1) { st.owner[j] = city.id; sim.markDirty(j); } }
+    { const tl = []; for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) tl.push((y + dy) * W + x + dx); WW.Growth.claimTiles(sim, city, tl); }   // Gebiet über Fluren (Besitz-Raster folgt den Fluren)
     city.sites.push(s.id);
     chron(sim, 'railStation', { city: city.name }, city, 'economy', 'Bahnhof im Bau');
     return s;

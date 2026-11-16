@@ -246,7 +246,7 @@
       }
       s.w = 3; s.h = 3;
     }
-    for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) { const j = (y + dy) * W + x + dx; if (st.owner[j] === -1) { st.owner[j] = city.id; sim.markDirty(j); } }
+    { const tl = []; for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) tl.push((y + dy) * W + x + dx); WW.Growth.claimTiles(sim, city, tl); }   // Gebiet über Fluren (Besitz-Raster folgt den Fluren)
     s.kind = spec.kind; s.active = false; s.filtered = false; s.closed = 0; s.opened = 0;
     if (!city.sites) city.sites = [];
     city.sites.push(s.id);

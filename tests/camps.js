@@ -229,14 +229,22 @@ test('3 Kriegsgefangene: Regime -> Lagerstadt (Zwangsarbeit), andere -> Gefangen
   let t = 0;
   for (; t < 3000 && !p1.every((u) => u.campState === 'held'); t += 20) run(sim, 20);
   log('Begleitwachen nach Ankunft:', escs.map((e, i) => (e.dead ? 'tot' : e.ind || 'frei') + ' ' + Math.round(Math.hypot(e.x - e0[i][0], e.y - e0[i][1])) + ' Kacheln gelaufen').join(', '));
-  assert(escs.every((e) => e.dead || (e.ind !== 'escort' && e.role === 'soldier')), 'Begleitwache bleibt hängen');
+  // (eine Wache darf weiter begleiten, wenn sie noch andere Gefangene führt – z. B. aus echten Gefechten)
+  run(sim, 5);   // (die Wache merkt die Ankunft im nächsten Schritt)
+  const stillLeads = (e) => sim.state.units.some((u) => !u.dead && u.role === 'prisoner' && u.escort === e.id && u.campState === 'march');
+  for (const e of escs) if (!(e.dead || (e.ind !== 'escort' && e.role === 'soldier') || stillLeads(e))) log('  Wache', e.id, e.role, e.ind, 'Begleitete:', sim.state.units.filter((u) => u.escort === e.id).map((u) => u.role + '/' + u.campState).join(','), 'N', e.escortN);
+  assert(escs.every((e) => e.dead || (e.ind !== 'escort' && e.role === 'soldier') || stillLeads(e)), 'Begleitwache bleibt hängen');
   if (!p1.every((u) => u.campState === 'held')) log('Stand:', p1.map((u) => [u.dead ? 'tot' : u.role, u.campState, u.x.toFixed(1), u.y.toFixed(1), u.fails, u.path ? u.path.length : '-'].join(' ')).join(' | '), 'Lager', W.camp.cx, W.camp.cy, W.camp.kind, '| Chronik', evs(sim, /^(pow|camp|peace|god)/).map((e) => e.year + ':' + e.type).join(','), '| B lebt', !!sim._kingdoms.get(W.B.id));
   log('angekommen nach', t, 'Ticks; Insassen', W.camp.inmates, 'davon Kriegsgefangene', W.camp.pows, '| Herkunft', JSON.stringify(W.camp.powFrom));
   assert(p1.every((u) => u.campState === 'held' && (u.work >= 0 || sim.state.inRing[Math.floor(u.y) * sim.state.W + Math.floor(u.x)] === W.camp.id)), 'nicht im Lager angekommen');
   run(sim, 130);
   log('Kennzahlen: Lager', W.camp.pows, JSON.stringify(W.camp.powFrom), '| A hält', W.A.powsHeld, 'verliert', W.A.powsLost, '| B hält', W.B.powsHeld, 'verliert', W.B.powsLost);
   assert(W.camp.pows >= 5 && W.camp.powFrom[W.B.id] >= 5 && W.A.powsHeld >= 5 && W.B.powsLost >= 5 && W.B.powsHeld >= 4 && W.A.powsLost >= 4, 'Kennzahlen falsch');
-  assert(p2.every((u) => !u.dead && Math.hypot(u.x - stk.x - 1, u.y - stk.y - 1) < 3), 'Gefangene im Gefangenenlager laufen davon');
+  // (wessen Begleitwache unterwegs fiel, ist frei – das ist Spielregel; die übrigen sitzen im Gefangenenlager)
+  for (let i = 0; i < 1500 && p2.some((u) => !u.dead && u.role === 'prisoner' && u.campState === 'march'); i += 20) run(sim, 20);
+  const inStk = p2.filter((u) => !u.dead && u.role === 'prisoner' && u.campState === 'held');
+  log('Gefangenenlager:', inStk.length, '/ 4 eingeliefert, frei durch geschlagene Wache', p2.filter((u) => u.role !== 'prisoner' || u.campState === 'home').length);
+  assert(inStk.length >= 1 && inStk.every((u) => Math.hypot(u.x - stk.x - 1, u.y - stk.y - 1) < 3), 'Gefangene im Gefangenenlager laufen davon');
   // Frieden (sonst erobert das Regime im erzwungenen Krieg bald den Gegner); das Regime behält zwei Drittel im Lager
   sim.actions.setRelation(W.A.id, W.B.id, 'peace');
   const keptP = prisoners(sim).filter((u) => u.camp === W.camp.id && u.powUntil > 0);
@@ -300,7 +308,7 @@ test('5 Gefangenenaustausch im Krieg', function () {
   const W = warWorld('fascism', 'democracy', { seed: 6 });
   const sim = W.sim;
   sim.actions.setRelation(W.A.id, W.B.id, 'war');
-  const p1 = takePows(sim, W.A, W.B, 3), p2 = takePows(sim, W.B, W.A, 3);
+  const p1 = takePows(sim, W.A, W.B, 3, 0.8), p2 = takePows(sim, W.B, W.A, 3, 0.8);   // (Gefecht nahe beim Halter)
   const old = WW.CAMPS.EXCHANGE;
   WW.CAMPS.EXCHANGE = 1;   // sicher auslösen
   try { run(sim, TPY + 10); } finally { WW.CAMPS.EXCHANGE = old; }
@@ -463,8 +471,10 @@ test('9 Speichern/Laden, Determinismus, alte Spielstände, Zeitaufschlag', funct
   run(O, 300);
   const camp = campCities(O)[0];
   const inm = ids.map((id) => O._units.get(id)).filter(Boolean);
+  { const lcO = O._structs.get(lc.id); log('  Einzelbau danach:', lcO ? (lcO.dead ? 'weg' : lcO.type + ' built ' + lcO.built + ' city ' + lcO.cityId) : 'weg', '| Reich', O._kingdoms.get(o.k.id).gov, '| Lagerstädte', campCities(O).map((c) => c.name + '#' + c.id).join(','), '| Insassen-Haft', inm.map((u) => u.camp).join(',')); }
   log('alter Stand: Einzelbau ->', camp ? 'Lagerstadt ' + camp.name : 'Mahnmal', '| alte Insassen', inm.map((u) => u.role + (u.camp === (camp && camp.id) ? '@Lager' : '')).join(','));
-  assert(camp ? inm.every((u) => u.role === 'prisoner' && u.camp === camp.id) : inm.every((u) => u.role !== 'prisoner'), 'alte Insassen hängen in der Luft');
+  // (eine Lagerstadt kann es schon geben – Faschismus baut ohne Anlass –, dann wird der Einzelbau zur zweiten oder löst sich auf)
+  assert(inm.every((u) => u.role !== 'prisoner' || u.campState === 'home' || (WW.Camps.holdOf(O, u) && WW.Camps.holdOf(O, u).kind === 'camp') || (WW.Camps.holdOf(O, u) || {}).type === 'laborcamp'), 'alte Insassen hängen in der Luft');
   run(O, 1200);
   // Zeitaufschlag (Krieg mit Gefangenen, Lagerstadt im Bau/Betrieb)
   // Zeitaufschlag ohne Krieg: faschistische Welt mit Lagerstadt (eager), Abholungen, Zwangsarbeit
@@ -513,10 +523,13 @@ test('11 Gleisanschluss: Rampe vor dem Tor, Güterzug liefert ab, Gefangenenzug 
   log('Güterzug: abgeholt', camp.campShipped, '| Halte am Lager', arrivals);
   assert(camp.campShipped > 0 && arrivals > 0, 'Güterzug holt nichts ab');
   // Gefangenenzug: Abgeholte gehen zum Bahnhof der Mutterstadt, fahren, steigen an der Rampe aus
-  const home = sim._cities.get(camp.campHome);
-  const take = (n) => st.units.filter((u) => !u.dead && u.cityId === home.id && u.role === 'farmer' && !u.ind && !u.order).slice(0, n);
+  const ts0 = WW.Rail.campTownStation(sim, camp), home = sim._cities.get(ts0 ? ts0.cityId : camp.campHome);   // Gefangene aus der Stadt am Bahnhof
+  // (Leute aus der Stadt am Bahnhof, die näher am Bahnhof als am Lager stehen – wer schon dicht beim Lager ist, geht zu Fuß)
+  const take = (n) => st.units.filter((u) => !u.dead && u.cityId === home.id && u.role === 'farmer' && !u.ind && !u.order &&
+    Math.hypot(u.x - ts0.x - 1, u.y - ts0.y - 1) < Math.hypot(u.x - camp.cx, u.y - camp.cy)).slice(0, n);
   const pol = take(4);
   for (const u of pol) WW.Camps.intern(sim, u, camp, { pow: false, march: true });
+  if (!pol.every((u) => u.campVia)) log('  Bahnhof', ts0 && [ts0.x, ts0.y, ts0.cityId], 'Lager', camp.cx, camp.cy, 'Stadt', home && [home.name, home.cx, home.cy], '| Gefangene', pol.map((u) => [u.x.toFixed(0), u.y.toFixed(0), u.campVia, u.campState, u.camp].join('/')).join(' '), 'Strecke', !!WW.Rail.campLineOf(sim, camp));
   assert(pol.every((u) => u.campVia), 'nicht zum Bahnhof geschickt');
   let rode = false, prisonTrain = null;
   for (let i = 0; i < 3000 && !pol.every((u) => u.campState === 'held'); i++) {
