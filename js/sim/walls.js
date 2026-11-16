@@ -21,7 +21,7 @@
 //   - Baustellen: höchstens siteCap = 4 + 3 × Baumeister offene Mauerstücke (Krieg ×3); der Rest des Rings wird nach und
 //     nach angelegt (repairPlan). Tore werden gleich angelegt. Mauerbaustellen zählen nicht gegen die Bauplanung der Stadt.
 //   - w.prog = { built (Höchststand), year (letzter Fortschritt), since (Beginn) }: kommt Bau/Ausbau/Erweiterung
-//     WW.WALL_STALL_YEARS (5) nicht voran oder dauert länger als WW.WALL_MAX_YEARS (9; unter 85 % fertig, sonst +5),
+//     WW.WALL_STALL_YEARS (5) nicht voran oder dauert länger als WW.WALL_MAX_YEARS (9; unter 85 % fertig, sonst +1),
 //     wird er zurückgestellt (Ereignis wallStalled): Ausbau -> abgebrochen, fertige Stücke behalten ihre Stufe
 //     (w.upgradeRetry); Erweiterung -> zurückgenommen, alter Ring (w.prev: plan, gates, towers, gaps, inside, level)
 //     gilt wieder und war nie offen (w.expandRetry); erster Ring -> abgetragen, später neu (w.retryYear).
@@ -739,9 +739,9 @@
       if (w.built > pr.built) { pr.built = w.built; pr.year = st.year; }
       // (Höchststand: Wiederaufbau nach Brand/Bresche zählt nicht als Fortschritt)
       // kein Fortschritt seit WALL_STALL_YEARS, oder nach WALL_MAX_YEARS noch nicht zu 85 % fertig (Schneckentempo)
-      // nach WALL_MAX_YEARS + 5 auch dann, wenn nur noch wenige Stücke fehlen (einzelne Stücke, die nie fertig werden)
+      // nach WALL_MAX_YEARS + 1 auch dann, wenn nur noch wenige Stücke fehlen (einzelne Stücke, die nie fertig werden)
       const age = st.year - pr.since, max = WW.WALL_MAX_YEARS || 10;
-      const slow = (age >= max && w.built < (w.total || 0) * 0.85) || age >= max + 5;
+      const slow = (age >= max && w.built < (w.total || 0) * 0.85) || age >= max + 1;
       if ((st.year - pr.year >= (WW.WALL_STALL_YEARS || 6) || slow) && !(w.total > 0 && w.built >= w.total)) {
         stalled(sim, city, gov, vars, at);
         return;

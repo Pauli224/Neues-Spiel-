@@ -581,7 +581,7 @@
       const nm = WW.Growth.natureMode(sim, sim._kingdoms.get(u.kingdomId), race);
       // Kahlschlag zieht immer weiter hinaus, Schonende lassen einen Hain um die Stadt stehen
       // Reichweite nach Naturmodus (Kahlschlag am weitesten); höchstens CONFIG.GATHER_R, danach richtet sich auch hasWood/hasStone
-      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResourceFrom(sim, u, city, res, 2, nm === 'exploit' ? C().GATHER_R : 16);
+      const i = res === 'wood' && nm === 'care' ? (findResourceFrom(sim, u, city, res, 9, 18)) : findResourceFrom(sim, u, city, res, 2, nm === 'exploit' ? C().GATHER_R : 14);
       if (i < 0) { (city.noRes || (city.noRes = {}))[res] = st.tick; wander(sim, u, city, 4); return; }   // merken: nichts erreichbar
       const g = WW.Path.approachTile(sim, i, u.kingdomId, Math.floor(u.y) * W + Math.floor(u.x));
       if (g < 0) { (city.noRes || (city.noRes = {}))[res] = st.tick; wander(sim, u, city, 4); return; }

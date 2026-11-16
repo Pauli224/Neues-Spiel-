@@ -435,8 +435,7 @@
     const ringed = !!city.wall.plan;
     const minD = ringed ? 0 : WW.CONFIG.WALL_RESERVE + WW.CONFIG.WALL_MARGIN + 1.2;
     const irr = !!WW.Culture.info(city.culture).irrigation;   // sahel/nil: Bewässerung im Sand
-    if (sim._compDirty) WW.Path.updateComponents(sim);
-    const comp = sim.comp, myComp = comp ? comp[city.cy * W + city.cx] : 0;
+    const comp = sim._compDirty ? null : sim.comp, myComp = comp ? comp[city.cy * W + city.cx] : 0;   // nur wenn aktuell (keine Neuberechnung hier)
     let best = -1, bs = -1e9;
     for (let y = Math.max(1, Math.floor(py - r)); y <= Math.min(H - 2, Math.ceil(py + r)); y++) {
       for (let x = Math.max(1, Math.floor(px - r)); x <= Math.min(W - 2, Math.ceil(px + r)); x++) {
