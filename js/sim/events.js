@@ -419,7 +419,9 @@
       const k = ctx.k; if (!k) return '';
       let g = e.gov;
       if (Array.isArray(g)) g = g[sim.rng.int(g.length)];
-      if (!WW.GOVERNMENTS[g] || g === k.gov || k.govLocked || !sim.state.laws.govChanges) {
+      // 9.10: Ein faschistisches Regime stürzt auch durch Ereignisse nur in einer echten Krise (verlorene Stadt, belagerte Hauptstadt, Hunger)
+      const fasHold = k.gov === 'fascism' && WW.Gov && WW.Gov.fascistCrisis && !WW.Gov.fascistCrisis(sim, k);
+      if (!WW.GOVERNMENTS[g] || g === k.gov || k.govLocked || !sim.state.laws.govChanges || fasHold) {
         for (const c of citiesOf(sim, k)) c.happiness = WW.SimUtil.clamp(c.happiness - 5, 0, 100);
         return 'Umsturz bleibt aus, Laune −5';
       }
